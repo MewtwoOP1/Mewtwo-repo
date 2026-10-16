@@ -1,6 +1,6 @@
 # Zangetsu Community Sources
 
-Community-maintained JavaScript providers for the [Zangetsu](https://github.com/Spyou/Zangetsu) app. The active catalogue currently contains **TMDB + Stremio** for movie/TV metadata and user-configured add-on streams, **AnimeSuge**, **KotoTV**, and **MKissa** as anime sources.
+Community-maintained JavaScript providers for the [Zangetsu](https://github.com/Spyou/Zangetsu) app. The active catalogue currently contains **TMDB + Stremio** for movie/TV metadata and user-configured add-on streams, plus **AnimeSuge**, **KotoTV**, **MKissa**, and **HiAnime** as anime sources.
 
 **This repository does not host, upload, store, or serve video files.** Providers request metadata or playback URLs from third-party services. Availability is controlled by those services and may change at any time.
 
@@ -26,6 +26,10 @@ Combines TMDB metadata with stream discovery from Stremio-compatible add-ons tha
 
 This source handles movie and series metadata. Streams are requested from your configured add-ons; this repository does not provide or proxy them.
 
+### HiAnime
+
+Uses the configured HiAnime-compatible domain to search anime, list episodes, and resolve supported player sources. Domain availability and playback depend on the selected website and its third-party hosts.
+
 ### KotoTV
 
 Uses KotoTV search and watch pages to list anime and resolve available sub/dub player streams. Playback depends on KotoTV and its third-party player hosts; availability may change.
@@ -42,7 +46,7 @@ Uses the AnimeSuge website (`animesuge.cz`) to search for anime, list episodes, 
 - In **Zangetsu Mode**, AniList/MyAnimeList remains responsible for anime metadata and AnimeSuge is used as a playback source.
 - Website and player availability varies. Test a current title in Zangetsu after installation.
 
-The active source list is defined in `index.json`. Removed providers are not part of the current catalogue.
+The active source list is defined in `index.json`. JustAnime and Ani.pm have been removed from the active catalogue; their provider files may remain in the repository for reference and tests, but they are not offered by the manifest.
 
 ## Development and tests
 
