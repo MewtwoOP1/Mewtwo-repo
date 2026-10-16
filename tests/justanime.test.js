@@ -50,7 +50,7 @@ global.fetch = async (url, options) => {
 const provider = require("../providers/justanime.js");
 
 async function main() {
-  assert.equal(provider.version, "1.6.0");
+  assert.equal(provider.version, "1.7.0");
 
   // A temporary server error should be retried instead of immediately
   // collapsing into an empty detail/episode response.
@@ -92,6 +92,12 @@ async function main() {
   assert.equal(fallbackDetail.episodes[1].description, "Episode synopsis");
   assert.equal(fallbackDetail.episodes[1].thumbnail, "https://img.example/fallback-ep.jpg");
   assert.equal(fallbackDetail.episodes[0].title, "Another Real Title");
+
+  const episodeFetchCount = calls.filter((c) => c.url === "https://core.justanime.to/api/anime/21/episodes?page=1").length;
+  const listedEpisodes = await provider.getEpisodes("21", {});
+  assert.equal(listedEpisodes.length, 2);
+  assert.equal(calls.filter((c) => c.url === "https://core.justanime.to/api/anime/21/episodes?page=1").length, episodeFetchCount,
+    "getEpisodes should reuse the successful cached detail instead of refetching the endpoint");
 
   const streams = await provider.getVideoSources("21||2", {});
   assert.equal(streams.length, 2);
