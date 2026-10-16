@@ -436,14 +436,70 @@ function _crawl(url, referer, depth, visited) {
     });
   }).catch(function () { return []; });
 }
+function _playerListUrl(html) {
+  var text = String(html || '');
+  var match = text.match(/(?:const\s+)?pl_url\s*=\s*['"]([^'"]+)['"]/i) ||
+    text.match(/data-pl-url\s*=\s*["']([^"']+)["']/i);
+  return match ? _abs(_decode(match[1]), SITE + '/') : '';
+}
+function _serverLinks(html, pageUrl) {
+  var out = [], seen = {}, re = /<(?:a|div|li)\b[^>]*>/gi, m;
+  while ((m = re.exec(String(html || ''))) !== null) {
+    var tag = m[0], cls = _attr(tag, 'class'), server = _attr(tag, 'data-srv');
+    if (!server && !/(?:^|\s)sv-item(?:\s|$)/i.test(cls) && !_attr(tag, 'data-srv')) continue;
+    var raw = _attr(tag, 'data-id') || _attr(tag, 'data-url') || _attr(tag, 'href') || _attr(tag, 'src');
+    var url = _abs(raw, pageUrl);
+    if (!_isHttp(url) || _isMedia(url)) continue;
+    if (/(?:vidsrc)/i.test(String(server) + ' ' + url)) continue;
+    if (seen[url]) continue;
+    seen[url] = true;
+    out.push({ name: server || _text(tag) || 'Server', url: url });
+    if (out.length >= EMBED_LIMIT) break;
+  }
+  return out;
+}
+function _crawlCandidates(candidates, referer) {
+  var visited = {};
+  return Promise.all(candidates.slice(0, EMBED_LIMIT).map(function (candidate) {
+    var url = typeof candidate === 'string' ? candidate : candidate.url;
+    return _crawl(url, referer, 0, visited);
+  })).then(function (lists) {
+    var all = [];
+    lists.forEach(function (list) { all = all.concat(list || []); });
+    return all;
+  });
+}
 function getVideoSources(episodeUrl, opts) {
   var value = typeof episodeUrl === 'string' ? episodeUrl :
     (episodeUrl && (episodeUrl.url || episodeUrl.id)) || '';
   var target = _abs(value, SITE + '/');
-  if (!target) return Promise.reject(new Error('Movies2Watch: invalid episode URL'));
-  return _crawl(target, SITE + '/', 0, {}).then(function (sources) {
-    var out = _uniqItems(sources || []);
-    if (!out.length) throw new Error('Movies2Watch: no direct media URL exposed in page HTML; this player may require JavaScript or an unsupported host');
+  if (!target || !_isHttp(target)) return Promise.reject(new Error('Movies2Watch: invalid episode URL'));
+
+  return _get(target, SITE + '/').then(function (html) {
+    if (!html) throw new Error('Movies2Watch: empty episode page');
+    var direct = _directSources(html, target);
+    var plUrl = _playerListUrl(html);
+    var serversPromise;
+
+    if (plUrl) {
+      serversPromise = _get(plUrl, target, { 'X-Requested-With': 'XMLHttpRequest' })
+        .then(function (fragment) { return _serverLinks(fragment, plUrl); })
+        .catch(function () { return []; });
+    } else {
+      serversPromise = Promise.resolve(_iframeUrls(html, target).map(function (url) {
+        return { name: 'Embedded player', url: url };
+      }));
+    }
+
+    return serversPromise.then(function (servers) {
+      return _crawlCandidates(servers, target).then(function (resolved) {
+        return _uniqItems(direct.concat(resolved || []));
+      });
+    });
+  }).then(function (out) {
+    if (!out.length) {
+      throw new Error('Movies2Watch: no direct media URL exposed by the selected page/player. This host may need a dedicated extractor or browser JavaScript.');
+    }
     return out;
   });
 }
