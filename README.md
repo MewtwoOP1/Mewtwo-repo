@@ -38,6 +38,10 @@ This source handles movie and series metadata. Streams are requested from your c
 
 Uses MKissa's GraphQL catalogue and encrypted episode-source API. Playback depends on MKissa's rotating crypto handshake, supported third-party players, and any CAPTCHA or rate limits applied by the site.
 
+### HiAnime
+
+Pinned to one primary domain (hianime.dk). Search cards are normalized before detail and episode requests so `/watch/` is not accidentally duplicated. The source attempts direct media URLs exposed on the watch page or its player iframe; if a player does not expose a direct URL, playback can still fail. Mocked tests cover URL normalization and a sample iframe response, not live-site playback.
+
 ### AnimeSuge
 
 Uses the AnimeSuge website (`animesuge.cz`) to search for anime, list episodes, and resolve player sources.
