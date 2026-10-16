@@ -22,7 +22,7 @@ global.fetch = async (url, options) => {
   } else if (u.indexOf('https://ani.pm/api/anime/playback-bootstrap/anime/123?') === 0) {
     body = {
       core: {
-        title: 'Mock Anime', anilistId: 123, malId: 999,
+        title: { english: 'Mock Anime', romaji: 'Mock Anime Romaji' }, anilistId: 123, malId: 999,
         episodes: [{ number: 1, title: 'The Beginning' }, { number: 2, title: 'The Journey' }]
       },
       packages: { episodes: { '1': { sub: true, dub: true }, '2': { sub: true } } },
