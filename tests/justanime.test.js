@@ -17,7 +17,7 @@ global.fetch = async (url, options) => {
   } else if (u === "https://core.justanime.to/api/watch/21/episode/2/megaplay") {
     body = { sub: { sources: [{ url: "https://cdn.example/mock-1080p.m3u8", quality: "1080p", isM3U8: true }], headers: { Referer: "https://megaplay.buzz/" }, subtitles: [{ file: "https://cdn.example/en.vtt", label: "English" }] } };
   } else if (u === "https://core.justanime.to/api/watch/21/episode/2/animegg") {
-    body = { dub: { sources: [{ url: "https://cdn.example/mock-dub.mp4", quality: "720p" }] } };
+    body = { dub: { sources: [{ url: "https://cdn.example/play?id=opaque123", quality: "720p", isM3U8: true }] } };
   } else if (u === "https://core.justanime.to/api/watch/21/episode/2/anineko") {
     body = { langs: { sub: [], dub: [] } };
   }
@@ -54,8 +54,8 @@ async function main() {
   assert.equal(streams[0].url, "https://cdn.example/mock-1080p.m3u8");
   assert.equal(streams[0].container, "hls");
   assert.equal(streams[0].headers.Referer, "https://megaplay.buzz/");
-  assert.equal(streams[1].url, "https://cdn.example/mock-dub.mp4");
-  assert.equal(streams[1].container, "mp4");
+  assert.equal(streams[1].url, "https://cdn.example/play?id=opaque123");
+  assert.equal(streams[1].container, "hls");
   assert.ok(calls.every((c) => c.options.headers.Origin === "https://justanime.to"));
   assert.equal(await provider.getStreams("21||2", {}).then((x) => x.length), 2);
 
