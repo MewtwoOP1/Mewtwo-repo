@@ -5,7 +5,7 @@ var SITE = 'https://ani.pm';
 var API = SITE + '/api';
 var EMBED = 'https://embed.settlar.io';
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID) ? String(__SOURCE_ID) : 'anipm';
-var VERSION = '1.3.0';
+var VERSION = '1.3.1';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36';
 var _seriesCache = {};
 var _detailCache = {};
@@ -257,6 +257,11 @@ function _fetchDetail(url, opts) {
     _bootstrap(ref,1,'sub').catch(function(){return null;}),
     _bootstrap(ref,1,'dub').catch(function(){return null;})
   ]).then(function(results) {
+    // Do not return a synthetic, mostly-empty detail when both bootstrap
+    // requests failed or returned no usable catalogue payload. Such a result
+    // can arrive after the catalogue has already rendered and overwrite its
+    // AniList/MAL metadata. Let the caller keep the catalogue detail instead.
+    if (_detailScore(results[0]) <= 0 && _detailScore(results[1]) <= 0) return null;
     var data = _detailScore(results[1]) > _detailScore(results[0]) ? results[1] : (results[0] || results[1] || {});
     var core = _core(data) || {};
     var eps = _episodeRows(data,ref);
