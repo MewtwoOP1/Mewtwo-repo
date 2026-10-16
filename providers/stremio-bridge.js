@@ -353,6 +353,8 @@ function getDetail(rawId, opts) {
 }
 
 function _stream(raw, base, config) {
+  var addonParts = _addonParts(base);
+  var addonSource = addonParts.root + (addonParts.query ? '?' + addonParts.query : '');
   var url = raw && typeof raw.url === 'string' && /^https?:\/\//i.test(raw.url) ? raw.url : '';
   var hash = raw && raw.infoHash ? raw.infoHash : '';
   if (!url && !(config.includeTorrent && hash)) return null;
@@ -367,7 +369,7 @@ function _stream(raw, base, config) {
     quality: qualityMatch ? (qualityMatch[1].toLowerCase() === '4k' ? '2160p' : qualityMatch[1]) : 'Auto',
     headers: raw.behaviorHints && raw.behaviorHints.proxyHeaders && raw.behaviorHints.proxyHeaders.request || {},
     sourceId: 'stremio-bridge',
-    addonSource: base
+    addonSource: addonSource
   };
 }
 
