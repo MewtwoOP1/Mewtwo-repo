@@ -6,7 +6,7 @@ var SITE = 'https://justanime.to';
 var API = 'https://core.justanime.to/api';
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID)
   ? String(__SOURCE_ID) : 'justanime';
-var VERSION = '1.0.0';
+var VERSION = '1.1.0';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
   '(KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36';
 
@@ -146,16 +146,52 @@ function _stripHtml(value) {
     .replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
     .replace(/\s+/g, ' ').replace(/^\s+|\s+$/g, '');
 }
+function _episodeRows(response, animeId) {
+  var root = response && (response.data || response);
+  var items = Array.isArray(root) ? root :
+    (root && (root.episodes || root.results || root.items)) || [];
+  if (!Array.isArray(items) && root && root.data && Array.isArray(root.data.episodes)) items = root.data.episodes;
+  var out = [], seen = {};
+  items.forEach(function (ep, index) {
+    if (!ep || typeof ep !== 'object') return;
+    var n = parseInt(ep.number != null ? ep.number :
+      (ep.episodeNumber != null ? ep.episodeNumber : ep.episode), 10);
+    if (!isFinite(n) || n < 0) n = index + 1;
+    var title = _title({ title: ep.title }) || ep.name || ep.episodeTitle || ('Episode ' + n);
+    var key = animeId + '||' + n;
+    if (seen[key]) return;
+    seen[key] = true;
+    out.push({
+      id: key, number: n, title: String(title), url: key,
+      thumbnail: ep.thumbnail || ep.image || ep.cover || null,
+      description: _stripHtml(ep.description || ''), sourceId: SOURCE_ID
+    });
+  });
+  out.sort(function (a, b) { return b.number - a.number; });
+  return out;
+}
+function _fetchEpisodes(id) {
+  return _json(API + '/anime/' + encodeURIComponent(id) + '/episodes?page=1')
+    .then(function (response) { return _episodeRows(response, id); })
+    .catch(function () { return []; });
+}
 function getDetail(url, opts) {
   var id = _extractId(url);
-  if (!/^\d+$/.test(id)) return Promise.resolve(null);
-  return _json(API + '/anime/' + encodeURIComponent(id)).then(function (response) {
+  if (!/^\\d+$/.test(id)) return Promise.resolve(null);
+  return Promise.all([
+    _json(API + '/anime/' + encodeURIComponent(id)),
+    _fetchEpisodes(id)
+  ]).then(function (results) {
+    var response = results[0];
     var anime = response && (response.data || response.anime || response);
-    if (!anime || typeof anime !== 'object') return null;
+    if (!anime || typeof anime !== 'object' || response.error) return null;
+    var episodes = results[1] || [];
     var title = _title(anime) || id;
-    var count = _episodeCount(anime), episodes = [];
-    for (var n = count; n >= 1; n--) {
-      episodes.push({ id: id + '||' + n, number: n, title: 'Episode ' + n, url: id + '||' + n });
+    var count = _episodeCount(anime);
+    if (!episodes.length && count > 0) {
+      for (var n = count; n >= 1; n--) {
+        episodes.push({ id: id + '||' + n, number: n, title: 'Episode ' + n, url: id + '||' + n, sourceId: SOURCE_ID });
+      }
     }
     var genres = Array.isArray(anime.genres) ? anime.genres : [];
     return {
@@ -164,13 +200,18 @@ function getDetail(url, opts) {
       status: anime.status || 'unknown', genres: genres, studios: [],
       type: 'anime', sourceId: SOURCE_ID, year: anime.seasonYear || anime.year || null,
       malId: anime.idMal || anime.malId || anime.mal_id || null,
-      episodes: episodes, subCount: count, dubCount: count
+      episodes: episodes, subCount: count || episodes.length, dubCount: count || episodes.length
     };
   }).catch(function () { return null; });
 }
 function getEpisodes(url, opts) {
-  return getDetail(url, opts).then(function (detail) {
-    return detail && Array.isArray(detail.episodes) ? detail.episodes : [];
+  var id = _extractId(url);
+  if (!/^\\d+$/.test(id)) return Promise.resolve([]);
+  return _fetchEpisodes(id).then(function (episodes) {
+    if (episodes.length) return episodes;
+    return getDetail(url, opts).then(function (detail) {
+      return detail && Array.isArray(detail.episodes) ? detail.episodes : [];
+    });
   });
 }
 function _isHttpUrl(url) {
@@ -191,6 +232,8 @@ function _quality(source, url) {
 }
 function _sourceRows(payload, server, lang) {
   var track = payload && payload[lang];
+  // Newer AniNeko routes return source fields directly; legacy routes wrap them by language.
+  if (!track && payload && Array.isArray(payload.sources)) track = payload;
   var sources = track && Array.isArray(track.sources) ? track.sources : [];
   var headers = track && track.headers || payload && payload.headers || {};
   var out = [];
@@ -244,19 +287,31 @@ function getVideoSources(episodeUrl, opts) {
     (episodeUrl && (episodeUrl.url || episodeUrl.id)) || '';
   var parts = String(value).split('||');
   var id = _extractId(parts[0]), episode = parseInt(parts[1], 10);
-  if (!/^\d+$/.test(id) || !isFinite(episode) || episode < 1) {
+  if (!/^\\d+$/.test(id) || !isFinite(episode) || episode < 1) {
     return Promise.reject(new Error('JustAnime: invalid episode reference'));
   }
-  var config = _settings(), servers = config.servers === 'all'
-    ? ['megaplay', 'animegg'] : [config.servers];
-  var jobs = servers.map(function (server) {
-    return _json(API + '/watch/' + encodeURIComponent(id) + '/episode/' +
+  var config = _settings();
+  var langs = config.language === 'dub' ? ['dub', 'sub'] : ['sub', 'dub'];
+  var jobs = [];
+  // Current API route: language-specific AniNeko server returning sources directly.
+  if (config.servers === 'all' || config.servers === 'anineko') {
+    langs.forEach(function (lang) {
+      jobs.push(_json(API + '/watch/' + encodeURIComponent(id) + '/episode/' +
+        encodeURIComponent(episode) + '/anineko/' + lang + '/hd1').then(function (payload) {
+          return _sourceRows(payload, 'anineko', lang);
+        }).catch(function () { return []; }));
+    });
+  }
+  var legacyServers = config.servers === 'all' ? ['megaplay', 'animegg'] :
+    (config.servers === 'anineko' ? [] : [config.servers]);
+  legacyServers.forEach(function (server) {
+    jobs.push(_json(API + '/watch/' + encodeURIComponent(id) + '/episode/' +
       encodeURIComponent(episode) + '/' + server).then(function (payload) {
         var rows = [];
         rows = rows.concat(_sourceRows(payload, server, 'sub'));
         rows = rows.concat(_sourceRows(payload, server, 'dub'));
         return rows;
-      }).catch(function () { return []; });
+      }).catch(function () { return []; }));
   });
   if (config.servers === 'all' || config.servers === 'anineko') {
     jobs.push(_animekoSources(id, episode));
