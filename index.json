@@ -86,6 +86,16 @@
       "file": "providers/mkissa.js",
       "logo": "https://www.google.com/s2/favicons?sz=256&domain=mkissa.to",
       "nsfw": false
+    },
+    {
+      "id": "hianime",
+      "name": "HiAnime",
+      "version": "1.0.0",
+      "type": "anime",
+      "lang": "en",
+      "file": "providers/hianime.js",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=hianime.dk",
+      "nsfw": false
     }
   ]
 }
