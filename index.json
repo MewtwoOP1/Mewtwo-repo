@@ -139,6 +139,16 @@
           ]
         }
       ]
+    },
+    {
+      "id": "animesuge",
+      "name": "AnimeSuge",
+      "version": "1.0.0",
+      "type": "anime",
+      "lang": "en",
+      "file": "providers/animesuge.js",
+      "logo": "https://animesuge.cz/assets/sites/animesuge/icons/favicon.png",
+      "nsfw": false
     }
   ]
 }
