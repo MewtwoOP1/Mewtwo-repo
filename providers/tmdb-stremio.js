@@ -12,7 +12,7 @@ function getInfo() {
     name: 'TMDB + Stremio',
     lang: 'en',
     baseUrl: 'https://www.themoviedb.org',
-    logo: 'https://raw.githubusercontent.com/MewtwoOP1/Zangetsu-repo/main/assets/icon.svg',
+    logo: 'https://www.google.com/s2/favicons?sz=256&domain=themoviedb.org',
     type: 'movie',
     version: '3.0.0'
   };

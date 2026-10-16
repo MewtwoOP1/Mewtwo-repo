@@ -23,3 +23,5 @@ jobs:
         run: node tests/justanime.test.js
       - name: Run Ani.pm mocked integration tests
         run: node tests/anipm.test.js
+      - name: Run AnimeX mocked integration tests
+        run: node tests/animex.test.js
