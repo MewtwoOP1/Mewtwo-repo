@@ -205,9 +205,13 @@ function _parseIds(html) {
 }
 function _episodeNumber(value) {
   var s = String(value || '');
-  var m = s.match(/(?:season|s)\s*0?(\d{1,2})[\s,._:/-]*(?:episode|ep|e)\s*0?(\d{1,3})/i);
+  var m = s.match(/\/(\d{1,2})-(\d{1,3})\/?(?:[?#].*)?$/);
+  if (m) return { season: parseInt(m[1], 10) || 1, episode: parseInt(m[2], 10) || 1 };
+  m = s.match(/(?:season|s)\s*0?(\d{1,2})[\s,._:/-]*(?:episode|ep|e)\s*0?(\d{1,3})/i);
   if (m) return { season: parseInt(m[1], 10) || 1, episode: parseInt(m[2], 10) || 1 };
   m = s.match(/(?:season|s)[\s._:/-]*0?(\d{1,2}).{0,24}(?:episode|ep|e)[\s._:/-]*0?(\d{1,3})/i);
+  if (m) return { season: parseInt(m[1], 10) || 1, episode: parseInt(m[2], 10) || 1 };
+  m = s.match(/\bS(\d{1,2})E(\d{1,3})\b/i);
   if (m) return { season: parseInt(m[1], 10) || 1, episode: parseInt(m[2], 10) || 1 };
   m = s.match(/episode[\s._:#/-]*0?(\d{1,3})/i);
   if (m) return { season: 1, episode: parseInt(m[1], 10) || 1 };
@@ -218,6 +222,9 @@ function _episodes(html, pageUrl) {
   while ((m = re.exec(String(html || ''))) !== null) {
     var anchor = m[0], open = (anchor.match(/^<a\b[^>]*>/i) || [''])[0];
     var href = _attr(open, 'href'), label = _trim(_text(anchor));
+    var className = _attr(open, 'class');
+    if (className && !/(?:eps-item|episode|ep-item)/i.test(className) &&
+        !_episodeNumber(href + ' ' + label)) continue;
     var hint = [_attr(open, 'title'), _attr(open, 'aria-label'), _attr(open, 'data-season'),
       _attr(open, 'data-episode'), _attr(open, 'data-number'), href, label].join(' ');
     var nums = _episodeNumber(hint);
@@ -228,7 +235,7 @@ function _episodes(html, pageUrl) {
     }
     if (!nums || !href) continue;
     var url = _abs(href, pageUrl);
-    if (!url || url === pageUrl || !/\/(?:movie|series)\//i.test(url)) continue;
+    if (!url || url === pageUrl || !/\/series\//i.test(url)) continue;
     out.push({
       id: 'S' + nums.season + 'E' + nums.episode,
       title: 'S' + _pad(nums.season) + ' E' + _pad(nums.episode) +
@@ -237,7 +244,7 @@ function _episodes(html, pageUrl) {
     });
   }
   if (!out.length) {
-    var current = _episodeNumber(_text(html));
+    var current = _episodeNumber(String(pageUrl) + ' ' + _text(html));
     if (current) out.push({
       id: 'S' + current.season + 'E' + current.episode,
       title: 'S' + _pad(current.season) + ' E' + _pad(current.episode),
@@ -257,22 +264,80 @@ function _episodes(html, pageUrl) {
   });
 }
 function _pad(value) { var n = parseInt(value, 10) || 0; return n < 10 ? '0' + n : String(n); }
-function _parseDetail(html, url) {
-  var title = _cleanTitle(_meta(html, 'og:title') || _meta(html, 'twitter:title') ||
-    (html.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i) || [])[1] || '');
+function _seasonItems(html) {
+  var out = [], re = /<(?:div|a|li)\b[^>]*class\s*=\s*["'][^"']*\bss-item\b[^"']*["'][^>]*>/gi, m;
+  while ((m = re.exec(String(html || ''))) !== null) {
+    var tag = m[0], id = _attr(tag, 'data-id');
+    if (!id) continue;
+    var season = parseInt(_attr(tag, 'data-ss'), 10) || (out.length + 1);
+    out.push({ id: id, season: season, title: _trim(_attr(tag, 'title') || _attr(tag, 'aria-label')) });
+  }
+  return out;
+}
+function _loadSeriesEpisodes(html, pageUrl) {
+  var seasons = _seasonItems(html);
+  if (seasons.length) {
+    return Promise.all(seasons.map(function (season) {
+      var ajax = _pageUrl('/ajax/ajax.php?episode=' + encodeURIComponent(season.id));
+      return _get(ajax, pageUrl, { 'X-Requested-With': 'XMLHttpRequest' })
+        .then(function (fragment) {
+          return _episodes(fragment, pageUrl).map(function (episode) {
+            if (!episode.season || episode.season === 1) episode.season = season.season;
+            episode.id = 'S' + episode.season + 'E' + episode.number;
+            episode.title = (season.title ? season.title + ' · ' : '') +
+              'S' + _pad(episode.season) + ' E' + _pad(episode.number);
+            return episode;
+          });
+        }).catch(function () { return []; });
+    })).then(function (groups) {
+      var episodes = [];
+      groups.forEach(function (group) { episodes = episodes.concat(group); });
+      return _uniqueEpisodes(episodes);
+    });
+  }
+
+  var current = (String(html || '').match(/(?:const\s+)?current_url\s*=\s*['"]([^'"]+)['"]/i) || [])[1];
+  if (current) {
+    var currentUrl = _abs(current, pageUrl);
+    return _get(currentUrl, pageUrl, { 'X-Requested-With': 'XMLHttpRequest' })
+      .then(function (fragment) { return _episodes(fragment, pageUrl); })
+      .catch(function () { return _episodes(html, pageUrl); });
+  }
+  return Promise.resolve(_episodes(html, pageUrl));
+}
+function _uniqueEpisodes(items) {
+  var out = [], seen = {};
+  items.forEach(function (ep) {
+    var key = ep.season + 'x' + ep.number + '|' + ep.url;
+    if (!seen[key]) { seen[key] = true; out.push(ep); }
+  });
+  out.sort(function (a, b) {
+    if (a.season !== b.season) return a.season - b.season;
+    return a.number - b.number;
+  });
+  return out;
+}
+function _parseDetail(html, url, episodes) {
+  var heading = (html.match(/<(?:h1|h2|h3)\b[^>]*class\s*=\s*["'][^"']*heading-name[^"']*["'][^>]*>([\s\S]*?)<\/(?:h1|h2|h3)>/i) || [])[1] ||
+    (html.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i) || [])[1] ||
+    (html.match(/<(?:h2|h3)\b[^>]*class\s*=\s*["'][^"']*film-name[^"']*["'][^>]*>([\s\S]*?)<\/(?:h2|h3)>/i) || [])[1] || '';
+  var title = _cleanTitle(_meta(html, 'og:title') || _meta(html, 'twitter:title') || heading);
   if (!title) title = url.split('/').filter(Boolean).pop().replace(/-\d+\/?$/, '').replace(/-/g, ' ');
-  var description = _text(_meta(html, 'og:description') || _meta(html, 'description') || '');
+  var description = _text(
+    (html.match(/<(?:div|p)\b[^>]*class\s*=\s*["'][^"']*(?:film-description|f-desc|description)[^"']*["'][^>]*>([\s\S]*?)<\/(?:div|p)>/i) || [])[1] ||
+    _meta(html, 'og:description') || _meta(html, 'description') || '');
+  var posterTag = (html.match(/<img\b[^>]*(?:data-src|src)\s*=\s*["'][^"']+["'][^>]*>/i) || [''])[0];
   var cover = _meta(html, 'og:image') || _meta(html, 'twitter:image') ||
-    (html.match(/<img\b[^>]*(?:poster|cover)[^>]*>/i) ?
-      _attr((html.match(/<img\b[^>]*(?:poster|cover)[^>]*>/i) || [''])[0], 'src') : '');
+    _attr(posterTag, 'data-src') || _attr(posterTag, 'src') || '';
   cover = cover ? _abs(cover, url) : '';
   var type = /\/series\//i.test(url) ? 'series' : 'movie';
-  var episodes = type === 'series' ? _episodes(html, url) : [{ id: 'movie', title: title, number: 1, url: url }];
   var ids = _parseIds(html);
+  var eps = type === 'series' ? (episodes || _episodes(html, url)) :
+    [{ id: 'movie', title: title, number: 1, url: url }];
   return {
     id: url, title: title, cover: cover || null, url: url, description: description,
     status: 'unknown', genres: [], studios: [], type: 'movie', sourceId: SOURCE_ID,
-    year: _parseYear(html, title), episodes: episodes, subCount: episodes.length, dubCount: 0,
+    year: _parseYear(html, title), episodes: eps, subCount: eps.length, dubCount: 0,
     tmdbId: ids.tmdbId, imdbId: ids.imdbId, tmdbIsTv: type === 'series'
   };
 }
@@ -280,7 +345,14 @@ function getDetail(url, opts) {
   var value = typeof url === 'string' ? url : (url && (url.url || url.id)) || '';
   var target = _abs(value, SITE + '/');
   if (!target || !/\/(?:movie|series)\//i.test(target)) return Promise.resolve(null);
-  return _get(target, SITE + '/').then(function (html) { return html ? _parseDetail(html, target) : null; });
+  return _get(target, SITE + '/').then(function (html) {
+    if (!html) return null;
+    var type = /\/series\//i.test(target) ? 'series' : 'movie';
+    if (type !== 'series') return _parseDetail(html, target, null);
+    return _loadSeriesEpisodes(html, target).then(function (episodes) {
+      return _parseDetail(html, target, episodes);
+    }).catch(function () { return _parseDetail(html, target, _episodes(html, target)); });
+  }).catch(function () { return null; });
 }
 function getEpisodes(url, opts) {
   return getDetail(url, opts).then(function (detail) {
