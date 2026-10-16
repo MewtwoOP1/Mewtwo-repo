@@ -1,0 +1,281 @@
+// JustAnime source for Zangetsu.
+// Uses JustAnime's publicly exposed JSON API for catalogue, episode and stream data.
+// It does not host media, decrypt protected player payloads, or bypass access controls.
+
+var SITE = 'https://justanime.to';
+var API = 'https://core.justanime.to/api';
+var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID)
+  ? String(__SOURCE_ID) : 'justanime';
+var VERSION = '1.0.0';
+var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
+  '(KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36';
+
+function getInfo() {
+  return {
+    name: 'JustAnime',
+    lang: 'en',
+    baseUrl: SITE,
+    logo: 'https://www.google.com/s2/favicons?sz=256&domain=justanime.to',
+    type: 'anime',
+    version: VERSION
+  };
+}
+function getSettings() {
+  return [{
+    key: 'servers',
+    label: 'Streaming servers',
+    description: 'Which public JustAnime API server endpoints to check. Unsupported or unavailable streams are skipped.',
+    type: 'enum',
+    default: 'all',
+    options: [
+      { value: 'all', label: 'All servers (recommended)' },
+      { value: 'animegg', label: 'AnimeGG' },
+      { value: 'anineko', label: 'AniNeko' },
+      { value: 'megaplay', label: 'MegaPlay' }
+    ]
+  }, {
+    key: 'language',
+    label: 'Preferred audio',
+    description: 'Return the preferred audio language first, then fall back to the other language.',
+    type: 'enum',
+    default: 'sub',
+    options: [
+      { value: 'sub', label: 'Sub first' },
+      { value: 'dub', label: 'Dub first' }
+    ]
+  }];
+}
+function _settings() {
+  var s = (typeof __settings !== 'undefined' && __settings && __settings[SOURCE_ID]) || {};
+  return {
+    servers: /^(?:animegg|anineko|megaplay)$/.test(String(s.servers || '')) ? String(s.servers) : 'all',
+    language: s.language === 'dub' ? 'dub' : 'sub'
+  };
+}
+function _trim(s) { return String(s == null ? '' : s).replace(/^\s+|\s+$/g, ''); }
+function _json(url, referer) {
+  return fetch(url, { headers: {
+    'User-Agent': UA,
+    'Accept': 'application/json, text/plain, */*',
+    'Origin': SITE,
+    'Referer': referer || SITE + '/',
+    'X-Requested-With': 'XMLHttpRequest'
+  }, timeoutMs: 15000 }).then(function (r) {
+    if (r && r.status && r.status >= 400) throw new Error('JustAnime HTTP ' + r.status);
+    var body = r && r.body != null ? r.body : '';
+    if (typeof body !== 'string') body = JSON.stringify(body);
+    return JSON.parse(body || '{}');
+  });
+}
+function _title(item) {
+  var t = item && item.title;
+  if (typeof t === 'string') return t;
+  if (t && typeof t === 'object') return t.english || t.romaji || t.native || '';
+  return (item && (item.name || item.romaji || item.english)) || '';
+}
+function _cover(item) {
+  return item && (item.cover ||
+    (item.coverImage && (item.coverImage.extraLarge || item.coverImage.large || item.coverImage.medium)) ||
+    item.poster || item.image || '') || '';
+}
+function _id(item) {
+  var id = item && (item.id || item.anilistId || item.anilist_id);
+  return id == null ? '' : String(id);
+}
+function _card(item) {
+  var id = _id(item), title = _title(item);
+  if (!id || !title) return null;
+  return {
+    id: id, title: title, url: id, cover: _cover(item) || null,
+    type: 'anime', sourceId: SOURCE_ID,
+    malId: item.idMal || item.malId || item.mal_id || null
+  };
+}
+function _cards(items) {
+  var out = [], seen = {};
+  (Array.isArray(items) ? items : []).forEach(function (item) {
+    var card = _card(item);
+    if (card && !seen[card.id]) { seen[card.id] = true; out.push(card); }
+  });
+  return out;
+}
+function getHome(opts) {
+  return Promise.all([
+    _json(API + '/home').then(function (data) {
+      var items = data.latestEpisode || data.airing || [];
+      return { title: 'Recently Updated', items: _cards(items) };
+    }).catch(function () { return { title: 'Recently Updated', items: [] }; }),
+    _json(API + '/search?page=1').then(function (data) {
+      return { title: 'Popular Anime', items: _cards(data.results || []) };
+    }).catch(function () { return { title: 'Popular Anime', items: [] }; })
+  ]).then(function (rows) {
+    return rows.filter(function (row) { return row.items.length > 0; });
+  });
+}
+function popular(opts) {
+  return _json(API + '/search?page=' + Math.max(1, parseInt((opts && opts.page) || 1, 10)))
+    .then(function (data) { return _cards(data.results || []); })
+    .catch(function () { return []; });
+}
+function search(query, page, opts) {
+  var q = _trim(query).replace(/[?!]/g, '');
+  if (!q) return Promise.resolve([]);
+  return _json(API + '/search?query=' + encodeURIComponent(q) + '&page=' +
+    Math.max(1, parseInt(page || 1, 10))).then(function (data) {
+      return _cards(data.results || []);
+    }).catch(function () { return []; });
+}
+function _extractId(value) {
+  var s = String(value == null ? '' : value);
+  var m = s.match(/justanime\.to\/anime\/(\d+)/i);
+  if (m) return m[1];
+  m = s.match(/(?:^|\/)anime\/(\d+)(?:\/|$)/i);
+  if (m) return m[1];
+  m = s.match(/^(\d+)(?:\|\||$)/);
+  if (m) return m[1];
+  return s.replace(/^justanime:\/\//, '').split('||')[0].replace(/^\/+|\/+$/g, '');
+}
+function _episodeCount(anime) {
+  var value = anime && anime.episodes;
+  if (Array.isArray(value)) return value.length;
+  var n = parseInt(value, 10);
+  return isFinite(n) && n > 0 ? Math.min(n, 1000) : 0;
+}
+function _stripHtml(value) {
+  return String(value || '').replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+    .replace(/\s+/g, ' ').replace(/^\s+|\s+$/g, '');
+}
+function getDetail(url, opts) {
+  var id = _extractId(url);
+  if (!/^\d+$/.test(id)) return Promise.resolve(null);
+  return _json(API + '/anime/' + encodeURIComponent(id)).then(function (response) {
+    var anime = response && (response.data || response.anime || response);
+    if (!anime || typeof anime !== 'object') return null;
+    var title = _title(anime) || id;
+    var count = _episodeCount(anime), episodes = [];
+    for (var n = count; n >= 1; n--) {
+      episodes.push({ id: id + '||' + n, number: n, title: 'Episode ' + n, url: id + '||' + n });
+    }
+    var genres = Array.isArray(anime.genres) ? anime.genres : [];
+    return {
+      id: id, title: title, url: id, cover: _cover(anime) || null,
+      description: _stripHtml(anime.description || anime.synopsis || ''),
+      status: anime.status || 'unknown', genres: genres, studios: [],
+      type: 'anime', sourceId: SOURCE_ID, year: anime.seasonYear || anime.year || null,
+      malId: anime.idMal || anime.malId || anime.mal_id || null,
+      episodes: episodes, subCount: count, dubCount: count
+    };
+  }).catch(function () { return null; });
+}
+function getEpisodes(url, opts) {
+  return getDetail(url, opts).then(function (detail) {
+    return detail && Array.isArray(detail.episodes) ? detail.episodes : [];
+  });
+}
+function _isPlayable(url) {
+  return /^https?:\/\//i.test(String(url || '')) &&
+    /(?:\.m3u8|\.mp4|\.m4v|\.webm)(?:[?#]|$)/i.test(String(url || ''));
+}
+function _quality(source, url) {
+  var s = String((source && source.quality) || '') + ' ' + String(url || '');
+  var m = s.match(/\b(2160|1440|1080|720|576|540|480|360)p?\b/i);
+  return m ? m[1] + 'p' : 'Auto';
+}
+function _sourceRows(payload, server, lang) {
+  var track = payload && payload[lang];
+  var sources = track && Array.isArray(track.sources) ? track.sources : [];
+  var headers = track && track.headers || payload && payload.headers || {};
+  var out = [];
+  sources.forEach(function (s) {
+    var url = s && (s.url || s.file);
+    // Only use URLs directly exposed by the API. Encrypted/player-token payloads are not playable sources.
+    if (!_isPlayable(url)) return;
+    var h = {
+      'User-Agent': UA,
+      'Referer': headers.Referer || (server === 'megaplay' ? 'https://megaplay.buzz/' : SITE + '/'),
+      'Origin': headers.Origin || (server === 'megaplay' ? 'https://megaplay.buzz' : SITE)
+    };
+    var container = /\.m3u8(?:[?#]|$)/i.test(url) ? 'hls' : 'mp4';
+    out.push({
+      url: url, quality: _quality(s, url), container: container,
+      headers: h, kind: 'raw', label: 'JustAnime ' + server + ' ' + lang.toUpperCase(),
+      subtitles: (track.subtitles || track.tracks || []).filter(function (sub) {
+        return !!(sub && (sub.file || sub.url));
+      }).map(function (sub) {
+        return { file: sub.file || sub.url, label: sub.label || sub.lang || 'Unknown' };
+      })
+    });
+  });
+  return out;
+}
+function _animekoSources(id, episode) {
+  return _json(API + '/watch/' + encodeURIComponent(id) + '/episode/' +
+    encodeURIComponent(episode) + '/anineko').then(function (available) {
+      var langs = available && available.langs || {}, jobs = [];
+      ['sub', 'dub'].forEach(function (lang) {
+        (langs[lang] || []).forEach(function (server) {
+          if (!server || !server.server) return;
+          jobs.push(_json(API + '/watch/' + encodeURIComponent(id) + '/episode/' +
+            encodeURIComponent(episode) + '/anineko/' + encodeURIComponent(lang) + '/' +
+            encodeURIComponent(server.server)).then(function (data) {
+              var payload = {}; payload[lang] = data;
+              return _sourceRows(payload, 'anineko', lang);
+            }).catch(function () { return []; }));
+        });
+      });
+      return Promise.all(jobs).then(function (lists) {
+        var all = [];
+        lists.forEach(function (list) { all = all.concat(list); });
+        return all;
+      });
+    }).catch(function () { return []; });
+}
+function getVideoSources(episodeUrl, opts) {
+  var value = typeof episodeUrl === 'string' ? episodeUrl :
+    (episodeUrl && (episodeUrl.url || episodeUrl.id)) || '';
+  var parts = String(value).split('||');
+  var id = _extractId(parts[0]), episode = parseInt(parts[1], 10);
+  if (!/^\d+$/.test(id) || !isFinite(episode) || episode < 1) {
+    return Promise.reject(new Error('JustAnime: invalid episode reference'));
+  }
+  var config = _settings(), servers = config.servers === 'all'
+    ? ['megaplay', 'animegg'] : [config.servers];
+  var jobs = servers.map(function (server) {
+    return _json(API + '/watch/' + encodeURIComponent(id) + '/episode/' +
+      encodeURIComponent(episode) + '/' + server).then(function (payload) {
+        var rows = [];
+        rows = rows.concat(_sourceRows(payload, server, 'sub'));
+        rows = rows.concat(_sourceRows(payload, server, 'dub'));
+        return rows;
+      }).catch(function () { return []; });
+  });
+  if (config.servers === 'all' || config.servers === 'anineko') {
+    jobs.push(_animekoSources(id, episode));
+  }
+  return Promise.all(jobs).then(function (lists) {
+    var rows = [], seen = {};
+    lists.forEach(function (list) {
+      (list || []).forEach(function (row) {
+        if (!seen[row.url]) { seen[row.url] = true; rows.push(row); }
+      });
+    });
+    rows.sort(function (a, b) {
+      var al = a.label.indexOf(' ' + config.language.toUpperCase()) >= 0 ? 0 : 1;
+      var bl = b.label.indexOf(' ' + config.language.toUpperCase()) >= 0 ? 0 : 1;
+      return al - bl || (parseInt(b.quality, 10) || 0) - (parseInt(a.quality, 10) || 0);
+    });
+    if (!rows.length) throw new Error('JustAnime: API returned no directly playable stream URLs');
+    return rows;
+  });
+}
+function getStreams(url, opts) { return getVideoSources(url, opts); }
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    version: VERSION, getInfo: getInfo, getSettings: getSettings,
+    getHome: getHome, popular: popular, search: search, getDetail: getDetail,
+    getEpisodes: getEpisodes, getVideoSources: getVideoSources, getStreams: getStreams,
+    _cards: _cards, _extractId: _extractId, _sourceRows: _sourceRows
+  };
+}
