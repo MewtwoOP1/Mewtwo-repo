@@ -27,7 +27,7 @@ function get(url,ref){
   return b;
  });
 }
-function attrValue(tag,name){var re=new RegExp("(?:^|\\\\s)"+name+"\\\\s*=\\\\s*([\\\"'])(.*?)\\\\1","i"),m=String(tag||"").match(re);return m?m[2]:null;}
+function attrValue(tag,name){var re=new RegExp("\\b"+name+"\\s*=\\s*([\"'])(.*?)\\1","i"),m=String(tag||"").match(re);return m?m[2]:null;}
 function norm(s){return String(s||"").toLowerCase().replace(/[^a-z0-9]/g,"");}
 function dice(a,b){var x=norm(a),y=norm(b);if(x===y)return 1;if(x.length<2||y.length<2)return 0;var g={},h=0,i,k;for(i=0;i<x.length-1;i++){k=x.slice(i,i+2);g[k]=(g[k]||0)+1;}for(i=0;i<y.length-1;i++){k=y.slice(i,i+2);if(g[k]){h++;g[k]--;}}return 2*h/(x.length+y.length-2);}
 function parse(s){try{return JSON.parse(s||"null");}catch(e){return null;}}
