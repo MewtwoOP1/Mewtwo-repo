@@ -269,12 +269,23 @@ function _fetchDetail(url, opts) {
     var packages = _packages(data);
     var subCount=0,dubCount=0;
     Object.keys(packages).forEach(function(k){if(packages[k].sub===true||packages[k].subhard===true)subCount++;if(packages[k].dub===true||packages[k].dubhard===true)dubCount++;});
-    return {id:ref.source + ':' + ref.id,title:title,englishTitle:core.englishTitle || cachedItem.englishTitle || null,
+    var detail = {id:ref.source + ':' + ref.id,title:title,englishTitle:core.englishTitle || cachedItem.englishTitle || null,
       url:String(url),cover:_cover(core) || _cover(cachedItem) || (fallback && fallback.cover) || null,
       description:core.description || core.synopsis || '',status:core.status || 'unknown',genres:core.genres || [],studios:[],
       type:'anime',sourceId:SOURCE_ID,malId:_num(core.malId || core.idMal || cachedItem.malId),
       anilistId:_num(core.anilistId || core.idAnilist || cachedItem.anilistId),year:core.year || core.seasonYear || null,
       episodes:eps,subCount:subCount || eps.length,dubCount:dubCount || eps.length};
+    // Missing fields are not facts. Omit them so a partial source response
+    // cannot erase the metadata already supplied by the catalogue.
+    if (!detail.englishTitle) delete detail.englishTitle;
+    if (!detail.cover) delete detail.cover;
+    if (!detail.description) delete detail.description;
+    if (detail.status === 'unknown') delete detail.status;
+    if (!Array.isArray(detail.genres) || !detail.genres.length) delete detail.genres;
+    if (!detail.malId) delete detail.malId;
+    if (!detail.anilistId) delete detail.anilistId;
+    if (!detail.year) delete detail.year;
+    return detail;
   }).catch(function(){return fallback ? {id:ref.source+':'+ref.id,title:fallback.title,url:String(url),cover:fallback.cover,episodes:[],type:'anime',sourceId:SOURCE_ID} : null;});
 }
 function getEpisodes(url, opts) {
