@@ -5,7 +5,7 @@ var SITE = 'https://ani.pm';
 var API = SITE + '/api';
 var EMBED = 'https://embed.settlar.io';
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID) ? String(__SOURCE_ID) : 'anipm';
-var VERSION = '1.3.0';
+var VERSION = '1.3.1';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36';
 var _seriesCache = {};
 var _detailCache = {};
@@ -257,6 +257,11 @@ function _fetchDetail(url, opts) {
     _bootstrap(ref,1,'sub').catch(function(){return null;}),
     _bootstrap(ref,1,'dub').catch(function(){return null;})
   ]).then(function(results) {
+    // Do not return a synthetic, mostly-empty detail when both bootstrap
+    // requests failed or returned no usable catalogue payload. Such a result
+    // can arrive after the catalogue has already rendered and overwrite its
+    // AniList/MAL metadata. Let the caller keep the catalogue detail instead.
+    if (_detailScore(results[0]) <= 0 && _detailScore(results[1]) <= 0) return null;
     var data = _detailScore(results[1]) > _detailScore(results[0]) ? results[1] : (results[0] || results[1] || {});
     var core = _core(data) || {};
     var eps = _episodeRows(data,ref);
@@ -264,12 +269,23 @@ function _fetchDetail(url, opts) {
     var packages = _packages(data);
     var subCount=0,dubCount=0;
     Object.keys(packages).forEach(function(k){if(packages[k].sub===true||packages[k].subhard===true)subCount++;if(packages[k].dub===true||packages[k].dubhard===true)dubCount++;});
-    return {id:ref.source + ':' + ref.id,title:title,englishTitle:core.englishTitle || cachedItem.englishTitle || null,
+    var detail = {id:ref.source + ':' + ref.id,title:title,englishTitle:core.englishTitle || cachedItem.englishTitle || null,
       url:String(url),cover:_cover(core) || _cover(cachedItem) || (fallback && fallback.cover) || null,
       description:core.description || core.synopsis || '',status:core.status || 'unknown',genres:core.genres || [],studios:[],
       type:'anime',sourceId:SOURCE_ID,malId:_num(core.malId || core.idMal || cachedItem.malId),
       anilistId:_num(core.anilistId || core.idAnilist || cachedItem.anilistId),year:core.year || core.seasonYear || null,
       episodes:eps,subCount:subCount || eps.length,dubCount:dubCount || eps.length};
+    // Missing fields are not facts. Omit them so a partial source response
+    // cannot erase the metadata already supplied by the catalogue.
+    if (!detail.englishTitle) delete detail.englishTitle;
+    if (!detail.cover) delete detail.cover;
+    if (!detail.description) delete detail.description;
+    if (detail.status === 'unknown') delete detail.status;
+    if (!Array.isArray(detail.genres) || !detail.genres.length) delete detail.genres;
+    if (!detail.malId) delete detail.malId;
+    if (!detail.anilistId) delete detail.anilistId;
+    if (!detail.year) delete detail.year;
+    return detail;
   }).catch(function(){return fallback ? {id:ref.source+':'+ref.id,title:fallback.title,url:String(url),cover:fallback.cover,episodes:[],type:'anime',sourceId:SOURCE_ID} : null;});
 }
 function getEpisodes(url, opts) {

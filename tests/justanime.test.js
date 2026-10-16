@@ -18,7 +18,7 @@ global.fetch = async (url, options) => {
     body = { results: [{ id: 21, title: { english: "Mock Anime" }, cover: "https://img.example/mock.jpg" }], pageInfo: { hasNextPage: true } };
   } else if (u === "https://core.justanime.to/api/search?query=Mock%20Anime&page=1" ||
              u === "https://core.justanime.to/api/search?query=Retry%20Anime&page=1") {
-    body = { results: [{ id: 21, idMal: "999", title: { english: "Mock Anime", romaji: "Mock Anime Romaji" }, cover: "https://img.example/mock.jpg" }] };
+    body = { results: [{ id: 21, idMal: "999", anilistId: "777", title: { english: "Mock Anime", romaji: "Mock Anime Romaji" }, cover: "https://img.example/mock.jpg" }] };
   } else if (u === "https://core.justanime.to/api/anime/21") {
     body = { data: { id: 21, idMal: 999, title: { english: "Mock Anime", romaji: "Mock Anime" }, coverImage: { extraLarge: "https://img.example/mock.jpg" }, description: "<p>A test anime</p>", genres: ["Action"], episodes: 2, seasonYear: 2024, status: "FINISHED" } };
   } else if (u === "https://core.justanime.to/api/anime/21/episodes?page=1") {
@@ -54,7 +54,7 @@ global.fetch = async (url, options) => {
 const provider = require("../providers/justanime.js");
 
 async function main() {
-  assert.equal(provider.version, "1.9.0");
+  assert.equal(provider.version, "1.9.1");
 
   // A temporary server error should be retried instead of immediately
   // collapsing into an empty detail/episode response.
@@ -83,6 +83,7 @@ async function main() {
   const detail = await provider.getDetail("https://justanime.to/anime/21/mock-anime", {});
   assert.equal(detail.title, "Mock Anime");
   assert.equal(detail.malId, 999);
+  assert.equal(detail.anilistId, 777, "detail should preserve AniList ID from search when detail endpoint omits it");
   assert.equal(detail.episodes.length, 2);
   assert.deepEqual(detail.episodes.map((ep) => ep.number), [1, 2], "episodes must be ascending for Z Mode canonical mapping");
   assert.equal(detail.episodes[0].url, "21||1");

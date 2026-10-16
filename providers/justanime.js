@@ -6,7 +6,7 @@ var SITE = 'https://justanime.to';
 var API = 'https://core.justanime.to/api';
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID)
   ? String(__SOURCE_ID) : 'justanime';
-var VERSION = '1.9.0';
+var VERSION = '1.9.1';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
   '(KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36';
 
@@ -105,6 +105,7 @@ function _numericId(value) {
   var n = Number(s);
   return isFinite(n) && n > 0 ? n : null;
 }
+var _cardCache = {};
 function _card(item) {
   var id = _id(item), title = _title(item);
   if (!id || !title) return null;
@@ -123,7 +124,7 @@ function _card(item) {
     if (candidate && candidate !== title) { englishTitle = candidate; break; }
   }
 
-  return {
+  var card = {
     id: id, title: title, englishTitle: englishTitle,
     url: id, cover: _cover(item) || null,
     type: 'anime', sourceId: SOURCE_ID,
@@ -131,6 +132,11 @@ function _card(item) {
       (item.malId != null ? item.malId : item.mal_id)),
     anilistId: _numericId(item.anilistId != null ? item.anilistId : item.anilist_id)
   };
+  // Keep the last good search/home card available to detail resolution. The
+  // episode API can succeed while the detail API temporarily fails; don't
+  // replace a real catalogue title/cover/tracker IDs with "Anime <id>".
+  _cardCache[id] = card;
+  return card;
 }
 function _listPayload(data) {
   var value = data;
@@ -296,7 +302,12 @@ function _fetchDetail(url, opts) {
   ]).then(function (results) {
     var anime = _unwrapAnime(results[0]);
     var episodes = results[1] || [];
+    var cachedCard = _cardCache[id] || null;
     if (!anime && !episodes.length) return null;
+    // If only the episode endpoint answered, require a previously resolved
+    // search card rather than emitting an empty detail that can clobber
+    // catalogue metadata in consumers.
+    if (!anime && !cachedCard) return null;
     anime = anime || {};
 
     // Some JustAnime responses include the full episode objects on the anime
@@ -306,7 +317,8 @@ function _fetchDetail(url, opts) {
       episodes = _episodeRows(anime.episodes, id);
     }
 
-    var title = _title(anime) || anime.name || anime.english || anime.romaji || ('Anime ' + id);
+    var title = _title(anime) || anime.name || anime.english || anime.romaji ||
+      (cachedCard && cachedCard.title) || ('Anime ' + id);
     var count = _episodeCount(anime);
     if (!episodes.length && count > 0) {
       for (var n = 1; n <= count; n++) {
@@ -314,14 +326,26 @@ function _fetchDetail(url, opts) {
       }
     }
     var genres = Array.isArray(anime.genres) ? anime.genres : (Array.isArray(anime.genre) ? anime.genre : []);
-    return {
-      id: id, title: title, url: id, cover: _cover(anime) || null,
+    var detail = {
+      id: id, title: title, url: id,
+      cover: _cover(anime) || (cachedCard && cachedCard.cover) || null,
       description: _stripHtml(anime.description || anime.synopsis || ''),
       status: anime.status || 'unknown', genres: genres, studios: [],
       type: 'anime', sourceId: SOURCE_ID, year: anime.seasonYear || anime.year || null,
-      malId: anime.idMal || anime.malId || anime.mal_id || null,
+      malId: anime.idMal || anime.malId || anime.mal_id || (cachedCard && cachedCard.malId) || null,
+      anilistId: anime.anilistId || anime.anilist_id || (cachedCard && cachedCard.anilistId) || null,
       episodes: episodes, subCount: count || episodes.length, dubCount: count || episodes.length
     };
+    // Optional metadata must be absent, not an empty placeholder: consumers
+    // can then retain the catalogue's value instead of replacing it with "".
+    if (!detail.cover) delete detail.cover;
+    if (!detail.description) delete detail.description;
+    if (!detail.year) delete detail.year;
+    if (!detail.malId) delete detail.malId;
+    if (!detail.anilistId) delete detail.anilistId;
+    if (!detail.genres.length) delete detail.genres;
+    if (detail.status === 'unknown') delete detail.status;
+    return detail;
   }).catch(function () { return null; });
 }
 function getEpisodes(url, opts) {
