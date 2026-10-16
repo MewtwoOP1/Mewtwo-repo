@@ -487,11 +487,16 @@ function getVideoSources(episodeUrl, opts) {
 }
 
 
+function getStreams(id, opts) { return getVideoSources(id, opts); }
+function getLinks(id, opts) { return getVideoSources(id, opts); }
+
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
+    version: '3.0.0',
     getInfo: getInfo, getSettings: getSettings, getHome: getHome,
     popular: popular, search: search, getDetail: getDetail,
     getEpisodes: getEpisodes, getVideoSources: getVideoSources,
+    getStreams: getStreams, getLinks: getLinks,
     _item: _item, _parseTmdbUrl: _parseTmdbUrl, _episodeId: _episodeId,
     _combinedSettings: _combinedSettings, _tmdbRequestUrl: _tmdbRequestUrl,
     _parseAddonUrls: _parseAddonUrls, _parseStreamId: _parseStreamId
