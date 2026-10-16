@@ -57,15 +57,15 @@ function _abs(href, base) {
   dir = dir.substring(0, dir.lastIndexOf('/') + 1);
   return dir + value;
 }
-function _get(url, referer) {
-  return fetch(url, {
-    headers: {
-      'User-Agent': UA,
-      'Accept': 'text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8',
-      'Referer': referer || SITE + '/'
-    },
-    timeoutMs: 15000
-  }).then(function (response) {
+function _get(url, referer, extraHeaders) {
+  var headers = {
+    'User-Agent': UA,
+    'Accept': 'text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8',
+    'Referer': referer || SITE + '/'
+  };
+  var extra = extraHeaders || {};
+  Object.keys(extra).forEach(function (key) { headers[key] = extra[key]; });
+  return fetch(url, { headers: headers, timeoutMs: 15000 }).then(function (response) {
     if (response && response.status && response.status >= 400) throw new Error('HTTP ' + response.status);
     return response && response.body != null ? String(response.body) : '';
   });
@@ -96,15 +96,28 @@ function _meta(html, key) {
   }
   return '';
 }
-function _card(anchor, base) {
-  var open = (String(anchor).match(/^<a\b[^>]*>/i) || [''])[0];
-  var href = _attr(open, 'href');
+function _card(block, base) {
+  var html = String(block || '');
+  var re = /<a\b[^>]*>[\s\S]*?<\/a\s*>/gi, m, open = '', href = '';
+  while ((m = re.exec(html)) !== null) {
+    var candidateOpen = (m[0].match(/^<a\b[^>]*>/i) || [''])[0];
+    var candidateHref = _attr(candidateOpen, 'href');
+    if (/\/(?:movie|series)\//i.test(candidateHref)) {
+      open = candidateOpen;
+      href = candidateHref;
+      break;
+    }
+  }
+  if (!href) {
+    open = (html.match(/^<a\b[^>]*>/i) || [''])[0];
+    href = _attr(open, 'href');
+  }
   var url = _abs(href, base);
   if (!url || !/\/(?:movie|series)\//i.test(url) || /\/(?:movie|series)\/?$/i.test(url)) return null;
-  var imageTag = (String(anchor).match(/<img\b[^>]*>/i) || [''])[0];
-  var title = _attr(open, 'data-title') || _attr(open, 'aria-label') ||
-    _attr(open, 'title') || _attr(imageTag, 'alt') || '';
-  if (!title) title = _text(String(anchor).replace(/<img\b[^>]*>/gi, ''));
+  var imageTag = (html.match(/<img\b[^>]*>/i) || [''])[0];
+  var title = _attr(open, 'title') || _attr(open, 'data-title') || _attr(open, 'aria-label') ||
+    _attr(imageTag, 'alt') || '';
+  if (!title) title = _text(String(html).replace(/<img\b[^>]*>/gi, ''));
   title = _cleanTitle(title);
   if (!title || /^(?:watch|play|details|more)$/i.test(title)) return null;
   var poster = _attr(imageTag, 'data-src') || _attr(imageTag, 'data-lazy-src') ||
@@ -113,26 +126,41 @@ function _card(anchor, base) {
   return { id: url, title: title, cover: poster || null, url: url, type: 'movie', sourceId: SOURCE_ID };
 }
 function _cards(html, base) {
-  var out = [], re = /<a\b[^>]*>[\s\S]*?<\/a\s*>/gi, m;
-  while ((m = re.exec(String(html || ''))) !== null) {
-    var item = _card(m[0], base);
+  var source = String(html || ''), out = [], starts = [], re = /<div\b[^>]*class\s*=\s*["'][^"']*\bflw-item\b[^"']*["'][^>]*>/gi, m;
+  while ((m = re.exec(source)) !== null) starts.push(m.index);
+  for (var i = 0; i < starts.length; i++) {
+    var end = i + 1 < starts.length ? starts[i + 1] : source.length;
+    var item = _card(source.slice(starts[i], end), base);
     if (item) out.push(item);
+  }
+  // Fallback for lightweight themes and mocked fixtures without .flw-item wrappers.
+  if (!out.length) {
+    var anchors = /<a\b[^>]*>[\s\S]*?<\/a\s*>/gi, a;
+    while ((a = anchors.exec(source)) !== null) {
+      var item2 = _card(a[0], base);
+      if (item2) out.push(item2);
+    }
   }
   return _uniqItems(out);
 }
 function _pageUrl(path) { return SITE + (path.charAt(0) === '/' ? path : '/' + path); }
 
+function _filterUrl(sort, page, keyword) {
+  var query = 'sort=' + encodeURIComponent(sort) + '&order=desc&page=' + (Math.max(1, parseInt(page, 10) || 1));
+  if (keyword != null && _trim(keyword)) query = 'type=all&keyword=' + encodeURIComponent(_trim(keyword)) + '&' + query;
+  return _pageUrl('/filter.php?' + query);
+}
 function getHome(opts) {
-  var pages = [
-    { title: 'Latest Movies and Series', path: '/' },
-    { title: 'Movies', path: '/movie/' },
-    { title: 'Series', path: '/series/' }
-  ];
-  return Promise.all(pages.map(function (page) {
-    return _get(_pageUrl(page.path), SITE + '/').then(function (html) {
-      return { title: page.title, items: _cards(html, SITE + '/') };
-    }).catch(function () { return { title: page.title, items: [] }; });
-  })).then(function (rows) { return rows.filter(function (row) { return row.items.length > 0; }); });
+  var latest = _filterUrl('updated', 1);
+  var popularUrl = _filterUrl('rating', 1);
+  return Promise.all([
+    _get(latest, SITE + '/').then(function (html) {
+      return { title: 'Latest Movies and Series', items: _cards(html, latest) };
+    }).catch(function () { return { title: 'Latest Movies and Series', items: [] }; }),
+    _get(popularUrl, SITE + '/').then(function (html) {
+      return { title: 'Popular Movies and Series', items: _cards(html, popularUrl) };
+    }).catch(function () { return { title: 'Popular Movies and Series', items: [] }; })
+  ]).then(function (rows) { return rows.filter(function (row) { return row.items.length > 0; }); });
 }
 function popular(opts) {
   return getHome(opts).then(function (sections) {
@@ -142,15 +170,7 @@ function popular(opts) {
   });
 }
 function _searchUrls(query, page) {
-  var q = encodeURIComponent(query || ''), p = Math.max(1, parseInt(page, 10) || 1);
-  var suffix = p > 1 ? '&page=' + p : '';
-  return [
-    _pageUrl('/?s=' + q + suffix),
-    _pageUrl('/?q=' + q + suffix),
-    _pageUrl('/search?query=' + q + (p > 1 ? '&page=' + p : '')),
-    _pageUrl('/search?keyword=' + q + (p > 1 ? '&page=' + p : '')),
-    _pageUrl('/search?q=' + q + (p > 1 ? '&page=' + p : ''))
-  ];
+  return [_filterUrl('updated', page, query)];
 }
 function search(query, page, opts) {
   var q = _trim(query);
