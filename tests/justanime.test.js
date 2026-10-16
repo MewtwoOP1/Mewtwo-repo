@@ -11,7 +11,7 @@ global.fetch = async (url, options) => {
   } else if (u === "https://core.justanime.to/api/search?page=1") {
     body = { results: [{ id: 21, title: { english: "Mock Anime" }, cover: "https://img.example/mock.jpg" }], pageInfo: { hasNextPage: true } };
   } else if (u === "https://core.justanime.to/api/search?query=Mock%20Anime&page=1") {
-    body = { results: [{ id: 21, title: { english: "Mock Anime" }, cover: "https://img.example/mock.jpg" }] };
+    body = { results: [{ id: 21, idMal: "999", title: { english: "Mock Anime", romaji: "Mock Anime Romaji" }, cover: "https://img.example/mock.jpg" }] };
   } else if (u === "https://core.justanime.to/api/anime/21") {
     body = { data: { id: 21, idMal: 999, title: { english: "Mock Anime", romaji: "Mock Anime" }, coverImage: { extraLarge: "https://img.example/mock.jpg" }, description: "<p>A test anime</p>", genres: ["Action"], episodes: 2, seasonYear: 2024, status: "FINISHED" } };
   } else if (u === "https://core.justanime.to/api/anime/21/episodes?page=1") {
@@ -36,7 +36,7 @@ global.fetch = async (url, options) => {
 const provider = require("../providers/justanime.js");
 
 async function main() {
-  assert.equal(provider.version, "1.1.0");
+  assert.equal(provider.version, "1.4.0");
   assert.equal(provider.getInfo().name, "JustAnime");
   assert.equal(provider.getInfo().type, "anime");
   assert.deepEqual(provider.getSettings().map((s) => s.key), ["servers", "language"]);
@@ -50,6 +50,8 @@ async function main() {
   const search = await provider.search("Mock Anime", 1, {});
   assert.equal(search[0].id, "21");
   assert.equal(search[0].type, "anime");
+  assert.equal(search[0].malId, 999);
+  assert.equal(search[0].englishTitle, "Mock Anime Romaji");
 
   const detail = await provider.getDetail("https://justanime.to/anime/21/mock-anime", {});
   assert.equal(detail.title, "Mock Anime");
