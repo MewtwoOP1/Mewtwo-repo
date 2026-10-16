@@ -16,7 +16,7 @@ function _settings() {
   var s = (typeof __settings !== 'undefined' && __settings && __settings[SOURCE_ID]) || {};
   return { language: s.language === 'dub' ? 'dub' : 'sub' };
 }
-function _trim(v) { return String(v == null ? '' : v).replace(/^\\s+|\\s+$/g, ''); }
+function _trim(v) { return String(v == null ? '' : v).replace(/^\s+|\s+$/g, ''); }
 function _json(url, referer, attempt) {
   attempt = attempt || 0;
   return fetch(url, { headers:{'User-Agent':UA,'Accept':'application/json, text/plain, */*','Referer':referer || SITE + '/','Origin':SITE}, timeoutMs:15000 })
@@ -92,8 +92,8 @@ function _titleSearch(query) {
 }
 function _extractId(value) {
   var s=String(value == null ? '' : value);
-  var m=s.match(/(?:anilist=|\\/ani\\/|\\/series\\/)?(\\d+)(?:[/?#]|$)/i);
-  return m ? m[1] : (/^\\d+$/.test(s) ? s : '');
+  var m=s.match(/(?:anilist=|\/ani\/|\/series\/)?(\d+)(?:[/?#]|$)/i);
+  return m ? m[1] : (/^\d+$/.test(s) ? s : '');
 }
 function _episodes(id) {
   return _json(SITE + '/api/partner/v1/series/' + encodeURIComponent(id)).then(function(d){
@@ -109,7 +109,7 @@ function _episodes(id) {
 }
 function getDetail(url) {
   var id=_extractId(url);
-  if (!/^\\d+$/.test(id)) return Promise.resolve(null);
+  if (!/^\d+$/.test(id)) return Promise.resolve(null);
   return Promise.all([
     _json(SITE + '/api/partner/v1/series/' + encodeURIComponent(id)).catch(function(){return null;}),
     _json(SITE + '/api/partner/v1/lookup?anilist=' + encodeURIComponent(id)).catch(function(){return null;})
@@ -128,19 +128,19 @@ function getDetail(url) {
 }
 function getEpisodes(url) {
   var id=_extractId(url);
-  if (!/^\\d+$/.test(id)) return Promise.resolve([]);
+  if (!/^\d+$/.test(id)) return Promise.resolve([]);
   return _episodes(id).then(function(eps){if(eps.length)return eps;return getDetail(id).then(function(d){return d&&d.episodes||[];});});
 }
-function _isHttp(url) { return /^https?:\\/\\//i.test(String(url || '')); }
+function _isHttp(url) { return /^https?:\/\//i.test(String(url || '')); }
 function getVideoSources(episodeUrl, opts) {
   var value=typeof episodeUrl==='string'?episodeUrl:(episodeUrl&&(episodeUrl.url||episodeUrl.id))||'';
   var p=String(value).split('||'), id=_extractId(p[0]), ep=Number(p[1]);
-  if (!/^\\d+$/.test(id) || !isFinite(ep) || ep<1) return Promise.reject(new Error('Ani.pm: invalid episode reference'));
+  if (!/^\d+$/.test(id) || !isFinite(ep) || ep<1) return Promise.reject(new Error('Ani.pm: invalid episode reference'));
   var lang=_settings().language, jobs=[lang,lang==='sub'?'dub':'sub'];
   function resolve(language) {
     var embedUrl=SITE+'/embed/ani/'+encodeURIComponent(id)+'/'+encodeURIComponent(ep)+'/'+language;
     return _text(embedUrl).then(function(html){
-      var m=html.match(/id="anipm-embed-config">([^<]+)<\\/script>/);
+      var m=html.match(/id="anipm-embed-config">([^<]+)<\/script>/);
       if(!m) throw new Error('Ani.pm embed config missing');
       var config=JSON.parse(m[1]), nonce=config && config.nonce;
       if(!nonce) throw new Error('Ani.pm embed nonce missing');
@@ -150,7 +150,7 @@ function getVideoSources(episodeUrl, opts) {
         return _json(EMBED+'/api/embed/session?t='+encodeURIComponent(s.token),EMBED+'/').then(function(stream){
           if(!stream.source) throw new Error('Ani.pm stream URL missing');
           var subs=Array.isArray(stream.subtitles)?stream.subtitles.filter(function(x){return x&&x.url;}).map(function(x){return {file:x.url,label:x.label||x.srclang||'Unknown'};}):[];
-          return [{url:stream.source,quality:'Auto',container:/\\.m3u8(?:[?#]|$)/i.test(stream.source)?'hls':'mp4',
+          return [{url:stream.source,quality:'Auto',container:/\.m3u8(?:[?#]|$)/i.test(stream.source)?'hls':'mp4',
             headers:{'User-Agent':UA,'Referer':EMBED+'/'},kind:'raw',label:'Ani.pm '+language.toUpperCase(),subtitles:subs}];
         });
       });
