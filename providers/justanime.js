@@ -171,9 +171,19 @@ function _episodeRows(response, animeId) {
   return out;
 }
 function _fetchEpisodes(id) {
+  // The endpoint's payload has appeared as {data:{episodes:[...]}} and
+  // {episodes:[...]} depending on API deployment; parse both shapes.
   return _json(API + '/anime/' + encodeURIComponent(id) + '/episodes?page=1')
-    .then(function (response) { return _episodeRows(response, id); })
-    .catch(function () { return []; });
+    .then(function (response) {
+      var rows = _episodeRows(response, id);
+      if (rows.length) return rows;
+      var root = response && response.data;
+      if (root && root.data) {
+        rows = _episodeRows(root.data, id);
+        if (rows.length) return rows;
+      }
+      return [];
+    }).catch(function () { return []; });
 }
 function getDetail(url, opts) {
   var id = _extractId(url);
@@ -294,14 +304,10 @@ function getVideoSources(episodeUrl, opts) {
   var langs = config.language === 'dub' ? ['dub', 'sub'] : ['sub', 'dub'];
   var jobs = [];
   // Current API route: language-specific AniNeko server returning sources directly.
-  if (config.servers === 'all' || config.servers === 'anineko') {
-    langs.forEach(function (lang) {
-      jobs.push(_json(API + '/watch/' + encodeURIComponent(id) + '/episode/' +
-        encodeURIComponent(episode) + '/anineko/' + lang + '/hd1').then(function (payload) {
-          return _sourceRows(payload, 'anineko', lang);
-        }).catch(function () { return []; }));
-    });
-  }
+  // Discover the server IDs first. They are dynamic; hardcoding "hd1"
+  // can silently return no sources when JustAnime changes its server list.
+  // _animekoSources performs the API's documented two-step lookup.
+
   var legacyServers = config.servers === 'all' ? ['megaplay', 'animegg'] :
     (config.servers === 'anineko' ? [] : [config.servers]);
   legacyServers.forEach(function (server) {
