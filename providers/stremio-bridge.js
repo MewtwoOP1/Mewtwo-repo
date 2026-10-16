@@ -1,8 +1,8 @@
 // Stremio addon bridge for Zangetsu.
-// Version 1.2.0. User-configurable metadata and streaming add-ons.
+// Version 1.2.1. User-configurable metadata and streaming add-ons.
 // Addon URLs are provided by each user. No catalog provider is hardcoded.
 
-var BRIDGE_VERSION = '1.2.0';
+var BRIDGE_VERSION = '1.2.1';
 var SOURCE_SETTINGS = [
   {
     key: 'metadataAddonUrls',
@@ -37,7 +37,7 @@ var SOURCE_SETTINGS = [
     title: 'Include torrent-only results',
     label: 'Include torrent-only results',
     description: 'Keep results that contain an infoHash but no direct HTTP stream URL.',
-    type: 'toggle',
+    type: 'bool',
     default: false
   }
 ];
@@ -47,6 +47,7 @@ function getInfo() {
     id: 'stremio-bridge',
     name: 'Stremio Bridge (Bring Your Own Addons)',
     version: BRIDGE_VERSION,
+    baseUrl: 'https://github.com/MewtwoOP1/Zangetsu-repo',
     type: 'movie',
     lang: 'en',
     description: 'Uses user-configured Stremio-compatible add-ons.'
@@ -114,8 +115,11 @@ function _parseAddonUrls(raw) {
 
 function _readSetting(opts, key) {
   var value = opts && opts[key];
-  if (value == null && typeof getSetting === 'function') {
-    try { value = getSetting(key); } catch (e) { value = ''; }
+  // Zangetsu stores provider settings in the shared runtime under sourceId.
+  // search/getHome opts only contain call-specific options such as category.
+  if (value == null && typeof __settings !== 'undefined' && __settings) {
+    var saved = __settings['stremio-bridge'];
+    if (saved && saved[key] != null) value = saved[key];
   }
   return value;
 }
