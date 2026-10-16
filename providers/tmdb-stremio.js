@@ -504,6 +504,7 @@ if (typeof module !== 'undefined' && module.exports) {
     getStreams: getStreams, getLinks: getLinks,
     _item: _item, _parseTmdbUrl: _parseTmdbUrl, _episodeId: _episodeId,
     _combinedSettings: _combinedSettings, _tmdbRequestUrl: _tmdbRequestUrl,
-    _parseAddonUrls: _parseAddonUrls, _parseStreamId: _parseStreamId
+    _parseAddonUrls: _parseAddonUrls, _manifestUrl: _manifestUrl,
+    _parseStreamId: _parseStreamId
   };
 }
