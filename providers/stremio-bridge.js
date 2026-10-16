@@ -70,10 +70,22 @@ function _addonBase(raw) {
 }
 
 function _parseAddonUrls(raw) {
-  var parts = String(raw || '').split(/[\\n,;]+/);
+  var source = String(raw || '');
+  var parts = [], token = '';
   var urls = [], seen = {};
-  for (var i = 0; i < parts.length; i++) {
-    var base = _addonBase(parts[i]);
+  for (var i = 0; i < source.length; i++) {
+    var ch = source.charAt(i);
+    var code = source.charCodeAt(i);
+    if (ch === ',' || ch === ';' || code === 10 || code === 13) {
+      parts.push(token);
+      token = '';
+    } else {
+      token += ch;
+    }
+  }
+  parts.push(token);
+  for (var j = 0; j < parts.length; j++) {
+    var base = _addonBase(parts[j]);
     if (base && !seen[base]) { seen[base] = true; urls.push(base); }
   }
   return urls;
@@ -120,7 +132,11 @@ function _fetchJson(url) {
 }
 
 function _endpoint(base, resource, type, id, extra) {
-  var path = base.replace(/\\/$/, '') + '/' + resource + '/' +
+  var cleanBase = String(base || '');
+  if (cleanBase.charAt(cleanBase.length - 1) === '/') {
+    cleanBase = cleanBase.substring(0, cleanBase.length - 1);
+  }
+  var path = cleanBase + '/' + resource + '/' +
     encodeURIComponent(type) + '/' + encodeURIComponent(id);
   if (extra) path += '/' + extra;
   return path + '.json';
