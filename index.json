@@ -70,67 +70,12 @@
     {
       "id": "kototv",
       "name": "KotoTV",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "type": "anime",
       "lang": "en",
       "file": "providers/kototv.js",
       "logo": "https://www.google.com/s2/favicons?sz=256&domain=kototv.to",
-      "nsfw": false,
-      "settings": [
-        {
-          "key": "domain",
-          "label": "Domain",
-          "description": "Choose the exact domain this source should use. No automatic failover.",
-          "type": "enum",
-          "default": "https://kototv.to",
-          "options": [
-            {
-              "value": "https://kototv.to",
-              "label": "kototv.to"
-            },
-            {
-              "value": "https://anineko.site",
-              "label": "anineko.site"
-            },
-            {
-              "value": "https://aniorbit.cc",
-              "label": "aniorbit.cc"
-            },
-            {
-              "value": "https://anispark.cc",
-              "label": "anispark.cc"
-            },
-            {
-              "value": "https://animeflux.cc",
-              "label": "animeflux.cc"
-            },
-            {
-              "value": "https://aninova.cc",
-              "label": "aninova.cc"
-            },
-            {
-              "value": "https://anipulse.cc",
-              "label": "anipulse.cc"
-            },
-            {
-              "value": "https://anirush.cc",
-              "label": "anirush.cc"
-            },
-            {
-              "value": "https://aniblaze.cc",
-              "label": "aniblaze.cc"
-            },
-            {
-              "value": "https://hiotaku.cc",
-              "label": "hiotaku.cc"
-            },
-            {
-              "value": "https://www.aniwatch.rest",
-              "label": "www.aniwatch.rest"
-            }
-          ]
-        }
-      ]
+      "nsfw": false
     },
     {
       "id": "mkissa",
