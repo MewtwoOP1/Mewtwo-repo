@@ -528,3 +528,35 @@ function _expandQualities(masterUrl, hdrs, cat, subs, tag) {
     })
     .catch(function () { return [autoEntry('hls')]; });
 }
+
+
+// Keep the provider usable in Zangetsu's script runtime while exposing the same
+// entry points to Node-based validation and mocked integration tests.
+function getSettings() { return []; }
+function popular(opts) {
+  return getHome(opts).then(function (rows) {
+    var out = [];
+    (rows || []).forEach(function (row) {
+      (row.items || []).forEach(function (item) { out.push(item); });
+    });
+    return out;
+  });
+}
+function getStreams(id, opts) { return getVideoSources(id, opts); }
+function getLinks(id, opts) { return getVideoSources(id, opts); }
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    version: '1.0.3',
+    getInfo: getInfo,
+    getSettings: getSettings,
+    getHome: getHome,
+    popular: popular,
+    search: search,
+    getDetail: getDetail,
+    getEpisodes: getEpisodes,
+    getVideoSources: getVideoSources,
+    getStreams: getStreams,
+    getLinks: getLinks
+  };
+}
