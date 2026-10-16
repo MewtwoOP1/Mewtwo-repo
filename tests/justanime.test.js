@@ -43,7 +43,7 @@ global.fetch = async (url, options) => {
 const provider = require("../providers/justanime.js");
 
 async function main() {
-  assert.equal(provider.version, "1.4.0");
+  assert.equal(provider.version, "1.5.0");
   assert.equal(provider.getInfo().name, "JustAnime");
   assert.equal(provider.getInfo().type, "anime");
   assert.deepEqual(provider.getSettings().map((s) => s.key), ["servers", "language"]);
