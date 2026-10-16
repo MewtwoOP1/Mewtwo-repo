@@ -8,6 +8,9 @@ var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID) ? String(__S
 var VERSION = '1.1.0';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36';
 var _seriesCache = {};
+var _detailCache = {};
+var _detailInflight = {};
+var _DETAIL_TTL = 30000;
 
 function getInfo() {
   return { name:'Ani.pm', lang:'en', baseUrl:SITE, logo:'https://www.google.com/s2/favicons?sz=256&domain=ani.pm', type:'anime', version:VERSION };
@@ -195,6 +198,27 @@ function _legacyEpisodes(id) {
 function getDetail(url, opts) {
   var ref = _parseRef(url);
   if (!ref) return Promise.resolve(null);
+  var key = String(url);
+  var now = Date.now();
+  var hit = _detailCache[key];
+  if (hit && (now - hit.at) < _DETAIL_TTL) return Promise.resolve(hit.value);
+  if (_detailInflight[key]) return _detailInflight[key];
+  var pending = _fetchDetail(url, opts).then(function(detail) {
+    delete _detailInflight[key];
+    if (detail && Array.isArray(detail.episodes) && detail.episodes.length) {
+      _detailCache[key] = {at:Date.now(),value:detail};
+    }
+    return detail;
+  }, function(error) {
+    delete _detailInflight[key];
+    throw error;
+  });
+  _detailInflight[key] = pending;
+  return pending;
+}
+function _fetchDetail(url, opts) {
+  var ref = _parseRef(url);
+  if (!ref) return Promise.resolve(null);
   var cached = _seriesCache[String(url)];
   var fallback = cached && cached.card;
   if (ref.legacy) {
@@ -237,16 +261,11 @@ function getEpisodes(url, opts) {
   var ref = _parseRef(url);
   if (!ref) return Promise.resolve([]);
   if (ref.legacy) return _legacyEpisodes(ref.id);
-  return Promise.all([
-    _bootstrap(ref,1,'sub').catch(function(){return null;}),
-    _bootstrap(ref,1,'dub').catch(function(){return null;})
-  ]).then(function(results) {
-    var data = results[0] || results[1];
-    return data ? _episodeRows(data,ref) : [];
-  }).then(function(rows) {
-    if (rows.length) return rows;
-    return getDetail(url,opts).then(function(detail){return detail && Array.isArray(detail.episodes) ? detail.episodes : [];});
-  });
+  // Reuse the same successful detail/episode payload instead of issuing two
+  // more bootstrap calls immediately after getDetail has already fetched it.
+  return getDetail(url, opts).then(function(detail) {
+    return detail && Array.isArray(detail.episodes) ? detail.episodes : [];
+  }).catch(function(){return [];});
 }
 function _isHttp(url) { return /^https?:\/\//i.test(String(url || '')); }
 function _legacyStreams(id, ep, language) {
