@@ -1,6 +1,6 @@
 /**
  * Zangetsu Provider: Stremio Addon Bridge (AIOStreams, Pengu, Torrentio, etc.)
- * Version: 1.0.2
+ * Version: 1.0.3
  *
  * Users configure their own Stremio addon manifest URLs in Source Settings.
  * No personal addon URL is hard-coded.
@@ -33,7 +33,7 @@ const SOURCE_SETTINGS = [
 const PROVIDER_META = {
   id: "stremio-bridge",
   name: "Stremio Bridge (Bring Your Own Addons)",
-  version: "1.0.2",
+  version: "1.0.3",
   type: "movie",
   lang: "en",
   description: "Connects user-configured Stremio addons to Zangetsu. Each user supplies their own manifest URLs in source settings.",
@@ -87,7 +87,7 @@ async function fetchJson(url, options = {}) {
   try {
     const response = await fetch(url, {
       ...options,
-      headers: { Accept: "application/json", "User-Agent": "Zangetsu-Stremio-Bridge/1.0.2", ...(options.headers || {}) },
+      headers: { Accept: "application/json", "User-Agent": "Zangetsu-Stremio-Bridge/1.0.3", ...(options.headers || {}) },
       signal: controller ? controller.signal : undefined,
     });
     if (!response.ok) throw new Error(`HTTP ${response.status} from ${url}`);
