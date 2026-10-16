@@ -1,290 +1,296 @@
-/**
- * Zangetsu Provider: Stremio Addon Bridge (AIOStreams, Pengu, Torrentio, etc.)
- * Version: 1.0.3
- *
- * Users configure their own Stremio addon manifest URLs in Source Settings.
- * No personal addon URL is hard-coded.
- */
-const DEFAULT_ADDON_URLS = "";
-const CINEMETA_BASE = "https://v3-cinemeta.strem.io";
-const TIMEOUT_MS = 15000;
+// Stremio addon bridge for Zangetsu.
+// Version 1.1.0. Uses the Zangetsu JS runtime's fetch/absUrl-compatible style.
+// Addon URLs are provided by each user. No catalog provider is hardcoded.
 
-const SOURCE_SETTINGS = [
+var BRIDGE_VERSION = '1.1.0';
+var SOURCE_SETTINGS = [
   {
-    key: "addonUrls", id: "addonUrls",
-    title: "Stremio Addon Manifest URLs",
-    label: "Stremio Addon Manifest URLs (comma-separated)",
-    description: "Paste one or more complete Stremio manifest.json URLs, such as your own AIOStreams or Pengu URL. Separate multiple URLs with commas.",
-    type: "text", default: DEFAULT_ADDON_URLS, value: DEFAULT_ADDON_URLS,
+    key: 'addonUrls',
+    id: 'addonUrls',
+    title: 'Stremio Add-on Manifest URLs',
+    label: 'Manifest URLs',
+    description: 'Paste complete manifest.json URLs for your own Stremio add-ons. Separate multiple URLs with commas or new lines.',
+    type: 'text',
+    default: ''
   },
   {
-    key: "excludeNonHttp", id: "excludeNonHttp",
-    title: "Direct HTTP/HLS Streams Only", label: "Direct HTTP/HLS Streams Only",
-    description: "Hide streams that only provide an infoHash and no direct HTTP(S) URL.",
-    type: "toggle", default: true, value: true,
+    key: 'maxStreamsPerAddon',
+    id: 'maxStreamsPerAddon',
+    title: 'Maximum streams per add-on',
+    label: 'Maximum streams per add-on',
+    description: 'Limit the number of streams read from each configured add-on.',
+    type: 'number',
+    default: 25
   },
   {
-    key: "maxStreamsPerAddon", id: "maxStreamsPerAddon",
-    title: "Max Streams Per Addon", label: "Max Streams Per Addon",
-    type: "number", default: 25, value: 25,
-  },
+    key: 'includeTorrentStreams',
+    id: 'includeTorrentStreams',
+    title: 'Include torrent-only results',
+    label: 'Include torrent-only results',
+    description: 'Keep results that contain an infoHash but no direct HTTP stream URL.',
+    type: 'toggle',
+    default: false
+  }
 ];
 
-const PROVIDER_META = {
-  id: "stremio-bridge",
-  name: "Stremio Bridge (Bring Your Own Addons)",
-  version: "1.0.3",
-  type: "movie",
-  lang: "en",
-  description: "Connects user-configured Stremio addons to Zangetsu. Each user supplies their own manifest URLs in source settings.",
-  settings: SOURCE_SETTINGS,
-  preferences: SOURCE_SETTINGS,
-};
-
-function normalizeAddonBaseUrl(rawUrl) {
-  if (typeof rawUrl !== "string" || !rawUrl.trim()) return "";
-  try {
-    const parsed = new URL(rawUrl.trim().replace(/^stremio:\/\//i, "https://"));
-    if (!["http:", "https:"].includes(parsed.protocol) || parsed.username || parsed.password) return "";
-    parsed.hash = "";
-    parsed.pathname = (parsed.pathname.replace(/\/+$/, "").replace(/\/manifest\.json$/i, "") || "/");
-    return parsed.toString().replace(/\/$/, "");
-  } catch {
-    return "";
-  }
-}
-
-function readSetting(runtimeSettings, key, fallback) {
-  if (runtimeSettings && runtimeSettings[key] !== undefined && runtimeSettings[key] !== null && runtimeSettings[key] !== "") return runtimeSettings[key];
-  for (const getter of ["getPreference", "getSetting"]) {
-    if (typeof globalThis[getter] === "function") {
-      try {
-        const value = globalThis[getter](key);
-        if (value !== undefined && value !== null && value !== "") return value;
-      } catch {}
-    }
-  }
-  if (globalThis.__settings && globalThis.__settings[key] !== undefined && globalThis.__settings[key] !== "") return globalThis.__settings[key];
-  return fallback;
-}
-
-function getConfig(runtimeSettings = {}) {
-  const rawUrls = String(readSetting(runtimeSettings, "addonUrls", DEFAULT_ADDON_URLS));
-  const addonBases = [...new Set(rawUrls.split(/[\n,;]+/).map(normalizeAddonBaseUrl).filter(Boolean))];
-  const rawMax = Number(readSetting(runtimeSettings, "maxStreamsPerAddon", 25));
-  const rawExclude = readSetting(runtimeSettings, "excludeNonHttp", true);
-  const excludeNonHttp = !(rawExclude === false || String(rawExclude).toLowerCase() === "false" || String(rawExclude) === "0");
+function getInfo() {
   return {
-    addonBases,
-    excludeNonHttp,
-    maxStreamsPerAddon: Number.isFinite(rawMax) ? Math.max(1, Math.min(200, Math.floor(rawMax))) : 25,
+    id: 'stremio-bridge',
+    name: 'Stremio Bridge (Bring Your Own Addons)',
+    version: BRIDGE_VERSION,
+    type: 'movie',
+    lang: 'en',
+    description: 'Uses user-configured Stremio-compatible add-ons.'
   };
-}
-
-async function fetchJson(url, options = {}) {
-  const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
-  const timer = controller ? setTimeout(() => controller.abort(), TIMEOUT_MS) : null;
-  try {
-    const response = await fetch(url, {
-      ...options,
-      headers: { Accept: "application/json", "User-Agent": "Zangetsu-Stremio-Bridge/1.0.3", ...(options.headers || {}) },
-      signal: controller ? controller.signal : undefined,
-    });
-    if (!response.ok) throw new Error(`HTTP ${response.status} from ${url}`);
-    return await response.json();
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
-}
-
-function buildStremioUrl(baseUrl, resource, type, id, extra = "") {
-  const base = normalizeAddonBaseUrl(baseUrl);
-  if (!base) throw new Error("Invalid Stremio addon base URL");
-  const parsed = new URL(base);
-  const safeResource = String(resource).replace(/[^a-z]/gi, "");
-  parsed.pathname = `${parsed.pathname.replace(/\/+$/, "")}/${safeResource}/${encodeURIComponent(String(type))}/${encodeURIComponent(String(id))}.json`;
-  if (extra) {
-    const extraParams = new URLSearchParams(extra.startsWith("?") ? extra.slice(1) : extra);
-    for (const [key, value] of extraParams) parsed.searchParams.set(key, value);
-  }
-  return parsed.toString();
-}
-
-function mapStremioMetaToCard(meta) {
-  if (!meta || !meta.id) return null;
-  const type = meta.type === "series" ? "series" : "movie";
-  return {
-    id: JSON.stringify({ id: meta.id, type, tmdbId: meta.moviedb_id ? Number(meta.moviedb_id) : undefined, malId: meta.mal_id ? Number(meta.mal_id) : undefined }),
-    title: meta.name || meta.title || "Untitled",
-    poster: meta.poster || "",
-    backdrop: meta.background || meta.poster || "",
-    year: meta.releaseInfo ? parseInt(String(meta.releaseInfo), 10) || null : null,
-    type,
-    rating: meta.imdbRating ? parseFloat(meta.imdbRating) : null,
-    description: meta.description || "",
-  };
-}
-
-function parseItemId(rawId) {
-  if (!rawId) throw new Error("Missing item ID");
-  if (typeof rawId === "object") return rawId;
-  const value = String(rawId).trim();
-  if (value.startsWith("{")) return JSON.parse(value);
-  if (value.includes("|")) {
-    const [type, ...rest] = value.split("|");
-    return { type: type === "series" ? "series" : "movie", id: rest.join("|") };
-  }
-  return { type: "movie", id: value };
-}
-
-async function getHome() {
-  const catalogs = [
-    { title: "Popular Movies", type: "movie", id: "top" },
-    { title: "Popular Series", type: "series", id: "top" },
-  ];
-  const results = await Promise.allSettled(catalogs.map(async (section) => {
-    const data = await fetchJson(buildStremioUrl(CINEMETA_BASE, "catalog", section.type, section.id));
-    return { title: section.title, items: (Array.isArray(data.metas) ? data.metas : []).slice(0, 25).map(mapStremioMetaToCard).filter(Boolean) };
-  }));
-  return results.filter((result) => result.status === "fulfilled" && result.value.items.length).map((result) => result.value);
-}
-
-async function search(query) {
-  if (!query || !String(query).trim()) return [];
-  const q = encodeURIComponent(String(query).trim());
-  const results = await Promise.allSettled([
-    fetchJson(buildStremioUrl(CINEMETA_BASE, "catalog", "movie", "top", `search=${q}`)),
-    fetchJson(buildStremioUrl(CINEMETA_BASE, "catalog", "series", "top", `search=${q}`)),
-  ]);
-  const unique = new Map();
-  for (const result of results) {
-    if (result.status !== "fulfilled" || !Array.isArray(result.value.metas)) continue;
-    for (const meta of result.value.metas) {
-      const card = mapStremioMetaToCard(meta);
-      if (card) unique.set(card.id, card);
-    }
-  }
-  return [...unique.values()];
-}
-
-async function getDetail(rawId) {
-  const parsed = parseItemId(rawId);
-  const id = parsed.id || parsed.videoId;
-  const type = parsed.type || "movie";
-  if (!id) throw new Error("Missing Stremio item ID");
-  const data = await fetchJson(buildStremioUrl(CINEMETA_BASE, "meta", type, id));
-  const meta = data && data.meta ? data.meta : {};
-  const isSeries = (meta.type || type) === "series";
-  const episodes = isSeries && Array.isArray(meta.videos)
-    ? meta.videos.filter((v) => Number(v.season) > 0)
-      .sort((a, b) => Number(a.season) - Number(b.season) || Number(a.episode || a.number || 0) - Number(b.episode || b.number || 0))
-      .map((v) => {
-        const episode = Number(v.episode ?? v.number ?? 1);
-        const season = Number(v.season ?? 1);
-        return { id: JSON.stringify({ type: "series", videoId: v.id || `${id}:${season}:${episode}`, season, episode }), title: v.name || v.title || `Episode ${episode}`, season, episode, number: episode, thumbnail: v.thumbnail || meta.poster || "", overview: v.overview || v.description || "", released: v.released || null };
-      })
-    : [{ id: JSON.stringify({ type: "movie", videoId: meta.id || id }), title: meta.name || "Full Movie", season: 1, episode: 1, number: 1 }];
-  const detail = {
-    id: JSON.stringify({ id: meta.id || id, type: isSeries ? "series" : "movie" }),
-    title: meta.name || meta.title || "Untitled",
-    poster: meta.poster || "",
-    backdrop: meta.background || meta.poster || "",
-    description: meta.description || "",
-    year: meta.releaseInfo ? parseInt(String(meta.releaseInfo), 10) || null : null,
-    genres: Array.isArray(meta.genres) ? meta.genres : [],
-    type: isSeries ? "series" : "movie",
-    episodes,
-  };
-  const tmdbId = Number(meta.moviedb_id || parsed.tmdbId);
-  const malId = Number(meta.mal_id || parsed.malId);
-  if (Number.isInteger(tmdbId) && tmdbId > 0) { detail.tmdbId = tmdbId; detail.tmdbIsTv = isSeries; }
-  if (Number.isInteger(malId) && malId > 0) detail.malId = malId;
-  return detail;
-}
-
-function parseQualityLabel(stream) {
-  const text = `${stream.name || ""} ${stream.title || ""} ${stream.description || ""}`;
-  const match = text.match(/\b(2160p|4k|1080p|720p|480p|360p)\b/i);
-  if (!match) return "Auto";
-  const value = match[1].toUpperCase();
-  return value === "4K" ? "2160p" : value;
-}
-
-function mapStremioStream(stream, addonBase, excludeNonHttp) {
-  // externalUrl is commonly a webpage, not a playable stream URL.
-  const url = typeof stream.url === "string" && /^https?:\/\//i.test(stream.url) ? stream.url : null;
-  if (!url && excludeNonHttp) return null;
-  if (!url && !stream.infoHash) return null;
-  const headers = stream.behaviorHints?.proxyHeaders?.request || {};
-  const labels = [
-    stream.name ? String(stream.name).replace(/\s+/g, " ").trim() : "Stremio",
-    stream.title ? String(stream.title).split("\n")[0].trim() : stream.description ? String(stream.description).split("\n")[0].trim() : "",
-  ].filter(Boolean);
-  const subtitles = Array.isArray(stream.subtitles)
-    ? stream.subtitles.filter((s) => s && typeof s.url === "string").map((s) => ({ url: s.url, lang: s.lang || "en", label: s.lang || "Subtitle" }))
-    : [];
-  return {
-    name: labels.join(" | "),
-    title: stream.title || stream.description || labels.join(" | "),
-    quality: parseQualityLabel(stream),
-    url,
-    infoHash: stream.infoHash || undefined,
-    fileIdx: stream.fileIdx !== undefined ? stream.fileIdx : undefined,
-    headers,
-    subtitles,
-    addonSource: addonBase,
-    isHls: Boolean(url && /\.m3u8(?:\?|$)/i.test(url)),
-  };
-}
-
-function parseStreamId(rawId) {
-  if (typeof rawId !== "string" || !rawId.trim()) return { videoId: String(rawId || ""), mediaType: "movie" };
-  const value = rawId.trim();
-  if (value.startsWith("{")) {
-    const parsed = JSON.parse(value);
-    return { videoId: parsed.videoId || parsed.id || "", mediaType: parsed.type === "series" || parsed.season || parsed.episode ? "series" : "movie" };
-  }
-  return { videoId: value, mediaType: value.includes(":") ? "series" : "movie" };
-}
-
-async function getStreams(rawEpisodeId, runtimeSettings = {}) {
-  const config = getConfig(runtimeSettings);
-  if (!config.addonBases.length) return [];
-  const { videoId, mediaType } = parseStreamId(rawEpisodeId);
-  if (!videoId) return [];
-  const requests = config.addonBases.map(async (addonBase) => {
-    const data = await fetchJson(buildStremioUrl(addonBase, "stream", mediaType, videoId));
-    const streams = Array.isArray(data.streams) ? data.streams.slice(0, config.maxStreamsPerAddon) : [];
-    return streams.map((stream) => mapStremioStream(stream, addonBase, config.excludeNonHttp)).filter(Boolean);
-  });
-  const results = await Promise.allSettled(requests);
-  const unique = new Map();
-  for (const result of results) {
-    if (result.status !== "fulfilled") continue;
-    for (const stream of result.value) {
-      const key = stream.url || `${stream.infoHash || ""}:${stream.fileIdx ?? ""}`;
-      if (key !== ":") unique.set(key, stream);
-    }
-  }
-  return [...unique.values()];
 }
 
 function getSettings() { return SOURCE_SETTINGS; }
+function getPreferences() { return SOURCE_SETTINGS; }
 
-const StremioBridgeProvider = {
-  ...PROVIDER_META, getSettings, getPreferences: getSettings,
-  getHome, search, getDetail, getStreams, getCatalog: getHome, getLinks: getStreams,
-  normalizeAddonBaseUrl, buildStremioUrl, mapStremioStream, getConfig,
-};
+function _trim(value) {
+  return String(value == null ? '' : value).replace(/^\s+|\s+$/g, '');
+}
 
-if (typeof module !== "undefined" && module.exports) module.exports = StremioBridgeProvider;
-if (typeof globalThis !== "undefined") {
-  globalThis.provider = StremioBridgeProvider;
-  globalThis.settings = SOURCE_SETTINGS;
-  globalThis.getSettings = getSettings;
-  globalThis.getPreferences = getSettings;
-  globalThis.getHome = getHome;
-  globalThis.search = search;
-  globalThis.getDetail = getDetail;
-  globalThis.getStreams = getStreams;
+function _addonBase(raw) {
+  var value = _trim(raw);
+  if (!value) return '';
+  value = value.replace(/^stremio:\/\//i, 'https://').replace(/#.*$/, '');
+  if (!/^https?:\/\//i.test(value)) return '';
+  value = value.replace(/\/manifest\.json(?:\?.*)?$/i, '').replace(/\/$/, '');
+  return value;
+}
+
+function _settings(opts) {
+  var o = opts || {};
+  var raw = o.addonUrls;
+  if (raw == null && typeof getSetting === 'function') {
+    try { raw = getSetting('addonUrls'); } catch (e) { raw = ''; }
+  }
+  var parts = String(raw || '').split(/[\n,;]+/);
+  var urls = [], seen = {};
+  for (var i = 0; i < parts.length; i++) {
+    var base = _addonBase(parts[i]);
+    if (base && !seen[base]) { seen[base] = true; urls.push(base); }
+  }
+  var max = parseInt(o.maxStreamsPerAddon, 10);
+  if (!max || max < 1) max = 25;
+  if (max > 100) max = 100;
+  var includeTorrent = o.includeTorrentStreams === true || String(o.includeTorrentStreams).toLowerCase() === 'true';
+  return { urls: urls, max: max, includeTorrent: includeTorrent };
+}
+
+function _fetchJson(url) {
+  return fetch(url, { headers: { Accept: 'application/json' } }).then(function (response) {
+    if (response && response.status && response.status >= 400) {
+      throw new Error('HTTP ' + response.status);
+    }
+    if (response && typeof response.json === 'function') return response.json();
+    var body = response && response.body != null ? response.body : response;
+    return typeof body === 'string' ? JSON.parse(body) : body;
+  });
+}
+
+function _endpoint(base, resource, type, id, extra) {
+  var path = base.replace(/\/$/, '') + '/' + resource + '/' +
+    encodeURIComponent(type) + '/' + encodeURIComponent(id) + '.json';
+  if (extra) path += (path.indexOf('?') >= 0 ? '&' : '?') + extra;
+  return path;
+}
+
+function _toCard(meta) {
+  if (!meta || !meta.id) return null;
+  var type = meta.type === 'series' ? 'series' : 'movie';
+  return {
+    id: JSON.stringify({ id: String(meta.id), type: type, tmdbId: meta.moviedb_id ? Number(meta.moviedb_id) : undefined }),
+    title: meta.name || meta.title || 'Untitled',
+    cover: meta.poster || null,
+    poster: meta.poster || null,
+    url: String(meta.id),
+    type: type,
+    year: meta.releaseInfo || null,
+    description: meta.description || '',
+    sourceId: 'stremio-bridge'
+  };
+}
+
+function _allSettled(promises) {
+  return Promise.all(promises.map(function (p) {
+    return Promise.resolve(p).then(function (value) {
+      return { ok: true, value: value };
+    }, function (error) {
+      return { ok: false, error: error };
+    });
+  }));
+}
+
+function getHome(opts) {
+  var config = _settings(opts);
+  if (!config.urls.length) return Promise.resolve([]);
+  var tasks = config.urls.map(function (base) {
+    return _fetchJson(base + '/manifest.json').then(function (manifest) {
+      var catalogs = manifest && manifest.catalogs ? manifest.catalogs : [];
+      return Promise.all(catalogs.slice(0, 8).map(function (catalog) {
+        var type = catalog.type || 'movie';
+        var id = catalog.id || 'top';
+        var extra = '';
+        return _fetchJson(_endpoint(base, 'catalog', type, id, extra)).then(function (data) {
+          var metas = data && data.metas ? data.metas : [];
+          return { title: (manifest.name || 'Stremio Add-on') + ' · ' + (catalog.name || id), items: metas.map(_toCard).filter(Boolean) };
+        }).catch(function () { return null; });
+      }));
+    }).catch(function () { return []; });
+  });
+  return _allSettled(tasks).then(function (settled) {
+    var rows = [];
+    settled.forEach(function (r) {
+      if (r.ok && Array.isArray(r.value)) r.value.forEach(function (row) { if (row && row.items.length) rows.push(row); });
+    });
+    return rows;
+  });
+}
+
+function search(query, page, opts) {
+  var q = _trim(query);
+  var config = _settings(opts);
+  if (!q || !config.urls.length) return Promise.resolve([]);
+  var jobs = config.urls.map(function (base) {
+    return _fetchJson(base + '/manifest.json').then(function (manifest) {
+      var catalogs = (manifest && manifest.catalogs) || [];
+      var searches = catalogs.filter(function (c) {
+        return c && c.extra && c.extra.some(function (x) { return x.name === 'search'; });
+      }).slice(0, 10);
+      return Promise.all(searches.map(function (catalog) {
+        return _fetchJson(_endpoint(base, 'catalog', catalog.type || 'movie', catalog.id, 'search=' + encodeURIComponent(q)))
+          .then(function (data) { return (data && data.metas ? data.metas : []).map(_toCard).filter(Boolean); })
+          .catch(function () { return []; });
+      })).then(function (lists) {
+        return lists.reduce(function (all, list) { return all.concat(list); }, []);
+      });
+    }).catch(function () { return []; });
+  });
+  return _allSettled(jobs).then(function (settled) {
+    var out = [], seen = {};
+    settled.forEach(function (r) {
+      if (!r.ok) return;
+      (r.value || []).forEach(function (item) {
+        var key = item.id;
+        if (!seen[key]) { seen[key] = true; out.push(item); }
+      });
+    });
+    return out;
+  });
+}
+
+function _parseId(raw) {
+  if (raw && typeof raw === 'object') return raw;
+  var value = String(raw || '');
+  try { if (value.charAt(0) === '{') return JSON.parse(value); } catch (e) {}
+  return { id: value, type: 'movie' };
+}
+
+function getDetail(rawId, opts) {
+  var item = _parseId(rawId);
+  var id = item.id || item.videoId;
+  var type = item.type || 'movie';
+  var config = _settings(opts);
+  if (!id || !config.urls.length) return Promise.resolve(null);
+  var jobs = config.urls.map(function (base) {
+    return _fetchJson(_endpoint(base, 'meta', type, id, '')).then(function (data) {
+      return data && data.meta ? data.meta : null;
+    }).catch(function () { return null; });
+  });
+  return Promise.all(jobs).then(function (metas) {
+    var meta = null;
+    for (var i = 0; i < metas.length; i++) if (metas[i]) { meta = metas[i]; break; }
+    if (!meta) return null;
+    var series = (meta.type || type) === 'series';
+    var episodes = [];
+    if (series && Array.isArray(meta.videos)) {
+      meta.videos.forEach(function (video, index) {
+        episodes.push({
+          id: JSON.stringify({ type: 'series', videoId: video.id || id, season: video.season || 1, episode: video.episode || video.number || index + 1 }),
+          title: video.name || video.title || ('Episode ' + (index + 1)),
+          number: video.episode || video.number || index + 1,
+          season: video.season || 1
+        });
+      });
+    } else {
+      episodes.push({ id: JSON.stringify({ type: 'movie', videoId: meta.id || id }), title: meta.name || 'Full Movie', number: 1 });
+    }
+    var result = {
+      id: JSON.stringify({ id: meta.id || id, type: series ? 'series' : 'movie' }),
+      title: meta.name || meta.title || 'Untitled',
+      cover: meta.poster || null,
+      poster: meta.poster || null,
+      description: meta.description || '',
+      type: series ? 'series' : 'movie',
+      year: meta.releaseInfo || null,
+      episodes: episodes,
+      sourceId: 'stremio-bridge'
+    };
+    if (meta.moviedb_id) { result.tmdbId = Number(meta.moviedb_id); result.tmdbIsTv = series; }
+    return result;
+  });
+}
+
+function _stream(raw, base, config) {
+  var url = raw && typeof raw.url === 'string' && /^https?:\/\//i.test(raw.url) ? raw.url : '';
+  var hash = raw && raw.infoHash ? raw.infoHash : '';
+  if (!url && !(config.includeTorrent && hash)) return null;
+  var text = String((raw && raw.name) || '') + ' ' + String((raw && raw.title) || '');
+  var qualityMatch = text.match(/(2160p|4k|1080p|720p|480p|360p)/i);
+  return {
+    name: (raw.name || 'Stremio') + (raw.title ? ' · ' + raw.title : ''),
+    title: raw.title || raw.description || raw.name || 'Stream',
+    url: url || null,
+    infoHash: hash || undefined,
+    fileIdx: raw.fileIdx,
+    quality: qualityMatch ? (qualityMatch[1].toLowerCase() === '4k' ? '2160p' : qualityMatch[1]) : 'Auto',
+    headers: raw.behaviorHints && raw.behaviorHints.proxyHeaders && raw.behaviorHints.proxyHeaders.request || {},
+    sourceId: 'stremio-bridge',
+    addonSource: base
+  };
+}
+
+function _parseStreamId(raw) {
+  var item = _parseId(raw);
+  var id = item.videoId || item.id || '';
+  var type = item.type || (item.season || item.episode ? 'series' : 'movie');
+  return { id: id, type: type };
+}
+
+function getVideoSources(rawEpisodeId, opts) {
+  var config = _settings(opts);
+  var parsed = _parseStreamId(rawEpisodeId);
+  if (!config.urls.length || !parsed.id) return Promise.resolve([]);
+  var jobs = config.urls.map(function (base) {
+    return _fetchJson(_endpoint(base, 'stream', parsed.type, parsed.id, '')).then(function (data) {
+      var streams = data && data.streams ? data.streams.slice(0, config.max) : [];
+      return streams.map(function (stream) { return _stream(stream, base, config); }).filter(Boolean);
+    }).catch(function () { return []; });
+  });
+  return Promise.all(jobs).then(function (lists) {
+    var out = [], seen = {};
+    lists.forEach(function (list) {
+      list.forEach(function (stream) {
+        var key = stream.url || (stream.infoHash + ':' + stream.fileIdx);
+        if (!seen[key]) { seen[key] = true; out.push(stream); }
+      });
+    });
+    return out;
+  });
+}
+
+function getStreams(id, opts) { return getVideoSources(id, opts); }
+function getCatalog(opts) { return getHome(opts); }
+function getLinks(id, opts) { return getVideoSources(id, opts); }
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    getInfo: getInfo, getSettings: getSettings, getPreferences: getPreferences,
+    getHome: getHome, search: search, getDetail: getDetail,
+    getVideoSources: getVideoSources, getStreams: getStreams,
+    getCatalog: getCatalog, getLinks: getLinks,
+    _addonBase: _addonBase, _settings: _settings, _endpoint: _endpoint
+  };
 }
