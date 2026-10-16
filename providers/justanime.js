@@ -6,7 +6,7 @@ var SITE = 'https://justanime.to';
 var API = 'https://core.justanime.to/api';
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID)
   ? String(__SOURCE_ID) : 'justanime';
-var VERSION = '1.6.0';
+var VERSION = '1.7.0';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
   '(KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36';
 
@@ -255,7 +255,35 @@ function _unwrapAnime(response) {
   return value && typeof value === 'object' &&
     (_title(value) || value.episodes || value.description || value.cover || value.poster) ? value : null;
 }
+var _detailCache = {};
+var _detailInflight = {};
+var _DETAIL_TTL = 30000;
+
 function getDetail(url, opts) {
+  var id = _extractId(url);
+  if (!/^\d+$/.test(id)) return Promise.resolve(null);
+  var key = id;
+  var now = Date.now();
+  var hit = _detailCache[key];
+  if (hit && (now - hit.at) < _DETAIL_TTL) return Promise.resolve(hit.value);
+  if (_detailInflight[key]) return _detailInflight[key];
+  var pending = _fetchDetail(url, opts).then(function (detail) {
+    delete _detailInflight[key];
+    // Never cache an empty/failed response; a temporary upstream miss must
+    // not pin a broken episode list in the app.
+    if (detail && Array.isArray(detail.episodes) && detail.episodes.length) {
+      _detailCache[key] = { at: Date.now(), value: detail };
+    }
+    return detail;
+  }, function (error) {
+    delete _detailInflight[key];
+    throw error;
+  });
+  _detailInflight[key] = pending;
+  return pending;
+}
+
+function _fetchDetail(url, opts) {
   var id = _extractId(url);
   if (!/^\d+$/.test(id)) return Promise.resolve(null);
   // Details and episodes are independent. A failed detail request should not
@@ -295,14 +323,13 @@ function getDetail(url, opts) {
   }).catch(function () { return null; });
 }
 function getEpisodes(url, opts) {
-  var id = _extractId(url);
-  if (!/^\d+$/.test(id)) return Promise.resolve([]);
-  return _fetchEpisodes(id).then(function (episodes) {
-    if (episodes.length) return episodes;
-    return getDetail(url, opts).then(function (detail) {
-      return detail && Array.isArray(detail.episodes) ? detail.episodes : [];
-    });
-  });
+  // getDetail fetches the detail and episode endpoints together, normalizes
+  // their response shapes, and caches only a successful episode list. Calling
+  // _fetchEpisodes first here used to duplicate the same request on an empty
+  // or transient response and could make Z Mode's episode view flicker.
+  return getDetail(url, opts).then(function (detail) {
+    return detail && Array.isArray(detail.episodes) ? detail.episodes : [];
+  }).catch(function () { return []; });
 }
 function _isHttpUrl(url) {
   return /^https?:\/\//i.test(String(url || ''));
