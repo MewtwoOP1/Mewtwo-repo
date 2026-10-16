@@ -174,8 +174,12 @@ function _parseYear(html, title) {
 }
 function _parseIds(html) {
   var all = String(html || '');
-  var tmdb = (all.match(/(?:data-tmdb-id|data-tmdb|tmdb[_-]?id)\s*=\s*["']?(\d+)/i) || [])[1];
-  var imdb = (all.match(/\b(tt\d{6,12})\b/i) || [])[1];
+  var metaTmdb = _meta(all, 'tmdb_id') || _meta(all, 'tmdb-id') || _meta(all, 'tmdb');
+  var metaImdb = _meta(all, 'imdb_id') || _meta(all, 'imdb-id') || _meta(all, 'imdb');
+  var tmdb = (all.match(/(?:data-tmdb-id|data-tmdb|tmdb[_-]?id)\s*=\s*["']?(\d+)/i) || [])[1] ||
+    ((String(metaTmdb).match(/^\d+$/) || [])[0] || '');
+  var imdb = (all.match(/\b(tt\d{6,12})\b/i) || [])[1] ||
+    ((String(metaImdb).match(/tt\d{6,12}/i) || [])[0] || '');
   return { tmdbId: tmdb ? parseInt(tmdb, 10) : null, imdbId: imdb || null };
 }
 function _episodeNumber(value) {
