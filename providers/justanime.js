@@ -173,14 +173,21 @@ function getEpisodes(url, opts) {
     return detail && Array.isArray(detail.episodes) ? detail.episodes : [];
   });
 }
-function _isPlayable(url) {
-  return /^https?:\/\//i.test(String(url || '')) &&
-    /(?:\.m3u8|\.mp4|\.m4v|\.webm)(?:[?#]|$)/i.test(String(url || ''));
+function _isHttpUrl(url) {
+  return /^https?:\/\//i.test(String(url || ''));
+}
+function _isHls(source, url) {
+  var s = String(url || '');
+  return !!(source && (source.isM3U8 === true || source.isM3U8 === 1)) ||
+    /\.m3u8(?:[?#]|$)/i.test(s) ||
+    /(?:m3u8|mpegurl|application\/vnd\.apple\.mpegurl)/i.test(String(source && (source.type || source.mimeType || source.mime) || ''));
 }
 function _quality(source, url) {
-  var s = String((source && source.quality) || '') + ' ' + String(url || '');
+  var s = String((source && (source.quality || source.label || source.name)) || '') + ' ' + String(url || '');
   var m = s.match(/\b(2160|1440|1080|720|576|540|480|360)p?\b/i);
-  return m ? m[1] + 'p' : 'Auto';
+  if (m) return m[1] + 'p';
+  var res = String(source && source.resolution || '').match(/(?:x|^)(2160|1440|1080|720|576|540|480|360)(?:\b|$)/i);
+  return res ? res[1] + 'p' : 'Auto';
 }
 function _sourceRows(payload, server, lang) {
   var track = payload && payload[lang];
@@ -190,13 +197,14 @@ function _sourceRows(payload, server, lang) {
   sources.forEach(function (s) {
     var url = s && (s.url || s.file);
     // Only use URLs directly exposed by the API. Encrypted/player-token payloads are not playable sources.
-    if (!_isPlayable(url)) return;
+    // CDN/proxy stream URLs may not have a .m3u8/.mp4 suffix. Only accept HTTP(S) URLs exposed in the API's sources array.
+    if (!_isHttpUrl(url)) return;
     var h = {
       'User-Agent': UA,
       'Referer': headers.Referer || (server === 'megaplay' ? 'https://megaplay.buzz/' : SITE + '/'),
       'Origin': headers.Origin || (server === 'megaplay' ? 'https://megaplay.buzz' : SITE)
     };
-    var container = /\.m3u8(?:[?#]|$)/i.test(url) ? 'hls' : 'mp4';
+    var container = _isHls(s, url) ? 'hls' : 'mp4';
     out.push({
       url: url, quality: _quality(s, url), container: container,
       headers: h, kind: 'raw', label: 'JustAnime ' + server + ' ' + lang.toUpperCase(),
@@ -276,6 +284,7 @@ if (typeof module !== 'undefined' && module.exports) {
     version: VERSION, getInfo: getInfo, getSettings: getSettings,
     getHome: getHome, popular: popular, search: search, getDetail: getDetail,
     getEpisodes: getEpisodes, getVideoSources: getVideoSources, getStreams: getStreams,
-    _cards: _cards, _extractId: _extractId, _sourceRows: _sourceRows
+    _cards: _cards, _extractId: _extractId, _sourceRows: _sourceRows,
+    _isHttpUrl: _isHttpUrl, _isHls: _isHls
   };
 }
