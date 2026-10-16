@@ -100,9 +100,14 @@ async function fetchJson(url, options = {}) {
 function buildStremioUrl(baseUrl, resource, type, id, extra = "") {
   const base = normalizeAddonBaseUrl(baseUrl);
   if (!base) throw new Error("Invalid Stremio addon base URL");
+  const parsed = new URL(base);
   const safeResource = String(resource).replace(/[^a-z]/gi, "");
-  const query = extra ? (extra.startsWith("?") ? extra : `?${extra}`) : "";
-  return `${base}/${safeResource}/${encodeURIComponent(String(type))}/${encodeURIComponent(String(id))}.json${query}`;
+  parsed.pathname = `${parsed.pathname.replace(/\\/+$/, "")}/${safeResource}/${encodeURIComponent(String(type))}/${encodeURIComponent(String(id))}.json`;
+  if (extra) {
+    const extraParams = new URLSearchParams(extra.startsWith("?") ? extra.slice(1) : extra);
+    for (const [key, value] of extraParams) parsed.searchParams.set(key, value);
+  }
+  return parsed.toString();
 }
 
 function mapStremioMetaToCard(meta) {
