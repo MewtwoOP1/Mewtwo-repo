@@ -138,7 +138,7 @@ function _parseStreamId(raw) {
     if (candidate && !seen[candidate]) { seen[candidate] = true; ids.push(candidate); }
   }
 
-  add(id);
+  if (!/^tmdb:\/\/(?:movie|tv|series)\//i.test(id)) add(id);
   if (imdb) {
     if (type === 'series' && season > 0 && episode > 0) add(imdb + ':' + season + ':' + episode);
     add(imdb);
