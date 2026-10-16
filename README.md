@@ -1,8 +1,8 @@
 # Zangetsu Community Sources
 
-Community-maintained JavaScript providers for the [Zangetsu](https://github.com/Spyou/Zangetsu) app. The repository currently contains **TMDB + Stremio** metadata/stream discovery and a **Movies2Watch** HTML scraper.
+Community-maintained JavaScript providers for the [Zangetsu](https://github.com/Spyou/Zangetsu) app. This repository contains **TMDB + Stremio** metadata/stream discovery and a **JustAnime** anime provider.
 
-**This repository does not host, upload, store, or serve video files.** Providers retrieve metadata or inspect public third-party pages/add-on responses and return URLs supplied by those services. Availability and content are controlled by third parties, not this project.
+**This repository does not host, upload, store, or serve video files.** Providers retrieve metadata and URLs exposed by third-party APIs or add-ons. Availability and content are controlled by third parties, not this project.
 
 ## Install
 
@@ -12,7 +12,7 @@ In Zangetsu, open **Settings → Sources → Add repo** and add:
 https://raw.githubusercontent.com/MewtwoOP1/Zangetsu-repo/main/index.json
 ```
 
-Install **TMDB + Stremio** or **Movies2Watch** from the repository's source list.
+Install **TMDB + Stremio** or **JustAnime** from the repository's source list.
 
 ## Providers
 
@@ -24,25 +24,26 @@ Combines TMDB metadata with stream discovery from Stremio-compatible add-ons tha
 - **Stremio Add-on URLs:** enter one or more manifest URLs, separated by commas or new lines. Query parameters are preserved.
 - **Max streams per add-on:** choose 5, 10, 25, 50, or 100 results per configured add-on.
 
-### Movies2Watch
+### JustAnime
 
-Searches Movies2Watch catalog pages, reads title metadata and any episode links rendered into the page, then checks the page and its embedded player pages for direct HTTP(S) HLS or video-file URLs.
+Uses JustAnime's public JSON API for anime listings, search, details, episodes, and its published stream-server endpoints.
 
-- The resolver follows at most two embedded-page levels and limits the number of frames it checks.
-- It only recognizes direct media URLs exposed in fetched HTML. It does **not** run page JavaScript, decrypt protected players, defeat DRM, bypass logins/paywalls, or work around anti-bot protection.
-- If the site loads its player entirely through JavaScript or an unsupported provider, no direct source may be returned. The site's live HTML could not be validated from the development runtime, so treat this provider as experimental until it is tested in Zangetsu against a currently available title.
-- Site changes, regional restrictions, and third-party player changes can break results without notice.
+- **Streaming servers:** choose all supported endpoints, or limit requests to AnimeGG, AniNeko, or MegaPlay.
+- **Preferred audio:** puts sub or dub sources first, with the other language as fallback.
+- The provider returns direct HTTP(S) media URLs exposed by the API and includes request headers/subtitle metadata when supplied.
+- It does not decrypt protected player payloads, bypass logins/paywalls, defeat DRM, or work around anti-bot protection. If an endpoint returns encrypted data or no directly playable URL, that result is skipped.
+- Live API calls could not be reached from the development runtime due to DNS/network restrictions. Mocked tests validate parsing and provider behavior, but **do not prove current live-site playback**. Please test a currently available title in Zangetsu after installing it.
 
 ## Disclaimers
 
-- No movies, shows, subtitles, torrents, video files, or streaming servers are hosted by this repository.
-- Third-party metadata, artwork, websites, and add-ons remain controlled by their respective operators and may have separate terms and policies.
-- Users are responsible for ensuring that their use of third-party services and any content they access complies with applicable laws and service terms.
-- This is an unofficial community project and is not affiliated with or endorsed by Zangetsu, TMDB, Stremio, or Movies2Watch.
+- No movies, shows, anime, subtitles, torrents, video files, or streaming servers are hosted by this repository.
+- Third-party metadata, artwork, websites, APIs, and add-ons remain controlled by their respective operators and may have separate terms and policies.
+- Users are responsible for ensuring their use of third-party services and any content they access complies with applicable laws and service terms.
+- This is an unofficial community project and is not affiliated with or endorsed by Zangetsu, TMDB, Stremio, or JustAnime.
 
 ## Credits
 
-The provider manifest and JavaScript interface follow the self-contained source model documented by [Spyou/zangetsu-providers](https://github.com/Spyou/zangetsu-providers). The TMDB catalogue approach also draws on that repository's public provider patterns. This repository is independently maintained and is not the official Zangetsu provider repository.
+The provider manifest and JavaScript interface follow the self-contained source model documented by [Spyou/zangetsu-providers](https://github.com/Spyou/zangetsu-providers). The JustAnime API flow was cross-checked against the public [Mangayomi JustAnime extension](https://github.com/Mallyd11/mangayomi-anime-extensions/blob/main/javascript/anime/src/en/justanime.js). This repository is independently maintained and is not the official Zangetsu provider repository.
 
 ## License
 
