@@ -40,6 +40,15 @@ function _tmdbJson(path) {
   });
 }
 
+function _status(value) {
+  var status = _trim(value).toLowerCase();
+  if (status === 'returning series' || status === 'in production' || status === 'planned') return 'ongoing';
+  if (status === 'ended' || status === 'released') return 'completed';
+  if (status === 'canceled' || status === 'cancelled') return 'cancelled';
+  if (status === 'hiatus') return 'hiatus';
+  return 'unknown';
+}
+
 function _year(record) {
   return String(record.release_date || record.first_air_date || '').slice(0, 4) || null;
 }
@@ -245,7 +254,7 @@ function getDetail(url, opts) {
           banner: info.backdrop_path ? TMDB_BACKDROP + info.backdrop_path : null,
           url: _tmdbUrl(type, id),
           description: info.overview || '',
-          status: info.status || 'unknown',
+          status: _status(info.status),
           genres: genres,
           studios: [],
           type: 'movie',
