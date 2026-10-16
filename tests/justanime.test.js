@@ -1,16 +1,23 @@
 const assert = require("node:assert/strict");
 
 const calls = [];
+const transientFailures = new Map();
 global.__settings = { justanime: { servers: "all", language: "sub" } };
 global.fetch = async (url, options) => {
   const u = String(url);
   calls.push({ url: u, options: options || {} });
+  const remainingFailures = transientFailures.get(u) || 0;
+  if (remainingFailures > 0) {
+    transientFailures.set(u, remainingFailures - 1);
+    return { status: 503, body: JSON.stringify({ error: "temporary upstream failure" }) };
+  }
   let body = {};
   if (u === "https://core.justanime.to/api/home") {
     body = { latestEpisode: [{ id: 21, title: { english: "Mock Anime", romaji: "Mock Anime" }, cover: "https://img.example/mock.jpg" }] };
   } else if (u === "https://core.justanime.to/api/search?page=1") {
     body = { results: [{ id: 21, title: { english: "Mock Anime" }, cover: "https://img.example/mock.jpg" }], pageInfo: { hasNextPage: true } };
-  } else if (u === "https://core.justanime.to/api/search?query=Mock%20Anime&page=1") {
+  } else if (u === "https://core.justanime.to/api/search?query=Mock%20Anime&page=1" ||
+             u === "https://core.justanime.to/api/search?query=Retry%20Anime&page=1") {
     body = { results: [{ id: 21, idMal: "999", title: { english: "Mock Anime", romaji: "Mock Anime Romaji" }, cover: "https://img.example/mock.jpg" }] };
   } else if (u === "https://core.justanime.to/api/anime/21") {
     body = { data: { id: 21, idMal: 999, title: { english: "Mock Anime", romaji: "Mock Anime" }, coverImage: { extraLarge: "https://img.example/mock.jpg" }, description: "<p>A test anime</p>", genres: ["Action"], episodes: 2, seasonYear: 2024, status: "FINISHED" } };
@@ -44,6 +51,15 @@ const provider = require("../providers/justanime.js");
 
 async function main() {
   assert.equal(provider.version, "1.5.0");
+
+  // A temporary server error should be retried instead of immediately
+  // collapsing into an empty detail/episode response.
+  const retryUrl = "https://core.justanime.to/api/search?query=Retry%20Anime&page=1";
+  transientFailures.set(retryUrl, 1);
+  const retryResults = await provider.search("Retry Anime", 1, {});
+  assert.equal(retryResults.length, 1);
+  assert.equal(retryResults[0].title, "Mock Anime");
+  assert.equal(calls.filter((c) => c.url === retryUrl).length, 2);
   assert.equal(provider.getInfo().name, "JustAnime");
   assert.equal(provider.getInfo().type, "anime");
   assert.deepEqual(provider.getSettings().map((s) => s.key), ["servers", "language"]);
