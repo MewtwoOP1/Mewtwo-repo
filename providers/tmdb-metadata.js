@@ -75,7 +75,6 @@ function _item(record, forcedType) {
   if (record.vote_average != null && isFinite(Number(record.vote_average))) {
     item.score = Math.round(Number(record.vote_average) * 10);
   }
-  if (Array.isArray(record.genre_ids)) item.genres = [];
   return item;
 }
 
@@ -152,7 +151,7 @@ function _pad(value) {
   return n < 10 ? '0' + n : String(n);
 }
 
-function _episodeId(type, id, imdbId, season, episode) {
+function _episodeId(type, id, imdbId, season, episode, absoluteEpisode) {
   return JSON.stringify({
     id: _tmdbUrl(type, id),
     videoId: _tmdbUrl(type, id),
@@ -161,7 +160,8 @@ function _episodeId(type, id, imdbId, season, episode) {
     tmdbIsTv: type === 'tv',
     imdbId: imdbId || undefined,
     season: season || 0,
-    episode: episode || 0
+    episode: episode || 0,
+    absoluteEpisode: absoluteEpisode || undefined
   });
 }
 
@@ -179,16 +179,26 @@ function _tvEpisodes(id, imdbId, seasonCount) {
     var out = [];
     seasons.sort(function (a, b) { return a.season - b.season; });
     seasons.forEach(function (row) {
+      var continuous = false;
+      for (var c = 0; c < row.episodes.length; c++) {
+        var candidateNumber = row.episodes[c].episode_number;
+        if (candidateNumber != null && Number(candidateNumber) !== c + 1) {
+          continuous = true;
+          break;
+        }
+      }
       row.episodes.forEach(function (episode, index) {
         if (episode.episode_number == null) return;
-        var number = Number(episode.episode_number) || index + 1;
+        var tmdbNumber = Number(episode.episode_number) || index + 1;
         var seasonNumber = Number(row.season);
+        var relativeNumber = continuous ? index + 1 : tmdbNumber;
+        var absoluteNumber = continuous ? tmdbNumber : null;
         out.push({
-          id: String(seasonNumber) + 'x' + String(number),
-          title: 'S' + _pad(seasonNumber) + ' E' + _pad(number) + ' - ' + (episode.name || ('Episode ' + number)),
-          number: number,
+          id: String(seasonNumber) + 'x' + String(relativeNumber),
+          title: 'S' + _pad(seasonNumber) + ' E' + _pad(relativeNumber) + ' - ' + (episode.name || ('Episode ' + (absoluteNumber || tmdbNumber))),
+          number: absoluteNumber || tmdbNumber,
           season: seasonNumber,
-          url: _episodeId('tv', id, imdbId, seasonNumber, number),
+          url: _episodeId('tv', id, imdbId, seasonNumber, relativeNumber, absoluteNumber),
           date: episode.air_date || null,
           thumbnail: episode.still_path ? 'https://image.tmdb.org/t/p/w300' + episode.still_path : null
         });
