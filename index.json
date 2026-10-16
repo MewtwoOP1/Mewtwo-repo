@@ -33,40 +33,50 @@
           "type": "enum",
           "default": "25",
           "options": [
-            {
-              "value": "5",
-              "label": "5 streams"
-            },
-            {
-              "value": "10",
-              "label": "10 streams"
-            },
-            {
-              "value": "25",
-              "label": "25 streams"
-            },
-            {
-              "value": "50",
-              "label": "50 streams"
-            },
-            {
-              "value": "100",
-              "label": "100 streams"
-            }
+            { "value": "5", "label": "5 streams" },
+            { "value": "10", "label": "10 streams" },
+            { "value": "25", "label": "25 streams" },
+            { "value": "50", "label": "50 streams" },
+            { "value": "100", "label": "100 streams" }
           ]
         }
       ]
     },
     {
-      "id": "movies2watch",
-      "name": "Movies2Watch",
+      "id": "justanime",
+      "name": "JustAnime",
       "version": "1.0.0",
-      "type": "movie",
+      "type": "anime",
       "lang": "en",
-      "file": "providers/movies2watch.js",
-      "logo": "https://raw.githubusercontent.com/MewtwoOP1/Zangetsu-repo/main/assets/icon.svg",
+      "file": "providers/justanime.js",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=justanime.to",
       "nsfw": false,
-      "settings": []
+      "settings": [
+        {
+          "key": "servers",
+          "label": "Streaming servers",
+          "description": "Which public JustAnime API server endpoints to check. Unsupported or unavailable streams are skipped.",
+          "type": "enum",
+          "default": "all",
+          "options": [
+            { "value": "all", "label": "All servers (recommended)" },
+            { "value": "animegg", "label": "AnimeGG" },
+            { "value": "anineko", "label": "AniNeko" },
+            { "value": "megaplay", "label": "MegaPlay" }
+          ]
+        },
+        {
+          "key": "language",
+          "label": "Preferred audio",
+          "description": "Return the preferred audio language first, then fall back to the other language.",
+          "type": "enum",
+          "default": "sub",
+          "options": [
+            { "value": "sub", "label": "Sub first" },
+            { "value": "dub", "label": "Dub first" }
+          ]
+        }
+      ]
     }
   ]
 }
