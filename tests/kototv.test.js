@@ -1,0 +1,6 @@
+const assert=require("node:assert/strict");
+global.htmlText=function(s){return String(s||"").replace(/<[^>]*>/g,"").replace(/&amp;/g,"&").replace(/&quot;/g,'"').replace(/&#39;/g,"'").trim();};
+const provider=require("../providers/kototv.js");
+global.fetch=async function(url){url=String(url);if(url.includes("/api/ajax/search?q=Frieren"))return {status:200,body:JSON.stringify({results:[{slug:"frieren",title:"Frieren: Beyond Journey's End",poster:"https://img.example/f.jpg"}]})};if(url==="https://kototv.to/anime/frieren")return {status:200,body:'<h1>Frieren</h1><meta property="og:image" content="https://img.example/f.jpg"><li data-num="1" data-sub="1" data-dub="0"></li>'};return {status:200,body:""};};
+async function main(){assert.equal(provider.getInfo().name,"KotoTV");assert.equal(provider.getInfo().baseUrl,"https://kototv.to");assert.deepEqual(await provider.search("",1,{}),[]);const results=await provider.search("Frieren",1,{});assert.equal(results.length,1);assert.equal(results[0].id,"frieren");const detail=await provider.getDetail("frieren",{});assert.equal(detail.title,"Frieren");assert.equal(detail.episodes.length,1);assert.equal(detail.episodes[0].number,1);assert.match(detail.episodes[0].url,/^kototv:\/\//);console.log("KotoTV mocked integration tests passed.");}
+main().catch(e=>{console.error(e);process.exitCode=1;});

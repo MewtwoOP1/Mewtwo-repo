@@ -9,7 +9,7 @@
       "type": "movie",
       "lang": "en",
       "file": "providers/tmdb-stremio.js",
-      "logo": "https://raw.githubusercontent.com/MewtwoOP1/Zangetsu-repo/main/assets/icon.svg",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=themoviedb.org",
       "nsfw": false,
       "settings": [
         {
@@ -52,6 +52,85 @@
             {
               "value": "100",
               "label": "100 streams"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "animesuge",
+      "name": "AnimeSuge",
+      "version": "1.0.3",
+      "type": "anime",
+      "lang": "en",
+      "file": "providers/animesuge.js",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=animesuge.cz",
+      "nsfw": false
+    },
+    {
+      "id": "kototv",
+      "name": "KotoTV",
+      "version": "1.0.2",
+      "type": "anime",
+      "lang": "en",
+      "file": "providers/kototv.js",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=kototv.to",
+      "nsfw": false
+    },
+    {
+      "id": "mkissa",
+      "name": "MKissa",
+      "version": "1.0.1",
+      "type": "anime",
+      "lang": "en",
+      "file": "providers/mkissa.js",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=mkissa.to",
+      "nsfw": false
+    },
+    {
+      "id": "hianime",
+      "name": "HiAnime",
+      "version": "1.0.2",
+      "type": "anime",
+      "lang": "en",
+      "file": "providers/hianime.js",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=hianime.dk",
+      "nsfw": false,
+      "settings": [
+        {
+          "key": "domain",
+          "label": "Domain",
+          "description": "Choose the exact domain this source should use. No automatic failover.",
+          "type": "enum",
+          "default": "https://hianime.dk",
+          "options": [
+            {
+              "value": "https://hianime.dk",
+              "label": "hianime.dk"
+            },
+            {
+              "value": "https://hianime.al",
+              "label": "hianime.al"
+            },
+            {
+              "value": "https://hianime.fans",
+              "label": "hianime.fans"
+            },
+            {
+              "value": "https://hianimes.es",
+              "label": "hianimes.es"
+            },
+            {
+              "value": "https://zenkai.to",
+              "label": "zenkai.to"
+            },
+            {
+              "value": "https://anikoto.fan",
+              "label": "anikoto.fan"
+            },
+            {
+              "value": "https://anikoto.lv",
+              "label": "anikoto.lv"
             }
           ]
         }
@@ -139,16 +218,6 @@
           ]
         }
       ]
-    },
-    {
-      "id": "animesuge",
-      "name": "AnimeSuge",
-      "version": "1.0.3",
-      "type": "anime",
-      "lang": "en",
-      "file": "providers/animesuge.js",
-      "logo": "https://animesuge.cz/assets/sites/animesuge/icons/favicon.png",
-      "nsfw": false
     }
   ]
 }

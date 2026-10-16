@@ -1,0 +1,6 @@
+const assert=require("node:assert/strict");
+global.htmlText=function(s){return String(s||"").replace(/<[^>]*>/g,"").replace(/&amp;/g,"&").trim();};
+const provider=require("../providers/hianime.js");
+global.fetch=async function(url){url=String(url);if(url==="https://hianime.dk/search?keyword=Frieren&page=1")return {status:200,body:'<h3 class="film-name"><a href="/watch/frieren-beyond-journeys-end-123" title="Frieren: Beyond Journey\'s End">Frieren</a></h3><img src="https://img.example/f.jpg">'};if(url==="https://hianime.dk/watch/frieren-beyond-journeys-end-123")return {status:200,body:'<h1>Frieren: Beyond Journey\'s End</h1><a href="/watch/frieren-beyond-journeys-end-123?ep=1">Episode 1</a><meta property="og:image" content="https://img.example/f.jpg">'};return {status:404,body:""};};
+async function main(){assert.equal(provider.getInfo().name,"HiAnime");assert.deepEqual(await provider.search("",1,{}),[]);const found=await provider.search("Frieren",1,{});assert.equal(found.length,1);assert.equal(found[0].sourceId,"hianime");const detail=await provider.getDetail("frieren-beyond-journeys-end-123",{});assert.equal(detail.episodes.length,1);assert.equal(detail.episodes[0].number,1);console.log("HiAnime mocked integration tests passed.");}
+main().catch(e=>{console.error(e);process.exitCode=1;});

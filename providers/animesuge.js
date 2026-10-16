@@ -25,7 +25,7 @@ var PLAYER_RE = /^https?:\/\/(?:[a-z0-9-]+\.)?(?:vidtube\.[a-z]+|megaplay\.[a-z]
 
 function getInfo() {
   return { name: 'AnimeSuge', lang: 'en', baseUrl: SITE,
-    logo: SITE + '/animesuge/images/favicon.png', type: 'anime', version: '1.0.3' };
+    logo: 'https://www.google.com/s2/favicons?sz=256&domain=animesuge.cz', type: 'anime', version: '1.0.3' };
 }
 
 // ── Pure-JS base64 (encode + decode). Self-contained: the app injects no
@@ -527,4 +527,36 @@ function _expandQualities(masterUrl, hdrs, cat, subs, tag) {
       return out;
     })
     .catch(function () { return [autoEntry('hls')]; });
+}
+
+
+// Keep the provider usable in Zangetsu's script runtime while exposing the same
+// entry points to Node-based validation and mocked integration tests.
+function getSettings() { return []; }
+function popular(opts) {
+  return getHome(opts).then(function (rows) {
+    var out = [];
+    (rows || []).forEach(function (row) {
+      (row.items || []).forEach(function (item) { out.push(item); });
+    });
+    return out;
+  });
+}
+function getStreams(id, opts) { return getVideoSources(id, opts); }
+function getLinks(id, opts) { return getVideoSources(id, opts); }
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    version: '1.0.3',
+    getInfo: getInfo,
+    getSettings: getSettings,
+    getHome: getHome,
+    popular: popular,
+    search: search,
+    getDetail: getDetail,
+    getEpisodes: getEpisodes,
+    getVideoSources: getVideoSources,
+    getStreams: getStreams,
+    getLinks: getLinks
+  };
 }
