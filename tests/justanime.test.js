@@ -50,7 +50,7 @@ global.fetch = async (url, options) => {
 const provider = require("../providers/justanime.js");
 
 async function main() {
-  assert.equal(provider.version, "1.5.0");
+  assert.equal(provider.version, "1.6.0");
 
   // A temporary server error should be retried instead of immediately
   // collapsing into an empty detail/episode response.
