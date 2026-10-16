@@ -1,6 +1,6 @@
 # Zangetsu Community Sources
 
-Community-maintained JavaScript providers for the [Zangetsu](https://github.com/Spyou/Zangetsu) app. The active catalogue currently contains **TMDB + Stremio** for movie/TV metadata and user-configured add-on streams, and **AnimeSuge** as an anime source.
+Community-maintained JavaScript providers for the [Zangetsu](https://github.com/Spyou/Zangetsu) app. The active catalogue currently contains **TMDB + Stremio** for movie/TV metadata and user-configured add-on streams, **AnimeSuge**, and **KotoTV** as anime sources.
 
 **This repository does not host, upload, store, or serve video files.** Providers request metadata or playback URLs from third-party services. Availability is controlled by those services and may change at any time.
 
@@ -25,6 +25,10 @@ Combines TMDB metadata with stream discovery from Stremio-compatible add-ons tha
 - **Max streams per add-on:** Limit results considered from each configured add-on to 5, 10, 25, 50, or 100.
 
 This source handles movie and series metadata. Streams are requested from your configured add-ons; this repository does not provide or proxy them.
+
+### KotoTV
+
+Uses KotoTV search and watch pages to list anime and resolve available sub/dub player streams. Playback depends on KotoTV and its third-party player hosts; availability may change.
 
 ### AnimeSuge
 
