@@ -1,8 +1,8 @@
 # TMDB + Stremio for Zangetsu
 
-A community-maintained Zangetsu extension that combines TMDB metadata with stream discovery from Stremio-compatible add-ons.
+A community-maintained Zangetsu extension combining TMDB metadata with stream discovery from Stremio-compatible add-ons.
 
-**This repository does not host, upload, store, index, or distribute video files or streaming sources.** It only requests metadata from TMDB and asks add-ons that you configure to return stream links. Users are responsible for choosing, configuring, and legally using their own add-ons and services. Availability, legality, and content are controlled by those third parties, not this project.
+**This repository does not host, upload, store, index, or distribute video files or streaming sources.** It requests metadata from TMDB and asks add-ons configured by each user to return stream links. Users are responsible for selecting, configuring, and legally using their own add-ons and services. Availability, legality, and content are controlled by third parties, not this project.
 
 ## Install
 
@@ -12,44 +12,44 @@ In Zangetsu, open **Settings → Sources → Add repo** and add:
 https://raw.githubusercontent.com/MewtwoOP1/Zangetsu-repo/main/index.json
 ```
 
-Install **TMDB + Stremio**. Open the source's settings and configure the options below.
+Install **TMDB + Stremio**, then open that source's settings.
 
 ## Settings
 
-### TMDB API Key (optional)
-- Leave blank to use Zangetsu's built-in TMDB API key.
-- Enter your own TMDB v3 API key if you want to use your own credentials or quota.
-- The key is sent only to TMDB API requests. It is not sent to Stremio add-ons or this repository's servers.
-- Obtain a key from your TMDB account's API settings: https://www.themoviedb.org/settings/api
-- Keep your key private. The source settings are stored by the app on your device; this repository does not receive them.
+### TMDB API Key (optional; blank uses app default)
+- Leave this blank to use the TMDB key already supplied by Zangetsu.
+- Enter your own TMDB v3 API key to use your own credentials/quota instead.
+- Obtain a key in your TMDB account's API settings: https://www.themoviedb.org/settings/api
+- Your key is used for TMDB API requests only. It is not sent to configured Stremio add-ons or to this repository.
+- The app stores provider settings locally. This repository does not receive your key. Treat it as a secret and do not share screenshots that expose it.
 
 ### Stremio Add-on URLs
 - Paste one or more Stremio-compatible add-on manifest URLs.
 - Separate multiple URLs with commas or new lines.
 - URLs ending in `/manifest.json` are accepted.
-- Query parameters are preserved, which can be required by private or authenticated add-ons.
-- These add-ons are third-party services. This repository does not operate them or guarantee that they are available.
+- Query parameters are preserved for private or authenticated add-ons.
+- These are third-party services you choose and configure. This repository does not operate them, host their content, or guarantee their availability.
 
 ### Max streams per add-on
-Controls how many returned streams are considered from each add-on. Choose 5, 10, 25, 50, or 100. Higher values may return more options but can take longer and add clutter.
+Controls the maximum number of streams considered from each configured add-on. Available values are 5, 10, 25, 50, or 100. Higher values can return more choices but may take longer and make the stream list noisier.
 
-## What it does
+## Features
 
-- Shows trending and popular movies and series from TMDB.
-- Searches TMDB and shows posters, summaries, release years, and details.
-- Lists TV episodes using TMDB episode metadata.
-- Requests playable HTTP(S) stream URLs from the add-ons you configured.
-- Tries IMDb IDs with season/episode numbers and common TMDB ID formats for stream lookup.
-- Does not include or maintain a built-in catalogue of streaming sites.
+- Trending and popular movies and series from TMDB.
+- Search, posters, release years, summaries, and title details.
+- TV episode lists and TMDB/IMDb identifiers.
+- Stream lookup through user-configured Stremio-compatible add-ons.
+- IMDb IDs with season/episode numbers and common TMDB ID formats are tried for stream matching.
+- No built-in list of streaming websites and no hosted media.
 
-## Important disclaimers
+## Disclaimers
 
-- **No sources are hosted here.** No movies, shows, subtitles, torrents, debrid files, or stream servers are hosted or supplied by this repository.
-- TMDB supplies metadata and artwork. This project is not endorsed or certified by TMDB. This product uses the TMDB API but is not endorsed or certified by TMDB.
-- Stremio-compatible add-ons are independent third-party services. You configure them yourself; their operators determine what they return.
-- You are responsible for ensuring that your use of third-party services and any content you access complies with applicable laws and the providers' terms.
-- This is an unofficial community extension for Zangetsu and is not affiliated with or endorsed by the Zangetsu maintainers, TMDB, or Stremio.
+- **No sources are hosted here.** No movies, shows, subtitles, torrents, debrid files, video files, or stream servers are hosted or supplied by this repository.
+- Metadata and artwork are supplied by TMDB. This product uses the TMDB API but is not endorsed or certified by TMDB.
+- Stremio-compatible add-ons are independent third-party services. Their operators decide what they return.
+- Users are responsible for ensuring that their use of third-party services and any content they access complies with applicable laws and those services' terms.
+- This is an unofficial community extension and is not affiliated with or endorsed by the Zangetsu maintainers, TMDB, or Stremio.
 
 ## License
 
-The code in this repository is available under the MIT License. See [LICENSE](LICENSE). Third-party names, logos, APIs, metadata, and content remain the property of their respective owners and are subject to their own terms.
+The code in this repository is licensed under the MIT License. See [LICENSE](LICENSE). Third-party names, logos, APIs, metadata, and content remain the property of their respective owners and are subject to their own terms.
