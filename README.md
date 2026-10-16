@@ -30,6 +30,7 @@ Uses JustAnime's public JSON API for anime search, episode resolution, and its p
 
 - **Streaming servers:** choose all supported endpoints, or limit requests to AnimeGG, AniNeko, or MegaPlay.
 - **Preferred audio:** puts sub or dub sources first, with the other language as fallback.
+- Search/home cards and detail responses carry the title's AniList ID — JustAnime's catalogue ID is the AniList ID (the MAL ID arrives separately on detail) — so the app can ID-match a title instead of re-resolving it through an AniList title search on every open.
 - The provider returns direct HTTP(S) media URLs exposed by the API and includes request headers/subtitle metadata when supplied.
 - It does not decrypt protected player payloads, bypass logins/paywalls, defeat DRM, or work around anti-bot protection. If an endpoint returns encrypted data or no directly playable URL, that result is skipped.
 - Live API calls could not be reached from the development runtime due to DNS/network restrictions. Mocked tests validate parsing and provider behavior, but **do not prove current live-site playback**. Please test a currently available title in Zangetsu after installing it.
