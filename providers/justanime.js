@@ -177,7 +177,7 @@ function _fetchEpisodes(id) {
 }
 function getDetail(url, opts) {
   var id = _extractId(url);
-  if (!/^\\d+$/.test(id)) return Promise.resolve(null);
+  if (!/^\d+$/.test(id)) return Promise.resolve(null);
   return Promise.all([
     _json(API + '/anime/' + encodeURIComponent(id)),
     _fetchEpisodes(id)
@@ -206,7 +206,7 @@ function getDetail(url, opts) {
 }
 function getEpisodes(url, opts) {
   var id = _extractId(url);
-  if (!/^\\d+$/.test(id)) return Promise.resolve([]);
+  if (!/^\d+$/.test(id)) return Promise.resolve([]);
   return _fetchEpisodes(id).then(function (episodes) {
     if (episodes.length) return episodes;
     return getDetail(url, opts).then(function (detail) {
@@ -287,7 +287,7 @@ function getVideoSources(episodeUrl, opts) {
     (episodeUrl && (episodeUrl.url || episodeUrl.id)) || '';
   var parts = String(value).split('||');
   var id = _extractId(parts[0]), episode = parseInt(parts[1], 10);
-  if (!/^\\d+$/.test(id) || !isFinite(episode) || episode < 1) {
+  if (!/^\d+$/.test(id) || !isFinite(episode) || episode < 1) {
     return Promise.reject(new Error('JustAnime: invalid episode reference'));
   }
   var config = _settings();
