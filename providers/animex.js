@@ -9,6 +9,7 @@ var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID) ? String(__S
 var VERSION = '1.0.0';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36';
 var _searchCache = {};
+var _itemCache = {};
 var _detailCache = {};
 var _detailInflight = {};
 
@@ -82,6 +83,7 @@ function search(query,page,opts) {
     var items=data && data.searchAnime && data.searchAnime.items;
     var out=(Array.isArray(items)?items:[]).map(_normal).filter(Boolean);
     _searchCache[key]=out;
+    out.forEach(function(item){ _itemCache[String(item.id)] = item; });
     return out.slice();
   }).catch(function(){return [];});
 }
@@ -117,7 +119,7 @@ function getDetail(url,opts) {
   if (!id) return Promise.resolve(null);
   if (_detailCache[id]) return Promise.resolve(_detailCache[id]);
   if (_detailInflight[id]) return _detailInflight[id];
-  var baseItem=null;
+  var baseItem=_itemCache[String(id)] || null;
   var task=Promise.resolve().then(function(){ return _fetchEpisodes(id); }).then(function(episodes) {
     // The provider search result is enough to present a stable fallback when
     // the optional page/episode endpoint temporarily fails.
