@@ -41,7 +41,7 @@ async function gql(query,vars,sealed){
  if(d.data&&typeof d.data.tobeparsed==="string"){
   var a=bd(d.data.tobeparsed);
   if(!b||a[0]!==1||a.length<30)throw Error("MKissa encrypted response cannot be opened");
-  return JSON.parse(decodeURIComponent(escape(unutf(await gcm(b.key,a.slice(1,13),a.slice(13),false)))));
+  var plainBytes=await gcm(b.key,a.slice(1,13),a.slice(13),false);var plainText=unutf(plainBytes);var decodedText=decodeURIComponent(escape(plainText));return JSON.parse(decodedText);
  }
  if(msgs.length&&(!d.data||Object.keys(d.data).every(function(k){return d.data[k]===null;})))throw Error("MKissa API: "+msgs[0]);
  return d.data||{};
