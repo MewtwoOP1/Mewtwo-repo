@@ -70,12 +70,67 @@
     {
       "id": "kototv",
       "name": "KotoTV",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "type": "anime",
       "lang": "en",
       "file": "providers/kototv.js",
       "logo": "https://www.google.com/s2/favicons?sz=256&domain=kototv.to",
-      "nsfw": false
+      "nsfw": false,
+      "settings": [
+        {
+          "key": "domain",
+          "label": "Domain",
+          "description": "Choose the exact domain this source should use. No automatic failover.",
+          "type": "enum",
+          "default": "https://kototv.to",
+          "options": [
+            {
+              "value": "https://kototv.to",
+              "label": "kototv.to"
+            },
+            {
+              "value": "https://anineko.site",
+              "label": "anineko.site"
+            },
+            {
+              "value": "https://aniorbit.cc",
+              "label": "aniorbit.cc"
+            },
+            {
+              "value": "https://anispark.cc",
+              "label": "anispark.cc"
+            },
+            {
+              "value": "https://animeflux.cc",
+              "label": "animeflux.cc"
+            },
+            {
+              "value": "https://aninova.cc",
+              "label": "aninova.cc"
+            },
+            {
+              "value": "https://anipulse.cc",
+              "label": "anipulse.cc"
+            },
+            {
+              "value": "https://anirush.cc",
+              "label": "anirush.cc"
+            },
+            {
+              "value": "https://aniblaze.cc",
+              "label": "aniblaze.cc"
+            },
+            {
+              "value": "https://hiotaku.cc",
+              "label": "hiotaku.cc"
+            },
+            {
+              "value": "https://www.aniwatch.rest",
+              "label": "www.aniwatch.rest"
+            }
+          ]
+        }
+      ]
     },
     {
       "id": "mkissa",
@@ -90,12 +145,51 @@
     {
       "id": "hianime",
       "name": "HiAnime",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "type": "anime",
       "lang": "en",
       "file": "providers/hianime.js",
       "logo": "https://www.google.com/s2/favicons?sz=256&domain=hianime.dk",
-      "nsfw": false
+      "nsfw": false,
+      "settings": [
+        {
+          "key": "domain",
+          "label": "Domain",
+          "description": "Choose the exact domain this source should use. No automatic failover.",
+          "type": "enum",
+          "default": "https://hianime.dk",
+          "options": [
+            {
+              "value": "https://hianime.dk",
+              "label": "hianime.dk"
+            },
+            {
+              "value": "https://hianime.al",
+              "label": "hianime.al"
+            },
+            {
+              "value": "https://hianime.fans",
+              "label": "hianime.fans"
+            },
+            {
+              "value": "https://hianimes.es",
+              "label": "hianimes.es"
+            },
+            {
+              "value": "https://zenkai.to",
+              "label": "zenkai.to"
+            },
+            {
+              "value": "https://anikoto.fan",
+              "label": "anikoto.fan"
+            },
+            {
+              "value": "https://anikoto.lv",
+              "label": "anikoto.lv"
+            }
+          ]
+        }
+      ]
     }
   ]
 }
