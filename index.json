@@ -70,7 +70,7 @@
     {
       "id": "kototv",
       "name": "KotoTV",
-      "version": "1.0.4",
+      "version": "1.0.5",
       "type": "anime",
       "lang": "en",
       "file": "providers/kototv.js",
