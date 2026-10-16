@@ -1,0 +1,16 @@
+{
+  "name": "Zangetsu Stremio Bridge",
+  "description": "Integrates Stremio addons (AIOStreams, Pengu, Cinemeta, etc.) into Zangetsu.",
+  "sources": [
+    {
+      "id": "stremio-bridge",
+      "name": "Stremio Bridge (AIOStreams / Pengu)",
+      "version": "1.0.0",
+      "type": "movie",
+      "lang": "en",
+      "file": "providers/stremio-bridge.js",
+      "logo": "https://www.stremio.com/website/stremio-logo-small.png",
+      "nsfw": false
+    }
+  ]
+}
