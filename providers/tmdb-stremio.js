@@ -371,16 +371,6 @@ function _addonParts(base) {
   };
 }
 
-function _streamSettings() {
-  var max = parseInt(_readSetting('maxStreamsPerAddon'), 10);
-  if (!max || max < 1) max = 25;
-  if (max > 100) max = 100;
-  return {
-    urls: _parseAddonUrls(_readSetting('addonUrls')),
-    max: max
-  };
-}
-
 function _json(url) {
   return fetch(url, { headers: { Accept: 'application/json' }, timeoutMs: 12000 })
     .then(function (response) {
