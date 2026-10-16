@@ -33,11 +33,26 @@
           "type": "enum",
           "default": "25",
           "options": [
-            { "value": "5", "label": "5 streams" },
-            { "value": "10", "label": "10 streams" },
-            { "value": "25", "label": "25 streams" },
-            { "value": "50", "label": "50 streams" },
-            { "value": "100", "label": "100 streams" }
+            {
+              "value": "5",
+              "label": "5 streams"
+            },
+            {
+              "value": "10",
+              "label": "10 streams"
+            },
+            {
+              "value": "25",
+              "label": "25 streams"
+            },
+            {
+              "value": "50",
+              "label": "50 streams"
+            },
+            {
+              "value": "100",
+              "label": "100 streams"
+            }
           ]
         }
       ]
@@ -45,7 +60,7 @@
     {
       "id": "justanime",
       "name": "JustAnime",
-      "version": "1.4.0",
+      "version": "1.5.0",
       "type": "anime",
       "lang": "en",
       "file": "providers/justanime.js",
@@ -59,10 +74,22 @@
           "type": "enum",
           "default": "all",
           "options": [
-            { "value": "all", "label": "All servers (recommended)" },
-            { "value": "animegg", "label": "AnimeGG" },
-            { "value": "anineko", "label": "AniNeko" },
-            { "value": "megaplay", "label": "MegaPlay" }
+            {
+              "value": "all",
+              "label": "All servers (recommended)"
+            },
+            {
+              "value": "animegg",
+              "label": "AnimeGG"
+            },
+            {
+              "value": "anineko",
+              "label": "AniNeko"
+            },
+            {
+              "value": "megaplay",
+              "label": "MegaPlay"
+            }
           ]
         },
         {
@@ -72,8 +99,14 @@
           "type": "enum",
           "default": "sub",
           "options": [
-            { "value": "sub", "label": "Sub first" },
-            { "value": "dub", "label": "Dub first" }
+            {
+              "value": "sub",
+              "label": "Sub first"
+            },
+            {
+              "value": "dub",
+              "label": "Dub first"
+            }
           ]
         }
       ]

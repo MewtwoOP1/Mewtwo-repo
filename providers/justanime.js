@@ -6,7 +6,7 @@ var SITE = 'https://justanime.to';
 var API = 'https://core.justanime.to/api';
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID)
   ? String(__SOURCE_ID) : 'justanime';
-var VERSION = '1.4.0';
+var VERSION = '1.5.0';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
   '(KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36';
 
@@ -251,6 +251,14 @@ function getDetail(url, opts) {
     var episodes = results[1] || [];
     if (!anime && !episodes.length) return null;
     anime = anime || {};
+
+    // Some JustAnime responses include the full episode objects on the anime
+    // detail payload while the separate /episodes endpoint is empty or fails.
+    // Prefer those rich objects over generating generic "Episode N" rows.
+    if (!episodes.length && Array.isArray(anime.episodes)) {
+      episodes = _episodeRows(anime.episodes, id);
+    }
+
     var title = _title(anime) || anime.name || anime.english || anime.romaji || ('Anime ' + id);
     var count = _episodeCount(anime);
     if (!episodes.length && count > 0) {
