@@ -143,7 +143,7 @@
     {
       "id": "animesuge",
       "name": "AnimeSuge",
-      "version": "1.0.3",
+      "version": "1.0.4",
       "type": "anime",
       "lang": "en",
       "file": "providers/animesuge.js",
