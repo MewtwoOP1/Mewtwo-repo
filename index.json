@@ -141,13 +141,13 @@
       ]
     },
     {
-      "id": "reanime",
-      "name": "Re:ANIME",
-      "version": "1.0.0",
+      "id": "animesuge",
+      "name": "AnimeSuge",
+      "version": "1.0.3",
       "type": "anime",
       "lang": "en",
-      "file": "providers/reanime.js",
-      "logo": "https://reanime.to/favicon.ico",
+      "file": "providers/animesuge.js",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=animesuge.cz",
       "nsfw": false
     }
   ]
