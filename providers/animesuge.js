@@ -25,7 +25,7 @@ var PLAYER_RE = /^https?:\/\/(?:[a-z0-9-]+\.)?(?:vidtube\.[a-z]+|megaplay\.[a-z]
 
 function getInfo() {
   return { name: 'AnimeSuge', lang: 'en', baseUrl: SITE,
-    logo: SITE + '/animesuge/images/favicon.png', type: 'anime', version: '1.0.3' };
+    logo: 'https://www.google.com/s2/favicons?sz=256&domain=animesuge.cz', type: 'anime', version: '1.0.3' };
 }
 
 // ── Pure-JS base64 (encode + decode). Self-contained: the app injects no
