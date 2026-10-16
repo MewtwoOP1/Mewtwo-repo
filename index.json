@@ -139,6 +139,16 @@
           ]
         }
       ]
+    },
+    {
+      "id": "reanime",
+      "name": "Re:ANIME",
+      "version": "1.0.0",
+      "type": "anime",
+      "lang": "en",
+      "file": "providers/reanime.js",
+      "logo": "https://reanime.to/favicon.ico",
+      "nsfw": false
     }
   ]
 }
