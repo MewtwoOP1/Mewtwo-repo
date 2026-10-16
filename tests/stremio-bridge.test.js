@@ -11,6 +11,15 @@ assert.equal(
 );
 assert.equal(provider.normalizeAddonBaseUrl("javascript:alert(1)"), "");
 
+assert.equal(
+  provider.buildStremioUrl("https://example.com/addon/manifest.json", "stream", "movie", "tt123"),
+  "https://example.com/addon/stream/movie/tt123.json"
+);
+assert.equal(
+  provider.buildStremioUrl("https://example.com/addon/manifest.json", "catalog", "movie", "top", "search=Big%20Buck%20Bunny"),
+  "https://example.com/addon/catalog/movie/top.json?search=Big+Buck+Bunny"
+);
+
 const config = provider.getConfig({
   addonUrls: "https://one.example/manifest.json, https://two.example/addon/manifest.json",
   excludeNonHttp: true,
