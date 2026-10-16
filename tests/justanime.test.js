@@ -1,0 +1,67 @@
+const assert = require("node:assert/strict");
+
+const calls = [];
+global.__settings = { justanime: { servers: "all", language: "sub" } };
+global.fetch = async (url, options) => {
+  const u = String(url);
+  calls.push({ url: u, options: options || {} });
+  let body = {};
+  if (u === "https://core.justanime.to/api/home") {
+    body = { latestEpisode: [{ id: 21, title: { english: "Mock Anime", romaji: "Mock Anime" }, cover: "https://img.example/mock.jpg" }] };
+  } else if (u === "https://core.justanime.to/api/search?page=1") {
+    body = { results: [{ id: 21, title: { english: "Mock Anime" }, cover: "https://img.example/mock.jpg" }], pageInfo: { hasNextPage: true } };
+  } else if (u === "https://core.justanime.to/api/search?query=Mock%20Anime&page=1") {
+    body = { results: [{ id: 21, title: { english: "Mock Anime" }, cover: "https://img.example/mock.jpg" }] };
+  } else if (u === "https://core.justanime.to/api/anime/21") {
+    body = { data: { id: 21, idMal: 999, title: { english: "Mock Anime", romaji: "Mock Anime" }, coverImage: { extraLarge: "https://img.example/mock.jpg" }, description: "<p>A test anime</p>", genres: ["Action"], episodes: 2, seasonYear: 2024, status: "FINISHED" } };
+  } else if (u === "https://core.justanime.to/api/watch/21/episode/2/megaplay") {
+    body = { sub: { sources: [{ url: "https://cdn.example/mock-1080p.m3u8", quality: "1080p", isM3U8: true }], headers: { Referer: "https://megaplay.buzz/" }, subtitles: [{ file: "https://cdn.example/en.vtt", label: "English" }] } };
+  } else if (u === "https://core.justanime.to/api/watch/21/episode/2/animegg") {
+    body = { dub: { sources: [{ url: "https://cdn.example/mock-dub.mp4", quality: "720p" }] } };
+  } else if (u === "https://core.justanime.to/api/watch/21/episode/2/anineko") {
+    body = { langs: { sub: [], dub: [] } };
+  }
+  return { status: 200, body: JSON.stringify(body) };
+};
+
+const provider = require("../providers/justanime.js");
+
+async function main() {
+  assert.equal(provider.version, "1.0.0");
+  assert.equal(provider.getInfo().name, "JustAnime");
+  assert.equal(provider.getInfo().type, "anime");
+  assert.deepEqual(provider.getSettings().map((s) => s.key), ["servers", "language"]);
+  assert.ok(provider.getSettings().every((s) => s.description && s.label));
+
+  const home = await provider.getHome({});
+  assert.equal(home.length, 2);
+  assert.equal(home[0].items[0].title, "Mock Anime");
+  assert.equal(home[0].items[0].cover, "https://img.example/mock.jpg");
+
+  const search = await provider.search("Mock Anime", 1, {});
+  assert.equal(search[0].id, "21");
+  assert.equal(search[0].type, "anime");
+
+  const detail = await provider.getDetail("https://justanime.to/anime/21/mock-anime", {});
+  assert.equal(detail.title, "Mock Anime");
+  assert.equal(detail.malId, 999);
+  assert.equal(detail.episodes.length, 2);
+  assert.equal(detail.episodes[0].url, "21||2");
+  assert.equal(detail.description, "A test anime");
+
+  const streams = await provider.getVideoSources("21||2", {});
+  assert.equal(streams.length, 2);
+  assert.equal(streams[0].url, "https://cdn.example/mock-1080p.m3u8");
+  assert.equal(streams[0].container, "hls");
+  assert.equal(streams[0].headers.Referer, "https://megaplay.buzz/");
+  assert.equal(streams[1].url, "https://cdn.example/mock-dub.mp4");
+  assert.equal(streams[1].container, "mp4");
+  assert.ok(calls.every((c) => c.options.headers.Origin === "https://justanime.to"));
+  assert.equal(await provider.getStreams("21||2", {}).then((x) => x.length), 2);
+
+  console.log("JustAnime mocked integration tests passed.");
+}
+main().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});
