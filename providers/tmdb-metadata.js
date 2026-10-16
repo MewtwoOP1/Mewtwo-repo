@@ -21,7 +21,7 @@ function getInfo() {
 function getSettings() { return []; }
 
 function _trim(value) {
-  return String(value == null ? '' : value).replace(/^\\s+|\\s+$/g, '');
+  return String(value == null ? '' : value).replace(/^\s+|\s+$/g, '');
 }
 
 function _tmdbJson(path) {
@@ -135,7 +135,7 @@ function _parseTmdbUrl(value) {
     try { json = JSON.parse(s); } catch (e) {}
     if (json) return _parseTmdbUrl(json);
   }
-  var m = s.match(/^(?:tmdb|torbox):\\/\\/(movie|tv|series)\\/(\\d+)/i);
+  var m = s.match(/^(?:tmdb|torbox):\/\/(movie|tv|series)\/(\d+)/i);
   if (!m) return null;
   return { id: Number(m[2]), type: m[1].toLowerCase() === 'tv' || m[1].toLowerCase() === 'series' ? 'tv' : 'movie' };
 }
