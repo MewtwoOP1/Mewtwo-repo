@@ -1,11 +1,11 @@
 {
   "name": "Zangetsu Stremio Bridge",
-  "description": "Connect user-configured Stremio-compatible add-ons to Zangetsu.",
+  "description": "Connect user-configured Stremio metadata and streaming add-ons to Zangetsu.",
   "sources": [
     {
       "id": "stremio-bridge",
-      "name": "Stremio Bridge (Bring Your Own Addons)",
-      "version": "1.1.0",
+      "name": "Stremio Bridge (Metadata + Streams)",
+      "version": "1.2.0",
       "type": "movie",
       "lang": "en",
       "file": "providers/stremio-bridge.js",
@@ -13,11 +13,20 @@
       "nsfw": false,
       "settings": [
         {
+          "key": "metadataAddonUrls",
+          "id": "metadataAddonUrls",
+          "title": "Metadata Add-on Manifest URLs",
+          "label": "Metadata add-ons",
+          "description": "Add Stremio add-ons that provide catalogs and searchable metadata. Paste manifest.json URLs, separated by commas or new lines. No TMDB API key is required by this bridge.",
+          "type": "text",
+          "default": ""
+        },
+        {
           "key": "addonUrls",
           "id": "addonUrls",
-          "title": "Stremio Add-on Manifest URLs",
-          "label": "Manifest URLs",
-          "description": "Paste complete manifest.json URLs for your own Stremio add-ons. Separate multiple URLs with commas or new lines.",
+          "title": "Stream Add-on Manifest URLs",
+          "label": "Stream add-ons",
+          "description": "Add Stremio add-ons that provide playable streams. A combined add-on can be entered in both fields.",
           "type": "text",
           "default": ""
         },
