@@ -1,6 +1,11 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="TMDB plus Stremio extension icon">
-  <g fill="#f4f4f4" fill-rule="evenodd" stroke="#303030" stroke-width="1.5" stroke-linejoin="round">
-    <path d="M114 65 L112 74 L106 85 L93 98 L88 101 L85 100 L91 95 L83 100 L76 102 L61 102 L42 94 L40 96 L42 98 L41 99 L36 98 L31 101 L31 103 L38 109 L46 113 L59 116 L68 116 L67 115 L68 114 L74 114 L84 111 L92 107 L101 100 L101 99 L99 101 L97 100 L106 90 L110 83 L114 70ZM80 109 L81 108 L82 109 L81 110ZM85 107 L86 106 L87 107 L86 108ZM87 106 L88 105 L90 106 L89 107ZM89 105 L90 104 L92 105 L91 106ZM81 102 L82 101 L84 102 L83 103ZM33 102 L34 101 L35 102 L34 103ZM98 101 L93 105 L91 104 L96 100ZM83 101 L84 100 L86 101 L85 102ZM32 101 L33 100 L34 101 L33 102ZM41 99 L42 98 L43 99 L42 100ZM106 40 L84 53 L31 90 L27 88 L28 91 L3 112 L24 100 L30 95 L33 94 L35 95 L35 93 L38 90 L73 66ZM92 18 L83 13 L74 10 L56 10 L45 15 L42 14 L34 19 L24 29 L15 45 L13 53 L12 47 L18 32 L13 40 L9 55 L9 70 L13 82 L12 84 L17 92 L18 90 L23 88 L24 82 L28 84 L33 81 L30 72 L29 61 L32 49 L35 44 L29 55 L27 74 L25 66 L26 54 L31 41 L36 34 L47 24 L57 19 L64 18 L58 18 L48 21 L47 20 L57 15 L64 14 L66 12 L75 12Z"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="White circular brush mark crossed by a red slash">
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M20 82 A48 48 0 1 1 105 79" stroke="#303030" stroke-width="9"/>
+    <path d="M20 82 A48 48 0 1 1 105 79" stroke="#f5f5f5" stroke-width="5.5"/>
+    <path d="M28 78 A40 40 0 1 1 98 76" stroke="#a7a7a7" stroke-width="2"/>
+    <path d="M5 113 L125 19" stroke="#303030" stroke-width="7"/>
+    <path d="M5 113 L125 19" stroke="#f5f5f5" stroke-width="3.5"/>
+    <path d="M57 72 L125 19" stroke="#b80012" stroke-width="6"/>
+    <path d="M57 72 L125 19" stroke="#ed1024" stroke-width="3.5"/>
   </g>
-  <path d="M127 17 L91 40 L56 66 L97 41 L120 24Z" fill="#e50914" stroke="#303030" stroke-width="1"/>
 </svg>
