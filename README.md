@@ -12,7 +12,7 @@ In Zangetsu, open **Settings → Sources → Add repo** and add:
 https://raw.githubusercontent.com/MewtwoOP1/Zangetsu-repo/main/index.json
 ```
 
-Install **TMDB + Stremio** or **JustAnime** from the repository's source list.
+Install **JustAnime** to add it as a streaming source. For separate metadata and streaming, enable **Zangetsu Mode (Z Mode)** in the app. In Z Mode, AniList/MyAnimeList supplies anime metadata and TMDB/Simkl supplies movie and TV metadata; JustAnime is searched for streams when you play an episode. Open titles from the Z Mode catalogue, not JustAnime's own catalogue, to keep the detail screen independent from JustAnime. The source repository cannot switch the app's mode for you.
 
 ## Providers
 
@@ -26,7 +26,7 @@ Combines TMDB metadata with stream discovery from Stremio-compatible add-ons tha
 
 ### JustAnime
 
-Uses JustAnime's public JSON API for anime listings, search, details, episodes, and its published stream-server endpoints.
+Uses JustAnime's public JSON API for anime search, episode resolution, and its published stream-server endpoints. In standard source mode it can also show its own catalogue/detail pages. In **Zangetsu Mode (recommended for separate metadata)**, AniList/MyAnimeList owns the anime detail page and JustAnime is used as a playback source; the app matches the metadata title to JustAnime's catalogue at play time.
 
 - **Streaming servers:** choose all supported endpoints, or limit requests to AnimeGG, AniNeko, or MegaPlay.
 - **Preferred audio:** puts sub or dub sources first, with the other language as fallback.
