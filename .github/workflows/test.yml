@@ -21,3 +21,5 @@ jobs:
           node-version: 22
       - name: Run JustAnime mocked integration tests
         run: node tests/justanime.test.js
+      - name: Run Ani.pm provider smoke tests
+        run: node tests/anipm.test.js
