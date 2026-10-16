@@ -34,6 +34,10 @@ global.fetch = async (url, options) => {
       packages: { episodes: { '1': { sub: true, dub: true }, '2': { sub: true } } },
       settlarSelection: 'selection-token'
     };
+  } else if (u === 'https://ani.pm/api/anime/search?q=Broken%20Anime&page=1') {
+    body = { items: [{ id: '456', source: 'anime', title: { english: 'Broken Anime' }, anilistId: 456, malId: 654 }] };
+  } else if (u.indexOf('https://ani.pm/api/anime/playback-bootstrap/anime/456?') === 0) {
+    body = {};
   } else if (u.indexOf('https://ani.pm/api/anime/settlar/session?') === 0) {
     body = { embedUrl: 'https://embed.settlar.io/embed?t=session-token' };
   } else if (u === 'https://embed.settlar.io/api/embed/session?t=session-token') {
@@ -48,7 +52,7 @@ global.fetch = async (url, options) => {
 const provider = require('../providers/anipm.js');
 
 async function main() {
-  assert.equal(provider.version, '1.3.0');
+  assert.equal(provider.version, '1.3.1');
   assert.equal(provider.getInfo().name, 'Ani.pm');
   assert.equal(provider.getInfo().type, 'anime');
   assert.equal(provider.getSettings()[0].default, 'sub');
@@ -70,6 +74,11 @@ async function main() {
   assert.deepEqual(detail.episodes.map((ep) => ep.number), [1, 2], 'episodes must be ascending for Z Mode canonical mapping');
   assert.equal(detail.episodes[0].title, 'The Beginning');
   assert.equal(detail.episodes[1].title, 'The Journey');
+
+  const brokenResults = await provider.search('Broken Anime', 1, {});
+  assert.equal(brokenResults.length, 1);
+  const brokenDetail = await provider.getDetail(brokenResults[0].url, {});
+  assert.equal(brokenDetail, null, "failed empty bootstrap responses must not emit a synthetic detail that can replace catalogue metadata");
 
   const bootstrapCallsBeforeEpisodes = calls.filter((c) => c.url.indexOf('https://ani.pm/api/anime/playback-bootstrap/anime/123?') === 0).length;
   const episodes = await provider.getEpisodes(results[0].url, {});
