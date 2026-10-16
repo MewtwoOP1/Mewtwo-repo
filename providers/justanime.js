@@ -53,7 +53,8 @@ function _settings() {
   };
 }
 function _trim(s) { return String(s == null ? '' : s).replace(/^\s+|\s+$/g, ''); }
-function _json(url, referer) {
+function _json(url, referer, attempt) {
+  attempt = attempt || 0;
   return fetch(url, { headers: {
     'User-Agent': UA,
     'Accept': 'application/json, text/plain, */*',
@@ -61,10 +62,26 @@ function _json(url, referer) {
     'Referer': referer || SITE + '/',
     'X-Requested-With': 'XMLHttpRequest'
   }, timeoutMs: 15000 }).then(function (r) {
-    if (r && r.status && r.status >= 400) throw new Error('JustAnime HTTP ' + r.status);
+    if (r && r.status && r.status >= 400) {
+      var httpError = new Error('JustAnime HTTP ' + r.status);
+      httpError.status = r.status;
+      throw httpError;
+    }
     var body = r && r.body != null ? r.body : '';
     if (typeof body !== 'string') body = JSON.stringify(body);
     return JSON.parse(body || '{}');
+  }).catch(function (error) {
+    var status = error && Number(error.status);
+    // Only retry transient failures. A 404/other client error will not improve
+    // by repeating it; 429 and 5xx responses often recover on a short retry.
+    var retryable = !status || status === 408 || status === 429 || status >= 500;
+    if (!retryable || attempt >= 2) throw error;
+    var delay = attempt === 0 ? 300 : 900;
+    return new Promise(function (resolve) {
+      setTimeout(resolve, delay);
+    }).then(function () {
+      return _json(url, referer, attempt + 1);
+    });
   });
 }
 function _title(item) {
