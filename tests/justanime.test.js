@@ -66,7 +66,7 @@ async function main() {
   assert.equal(streams.length, 2);
   assert.equal(streams[0].url, "https://cdn.example/mock-1080p.m3u8");
   assert.equal(streams[0].container, "hls");
-  assert.equal(streams[0].headers.Referer, "https://justanime.to/");
+  assert.equal(streams[0].headers.Referer, "https://megaplay.buzz/");
   assert.equal(streams[1].url, "https://cdn.example/play?id=opaque123");
   assert.equal(streams[1].container, "hls");
   assert.ok(calls.every((c) => c.options.headers.Origin === "https://justanime.to"));
