@@ -1,4 +1,20 @@
 const assert = require("node:assert/strict");
+
+// Zangetsu injects htmlText into provider scripts; mirror the host helper in Node.
+global.htmlText = function (html) {
+  return String(html || "")
+    .replace(/<[^>]*>/g, "")
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
+    .replace(/&#x([\da-f]+);/gi, (_, n) => String.fromCharCode(parseInt(n, 16)))
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/\s+/g, " ")
+    .trim();
+};
+
 const provider = require("../providers/animesuge.js");
 
 const calls = [];
