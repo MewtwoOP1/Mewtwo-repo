@@ -2,6 +2,7 @@
 const assert = require('node:assert/strict');
 
 const calls = [];
+const bootstrapCounts = new Map();
 const transientFailures = new Map();
 global.__settings = { anipm: { language: 'sub' } };
 global.fetch = async (url, options) => {
@@ -20,7 +21,12 @@ global.fetch = async (url, options) => {
       anilistId: 123, malId: 999, cover: 'https://img.example/anipm.jpg'
     }] };
   } else if (u.indexOf('https://ani.pm/api/anime/playback-bootstrap/anime/123?') === 0) {
-    body = {
+    const lang = new URL(u).searchParams.get('lang');
+    const count = (bootstrapCounts.get(lang) || 0) + 1;
+    bootstrapCounts.set(lang, count);
+    if (lang === 'sub' && count === 1) {
+      body = { core: { title: { english: 'Mock Anime' } }, packages: { episodes: {} }, settlarSelection: 'empty-sub-selection' };
+    } else body = {
       core: {
         title: { english: 'Mock Anime', romaji: 'Mock Anime Romaji' }, anilistId: 123, malId: 999,
         episodes: [{ number: 1, title: 'The Beginning' }, { number: 2, title: 'The Journey' }]
@@ -42,7 +48,7 @@ global.fetch = async (url, options) => {
 const provider = require('../providers/anipm.js');
 
 async function main() {
-  assert.equal(provider.version, '1.2.0');
+  assert.equal(provider.version, '1.3.0');
   assert.equal(provider.getInfo().name, 'Ani.pm');
   assert.equal(provider.getInfo().type, 'anime');
   assert.equal(provider.getSettings()[0].default, 'sub');

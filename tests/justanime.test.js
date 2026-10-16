@@ -33,6 +33,10 @@ global.fetch = async (url, options) => {
     ] } };
   } else if (u === "https://core.justanime.to/api/anime/22/episodes?page=1") {
     body = { data: { episodes: [] } };
+  } else if (u === "https://core.justanime.to/api/anime/23") {
+    body = { data: { id: 23, title: { english: "Count Fallback Anime" }, episodes: 3 } };
+  } else if (u === "https://core.justanime.to/api/anime/23/episodes?page=1") {
+    body = { data: { episodes: [] } };
   } else if (u === "https://core.justanime.to/api/watch/21/episode/2/anineko/sub/hd1") {
     body = { sources: [{ url: "https://cdn.example/mock-1080p.m3u8", quality: "1080p", isM3U8: true }], headers: { Referer: "https://justanime.to/" }, subtitles: [] };
   } else if (u === "https://core.justanime.to/api/watch/21/episode/2/anineko/dub/hd1") {
@@ -50,7 +54,7 @@ global.fetch = async (url, options) => {
 const provider = require("../providers/justanime.js");
 
 async function main() {
-  assert.equal(provider.version, "1.8.0");
+  assert.equal(provider.version, "1.9.0");
 
   // A temporary server error should be retried instead of immediately
   // collapsing into an empty detail/episode response.
@@ -95,6 +99,10 @@ async function main() {
   assert.equal(fallbackDetail.episodes[0].description, "Episode synopsis");
   assert.equal(fallbackDetail.episodes[0].thumbnail, "https://img.example/fallback-ep.jpg");
   assert.equal(fallbackDetail.episodes[1].title, "Another Real Title");
+
+  const countFallback = await provider.getDetail("https://justanime.to/anime/23/count-fallback-anime", {});
+  assert.deepEqual(countFallback.episodes.map((ep) => ep.number), [1, 2, 3], "count-only fallback must be ascending");
+  assert.deepEqual(countFallback.episodes.map((ep) => ep.url), ["23||1", "23||2", "23||3"]);
 
   const episodeFetchCount = calls.filter((c) => c.url === "https://core.justanime.to/api/anime/21/episodes?page=1").length;
   const listedEpisodes = await provider.getEpisodes("21", {});

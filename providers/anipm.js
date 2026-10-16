@@ -5,7 +5,7 @@ var SITE = 'https://ani.pm';
 var API = SITE + '/api';
 var EMBED = 'https://embed.settlar.io';
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID) ? String(__SOURCE_ID) : 'anipm';
-var VERSION = '1.2.0';
+var VERSION = '1.3.0';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36';
 var _seriesCache = {};
 var _detailCache = {};
@@ -162,6 +162,17 @@ function _packages(data) {
   return data && ((data.anipmPackages && data.anipmPackages.episodes) || (data.packages && data.packages.episodes) ||
     (data.data && data.data.anipmPackages && data.data.anipmPackages.episodes) || {}) || {};
 }
+function _detailScore(data) {
+  if (!data) return -1;
+  var core = _core(data) || data;
+  var episodes = core && (Array.isArray(core.episodes) ? core.episodes : (Array.isArray(core.episodeList) ? core.episodeList : []));
+  var packages = _packages(data);
+  var packageCount = Object.keys(packages).length;
+  var title = _title(core);
+  // Prefer the bootstrap that actually carries the catalogue/source data;
+  // a truthy but empty SUB response must not mask a populated DUB response.
+  return (Array.isArray(episodes) ? episodes.length * 4 : 0) + packageCount + (title ? 2 : 0);
+}
 function _episodeNumber(item) {
   var n = Number(item && (item.number != null ? item.number : (item.episode != null ? item.episode : item.ep)));
   return isFinite(n) && n > 0 ? n : null;
@@ -246,11 +257,11 @@ function _fetchDetail(url, opts) {
     _bootstrap(ref,1,'sub').catch(function(){return null;}),
     _bootstrap(ref,1,'dub').catch(function(){return null;})
   ]).then(function(results) {
-    var data = results[0] || results[1] || {};
+    var data = _detailScore(results[1]) > _detailScore(results[0]) ? results[1] : (results[0] || results[1] || {});
     var core = _core(data) || {};
     var eps = _episodeRows(data,ref);
     var title = _title(core) || _title(cachedItem) || (fallback && fallback.title) || ('Anime ' + ref.id);
-    var packages = _packages(results[0] || results[1]);
+    var packages = _packages(data);
     var subCount=0,dubCount=0;
     Object.keys(packages).forEach(function(k){if(packages[k].sub===true||packages[k].subhard===true)subCount++;if(packages[k].dub===true||packages[k].dubhard===true)dubCount++;});
     return {id:ref.source + ':' + ref.id,title:title,englishTitle:core.englishTitle || cachedItem.englishTitle || null,
