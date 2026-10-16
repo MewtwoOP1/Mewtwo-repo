@@ -1,11 +1,12 @@
 // KotoTV anime source for Zangetsu.
 var SOURCE_ID=(typeof __SOURCE_ID!=="undefined"&&__SOURCE_ID)?String(__SOURCE_ID):"kototv";
 var SITE="https://kototv.to",PLAYER="https://player.kototv.to";
+var SITES=["https://kototv.to","https://anineko.site","https://aniorbit.cc","https://anispark.cc","https://animeflux.cc","https://aninova.cc","https://anipulse.cc","https://anirush.cc","https://aniblaze.cc","https://hiotaku.cc","https://www.aniwatch.rest"];
 var UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 function getInfo(){return {name:"KotoTV",lang:"en",baseUrl:SITE,logo:"https://www.google.com/s2/favicons?sz=256&domain=kototv.to",type:"anime",version:"1.0.0"};}
 function getSettings(){return [];}
 function txt(s){return htmlText(String(s||"")).trim();}
-function get(url,ref){return fetch(url,{headers:{"User-Agent":UA,"Accept":"text/html,application/json,*/*","Referer":ref||SITE+"/"}}).then(function(r){if(r&&r.status>=400)throw Error("KotoTV HTTP "+r.status);return r.body==null?"":r.body;});}
+function get(url,ref){var path;try{var u=new URL(url);path=u.pathname+u.search;}catch(e){path=String(url).replace(/^https?:\\/\\/[^/]+/,"");}var hosts=[SITE].concat(SITES.filter(function(x){return x!==SITE;}));function attempt(i,last){if(i>=hosts.length)return Promise.reject(last||Error("KotoTV mirrors unavailable"));var host=hosts[i];return fetch(host+path,{headers:{"User-Agent":UA,"Accept":"text/html,application/json,*/*","Referer":host+"/"}}).then(function(r){if(!r||r.status>=400)throw Error("KotoTV mirror HTTP "+(r&&r.status||"error")+" at "+host);var b=r.body==null?"":r.body;if(!b)throw Error("Empty response from "+host);return b;}).catch(function(e){return attempt(i+1,e);});}return attempt(0,null);}
 function norm(s){return String(s||"").toLowerCase().replace(/[^a-z0-9]/g,"");}
 function dice(a,b){var x=norm(a),y=norm(b);if(x===y)return 1;if(x.length<2||y.length<2)return 0;var g={},h=0,i,k;for(i=0;i<x.length-1;i++){k=x.slice(i,i+2);g[k]=(g[k]||0)+1;}for(i=0;i<y.length-1;i++){k=y.slice(i,i+2);if(g[k]){h++;g[k]--;}}return 2*h/(x.length+y.length-2);}
 function parse(s){try{return JSON.parse(s||"null");}catch(e){return null;}}
