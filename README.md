@@ -1,26 +1,55 @@
-# Zangetsu Extensions
+# TMDB + Stremio for Zangetsu
 
-A small Zangetsu source repository with separate metadata and streaming extensions.
+A community-maintained Zangetsu extension that combines TMDB metadata with stream discovery from Stremio-compatible add-ons.
 
-## Sources
-
-- **TMDB Metadata** provides trending/popular movie and series rows, search, title details, episode lists, posters, and TMDB/IMDb IDs. It follows the TMDB catalogue approach used by the official [Spyou/zangetsu-providers](https://github.com/Spyou/zangetsu-providers) sources. The app supplies its TMDB API key; this repository does not store one.
-- **Stremio Stream Bridge** queries user-configured Stremio-compatible add-ons for playable HTTP(S) streams. It deliberately does not provide catalogues or metadata.
+**This repository does not host, upload, store, index, or distribute video files or streaming sources.** It only requests metadata from TMDB and asks add-ons that you configure to return stream links. Users are responsible for choosing, configuring, and legally using their own add-ons and services. Availability, legality, and content are controlled by those third parties, not this project.
 
 ## Install
 
-Add this repository in Zangetsu under **Settings → Sources → Add repo**:
+In Zangetsu, open **Settings → Sources → Add repo** and add:
 
 ```
 https://raw.githubusercontent.com/MewtwoOP1/Zangetsu-repo/main/index.json
 ```
 
-Install both **TMDB Metadata** and **Stremio Stream Bridge**. Use TMDB Metadata to browse and search. Open Stremio Stream Bridge settings and paste one or more stream add-on manifest URLs, separated by commas or new lines. URLs ending in `manifest.json` are accepted, and query parameters are preserved for private add-ons.
+Install **TMDB + Stremio**. Open the source's settings and configure the options below.
 
-The metadata source hands playback to the installed Stremio Stream Bridge. If the bridge is not installed or no stream add-on is configured, metadata browsing still works but playback returns no streams.
+## Settings
 
-## Compatibility notes
+### TMDB API Key (optional)
+- Leave blank to use Zangetsu's built-in TMDB API key.
+- Enter your own TMDB v3 API key if you want to use your own credentials or quota.
+- The key is sent only to TMDB API requests. It is not sent to Stremio add-ons or this repository's servers.
+- Obtain a key from your TMDB account's API settings: https://www.themoviedb.org/settings/api
+- Keep your key private. The source settings are stored by the app on your device; this repository does not receive them.
 
-- Only direct HTTP(S) stream URLs are returned. Torrent-only results are omitted because Zangetsu's `VideoSource` contract requires a playable URL.
-- Series requests use the IMDb ID with season and episode when available, then try common TMDB ID forms as fallbacks.
-- Each source's version is tracked in both its JavaScript file and `index.json`; bump both when publishing a change.
+### Stremio Add-on URLs
+- Paste one or more Stremio-compatible add-on manifest URLs.
+- Separate multiple URLs with commas or new lines.
+- URLs ending in `/manifest.json` are accepted.
+- Query parameters are preserved, which can be required by private or authenticated add-ons.
+- These add-ons are third-party services. This repository does not operate them or guarantee that they are available.
+
+### Max streams per add-on
+Controls how many returned streams are considered from each add-on. Choose 5, 10, 25, 50, or 100. Higher values may return more options but can take longer and add clutter.
+
+## What it does
+
+- Shows trending and popular movies and series from TMDB.
+- Searches TMDB and shows posters, summaries, release years, and details.
+- Lists TV episodes using TMDB episode metadata.
+- Requests playable HTTP(S) stream URLs from the add-ons you configured.
+- Tries IMDb IDs with season/episode numbers and common TMDB ID formats for stream lookup.
+- Does not include or maintain a built-in catalogue of streaming sites.
+
+## Important disclaimers
+
+- **No sources are hosted here.** No movies, shows, subtitles, torrents, debrid files, or stream servers are hosted or supplied by this repository.
+- TMDB supplies metadata and artwork. This project is not endorsed or certified by TMDB. This product uses the TMDB API but is not endorsed or certified by TMDB.
+- Stremio-compatible add-ons are independent third-party services. You configure them yourself; their operators determine what they return.
+- You are responsible for ensuring that your use of third-party services and any content you access complies with applicable laws and the providers' terms.
+- This is an unofficial community extension for Zangetsu and is not affiliated with or endorsed by the Zangetsu maintainers, TMDB, or Stremio.
+
+## License
+
+The code in this repository is available under the MIT License. See [LICENSE](LICENSE). Third-party names, logos, APIs, metadata, and content remain the property of their respective owners and are subject to their own terms.
