@@ -9,7 +9,7 @@ const rootDir = process.cwd();
 const manifestPath = path.join(rootDir, "index.json");
 const testPaths = [
   path.join(rootDir, "tests/tmdb-stremio.test.js"),
-  path.join(rootDir, "tests/movies2watch.test.js")
+  path.join(rootDir, "tests/justanime.test.js")
 ];
 
 function fail(message) {
