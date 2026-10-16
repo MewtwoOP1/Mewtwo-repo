@@ -251,6 +251,14 @@ function getDetail(url, opts) {
     var episodes = results[1] || [];
     if (!anime && !episodes.length) return null;
     anime = anime || {};
+
+    // Some JustAnime responses include the full episode objects on the anime
+    // detail payload while the separate /episodes endpoint is empty or fails.
+    // Prefer those rich objects over generating generic "Episode N" rows.
+    if (!episodes.length && Array.isArray(anime.episodes)) {
+      episodes = _episodeRows(anime.episodes, id);
+    }
+
     var title = _title(anime) || anime.name || anime.english || anime.romaji || ('Anime ' + id);
     var count = _episodeCount(anime);
     if (!episodes.length && count > 0) {
