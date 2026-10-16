@@ -19,6 +19,10 @@ global.fetch = async (url, options) => {
   } else if (u === "https://core.justanime.to/api/search?query=Mock%20Anime&page=1" ||
              u === "https://core.justanime.to/api/search?query=Retry%20Anime&page=1") {
     body = { results: [{ id: 21, idMal: "999", title: { english: "Mock Anime", romaji: "Mock Anime Romaji" }, cover: "https://img.example/mock.jpg" }] };
+  } else if (u === "https://core.justanime.to/api/search?query=Broken%20Detail&page=1") {
+    body = { results: [{ id: 24, title: { english: "Known Card Anime" }, cover: "https://img.example/known-card.jpg", idMal: 4242 }] };
+  } else if (u === "https://core.justanime.to/api/anime/24" || u === "https://core.justanime.to/api/anime/24/episodes?page=1") {
+    return { status: 404, body: JSON.stringify({ error: "detail endpoint unavailable" }) };
   } else if (u === "https://core.justanime.to/api/anime/21") {
     body = { data: { id: 21, idMal: 999, title: { english: "Mock Anime", romaji: "Mock Anime" }, coverImage: { extraLarge: "https://img.example/mock.jpg" }, description: "<p>A test anime</p>", genres: ["Action"], episodes: 2, seasonYear: 2024, status: "FINISHED" } };
   } else if (u === "https://core.justanime.to/api/anime/21/episodes?page=1") {
@@ -54,7 +58,7 @@ global.fetch = async (url, options) => {
 const provider = require("../providers/justanime.js");
 
 async function main() {
-  assert.equal(provider.version, "1.9.0");
+  assert.equal(provider.version, "1.10.0");
 
   // A temporary server error should be retried instead of immediately
   // collapsing into an empty detail/episode response.
@@ -90,6 +94,14 @@ async function main() {
   assert.equal(detail.episodes[0].thumbnail, "https://img.example/ep1.jpg");
   assert.equal(detail.episodes[1].title, "The Journey");
   assert.equal(detail.description, "A test anime");
+
+  const brokenSearch = await provider.search("Broken Detail", 1, {});
+  assert.equal(brokenSearch.length, 1);
+  const brokenDetail = await provider.getDetail(brokenSearch[0].url, {});
+  assert.equal(brokenDetail.title, "Known Card Anime", "a detail API miss must fall back to the matched search card");
+  assert.equal(brokenDetail.cover, "https://img.example/known-card.jpg");
+  assert.equal(brokenDetail.malId, 4242);
+  assert.deepEqual(brokenDetail.episodes, [], "fallback must not invent playable episodes");
 
   const fallbackDetail = await provider.getDetail("https://justanime.to/anime/22/fallback-anime", {});
   assert.equal(fallbackDetail.title, "Fallback Anime");

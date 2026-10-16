@@ -15,7 +15,11 @@ global.fetch = async (url, options) => {
   }
 
   let body = {};
-  if (u === 'https://ani.pm/api/anime/search?q=Mock%20Anime&page=1') {
+  if (u === 'https://ani.pm/api/anime/search?q=Broken%20Detail&page=1') {
+    body = { items: [{ id: '999', source: 'broken', title: { english: 'Known Ani.pm Card' }, malId: 9999, cover: 'https://img.example/known-anipm.jpg' }] };
+  } else if (u.indexOf('https://ani.pm/api/anime/playback-bootstrap/broken/999?') === 0) {
+    return { status: 404, body: JSON.stringify({ error: 'bootstrap unavailable' }) };
+  } else if (u === 'https://ani.pm/api/anime/search?q=Mock%20Anime&page=1') {
     body = { items: [{
       id: '123', source: 'anime', title: { english: 'Mock Anime', romaji: 'Mock Anime Romaji' },
       anilistId: 123, malId: 999, cover: 'https://img.example/anipm.jpg'
@@ -48,7 +52,7 @@ global.fetch = async (url, options) => {
 const provider = require('../providers/anipm.js');
 
 async function main() {
-  assert.equal(provider.version, '1.3.0');
+  assert.equal(provider.version, '1.4.0');
   assert.equal(provider.getInfo().name, 'Ani.pm');
   assert.equal(provider.getInfo().type, 'anime');
   assert.equal(provider.getSettings()[0].default, 'sub');
@@ -62,6 +66,14 @@ async function main() {
   assert.equal(results[0].englishTitle, 'Mock Anime Romaji');
   assert.equal(results[0].malId, 999);
   assert.equal(results[0].anilistId, 123);
+
+  const brokenResults = await provider.search('Broken Detail', 1, {});
+  assert.equal(brokenResults.length, 1);
+  const brokenDetail = await provider.getDetail(brokenResults[0].url, {});
+  assert.equal(brokenDetail.title, 'Known Ani.pm Card', 'bootstrap failure must preserve the matched search card');
+  assert.equal(brokenDetail.cover, 'https://img.example/known-anipm.jpg');
+  assert.equal(brokenDetail.malId, 9999);
+  assert.deepEqual(brokenDetail.episodes, [], 'fallback must not invent playable episodes');
 
   const detail = await provider.getDetail(results[0].url, {});
   assert.equal(detail.title, 'Mock Anime');

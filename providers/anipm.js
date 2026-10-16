@@ -5,7 +5,7 @@ var SITE = 'https://ani.pm';
 var API = SITE + '/api';
 var EMBED = 'https://embed.settlar.io';
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID) ? String(__SOURCE_ID) : 'anipm';
-var VERSION = '1.3.0';
+var VERSION = '1.4.0';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36';
 var _seriesCache = {};
 var _detailCache = {};
@@ -219,6 +219,19 @@ function getDetail(url, opts) {
   if (hit && (now - hit.at) < _DETAIL_TTL) return Promise.resolve(hit.value);
   if (_detailInflight[key]) return _detailInflight[key];
   var pending = _fetchDetail(url, opts).then(function(detail) {
+    // A search result can match successfully while both bootstrap calls fail,
+    // and _fetchDetail may resolve null without throwing. Preserve that known
+    // card as a valid empty source detail instead of returning null to Z Mode.
+    if (!detail) {
+      var cached = _seriesCache[key];
+      var card = cached && cached.card;
+      if (card) detail = {
+        id:card.id, title:card.title, englishTitle:card.englishTitle,
+        url:card.url, cover:card.cover, type:card.type, sourceId:SOURCE_ID,
+        malId:card.malId, anilistId:card.anilistId, episodes:[],
+        subCount:0, dubCount:0
+      };
+    }
     delete _detailInflight[key];
     if (detail && Array.isArray(detail.episodes) && detail.episodes.length) {
       _detailCache[key] = {at:Date.now(),value:detail};

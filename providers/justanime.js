@@ -6,7 +6,7 @@ var SITE = 'https://justanime.to';
 var API = 'https://core.justanime.to/api';
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID)
   ? String(__SOURCE_ID) : 'justanime';
-var VERSION = '1.9.0';
+var VERSION = '1.10.0';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
   '(KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36';
 
@@ -148,7 +148,13 @@ function _cards(items) {
   var out = [], seen = {};
   _listPayload(items).forEach(function (item) {
     var card = _card(item);
-    if (card && !seen[card.id]) { seen[card.id] = true; out.push(card); }
+    if (card && !seen[card.id]) {
+      seen[card.id] = true;
+      // Keep the search card so a later detail-endpoint outage can still return
+      // a valid source detail instead of null after the title has matched.
+      _cardCache[card.id] = card;
+      out.push(card);
+    }
   });
   return out;
 }
@@ -257,6 +263,7 @@ function _unwrapAnime(response) {
   return value && typeof value === 'object' &&
     (_title(value) || value.episodes || value.description || value.cover || value.poster) ? value : null;
 }
+var _cardCache = {};
 var _detailCache = {};
 var _detailInflight = {};
 var _DETAIL_TTL = 30000;
@@ -270,6 +277,18 @@ function getDetail(url, opts) {
   if (hit && (now - hit.at) < _DETAIL_TTL) return Promise.resolve(hit.value);
   if (_detailInflight[key]) return _detailInflight[key];
   var pending = _fetchDetail(url, opts).then(function (detail) {
+    // Detail and episode endpoints can fail independently after search already
+    // matched this title. Return the known card with an empty episode list so
+    // Z Mode can keep the catalogue metadata and simply skip source episodes.
+    if (!detail) {
+      var card = _cardCache[id];
+      if (card) detail = {
+        id: card.id, title: card.title, englishTitle: card.englishTitle,
+        url: card.url, cover: card.cover, type: card.type, sourceId: SOURCE_ID,
+        malId: card.malId, anilistId: card.anilistId, episodes: [],
+        subCount: 0, dubCount: 0
+      };
+    }
     delete _detailInflight[key];
     // Never cache an empty/failed response; a temporary upstream miss must
     // not pin a broken episode list in the app.
