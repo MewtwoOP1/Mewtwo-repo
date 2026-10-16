@@ -48,7 +48,7 @@ function getSettings() {
 }
 
 function _trim(value) {
-  return String(value == null ? '' : value).replace(/^\\s+|\\s+$/g, '');
+  return String(value == null ? '' : value).replace(/^\s+|\s+$/g, '');
 }
 
 function _readSetting(key) {
