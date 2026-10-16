@@ -1,11 +1,11 @@
 {
   "name": "Zangetsu Stremio Bridge",
-  "description": "Connects each user's own Stremio-compatible addons to Zangetsu.",
+  "description": "Connect user-configured Stremio-compatible add-ons to Zangetsu.",
   "sources": [
     {
       "id": "stremio-bridge",
       "name": "Stremio Bridge (Bring Your Own Addons)",
-      "version": "1.0.3",
+      "version": "1.1.0",
       "type": "movie",
       "lang": "en",
       "file": "providers/stremio-bridge.js",
@@ -15,28 +15,29 @@
         {
           "key": "addonUrls",
           "id": "addonUrls",
-          "title": "Stremio Addon Manifest URLs",
-          "label": "Stremio Addon Manifest URLs (comma-separated)",
-          "description": "Paste one or more of your own AIOStreams, Pengu, or other Stremio manifest.json URLs. Separate multiple URLs with commas.",
+          "title": "Stremio Add-on Manifest URLs",
+          "label": "Manifest URLs",
+          "description": "Paste complete manifest.json URLs for your own Stremio add-ons. Separate multiple URLs with commas or new lines.",
           "type": "text",
           "default": ""
         },
         {
-          "key": "excludeNonHttp",
-          "id": "excludeNonHttp",
-          "title": "Direct HTTP/HLS Streams Only",
-          "label": "Direct HTTP/HLS Streams Only",
-          "description": "Hide streams that only provide an infoHash and no direct HTTP(S) URL.",
-          "type": "toggle",
-          "default": true
-        },
-        {
           "key": "maxStreamsPerAddon",
           "id": "maxStreamsPerAddon",
-          "title": "Max Streams Per Addon",
-          "label": "Max Streams Per Addon",
+          "title": "Maximum streams per add-on",
+          "label": "Maximum streams per add-on",
+          "description": "Limit the number of streams read from each configured add-on.",
           "type": "number",
           "default": 25
+        },
+        {
+          "key": "includeTorrentStreams",
+          "id": "includeTorrentStreams",
+          "title": "Include torrent-only results",
+          "label": "Include torrent-only results",
+          "description": "Keep results that contain an infoHash but no direct HTTP stream URL.",
+          "type": "toggle",
+          "default": false
         }
       ]
     }
