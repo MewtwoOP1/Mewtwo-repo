@@ -6,7 +6,7 @@ var SITE = 'https://justanime.to';
 var API = 'https://core.justanime.to/api';
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID)
   ? String(__SOURCE_ID) : 'justanime';
-var VERSION = '1.2.0';
+var VERSION = '1.3.0';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
   '(KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36';
 
@@ -91,9 +91,21 @@ function _card(item) {
     malId: item.idMal || item.malId || item.mal_id || null
   };
 }
+function _listPayload(data) {
+  var value = data;
+  // API deployments have returned arrays directly and wrapped them in data/results.
+  for (var i = 0; i < 4 && value && !Array.isArray(value); i++) {
+    if (Array.isArray(value.results)) value = value.results;
+    else if (Array.isArray(value.items)) value = value.items;
+    else if (Array.isArray(value.data)) value = value.data;
+    else if (value.data && typeof value.data === 'object') value = value.data;
+    else break;
+  }
+  return Array.isArray(value) ? value : [];
+}
 function _cards(items) {
   var out = [], seen = {};
-  (Array.isArray(items) ? items : []).forEach(function (item) {
+  _listPayload(items).forEach(function (item) {
     var card = _card(item);
     if (card && !seen[card.id]) { seen[card.id] = true; out.push(card); }
   });
@@ -106,7 +118,7 @@ function getHome(opts) {
       return { title: 'Recently Updated', items: _cards(items) };
     }).catch(function () { return { title: 'Recently Updated', items: [] }; }),
     _json(API + '/search?page=1').then(function (data) {
-      return { title: 'Popular Anime', items: _cards(data.results || []) };
+      return { title: 'Popular Anime', items: _cards(data) };
     }).catch(function () { return { title: 'Popular Anime', items: [] }; })
   ]).then(function (rows) {
     return rows.filter(function (row) { return row.items.length > 0; });
@@ -114,7 +126,7 @@ function getHome(opts) {
 }
 function popular(opts) {
   return _json(API + '/search?page=' + Math.max(1, parseInt((opts && opts.page) || 1, 10)))
-    .then(function (data) { return _cards(data.results || []); })
+    .then(function (data) { return _cards(data); })
     .catch(function () { return []; });
 }
 function search(query, page, opts) {
@@ -122,7 +134,7 @@ function search(query, page, opts) {
   if (!q) return Promise.resolve([]);
   return _json(API + '/search?query=' + encodeURIComponent(q) + '&page=' +
     Math.max(1, parseInt(page || 1, 10))).then(function (data) {
-      return _cards(data.results || []);
+      return _cards(data);
     }).catch(function () { return []; });
 }
 function _extractId(value) {
@@ -147,10 +159,15 @@ function _stripHtml(value) {
     .replace(/\s+/g, ' ').replace(/^\s+|\s+$/g, '');
 }
 function _episodeRows(response, animeId) {
-  var root = response && (response.data || response);
+  var root = response;
+  for (var depth = 0; depth < 4 && root && !Array.isArray(root); depth++) {
+    if (Array.isArray(root.episodes) || Array.isArray(root.results) || Array.isArray(root.items)) break;
+    if (root.data && typeof root.data === 'object') root = root.data;
+    else if (root.anime && typeof root.anime === 'object') root = root.anime;
+    else break;
+  }
   var items = Array.isArray(root) ? root :
-    (root && (root.episodes || root.results || root.items)) || [];
-  if (!Array.isArray(items) && root && root.data && Array.isArray(root.data.episodes)) items = root.data.episodes;
+    (root && (root.episodes || root.results || root.items || root.docs)) || [];
   var out = [], seen = {};
   items.forEach(function (ep, index) {
     if (!ep || typeof ep !== 'object') return;
@@ -185,25 +202,39 @@ function _fetchEpisodes(id) {
       return [];
     }).catch(function () { return []; });
 }
+function _unwrapAnime(response) {
+  var value = response;
+  for (var i = 0; i < 4 && value && typeof value === 'object'; i++) {
+    if (value.error || value.success === false) return null;
+    if (value.anime && typeof value.anime === 'object') { value = value.anime; continue; }
+    if (value.data && typeof value.data === 'object' && !Array.isArray(value.data)) { value = value.data; continue; }
+    if (value.result && typeof value.result === 'object') { value = value.result; continue; }
+    break;
+  }
+  return value && typeof value === 'object' &&
+    (_title(value) || value.episodes || value.description || value.cover || value.poster) ? value : null;
+}
 function getDetail(url, opts) {
   var id = _extractId(url);
   if (!/^\d+$/.test(id)) return Promise.resolve(null);
+  // Details and episodes are independent. A failed detail request should not
+  // erase usable episodes, and nested API response wrappers are normalized.
   return Promise.all([
-    _json(API + '/anime/' + encodeURIComponent(id)),
+    _json(API + '/anime/' + encodeURIComponent(id)).catch(function () { return null; }),
     _fetchEpisodes(id)
   ]).then(function (results) {
-    var response = results[0];
-    var anime = response && (response.data || response.anime || response);
-    if (!anime || typeof anime !== 'object' || response.error) return null;
+    var anime = _unwrapAnime(results[0]);
     var episodes = results[1] || [];
-    var title = _title(anime) || id;
+    if (!anime && !episodes.length) return null;
+    anime = anime || {};
+    var title = _title(anime) || anime.name || anime.english || anime.romaji || ('Anime ' + id);
     var count = _episodeCount(anime);
     if (!episodes.length && count > 0) {
       for (var n = count; n >= 1; n--) {
         episodes.push({ id: id + '||' + n, number: n, title: 'Episode ' + n, url: id + '||' + n, sourceId: SOURCE_ID });
       }
     }
-    var genres = Array.isArray(anime.genres) ? anime.genres : [];
+    var genres = Array.isArray(anime.genres) ? anime.genres : (Array.isArray(anime.genre) ? anime.genre : []);
     return {
       id: id, title: title, url: id, cover: _cover(anime) || null,
       description: _stripHtml(anime.description || anime.synopsis || ''),
