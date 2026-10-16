@@ -28,13 +28,11 @@ This source handles movie and series metadata. Streams are requested from your c
 
 ### KotoTV
 
-- **Streaming servers:** choose all supported endpoints, or limit requests to AnimeGG, AniNeko, or MegaPlay.
-- **Preferred audio:** puts sub or dub sources first, with the other language as fallback.
-- Search/home cards and detail responses carry the title's AniList ID — JustAnime's catalogue ID is the AniList ID (the MAL ID arrives separately on detail) — so the app can ID-match a title instead of re-resolving it through an AniList title search on every open.
-- The provider returns direct HTTP(S) media URLs exposed by the API and includes request headers/subtitle metadata when supplied.
-- It does not decrypt protected player payloads, bypass logins/paywalls, defeat DRM, or work around anti-bot protection. If an endpoint returns encrypted data or no directly playable URL, that result is skipped.
-- Live API calls could not be reached from the development runtime due to DNS/network restrictions. Mocked tests validate parsing and provider behavior, but **do not prove current live-site playback**. Please test a currently available title in Zangetsu after installing it.
-Uses KotoTV search and watch pages to list anime and resolve available sub/dub player streams. Playback depends on KotoTV and its third-party player hosts; availability may change.
+- **Domain setting:** select one listed site domain manually. The provider does not switch domains automatically.
+- Search results and detail pages are parsed from the selected KotoTV-compatible site.
+- Playback URLs are resolved from the player host returned by the watch page. The provider keeps that external host intact and passes a player-origin referer to the stream.
+- The provider does not bypass logins, paywalls, DRM, or anti-bot protection.
+- **Verification:** automated tests use mocked site/player responses, including a regression check that player requests go to the external player host. The live site cannot be reached from this development runtime, so passing tests do not prove current live playback.
 
 ### MKissa
 
