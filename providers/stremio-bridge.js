@@ -37,8 +37,6 @@ function getSettings() {
         { value: '50', label: '50' },
         { value: '100', label: '100' }
       ]
-    },
-    {
     }
   ];
 }
@@ -163,7 +161,6 @@ function _stream(raw, base, config) {
   var qualityMatch = text.match(/(2160p|4k|1080p|720p|480p|360p)/i);
   var container = /\.m3u8(?:[?#]|$)/i.test(url) ? 'hls' :
     /\.(mp4|m4v|mov|webm)(?:[?#]|$)/i.test(url) ? 'mp4' : 'unknown';
-  var parts = _addonParts(base);
   return {
     url: url,
     quality: qualityMatch ? (qualityMatch[1].toLowerCase() === '4k' ? '2160p' : qualityMatch[1]) : 'Auto',
@@ -210,7 +207,7 @@ function getVideoSources(episodeUrl, opts) {
     var out = [], seen = {};
     lists.forEach(function (list) {
       list.forEach(function (stream) {
-        var key = stream.url || (stream.infoHash + ':' + stream.fileIdx);
+        var key = stream.url;
         if (!seen[key]) { seen[key] = true; out.push(stream); }
       });
     });
