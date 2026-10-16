@@ -326,7 +326,7 @@ function _fetchDetail(url, opts) {
       }
     }
     var genres = Array.isArray(anime.genres) ? anime.genres : (Array.isArray(anime.genre) ? anime.genre : []);
-    return {
+    var detail = {
       id: id, title: title, url: id,
       cover: _cover(anime) || (cachedCard && cachedCard.cover) || null,
       description: _stripHtml(anime.description || anime.synopsis || ''),
@@ -336,6 +336,16 @@ function _fetchDetail(url, opts) {
       anilistId: anime.anilistId || anime.anilist_id || (cachedCard && cachedCard.anilistId) || null,
       episodes: episodes, subCount: count || episodes.length, dubCount: count || episodes.length
     };
+    // Optional metadata must be absent, not an empty placeholder: consumers
+    // can then retain the catalogue's value instead of replacing it with "".
+    if (!detail.cover) delete detail.cover;
+    if (!detail.description) delete detail.description;
+    if (!detail.year) delete detail.year;
+    if (!detail.malId) delete detail.malId;
+    if (!detail.anilistId) delete detail.anilistId;
+    if (!detail.genres.length) delete detail.genres;
+    if (detail.status === 'unknown') delete detail.status;
+    return detail;
   }).catch(function () { return null; });
 }
 function getEpisodes(url, opts) {
