@@ -149,35 +149,6 @@
       "file": "providers/animesuge.js",
       "logo": "https://www.google.com/s2/favicons?sz=256&domain=animesuge.cz",
       "nsfw": false
-    },
-    {
-      "id": "animesuge",
-      "name": "AnimeSuge",
-      "version": "1.0.0",
-      "type": "anime",
-      "lang": "en",
-      "file": "providers/animesuge.js",
-      "logo": "https://animesuge.cz/favicon.ico",
-      "nsfw": false,
-      "settings": [
-        {
-          "key": "language",
-          "label": "Preferred audio",
-          "description": "Prefer sub or dub when both are available.",
-          "type": "enum",
-          "default": "sub",
-          "options": [
-            {
-              "value": "sub",
-              "label": "Sub first"
-            },
-            {
-              "value": "dub",
-              "label": "Dub first"
-            }
-          ]
-        }
-      ]
     }
   ]
 }
