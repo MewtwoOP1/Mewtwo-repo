@@ -25,7 +25,7 @@ var PLAYER_RE = /^https?:\/\/(?:[a-z0-9-]+\.)?(?:vidtube\.[a-z]+|megaplay\.[a-z]
 
 function getInfo() {
   return { name: 'AnimeSuge', lang: 'en', baseUrl: SITE,
-    logo: SITE + '/animesuge/images/favicon.png', type: 'anime', version: '1.0.3' };
+    logo: SITE + '/animesuge/images/favicon.png', type: 'anime', version: '1.0.4' };
 }
 
 // ── Pure-JS base64 (encode + decode). Self-contained: the app injects no
@@ -196,8 +196,7 @@ function _ajax(path) {
 function _slugFromAnime(href) {
   var m = String(href || '').match(/\/anime\/([^/"?#]+)/);
   return m ? m[1] : null;
-}
-// ── Cards (search results, home widgets) ────────────────────────────────────
+}// ── Cards (search results, home widgets) ────────────────────────────────────
 function _cards(html) {
   var source = String(html || ''), out = [], seen = {};
   // AnimeSuge changed from the old `<div class="item">` layout to the
@@ -396,8 +395,7 @@ function getVideoSources(episodeUrl) {
   var cat = parts[0] === 'dub' ? 'dub' : 'sub';
   var serverIds = parts[1] ? decodeURIComponent(parts[1]) : '';
   if (!serverIds) return Promise.reject(new Error('AnimeSuge: no server ids'));
-  return _ajax('/ajax/server/list?servers=' + encodeURIComponent(serverIds)).then(function (j) {
-    var lhtml = (j && typeof j.result === 'string') ? j.result : '';
+  return _ajax('/ajax/server/list?servers=' + encodeURIComponent(serverIds)).then(function (j) {    var lhtml = (j && typeof j.result === 'string') ? j.result : '';
     var servers = _parseServers(lhtml);
     var want = [];
     for (var i = 0; i < servers.length; i++) {
