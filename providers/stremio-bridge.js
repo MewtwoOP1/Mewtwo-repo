@@ -39,10 +39,6 @@ function getSettings() {
       ]
     },
     {
-      key: 'includeTorrentStreams',
-      label: 'Include torrent-only results',
-      type: 'bool',
-      default: false
     }
   ];
 }
@@ -67,21 +63,36 @@ function _parseAddonUrls(raw) {
     if (!value) continue;
     value = value.replace(/^stremio:\/\//i, 'https://').replace(/#.*$/, '');
     if (!/^https?:\/\//i.test(value)) continue;
-    value = value.replace(/\/$/, '').replace(/\/manifest\.json$/i, '');
-    if (!seen[value]) { seen[value] = true; out.push(value); }
+    var query = '';
+    var queryAt = value.indexOf('?');
+    if (queryAt >= 0) {
+      query = value.substring(queryAt + 1);
+      value = value.substring(0, queryAt);
+    }
+    value = value.replace(/\/manifest\.json$/i, '').replace(/\/$/, '');
+    var normalized = value + (query ? '::zangetsu-query::' + query : '');
+    if (!seen[normalized]) { seen[normalized] = true; out.push(normalized); }
   }
   return out;
+}
+
+function _addonParts(base) {
+  var value = String(base || '');
+  var marker = value.indexOf('::zangetsu-query::');
+  if (marker < 0) return { root: value, query: '' };
+  return {
+    root: value.substring(0, marker),
+    query: value.substring(marker + '::zangetsu-query::'.length)
+  };
 }
 
 function _settings() {
   var max = parseInt(_readSetting('maxStreamsPerAddon'), 10);
   if (!max || max < 1) max = 25;
   if (max > 100) max = 100;
-  var torrentValue = _readSetting('includeTorrentStreams');
   return {
     urls: _parseAddonUrls(_readSetting('addonUrls')),
-    max: max,
-    includeTorrent: torrentValue === true || String(torrentValue).toLowerCase() === 'true'
+    max: max
   };
 }
 
@@ -94,10 +105,15 @@ function _json(url) {
     });
 }
 
-function _manifestUrl(base) { return base + '/manifest.json'; }
+function _manifestUrl(base) {
+  var parts = _addonParts(base);
+  return parts.root + '/manifest.json' + (parts.query ? '?' + parts.query : '');
+}
 
 function _streamEndpoint(base, type, id) {
-  return base + '/stream/' + encodeURIComponent(type) + '/' + encodeURIComponent(id) + '.json';
+  var parts = _addonParts(base);
+  return parts.root + '/stream/' + encodeURIComponent(type) + '/' +
+    encodeURIComponent(id) + '.json' + (parts.query ? '?' + parts.query : '');
 }
 
 function _parseStreamId(raw) {
@@ -142,20 +158,19 @@ function _parseStreamId(raw) {
 function _stream(raw, base, config) {
   if (!raw || typeof raw !== 'object') return null;
   var url = typeof raw.url === 'string' && /^https?:\/\//i.test(raw.url) ? raw.url : '';
-  var hash = raw.infoHash ? String(raw.infoHash) : '';
-  if (!url && !(config.includeTorrent && hash)) return null;
-  var text = String(raw.name || '') + ' ' + String(raw.title || '');
+  if (!url) return null;
+  var text = String(raw.name || '') + ' ' + String(raw.title || '') + ' ' + String(raw.description || '');
   var qualityMatch = text.match(/(2160p|4k|1080p|720p|480p|360p)/i);
+  var container = /\.m3u8(?:[?#]|$)/i.test(url) ? 'hls' :
+    /\.(mp4|m4v|mov|webm)(?:[?#]|$)/i.test(url) ? 'mp4' : 'unknown';
+  var parts = _addonParts(base);
   return {
-    name: (raw.name || 'Stremio') + (raw.title ? ' · ' + raw.title : ''),
-    title: raw.title || raw.description || raw.name || 'Stream',
-    url: url || null,
-    infoHash: hash || undefined,
-    fileIdx: raw.fileIdx,
+    url: url,
     quality: qualityMatch ? (qualityMatch[1].toLowerCase() === '4k' ? '2160p' : qualityMatch[1]) : 'Auto',
+    label: (raw.name || 'Stremio') + (raw.title ? ' · ' + raw.title : ''),
+    container: container,
     headers: raw.behaviorHints && raw.behaviorHints.proxyHeaders && raw.behaviorHints.proxyHeaders.request || {},
-    sourceId: SOURCE_ID,
-    addonSource: base
+    kind: 'raw'
   };
 }
 
@@ -212,6 +227,7 @@ if (typeof module !== 'undefined' && module.exports) {
     popular: popular, search: search, getDetail: getDetail,
     getEpisodes: getEpisodes, getVideoSources: getVideoSources,
     getStreams: getStreams, getLinks: getLinks,
-    _settings: _settings, _parseStreamId: _parseStreamId
+    _settings: _settings, _parseStreamId: _parseStreamId,
+    _parseAddonUrls: _parseAddonUrls, _manifestUrl: _manifestUrl, _streamEndpoint: _streamEndpoint
   };
 }
