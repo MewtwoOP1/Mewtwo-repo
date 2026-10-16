@@ -63,9 +63,12 @@ async function main() {
   assert.equal(detail.episodes.length, 2);
   assert.equal(detail.episodes[0].title, 'The Journey');
 
+  const bootstrapCallsBeforeEpisodes = calls.filter((c) => c.url.indexOf('https://ani.pm/api/anime/playback-bootstrap/anime/123?') === 0).length;
   const episodes = await provider.getEpisodes(results[0].url, {});
   assert.equal(episodes.length, 2);
   assert.equal(episodes[1].title, 'The Beginning');
+  assert.equal(calls.filter((c) => c.url.indexOf('https://ani.pm/api/anime/playback-bootstrap/anime/123?') === 0).length, bootstrapCallsBeforeEpisodes,
+    'getEpisodes should reuse successful detail bootstrap data');
 
   const streams = await provider.getVideoSources(episodes[1].url, {});
   assert.equal(streams.length, 1);
