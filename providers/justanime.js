@@ -6,7 +6,7 @@ var SITE = 'https://justanime.to';
 var API = 'https://core.justanime.to/api';
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID)
   ? String(__SOURCE_ID) : 'justanime';
-var VERSION = '1.9.1';
+var VERSION = '1.9.2';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
   '(KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36';
 
@@ -130,7 +130,18 @@ function _card(item) {
     type: 'anime', sourceId: SOURCE_ID,
     malId: _numericId(item.idMal != null ? item.idMal :
       (item.malId != null ? item.malId : item.mal_id)),
-    anilistId: _numericId(item.anilistId != null ? item.anilistId : item.anilist_id)
+    // JustAnime's catalogue IS AniList's catalogue: the API's `id` is the
+    // AniList ID (the detail payload is the AniList Media schema and carries
+    // the MAL ID separately as `idMal` — e.g. Frieren id 154587 / idMal
+    // 52991). Search/home payloads send no `anilistId` field at all, so
+    // reading only that field shipped `anilistId: null` on every card. With
+    // no ID on the card the app cannot ID-match the title and re-resolves it
+    // through AniList title search on every tap/open — the anonymous search
+    // AniList now refuses/rate-limits, which surfaces in the app as the
+    // repeated "AniList is having a moment" failure. An explicit field, if
+    // the API ever sends one, still wins over the catalogue ID.
+    anilistId: _numericId(item.anilistId != null ? item.anilistId :
+      (item.anilist_id != null ? item.anilist_id : item.id))
   };
   // Keep the last good search/home card available to detail resolution. The
   // episode API can succeed while the detail API temporarily fails; don't
@@ -303,11 +314,22 @@ function _fetchDetail(url, opts) {
     var anime = _unwrapAnime(results[0]);
     var episodes = results[1] || [];
     var cachedCard = _cardCache[id] || null;
-    if (!anime && !episodes.length) return null;
     // If only the episode endpoint answered, require a previously resolved
     // search card rather than emitting an empty detail that can clobber
     // catalogue metadata in consumers.
     if (!anime && !cachedCard) return null;
+    // When BOTH endpoints fail/empty but a search/home card already resolved
+    // this title in this session, fall through and build the detail from
+    // that card (empty episode list) instead of returning null. A null
+    // getDetail result is a hard error in the app — its JS bridge throws
+    // "justanime.getDetail returned null" — so the whole detail screen
+    // failed even though the title was known: in Z Mode that surfaces as
+    // an "AniList is having a moment" banner over a title/cover fallback
+    // with no episodes and a dead Play button. An empty-episodes detail
+    // keeps the screen alive (Z Mode keeps the catalogue's episodes, and
+    // the stream endpoints are independent of these two calls). Null is
+    // now reserved for a title nothing is known about: no detail payload,
+    // no episodes, and no cached card.
     anime = anime || {};
 
     // Some JustAnime responses include the full episode objects on the anime
@@ -333,7 +355,11 @@ function _fetchDetail(url, opts) {
       status: anime.status || 'unknown', genres: genres, studios: [],
       type: 'anime', sourceId: SOURCE_ID, year: anime.seasonYear || anime.year || null,
       malId: anime.idMal || anime.malId || anime.mal_id || (cachedCard && cachedCard.malId) || null,
-      anilistId: anime.anilistId || anime.anilist_id || (cachedCard && cachedCard.anilistId) || null,
+      // The detail payload never carries an `anilistId` field either; its
+      // `id` is the AniList ID (see _card). Fall back to it last so a detail
+      // opened without a preceding search/home card still ships the ID
+      // instead of having it deleted as empty below.
+      anilistId: anime.anilistId || anime.anilist_id || (cachedCard && cachedCard.anilistId) || _numericId(anime.id) || null,
       episodes: episodes, subCount: count || episodes.length, dubCount: count || episodes.length
     };
     // Optional metadata must be absent, not an empty placeholder: consumers
