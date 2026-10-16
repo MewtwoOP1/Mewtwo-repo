@@ -6,7 +6,7 @@ var SITE = 'https://justanime.to';
 var API = 'https://core.justanime.to/api';
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID)
   ? String(__SOURCE_ID) : 'justanime';
-var VERSION = '1.5.0';
+var VERSION = '1.6.0';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
   '(KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36';
 
