@@ -5,7 +5,7 @@ var SITE = 'https://ani.pm';
 var API = SITE + '/api';
 var EMBED = 'https://embed.settlar.io';
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID) ? String(__SOURCE_ID) : 'anipm';
-var VERSION = '1.1.0';
+var VERSION = '1.2.0';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36';
 var _seriesCache = {};
 var _detailCache = {};
@@ -180,7 +180,9 @@ function _episodeRows(data, ref) {
       url:ref.source + '::' + ref.id + '||' + n,sourceId:SOURCE_ID,
       thumbnail:item.thumbnail || item.image || item.cover || null,description:item.description || ''});
   });
-  out.sort(function(a,b){return b.number-a.number;});
+  // Z Mode numbers source slots from the start of the series; never return
+  // newest-first or its canonical episode URLs will point at the wrong streams.
+  out.sort(function(a,b){return a.number-b.number;});
   return out;
 }
 function _legacyEpisodes(id) {
@@ -189,10 +191,12 @@ function _legacyEpisodes(id) {
       var root = data && (data.data || data);
       var rows = root && (root.episodeList || root.episodes);
       if (!Array.isArray(rows)) return [];
-      return rows.map(function(item,index) {
+      var episodes = rows.map(function(item,index) {
         var n = _episodeNumber(item) || index + 1;
         return {id:id + '||' + n,number:n,title:item.title || ('Episode ' + n),url:id + '||' + n,sourceId:SOURCE_ID};
       });
+      episodes.sort(function(a,b){return a.number-b.number;});
+      return episodes;
     }).catch(function(){return [];});
 }
 function getDetail(url, opts) {

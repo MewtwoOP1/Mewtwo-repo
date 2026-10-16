@@ -50,7 +50,7 @@ global.fetch = async (url, options) => {
 const provider = require("../providers/justanime.js");
 
 async function main() {
-  assert.equal(provider.version, "1.7.0");
+  assert.equal(provider.version, "1.8.0");
 
   // A temporary server error should be retried instead of immediately
   // collapsing into an empty detail/episode response.
@@ -80,18 +80,21 @@ async function main() {
   assert.equal(detail.title, "Mock Anime");
   assert.equal(detail.malId, 999);
   assert.equal(detail.episodes.length, 2);
-  assert.equal(detail.episodes[0].url, "21||2");
-  assert.equal(detail.episodes[0].title, "The Journey");
-  assert.equal(detail.episodes[0].thumbnail, "https://img.example/ep2.jpg");
+  assert.deepEqual(detail.episodes.map((ep) => ep.number), [1, 2], "episodes must be ascending for Z Mode canonical mapping");
+  assert.equal(detail.episodes[0].url, "21||1");
+  assert.equal(detail.episodes[0].title, "The Beginning");
+  assert.equal(detail.episodes[0].thumbnail, "https://img.example/ep1.jpg");
+  assert.equal(detail.episodes[1].title, "The Journey");
   assert.equal(detail.description, "A test anime");
 
   const fallbackDetail = await provider.getDetail("https://justanime.to/anime/22/fallback-anime", {});
   assert.equal(fallbackDetail.title, "Fallback Anime");
   assert.equal(fallbackDetail.episodes.length, 2);
-  assert.equal(fallbackDetail.episodes[1].title, "A Real Episode Title");
-  assert.equal(fallbackDetail.episodes[1].description, "Episode synopsis");
-  assert.equal(fallbackDetail.episodes[1].thumbnail, "https://img.example/fallback-ep.jpg");
-  assert.equal(fallbackDetail.episodes[0].title, "Another Real Title");
+  assert.deepEqual(fallbackDetail.episodes.map((ep) => ep.number), [1, 2]);
+  assert.equal(fallbackDetail.episodes[0].title, "A Real Episode Title");
+  assert.equal(fallbackDetail.episodes[0].description, "Episode synopsis");
+  assert.equal(fallbackDetail.episodes[0].thumbnail, "https://img.example/fallback-ep.jpg");
+  assert.equal(fallbackDetail.episodes[1].title, "Another Real Title");
 
   const episodeFetchCount = calls.filter((c) => c.url === "https://core.justanime.to/api/anime/21/episodes?page=1").length;
   const listedEpisodes = await provider.getEpisodes("21", {});
