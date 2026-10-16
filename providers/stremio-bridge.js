@@ -65,8 +65,29 @@ function _addonBase(raw) {
   if (!value) return '';
   value = value.replace(/^stremio:\/\//i, 'https://').replace(/#.*$/, '');
   if (!/^https?:\/\//i.test(value)) return '';
-  value = value.replace(/\/manifest\.json(?:\?.*)?$/i, '').replace(/\/$/, '');
-  return value;
+  var query = '';
+  var queryAt = value.indexOf('?');
+  if (queryAt >= 0) {
+    query = value.substring(queryAt + 1);
+    value = value.substring(0, queryAt);
+  }
+  value = value.replace(/\/manifest\.json$/i, '').replace(/\/$/, '');
+  return value + (query ? '::zangetsu-query::' + query : '');
+}
+
+function _addonParts(base) {
+  var value = String(base || '');
+  var marker = value.indexOf('::zangetsu-query::');
+  if (marker < 0) return { root: value, query: '' };
+  return {
+    root: value.substring(0, marker),
+    query: value.substring(marker + '::zangetsu-query::'.length)
+  };
+}
+
+function _manifestUrl(base) {
+  var parts = _addonParts(base);
+  return parts.root + '/manifest.json' + (parts.query ? '?' + parts.query : '');
 }
 
 function _parseAddonUrls(raw) {
@@ -132,14 +153,17 @@ function _fetchJson(url) {
 }
 
 function _endpoint(base, resource, type, id, extra) {
-  var cleanBase = String(base || '');
+  var parts = _addonParts(base);
+  var cleanBase = parts.root;
   if (cleanBase.charAt(cleanBase.length - 1) === '/') {
     cleanBase = cleanBase.substring(0, cleanBase.length - 1);
   }
   var path = cleanBase + '/' + resource + '/' +
     encodeURIComponent(type) + '/' + encodeURIComponent(id);
   if (extra) path += '/' + extra;
-  return path + '.json';
+  path += '.json';
+  if (parts.query) path += '?' + parts.query;
+  return path;
 }
 
 function _toCard(meta) {
@@ -180,7 +204,7 @@ function getHome(opts) {
   var config = _settings(opts);
   if (!config.metadataUrls.length) return Promise.resolve([]);
   var tasks = config.metadataUrls.map(function (base) {
-    return _fetchJson(base + '/manifest.json').then(function (manifest) {
+    return _fetchJson(_manifestUrl(base)).then(function (manifest) {
       var catalogs = manifest && manifest.catalogs ? manifest.catalogs : [];
       return Promise.all(catalogs.slice(0, 12).map(function (catalog) {
         if (!catalog || !catalog.id) return null;
@@ -217,7 +241,7 @@ function search(query, page, opts) {
   if (!q || !config.metadataUrls.length) return Promise.resolve([]);
   var skip = Math.max(0, ((parseInt(page, 10) || 1) - 1) * 100);
   var jobs = config.metadataUrls.map(function (base) {
-    return _fetchJson(base + '/manifest.json').then(function (manifest) {
+    return _fetchJson(_manifestUrl(base)).then(function (manifest) {
       var catalogs = (manifest && manifest.catalogs) || [];
       var searches = catalogs.filter(function (catalog) {
         if (!catalog || !catalog.id || !catalog.extra) return false;
