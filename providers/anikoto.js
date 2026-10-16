@@ -2,7 +2,7 @@
 var SOURCE_ID=(typeof __SOURCE_ID!=="undefined"&&__SOURCE_ID)?String(__SOURCE_ID):"anikoto";
 var API="https://anikotoapi.site",SITE="https://anikototv.to";
 var UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36";
-function getInfo(){return {name:"AniKoto",lang:"en",baseUrl:SITE,logo:SITE+"/favicon.ico",type:"anime",version:"1.0.0"};}
+function getInfo(){return {name:"AniKoto",lang:"en",baseUrl:SITE,logo:"https://www.google.com/s2/favicons?sz=256&domain=anikototv.to",type:"anime",version:"1.0.0"};}
 function getSettings(){return [];}
 function text(s){return htmlText(String(s||"").replace(/<[^>]*>/g," ")).replace(/\s+/g," ").trim();}
 function get(url,ref){return fetch(url,{headers:{"User-Agent":UA,"Accept":"text/html,application/json,*/*","Referer":ref||SITE+"/"}}).then(function(r){if(!r||r.status>=400)throw Error("AniKoto HTTP "+(r&&r.status||"error"));if(typeof r.body!=="string")throw Error("AniKoto empty response");return r.body;});}
