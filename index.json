@@ -9,7 +9,7 @@
       "type": "movie",
       "lang": "en",
       "file": "providers/tmdb-stremio.js",
-      "logo": "https://raw.githubusercontent.com/MewtwoOP1/Zangetsu-repo/main/assets/icon.svg",
+      "logo": "https://raw.githubusercontent.com/MewtwoOP1/Zangetsu-repo/main/assets/icon.webp",
       "nsfw": false,
       "settings": [
         {
