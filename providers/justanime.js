@@ -6,7 +6,7 @@ var SITE = 'https://justanime.to';
 var API = 'https://core.justanime.to/api';
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID)
   ? String(__SOURCE_ID) : 'justanime';
-var VERSION = '1.8.0';
+var VERSION = '1.9.0';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
   '(KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36';
 
@@ -309,7 +309,7 @@ function _fetchDetail(url, opts) {
     var title = _title(anime) || anime.name || anime.english || anime.romaji || ('Anime ' + id);
     var count = _episodeCount(anime);
     if (!episodes.length && count > 0) {
-      for (var n = count; n >= 1; n--) {
+      for (var n = 1; n <= count; n++) {
         episodes.push({ id: id + '||' + n, number: n, title: 'Episode ' + n, url: id + '||' + n, sourceId: SOURCE_ID });
       }
     }
