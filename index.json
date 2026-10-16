@@ -5,7 +5,7 @@
     {
       "id": "stremio-bridge",
       "name": "Stremio Bridge (Bring Your Own Addons)",
-      "version": "1.0.2",
+      "version": "1.0.3",
       "type": "movie",
       "lang": "en",
       "file": "providers/stremio-bridge.js",
