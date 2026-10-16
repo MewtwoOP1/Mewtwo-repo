@@ -197,25 +197,43 @@ function _slugFromAnime(href) {
   var m = String(href || '').match(/\/anime\/([^/"?#]+)/);
   return m ? m[1] : null;
 }
-
 // ── Cards (search results, home widgets) ────────────────────────────────────
 function _cards(html) {
-  var out = [], seen = {};
-  var chunks = String(html || '').split('<div class="item">');
+  var source = String(html || ''), out = [], seen = {};
+  // AnimeSuge changed from the old `<div class="item">` layout to the
+  // newer `flw-item` / `film-name` layout. Support both templates.
+  var chunks = source.split(/<div\\b[^>]*class=["'][^"']*(?:flw-item|item)(?:\\s|["'])[^"']*["'][^>]*>/i);
+  if (chunks.length < 2) chunks = source.split(/<div\\b[^>]*class=["'][^"']*film-poster[^"']*["'][^>]*>/i);
   for (var i = 1; i < chunks.length; i++) {
-    var c = chunks[i];
-    var href = (c.match(/href="([^"]*\/anime\/[^"]+)"/) || [])[1];
+    var c = chunks[i].slice(0, 9000);
+    var href = (c.match(/href=["']([^"']*\\/anime\\/[^"'?#]+)(?:\\?[^"']*)?["']/i) || [])[1] || '';
     var slug = _slugFromAnime(href);
     if (!slug || seen[slug]) continue;
-    var title = (c.match(/data-jp="([^"]+)"/) || [])[1]
-      || (c.match(/<div class="name">\s*<a[^>]*>([^<]+)<\/a>/) || [])[1];
+    var title = (c.match(/class=["'][^"']*film-name[^"']*["'][^>]*>[\\s\\S]*?<a[^>]*>([\\s\\S]*?)<\\/a>/i) || [])[1]
+      || (c.match(/data-jp=["']([^"']+)["']/i) || [])[1]
+      || (c.match(/<a[^>]*href=["'][^"']*\\/anime\\/[^"']*["'][^>]*title=["']([^"']+)["']/i) || [])[1]
+      || (c.match(/<img[^>]+alt=["']([^"']+)["']/i) || [])[1]
+      || (c.match(/<div class=["'][^"']*name[^"']*["']>\\s*<a[^>]*>([^<]+)<\\/a>/i) || [])[1];
+    title = htmlText(String(title || '').replace(/<[^>]*>/g, ' ')).trim();
     if (!title) continue;
-    var poster = (c.match(/<img[^>]+data-src="([^"]+)"/) || c.match(/<img[^>]+src="([^"]+)"/) || [])[1];
-    var hasSub = /<span class="sub">/.test(c), hasDub = /<span class="dub">/.test(c);
+    var poster = (c.match(/<img[^>]+(?:data-src|data-lazy-src|src)=["']([^"']+)["']/i) || [])[1] || '';
+    var hasSub = /class=["'][^"']*\\bsub\\b[^"']*["']/i.test(c);
+    var hasDub = /class=["'][^"']*\\bdub\\b[^"']*["']/i.test(c);
     seen[slug] = 1;
-    out.push({ id: slug, title: htmlText(title).trim(), url: slug,
+    out.push({ id: slug, title: title, url: slug,
       cover: poster || null, type: 'anime', sourceId: SOURCE_ID,
       dubBadge: (hasSub && hasDub) ? 'SUB DUB' : (hasDub ? 'DUB' : 'SUB') });
+  }
+  // Last-resort parser for layouts where cards aren't wrapped in a known class.
+  if (!out.length) {
+    var re = /<a\\b([^>]*href=["']([^"']*\\/anime\\/[^"'?#]+)[^"']*["'][^>]*)>([\\s\\S]{0,1800}?)<\\/a>/gi, m;
+    while ((m = re.exec(source)) !== null) {
+      var slug2 = _slugFromAnime(m[2]);
+      var title2 = htmlText(String((m[1].match(/title=["']([^"']+)["']/i) || [])[1] || m[3] || '').replace(/<[^>]*>/g, ' ')).trim();
+      if (!slug2 || !title2 || seen[slug2]) continue;
+      seen[slug2] = 1;
+      out.push({ id: slug2, title: title2, url: slug2, type: 'anime', sourceId: SOURCE_ID });
+    }
   }
   return out;
 }
@@ -396,8 +414,7 @@ function getVideoSources(episodeUrl) {
     return Promise.all(jobs).then(function (lists) {
       var out = [], seen = {};
       lists.forEach(function (l) {
-        (l || []).forEach(function (v) {
-          if (!v || !v.url || seen[v.url]) return;
+        (l || []).forEach(function (v) {          if (!v || !v.url || seen[v.url]) return;
           seen[v.url] = 1; out.push(v);
         });
       });
