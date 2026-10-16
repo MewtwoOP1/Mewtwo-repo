@@ -1,47 +1,62 @@
 /**
  * Zangetsu Provider: Stremio Addon Bridge (AIOStreams, Pengu, etc.)
- * Version: 1.0.0
+ * Version: 1.0.1
  */
+
+// 👇 PASTE YOUR AIOSTREAMS / PENGU MANIFEST URLS HERE (COMMA-SEPARATED) 👇
+const DEFAULT_ADDON_URLS = [
+  "https://v3-cinemeta.strem.io/manifest.json",
+  // "https://your-aiostreams-instance.com/.../manifest.json",
+  // "https://your-pengu-instance.com/.../manifest.json"
+].join(",");
+
+const SOURCE_SETTINGS = [
+  {
+    key: "addonUrls",
+    id: "addonUrls",
+    title: "Stremio Addon Manifest URLs",
+    label: "Stremio Addon Manifest URLs (comma-separated)",
+    description: "Paste your AIOStreams, Pengu, or other Stremio manifest.json URLs",
+    type: "text",
+    default: DEFAULT_ADDON_URLS,
+    value: DEFAULT_ADDON_URLS,
+  },
+  {
+    key: "excludeNonHttp",
+    id: "excludeNonHttp",
+    title: "Direct HTTP/HLS Streams Only",
+    label: "Direct HTTP/HLS Streams Only",
+    description: "Skip raw infoHash torrents without a direct HTTP/debrid stream URL",
+    type: "toggle",
+    default: true,
+    value: true,
+  },
+  {
+    key: "maxStreamsPerAddon",
+    id: "maxStreamsPerAddon",
+    title: "Max Streams Per Addon",
+    label: "Max Streams Per Addon",
+    type: "number",
+    default: 25,
+    value: 25,
+  },
+];
 
 const PROVIDER_META = {
   id: "stremio-bridge",
   name: "Stremio Bridge (AIOStreams / Pengu)",
-  version: "1.0.0",
+  version: "1.0.1",
   type: "movie",
   lang: "en",
   description:
     "Connects Stremio addons (AIOStreams, Pengu, etc.) to Zangetsu with automatic Cinemeta catalog/metadata resolution.",
-  settings: [
-    {
-      key: "addonUrls",
-      label: "Stremio Addon Manifest URLs (comma-separated)",
-      type: "text",
-      default: "https://v3-cinemeta.strem.io/manifest.json",
-      placeholder:
-        "https://aiostreams.example.com/.../manifest.json, https://pengu.example.com/manifest.json",
-    },
-    {
-      key: "excludeNonHttp",
-      label: "Direct HTTP/HLS Streams Only (skip raw infoHash-only torrents)",
-      type: "toggle",
-      default: true,
-    },
-    {
-      key: "maxStreamsPerAddon",
-      label: "Max Streams Per Addon",
-      type: "number",
-      default: 25,
-    },
-  ],
+  settings: SOURCE_SETTINGS,
+  preferences: SOURCE_SETTINGS,
 };
 
 const CINEMETA_BASE = "https://v3-cinemeta.strem.io";
-const TIMEOUT_MS = 12000;
+const TIMEOUT_MS = 15000;
 
-/**
- * Normalizes a Stremio addon URL by converting stremio:// to https://
- * and stripping trailing /manifest.json or slashes.
- */
 function normalizeAddonBaseUrl(rawUrl) {
   if (!rawUrl || typeof rawUrl !== "string") return "";
   return rawUrl
@@ -51,24 +66,26 @@ function normalizeAddonBaseUrl(rawUrl) {
     .replace(/\/+$/, "");
 }
 
-/**
- * Reads user settings from Zangetsu's runtime storage or falls back to defaults.
- */
 function getConfig(runtimeSettings = {}) {
   const getSetting = (key, fallback) => {
-    if (runtimeSettings && runtimeSettings[key] !== undefined) {
+    if (runtimeSettings && runtimeSettings[key] !== undefined && runtimeSettings[key] !== "") {
       return runtimeSettings[key];
     }
     if (typeof globalThis.getPreference === "function") {
       const val = globalThis.getPreference(key);
       if (val !== undefined && val !== null && val !== "") return val;
     }
+    if (typeof globalThis.getSetting === "function") {
+      const val = globalThis.getSetting(key);
+      if (val !== undefined && val !== null && val !== "") return val;
+    }
+    if (globalThis.__settings && globalThis.__settings[key] !== undefined) {
+      return globalThis.__settings[key];
+    }
     return fallback;
   };
 
-  const rawUrls = String(
-    getSetting("addonUrls", "https://v3-cinemeta.strem.io/manifest.json")
-  );
+  const rawUrls = String(getSetting("addonUrls", DEFAULT_ADDON_URLS));
   const addonBases = rawUrls
     .split(",")
     .map(normalizeAddonBaseUrl)
@@ -81,9 +98,6 @@ function getConfig(runtimeSettings = {}) {
   };
 }
 
-/**
- * Wrapper around fetch with timeout and JSON parsing.
- */
 async function fetchJson(url, options = {}) {
   const controller =
     typeof AbortController !== "undefined" ? new AbortController() : null;
@@ -96,7 +110,7 @@ async function fetchJson(url, options = {}) {
       ...options,
       headers: {
         Accept: "application/json",
-        "User-Agent": "Zangetsu-Stremio-Bridge/1.0.0",
+        "User-Agent": "Zangetsu-Stremio-Bridge/1.0.1",
         ...(options.headers || {}),
       },
       signal: controller ? controller.signal : undefined,
@@ -111,9 +125,6 @@ async function fetchJson(url, options = {}) {
   }
 }
 
-/**
- * Encodes Stremio path parameters safely (Stremio expects URL-encoded components).
- */
 function buildStremioUrl(baseUrl, resource, type, id, extra = "") {
   const cleanBase = normalizeAddonBaseUrl(baseUrl);
   const encodedId = encodeURIComponent(id);
@@ -121,9 +132,6 @@ function buildStremioUrl(baseUrl, resource, type, id, extra = "") {
   return `${cleanBase}/${resource}/${encodeURIComponent(type)}/${encodedId}${extraSegment}.json`;
 }
 
-/**
- * Converts a Stremio meta preview object into a Zangetsu catalog item.
- */
 function mapStremioMetaToCard(meta) {
   const type = meta.type === "series" ? "series" : "movie";
   const compositeId = JSON.stringify({
@@ -145,9 +153,6 @@ function mapStremioMetaToCard(meta) {
   };
 }
 
-/**
- * Parses the item ID passed by Zangetsu (supports JSON composite ID or "type:id" shorthand).
- */
 function parseItemId(rawId) {
   if (!rawId) throw new Error("Missing item ID");
   if (typeof rawId === "object") return rawId;
@@ -156,25 +161,19 @@ function parseItemId(rawId) {
   if (str.startsWith("{")) {
     return JSON.parse(str);
   }
-
-  // Fallback format: "movie|tt1234567" or "series|tt1234567" or plain "tt1234567"
   if (str.includes("|")) {
     const [type, id] = str.split("|");
     return { type: type === "series" ? "series" : "movie", id };
   }
-
   return { type: "movie", id: str };
 }
 
-/**
- * 1. Fetch Home / Catalog rows
- */
 async function getHome(runtimeSettings = {}) {
   const sections = [
     { title: "Popular Movies", type: "movie", catalogId: "top" },
     { title: "Popular Series", type: "series", catalogId: "top" },
-    { title: "Featured Movies", type: "movie", catalogId: "imdbRating" },
-    { title: "Featured Series", type: "series", catalogId: "imdbRating" },
+    { title: "Top Rated Movies", type: "movie", catalogId: "imdbRating" },
+    { title: "Top Rated Series", type: "series", catalogId: "imdbRating" },
   ];
 
   const results = await Promise.allSettled(
@@ -201,9 +200,6 @@ async function getHome(runtimeSettings = {}) {
     .map((r) => r.value);
 }
 
-/**
- * 2. Search across Movies and Series via Stremio Catalog API
- */
 async function search(query, runtimeSettings = {}) {
   if (!query || !String(query).trim()) return [];
   const encodedQuery = `search=${encodeURIComponent(String(query).trim())}`;
@@ -224,9 +220,6 @@ async function search(query, runtimeSettings = {}) {
   return combined;
 }
 
-/**
- * 3. Get Detail & Episodes (including Zangetsu Tracker Sync IDs)
- */
 async function getDetail(rawId, runtimeSettings = {}) {
   const { id, type, tmdbId: hintTmdbId, malId: hintMalId } = parseItemId(rawId);
   const url = buildStremioUrl(CINEMETA_BASE, "meta", type, id);
@@ -234,9 +227,7 @@ async function getDetail(rawId, runtimeSettings = {}) {
   const meta = data && data.meta ? data.meta : {};
 
   const isSeries = (meta.type || type) === "series";
-  const resolvedTmdbId = meta.moviedb_id
-    ? Number(meta.moviedb_id)
-    : hintTmdbId;
+  const resolvedTmdbId = meta.moviedb_id ? Number(meta.moviedb_id) : hintTmdbId;
   const resolvedMalId = meta.mal_id ? Number(meta.mal_id) : hintMalId;
 
   let episodes = [];
@@ -252,7 +243,6 @@ async function getDetail(rawId, runtimeSettings = {}) {
       .map((v) => {
         const epNum = Number(v.episode ?? v.number ?? 1);
         const seasonNum = Number(v.season ?? 1);
-        // Stremio video ID format for series is usually "tt1234567:season:episode"
         const stremioVideoId = v.id || `${id}:${seasonNum}:${epNum}`;
         return {
           id: JSON.stringify({
@@ -297,7 +287,6 @@ async function getDetail(rawId, runtimeSettings = {}) {
     episodes,
   };
 
-  // Optional Tracker Sync fields supported by Zangetsu (Simkl / AniList / MAL)
   if (Number.isInteger(resolvedTmdbId) && resolvedTmdbId > 0) {
     detailObj.tmdbId = resolvedTmdbId;
     detailObj.tmdbIsTv = isSeries;
@@ -309,9 +298,6 @@ async function getDetail(rawId, runtimeSettings = {}) {
   return detailObj;
 }
 
-/**
- * Extracts a clean quality badge (e.g., 2160p, 1080p, 720p) from Stremio stream metadata.
- */
 function parseQualityLabel(stream) {
   const combined = `${stream.name || ""} ${stream.title || ""} ${stream.description || ""}`;
   const match = combined.match(/\b(2160p|4k|1080p|720p|480p|360p)\b/i);
@@ -320,9 +306,6 @@ function parseQualityLabel(stream) {
   return token === "4K" ? "2160p" : token;
 }
 
-/**
- * Converts a single Stremio stream object into a Zangetsu stream entry.
- */
 function mapStremioStream(stream, addonBase, excludeNonHttp) {
   const directUrl = stream.url || stream.externalUrl || null;
   if (!directUrl && excludeNonHttp) {
@@ -369,9 +352,6 @@ function mapStremioStream(stream, addonBase, excludeNonHttp) {
   };
 }
 
-/**
- * 4. Fetch Streams from all configured Stremio Addons (AIOStreams, Pengu, etc.)
- */
 async function getStreams(rawEpisodeId, runtimeSettings = {}) {
   const config = getConfig(runtimeSettings);
 
@@ -386,7 +366,6 @@ async function getStreams(rawEpisodeId, runtimeSettings = {}) {
     mediaType = "series";
   }
 
-  // Filter out pure metadata-only addons like Cinemeta when other stream addons are configured
   const streamAddonBases =
     config.addonBases.length > 1
       ? config.addonBases.filter((b) => !b.includes("v3-cinemeta.strem.io"))
@@ -422,13 +401,18 @@ async function getStreams(rawEpisodeId, runtimeSettings = {}) {
   return mergedStreams;
 }
 
+function getSettings() {
+  return SOURCE_SETTINGS;
+}
+
 const StremioBridgeProvider = {
   ...PROVIDER_META,
+  getSettings,
+  getPreferences: getSettings,
   getHome,
   search,
   getDetail,
   getStreams,
-  // Common aliases used across provider runtimes
   getCatalog: getHome,
   getLinks: getStreams,
   normalizeAddonBaseUrl,
@@ -440,4 +424,11 @@ if (typeof module !== "undefined" && module.exports) {
 }
 if (typeof globalThis !== "undefined") {
   globalThis.provider = StremioBridgeProvider;
+  globalThis.settings = SOURCE_SETTINGS;
+  globalThis.getSettings = getSettings;
+  globalThis.getPreferences = getSettings;
+  globalThis.getHome = getHome;
+  globalThis.search = search;
+  globalThis.getDetail = getDetail;
+  globalThis.getStreams = getStreams;
 }
