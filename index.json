@@ -1,59 +1,57 @@
 {
-  "name": "Zangetsu Extensions",
-  "description": "Separate TMDB metadata and Stremio stream sources for Zangetsu.",
+  "name": "TMDB + Stremio for Zangetsu",
+  "description": "TMDB catalogue and user-configured Stremio add-on streams. This repository does not host or provide video files.",
   "sources": [
     {
-      "id": "tmdb-metadata",
-      "name": "TMDB Metadata",
-      "version": "1.0.0",
+      "id": "tmdb-stremio",
+      "name": "TMDB + Stremio",
+      "version": "3.0.0",
       "type": "movie",
       "lang": "en",
-      "file": "providers/tmdb-metadata.js",
-      "logo": "https://www.themoviedb.org/assets/2/v4/logos/round.svg",
-      "nsfw": false,
-      "settings": []
-    },
-    {
-      "id": "stremio-bridge",
-      "name": "Stremio Stream Bridge",
-      "version": "2.0.0",
-      "type": "movie",
-      "lang": "en",
-      "file": "providers/stremio-bridge.js",
-      "logo": "https://www.stremio.com/website/stremio-logo-small.png",
+      "file": "providers/tmdb-stremio.js",
+      "logo": "https://raw.githubusercontent.com/MewtwoOP1/Zangetsu-repo/main/assets/icon.svg",
       "nsfw": false,
       "settings": [
         {
+          "key": "tmdbApiKey",
+          "label": "TMDB API Key (optional; blank uses app default)",
+          "description": "Your personal TMDB v3 API key. Leave blank to use Zangetsu’s built-in key. Sent only to TMDB.",
+          "type": "text",
+          "default": ""
+        },
+        {
           "key": "addonUrls",
-          "label": "Stream Add-on Manifest URLs",
+          "label": "Stremio Add-on URLs (manifest URLs; comma/newline separated)",
+          "description": "One or more Stremio-compatible add-on manifest URLs. Add-ons provide streams; this repository does not host video.",
           "type": "text",
           "default": ""
         },
         {
           "key": "maxStreamsPerAddon",
-          "label": "Maximum streams per add-on",
+          "label": "Max streams per add-on (limit results from each add-on)",
+          "description": "Maximum number of streams considered per configured add-on.",
           "type": "enum",
           "default": "25",
           "options": [
             {
               "value": "5",
-              "label": "5"
+              "label": "5 streams"
             },
             {
               "value": "10",
-              "label": "10"
+              "label": "10 streams"
             },
             {
               "value": "25",
-              "label": "25"
+              "label": "25 streams"
             },
             {
               "value": "50",
-              "label": "50"
+              "label": "50 streams"
             },
             {
               "value": "100",
-              "label": "100"
+              "label": "100 streams"
             }
           ]
         }
