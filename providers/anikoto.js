@@ -3,6 +3,7 @@ var SOURCE_ID=(typeof __SOURCE_ID!=="undefined"&&__SOURCE_ID)?String(__SOURCE_ID
 var API="https://anikotoapi.site",SITE="https://anikototv.to";
 var UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36";
 function getInfo(){return {name:"AniKoto",lang:"en",baseUrl:SITE,logo:SITE+"/favicon.ico",type:"anime",version:"1.0.0"};}
+function getSettings(){return [];}
 function text(s){return htmlText(String(s||"").replace(/<[^>]*>/g," ")).replace(/\s+/g," ").trim();}
 function get(url,ref){return fetch(url,{headers:{"User-Agent":UA,"Accept":"text/html,application/json,*/*","Referer":ref||SITE+"/"}}).then(function(r){if(!r||r.status>=400)throw Error("AniKoto HTTP "+(r&&r.status||"error"));if(typeof r.body!=="string")throw Error("AniKoto empty response");return r.body;});}
 function json(url){return get(url,API+"/").then(function(b){var j;try{j=JSON.parse(b);}catch(e){throw Error("AniKoto invalid JSON");}return j;});}
@@ -70,4 +71,4 @@ function getVideoSources(url,opts){
 }
 function getStreams(id,opts){return getVideoSources(id,opts);}
 function getLinks(id,opts){return getVideoSources(id,opts);}
-if(typeof module!=="undefined"&&module.exports)module.exports={version:"1.0.0",getInfo:getInfo,getHome:getHome,search:search,getDetail:getDetail,getEpisodes:getEpisodes,getVideoSources:getVideoSources,getStreams:getStreams,getLinks:getLinks};
+if(typeof module!=="undefined"&&module.exports)module.exports={version:"1.0.0",getInfo:getInfo,getSettings:getSettings,getHome:getHome,search:search,getDetail:getDetail,getEpisodes:getEpisodes,getVideoSources:getVideoSources,getStreams:getStreams,getLinks:getLinks};
