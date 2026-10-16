@@ -1,11 +1,11 @@
 {
   "name": "Zangetsu Stremio Bridge",
-  "description": "Integrates Stremio addons (AIOStreams, Pengu, Cinemeta, etc.) into Zangetsu.",
+  "description": "Connects each user's own Stremio-compatible addons to Zangetsu.",
   "sources": [
     {
       "id": "stremio-bridge",
-      "name": "Stremio Bridge (AIOStreams / Pengu)",
-      "version": "1.0.1",
+      "name": "Stremio Bridge (Bring Your Own Addons)",
+      "version": "1.0.2",
       "type": "movie",
       "lang": "en",
       "file": "providers/stremio-bridge.js",
@@ -17,16 +17,16 @@
           "id": "addonUrls",
           "title": "Stremio Addon Manifest URLs",
           "label": "Stremio Addon Manifest URLs (comma-separated)",
-          "description": "Paste your AIOStreams, Pengu, or Torrentio manifest.json URLs separated by commas.",
+          "description": "Paste one or more of your own AIOStreams, Pengu, or other Stremio manifest.json URLs. Separate multiple URLs with commas.",
           "type": "text",
-          "default": "https://v3-cinemeta.strem.io/manifest.json"
+          "default": ""
         },
         {
           "key": "excludeNonHttp",
           "id": "excludeNonHttp",
           "title": "Direct HTTP/HLS Streams Only",
           "label": "Direct HTTP/HLS Streams Only",
-          "description": "Skip raw P2P infoHash-only torrents that do not have an HTTP/debrid URL.",
+          "description": "Hide streams that only provide an infoHash and no direct HTTP(S) URL.",
           "type": "toggle",
           "default": true
         },
