@@ -351,18 +351,38 @@ function _parseStreamId(raw) {
   var item = _parseId(raw);
   var id = item.videoId || item.id || '';
   var type = item.type || (item.season || item.episode ? 'series' : 'movie');
-  return { id: id, type: type };
+  var ids = [], seen = {};
+  function addId(value) {
+    var candidate = String(value == null ? '' : value);
+    if (candidate && !seen[candidate]) {
+      seen[candidate] = true;
+      ids.push(candidate);
+    }
+  }
+  // Prefer the exact catalog/episode ID, then common external IDs when the
+  // metadata add-on supplies them. This helps match IDs used by stream add-ons.
+  addId(id);
+  addId(item.imdbId || item.imdb_id);
+  var tmdb = item.tmdbId || item.tmdb_id || item.moviedb_id;
+  if (tmdb) {
+    addId(String(tmdb));
+    addId('tmdb:' + (type === 'series' ? 'series' : 'movie') + ':' + String(tmdb));
+  }
+  return { id: id, ids: ids, type: type };
 }
 
 function getVideoSources(rawEpisodeId, opts) {
   var config = _settings(opts);
   var parsed = _parseStreamId(rawEpisodeId);
-  if (!config.streamUrls.length || !parsed.id) return Promise.resolve([]);
-  var jobs = config.streamUrls.map(function (base) {
-    return _fetchJson(_endpoint(base, 'stream', parsed.type, parsed.id, '')).then(function (data) {
-      var streams = data && data.streams ? data.streams.slice(0, config.max) : [];
-      return streams.map(function (stream) { return _stream(stream, base, config); }).filter(Boolean);
-    }).catch(function () { return []; });
+  if (!config.streamUrls.length || !parsed.ids.length) return Promise.resolve([]);
+  var jobs = [];
+  config.streamUrls.forEach(function (base) {
+    parsed.ids.forEach(function (streamId) {
+      jobs.push(_fetchJson(_endpoint(base, 'stream', parsed.type, streamId, '')).then(function (data) {
+        var streams = data && data.streams ? data.streams.slice(0, config.max) : [];
+        return streams.map(function (stream) { return _stream(stream, base, config); }).filter(Boolean);
+      }).catch(function () { return []; }));
+    });
   });
   return Promise.all(jobs).then(function (lists) {
     var out = [], seen = {};
