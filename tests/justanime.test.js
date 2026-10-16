@@ -19,6 +19,13 @@ global.fetch = async (url, options) => {
       { number: 1, title: "The Beginning", thumbnail: "https://img.example/ep1.jpg" },
       { number: 2, title: "The Journey", thumbnail: "https://img.example/ep2.jpg" }
     ] } };
+  } else if (u === "https://core.justanime.to/api/anime/22") {
+    body = { data: { id: 22, title: { english: "Fallback Anime" }, episodes: [
+      { number: 1, title: "A Real Episode Title", description: "Episode synopsis", thumbnail: "https://img.example/fallback-ep.jpg" },
+      { number: 2, title: { english: "Another Real Title" }, episodeNumber: 2 }
+    ] } };
+  } else if (u === "https://core.justanime.to/api/anime/22/episodes?page=1") {
+    body = { data: { episodes: [] } };
   } else if (u === "https://core.justanime.to/api/watch/21/episode/2/anineko/sub/hd1") {
     body = { sources: [{ url: "https://cdn.example/mock-1080p.m3u8", quality: "1080p", isM3U8: true }], headers: { Referer: "https://justanime.to/" }, subtitles: [] };
   } else if (u === "https://core.justanime.to/api/watch/21/episode/2/anineko/dub/hd1") {
@@ -61,6 +68,14 @@ async function main() {
   assert.equal(detail.episodes[0].title, "The Journey");
   assert.equal(detail.episodes[0].thumbnail, "https://img.example/ep2.jpg");
   assert.equal(detail.description, "A test anime");
+
+  const fallbackDetail = await provider.getDetail("https://justanime.to/anime/22/fallback-anime", {});
+  assert.equal(fallbackDetail.title, "Fallback Anime");
+  assert.equal(fallbackDetail.episodes.length, 2);
+  assert.equal(fallbackDetail.episodes[1].title, "A Real Episode Title");
+  assert.equal(fallbackDetail.episodes[1].description, "Episode synopsis");
+  assert.equal(fallbackDetail.episodes[1].thumbnail, "https://img.example/fallback-ep.jpg");
+  assert.equal(fallbackDetail.episodes[0].title, "Another Real Title");
 
   const streams = await provider.getVideoSources("21||2", {});
   assert.equal(streams.length, 2);
