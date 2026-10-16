@@ -14,6 +14,15 @@ global.fetch = async (url, options) => {
     body = { results: [{ id: 21, title: { english: "Mock Anime" }, cover: "https://img.example/mock.jpg" }] };
   } else if (u === "https://core.justanime.to/api/anime/21") {
     body = { data: { id: 21, idMal: 999, title: { english: "Mock Anime", romaji: "Mock Anime" }, coverImage: { extraLarge: "https://img.example/mock.jpg" }, description: "<p>A test anime</p>", genres: ["Action"], episodes: 2, seasonYear: 2024, status: "FINISHED" } };
+  } else if (u === "https://core.justanime.to/api/anime/21/episodes?page=1") {
+    body = { data: { episodes: [
+      { number: 1, title: "The Beginning", thumbnail: "https://img.example/ep1.jpg" },
+      { number: 2, title: "The Journey", thumbnail: "https://img.example/ep2.jpg" }
+    ] } };
+  } else if (u === "https://core.justanime.to/api/watch/21/episode/2/anineko/sub/hd1") {
+    body = { sources: [{ url: "https://cdn.example/mock-1080p.m3u8", quality: "1080p", isM3U8: true }], headers: { Referer: "https://justanime.to/" }, subtitles: [] };
+  } else if (u === "https://core.justanime.to/api/watch/21/episode/2/anineko/dub/hd1") {
+    body = { sources: [{ url: "https://cdn.example/play?id=opaque123", quality: "720p", isM3U8: true }] };
   } else if (u === "https://core.justanime.to/api/watch/21/episode/2/megaplay") {
     body = { sub: { sources: [{ url: "https://cdn.example/mock-1080p.m3u8", quality: "1080p", isM3U8: true }], headers: { Referer: "https://megaplay.buzz/" }, subtitles: [{ file: "https://cdn.example/en.vtt", label: "English" }] } };
   } else if (u === "https://core.justanime.to/api/watch/21/episode/2/animegg") {
@@ -27,7 +36,7 @@ global.fetch = async (url, options) => {
 const provider = require("../providers/justanime.js");
 
 async function main() {
-  assert.equal(provider.version, "1.0.0");
+  assert.equal(provider.version, "1.1.0");
   assert.equal(provider.getInfo().name, "JustAnime");
   assert.equal(provider.getInfo().type, "anime");
   assert.deepEqual(provider.getSettings().map((s) => s.key), ["servers", "language"]);
@@ -47,6 +56,8 @@ async function main() {
   assert.equal(detail.malId, 999);
   assert.equal(detail.episodes.length, 2);
   assert.equal(detail.episodes[0].url, "21||2");
+  assert.equal(detail.episodes[0].title, "The Journey");
+  assert.equal(detail.episodes[0].thumbnail, "https://img.example/ep2.jpg");
   assert.equal(detail.description, "A test anime");
 
   const streams = await provider.getVideoSources("21||2", {});
