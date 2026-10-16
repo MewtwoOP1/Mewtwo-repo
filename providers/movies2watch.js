@@ -10,6 +10,7 @@ var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
   + '(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 var EMBED_LIMIT = 8;
 var MAX_DEPTH = 2;
+var MAX_PAGES = 12;
 
 function getInfo() {
   return {
@@ -300,14 +301,22 @@ function _directSources(html, pageUrl) {
   }
   return out;
 }
+function _looksLikePlayer(url) {
+  return /\/(?:embed|player|stream|video|watch|e|v)(?:\/|[?#]|$)/i.test(url) ||
+    /(?:vidsrc|vidlink|vidnest|filemoon|streamwish|dood|streamtape|mixdrop|vidcloud|vidplay|upstream|hydrax|2embed)/i.test(url);
+}
 function _iframeUrls(html, pageUrl) {
-  var out = [], seen = {}, re = /<iframe\b[^>]*>/gi, m;
+  var out = [], seen = {}, re = /<(?:iframe|embed|div|button|a)\b[^>]*>/gi, m;
   while ((m = re.exec(String(html || ''))) !== null) {
-    var tag = m[0], raw = _attr(tag, 'src') || _attr(tag, 'data-src') ||
-      _attr(tag, 'data-lazy-src') || _attr(tag, 'data-url') || _attr(tag, 'data-embed');
+    var tag = m[0];
+    var isFrame = /^<(?:iframe|embed)\b/i.test(tag);
+    var raw = _attr(tag, 'src') || _attr(tag, 'data-src') ||
+      _attr(tag, 'data-lazy-src') || _attr(tag, 'data-url') ||
+      _attr(tag, 'data-embed') || _attr(tag, 'data-player') ||
+      _attr(tag, 'data-iframe') || _attr(tag, 'href');
     if (!raw) continue;
     var url = _abs(raw, pageUrl);
-    if (!_isHttp(url) || _isMedia(url)) continue;
+    if (!_isHttp(url) || _isMedia(url) || (!isFrame && !_looksLikePlayer(url))) continue;
     if (/(?:youtube(?:-nocookie)?\.com|youtu\.be|vimeo\.com|doubleclick\.net|googlesyndication\.com|google-analytics\.com|recaptcha|facebook\.com\/plugins)/i.test(url)) continue;
     if (seen[url]) continue;
     seen[url] = true;
@@ -317,12 +326,15 @@ function _iframeUrls(html, pageUrl) {
   return out;
 }
 function _crawl(url, referer, depth, visited) {
-  if (!_isHttp(url) || depth > MAX_DEPTH || visited[url]) return Promise.resolve([]);
+  if (!_isHttp(url) || depth > MAX_DEPTH || visited[url] ||
+      (visited.__count || 0) >= MAX_PAGES) return Promise.resolve([]);
   visited[url] = true;
+  visited.__count = (visited.__count || 0) + 1;
   return _get(url, referer).then(function (html) {
     var direct = _directSources(html, url);
-    if (depth >= MAX_DEPTH) return direct;
-    var frames = _iframeUrls(html, url);
+    if (depth >= MAX_DEPTH || (visited.__count || 0) >= MAX_PAGES) return direct;
+    var frames = _iframeUrls(html, url)
+      .slice(0, Math.min(EMBED_LIMIT, MAX_PAGES - (visited.__count || 0)));
     return Promise.all(frames.map(function (frameUrl) {
       return _crawl(frameUrl, url, depth + 1, visited);
     })).then(function (nested) {
