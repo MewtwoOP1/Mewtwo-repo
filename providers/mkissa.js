@@ -2,7 +2,7 @@
 // Adapted for Zangetsu from the MIT-licensed Seanime MKissa extension by Aqua.
 // Copyright (c) 2026 Aqua; see https://github.com/aquaryuo/seanime/blob/cc376df4a1f180d0c4e2dfcbee574da10fd6b0fe/LICENSE
 var SITE="https://mkissa.to",API="https://api.mkissa.net",PLAYER="https://filelotion.fyi",BUILD="179",LANE="k7",MASK="b5905da39d2feab87b23661f2d791a560537111e8990186e405ed6cbc7701905",PREFIX="KoCGqjW:",UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36";
-function getInfo(){return {name:"MKissa",lang:"en",baseUrl:SITE,logo:"https://www.google.com/s2/favicons?sz=256&domain=mkissa.to",type:"anime",version:"1.0.0"};}
+function getInfo(){return {name:"MKissa",lang:"en",baseUrl:SITE,logo:"https://www.google.com/s2/favicons?sz=256&domain=mkissa.to",type:"anime",version:"1.0.1"};}
 function getSettings(){return [];}
 function hb(h){var a=[];for(var i=0;i+1<h.length;i+=2)a.push(parseInt(h.slice(i,i+2),16));return a;}
 function hx(a){return Array.from(a).map(function(x){return x.toString(16).padStart(2,"0");}).join("");}
@@ -20,7 +20,32 @@ function norm(s){return String(s||"").toLowerCase().replace(/[^a-z0-9]/g,"");}
 function score(a,b){a=norm(a);b=norm(b);if(!a||!b)return 0;if(a===b)return 1;var d=[],i,j;for(j=0;j<=b.length;j++)d[j]=j;for(i=1;i<=a.length;i++){var p=d[0];d[0]=i;for(j=1;j<=b.length;j++){var t=d[j];d[j]=a[i-1]===b[j-1]?p:1+Math.min(p,d[j],d[j-1]);p=t;}}return 1-d[b.length]/Math.max(a.length,b.length);}
 function uniq(a){var o=[];a.forEach(function(x){x=String(x||"").trim();if(x&&!o.some(function(y){return y.toLowerCase()===x.toLowerCase();}))o.push(x);});return o;}
 async function boot(){var now=Date.now(),week=604800000,epoch=Math.floor(now/week),mask=hb(MASK),k1=await hm(mask,utf(PREFIX+BUILD)),epochs=(now-epoch*week<86400000&&epoch>0)?[epoch-1,epoch]:[epoch];for(var i=0;i<epochs.length;i++){var e=epochs[i],token=hx(await hm(k1,utf([BUILD,"mkissa",LANE,e,"mkissa.to"].join("|"))));try{var j=await jget(API+"/client-crypto/v1/bootstrap?buildId="+BUILD+"&k="+LANE,{headers:{"User-Agent":UA,"Origin":SITE,"Referer":SITE+"/","x-build-id":BUILD,"x-aa-boot":token}}),part=bd(j.partB);if(part.length<32)continue;var key=[];for(var z=0;z<32;z++)key.push(part[z]^mask[z%mask.length]);return {epoch:Number(j.epoch)||e,key:key};}catch(e){}}throw Error("MKissa crypto bootstrap failed; site handshake may have changed");}
-async function gql(query,vars,sealed){var qh=hx(await sha(utf(query))),ext=null,b=null;if(sealed){b=await boot();var ts=Math.floor(Date.now()/300000)*300000,iv=(await sha(utf(b.epoch+":"+BUILD+":"+qh+":"+ts+":"+LANE))).slice(0,12),plain=JSON.stringify({v:1,ts:ts,epoch:b.epoch,buildId:BUILD,qh:qh,k:LANE});ext={persistedQuery:{version:1,sha256Hash:qh},k:LANE,aaReq:be([1].concat(iv,await gcm(b.key,iv,utf(plain),true)))};var payload={query:query,variables:vars};if(ext)payload.extensions=ext;var r=await fetch(API+"/api",{method:"POST",headers:{"Content-Type":"application/json","User-Agent":UA,"Origin":SITE,"Referer":SITE+"/","x-build-id":BUILD},body:JSON.stringify(payload)}),raw=await body(r),d;try{d=JSON.parse(raw);}catch(e){throw Error("MKissa GraphQL response was not JSON");}var msgs=(d.errors||[]).map(function(x){return String(x.message||"");});if(msgs.indexOf("NEED_CAPTCHA")>=0||msgs.indexOf("CAPTCHA_INVALID")>=0)throw Error("MKissa requires a CAPTCHA for this connection");if(msgs.some(function(x){return /too many requests/i.test(x);}))throw Error("MKissa rate limited this request");if(msgs.some(function(x){return /^AA_CRYPTO/.test(x);}))throw Error("MKissa encryption handshake rejected; build may have changed");if(d.data&&typeof d.data.tobeparsed==="string"){var a=bd(d.data.tobeparsed);if(!b||a[0]!==1||a.length<30)throw Error("MKissa encrypted response cannot be opened");return JSON.parse(decodeURIComponent(escape(unutf(await gcm(b.key,a.slice(1,13),a.slice(13),false)))));}if(msgs.length&&(!d.data||Object.keys(d.data).every(function(k){return d.data[k]===null;})))throw Error("MKissa API: "+msgs[0]);return d.data||{};}
+async function gql(query,vars,sealed){
+ var qh=hx(await sha(utf(query))),ext=null,b=null;
+ if(sealed){
+  b=await boot();
+  var ts=Math.floor(Date.now()/300000)*300000;
+  var iv=(await sha(utf(b.epoch+":"+BUILD+":"+qh+":"+ts+":"+LANE))).slice(0,12);
+  var plain=JSON.stringify({v:1,ts:ts,epoch:b.epoch,buildId:BUILD,qh:qh,k:LANE});
+  ext={persistedQuery:{version:1,sha256Hash:qh},k:LANE,aaReq:be([1].concat(iv,await gcm(b.key,iv,utf(plain),true)))};
+ }
+ var payload={query:query,variables:vars};
+ if(ext)payload.extensions=ext;
+ var r=await fetch(API+"/api",{method:"POST",headers:{"Content-Type":"application/json","User-Agent":UA,"Origin":SITE,"Referer":SITE+"/","x-build-id":BUILD},body:JSON.stringify(payload)});
+ var raw=await body(r),d;
+ try{d=JSON.parse(raw);}catch(e){throw Error("MKissa GraphQL response was not JSON");}
+ var msgs=(d.errors||[]).map(function(x){return String(x.message||"");});
+ if(msgs.indexOf("NEED_CAPTCHA")>=0||msgs.indexOf("CAPTCHA_INVALID")>=0)throw Error("MKissa requires a CAPTCHA for this connection");
+ if(msgs.some(function(x){return /too many requests/i.test(x);}))throw Error("MKissa rate limited this request");
+ if(msgs.some(function(x){return /^AA_CRYPTO/.test(x);}))throw Error("MKissa encryption handshake rejected; build may have changed");
+ if(d.data&&typeof d.data.tobeparsed==="string"){
+  var a=bd(d.data.tobeparsed);
+  if(!b||a[0]!==1||a.length<30)throw Error("MKissa encrypted response cannot be opened");
+  return JSON.parse(decodeURIComponent(escape(unutf(await gcm(b.key,a.slice(1,13),a.slice(13),false)))));
+ }
+ if(msgs.length&&(!d.data||Object.keys(d.data).every(function(k){return d.data[k]===null;})))throw Error("MKissa API: "+msgs[0]);
+ return d.data||{};
+}
 var FIELDS="_id name englishName nativeName altNames type aniListId malId airedStart availableEpisodes";
 function result(s,a){var e=s.availableEpisodes||{},sub=(e.sub||0)>0,dub=(e.dub||0)>0;if(!(a==="dub"?dub:sub))return null;return {id:String(s._id)+"$"+a,title:s.englishName||s.name||s._id,url:SITE+"/anime/"+s._id,type:"anime",subOrDub:sub&&dub?"both":dub?"dub":"sub",sourceId:"mkissa"};}
 async function searchShows(q){var query="query($search:SearchInput,$limit:Int,$page:Int,$countryOrigin:VaildCountryOriginEnumType){shows(search:$search,limit:$limit,page:$page,countryOrigin:$countryOrigin){edges{"+FIELDS+"}}}",d=await gql(query,{search:{query:q,allowAdult:false,allowUnknown:false},limit:26,page:1,countryOrigin:"ALL"},false);return d&&d.shows&&Array.isArray(d.shows.edges)?d.shows.edges:[];}
@@ -34,4 +59,4 @@ async function resolve(s){var u=String(s.sourceUrl||"");if(u.indexOf("--")===0){
 function getVideoSources(url,opts){var p=String(url||"").replace(/^mkissa:\/\//,"").split("/"),sid=p[0],audio=p[1]==="dub"?"dub":"sub",ep=p[2]||"1";if(!/^\w{3,40}$/.test(sid)||!/^\d+$/.test(ep))return Promise.reject(Error("MKissa: invalid episode URL"));var q="query($showId:String!,$translationType:VaildTranslationTypeEnumType!,$episodeString:String!){episode(showId:$showId,translationType:$translationType,episodeString:$episodeString){episodeString sourceUrls show{_id}}}";return gql(q,{showId:sid,translationType:audio,episodeString:ep},true).then(function(d){var a=d&&d.episode&&d.episode.sourceUrls||[],rank=a.filter(function(s){return s&&typeof s.sourceUrl==="string"&&(/^(--|https?:\/\/)/.test(s.sourceUrl));}).sort(function(x,y){return (x.slow?1:0)-(y.slow?1:0)||(x.priority||0)-(y.priority||0);});return Promise.all(rank.map(function(s){return resolve(s).catch(function(){return [];});})).then(function(groups){var out=[];groups.forEach(function(g){g.forEach(function(x){out.push(x);});});if(!out.length)throw Error("MKissa: no playable supported sources were found");return out;});});}
 function getStreams(id,opts){return getVideoSources(id,opts);}
 function getLinks(id,opts){return getVideoSources(id,opts);}
-if(typeof module!=="undefined"&&module.exports)module.exports={version:"1.0.0",getInfo:getInfo,getSettings:getSettings,getHome:getHome,search:search,getDetail:getDetail,getEpisodes:getEpisodes,getVideoSources:getVideoSources,getStreams:getStreams,getLinks:getLinks};
+if(typeof module!=="undefined"&&module.exports)module.exports={version:"1.0.1",getInfo:getInfo,getSettings:getSettings,getHome:getHome,search:search,getDetail:getDetail,getEpisodes:getEpisodes,getVideoSources:getVideoSources,getStreams:getStreams,getLinks:getLinks};
