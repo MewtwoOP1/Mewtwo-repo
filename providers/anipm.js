@@ -229,7 +229,7 @@ function _fetchDetail(url, opts) {
       var root = results[0] && (results[0].data || results[0]) || {};
       var lookup = _list(results[1])[0] || {};
       var rows = Array.isArray(root.episodeList) ? root.episodeList : (Array.isArray(root.episodes) ? root.episodes : []);
-      var title = root.title || root.name || lookup.title || (fallback && fallback.title) || ('Anime ' + ref.id);
+      var title = _title(root) || _title(lookup) || (fallback && fallback.title) || ('Anime ' + ref.id);
       return {id:ref.id,title:title,englishTitle:lookup.englishTitle || null,url:String(url),cover:_cover(root) || _cover(lookup) || (fallback && fallback.cover) || null,
         description:root.description || root.synopsis || '',status:root.status || 'unknown',genres:root.genres || [],studios:[],
         type:'anime',sourceId:SOURCE_ID,malId:_num(root.malId || lookup.malId),anilistId:_num(root.anilistId || ref.id),
@@ -245,7 +245,7 @@ function _fetchDetail(url, opts) {
     var data = results[0] || results[1] || {};
     var core = _core(data) || {};
     var eps = _episodeRows(data,ref);
-    var title = core.title || core.name || cachedItem.title || cachedItem.name || (fallback && fallback.title) || ('Anime ' + ref.id);
+    var title = _title(core) || _title(cachedItem) || (fallback && fallback.title) || ('Anime ' + ref.id);
     var packages = _packages(results[0] || results[1]);
     var subCount=0,dubCount=0;
     Object.keys(packages).forEach(function(k){if(packages[k].sub===true||packages[k].subhard===true)subCount++;if(packages[k].dub===true||packages[k].dubhard===true)dubCount++;});
