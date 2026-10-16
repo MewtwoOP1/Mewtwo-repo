@@ -42,7 +42,7 @@ global.fetch = async (url, options) => {
 const provider = require('../providers/anipm.js');
 
 async function main() {
-  assert.equal(provider.version, '1.1.0');
+  assert.equal(provider.version, '1.2.0');
   assert.equal(provider.getInfo().name, 'Ani.pm');
   assert.equal(provider.getInfo().type, 'anime');
   assert.equal(provider.getSettings()[0].default, 'sub');
@@ -61,16 +61,18 @@ async function main() {
   assert.equal(detail.title, 'Mock Anime');
   assert.equal(detail.malId, 999);
   assert.equal(detail.episodes.length, 2);
-  assert.equal(detail.episodes[0].title, 'The Journey');
+  assert.deepEqual(detail.episodes.map((ep) => ep.number), [1, 2], 'episodes must be ascending for Z Mode canonical mapping');
+  assert.equal(detail.episodes[0].title, 'The Beginning');
+  assert.equal(detail.episodes[1].title, 'The Journey');
 
   const bootstrapCallsBeforeEpisodes = calls.filter((c) => c.url.indexOf('https://ani.pm/api/anime/playback-bootstrap/anime/123?') === 0).length;
   const episodes = await provider.getEpisodes(results[0].url, {});
   assert.equal(episodes.length, 2);
-  assert.equal(episodes[1].title, 'The Beginning');
+  assert.equal(episodes[0].title, 'The Beginning');
   assert.equal(calls.filter((c) => c.url.indexOf('https://ani.pm/api/anime/playback-bootstrap/anime/123?') === 0).length, bootstrapCallsBeforeEpisodes,
     'getEpisodes should reuse successful detail bootstrap data');
 
-  const streams = await provider.getVideoSources(episodes[1].url, {});
+  const streams = await provider.getVideoSources(episodes[0].url, {});
   assert.equal(streams.length, 1);
   assert.equal(streams[0].url, 'https://cdn.example/mock-episode.m3u8');
   assert.equal(streams[0].container, 'hls');
