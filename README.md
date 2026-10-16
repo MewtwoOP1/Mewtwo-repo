@@ -50,6 +50,10 @@ Controls the maximum number of streams considered from each configured add-on. A
 - Users are responsible for ensuring that their use of third-party services and any content they access complies with applicable laws and those services' terms.
 - This is an unofficial community extension and is not affiliated with or endorsed by the Zangetsu maintainers, TMDB, or Stremio.
 
+## Credits
+
+The TMDB catalogue implementation follows the metadata catalogue approach used by [Spyou/zangetsu-providers](https://github.com/Spyou/zangetsu-providers). This repository is independently maintained and is not an official Zangetsu source repository.
+
 ## License
 
 The code in this repository is licensed under the MIT License. See [LICENSE](LICENSE). Third-party names, logos, APIs, metadata, and content remain the property of their respective owners and are subject to their own terms.
