@@ -56,12 +56,6 @@
               "label": "100"
             }
           ]
-        },
-        {
-          "key": "includeTorrentStreams",
-          "label": "Include torrent-only results",
-          "type": "bool",
-          "default": false
         }
       ]
     }
