@@ -202,17 +202,31 @@ function _fetchEpisodes(id) {
       return [];
     }).catch(function () { return []; });
 }
+function _unwrapAnime(response) {
+  var value = response;
+  for (var i = 0; i < 4 && value && typeof value === 'object'; i++) {
+    if (value.error || value.success === false) return null;
+    if (value.anime && typeof value.anime === 'object') { value = value.anime; continue; }
+    if (value.data && typeof value.data === 'object' && !Array.isArray(value.data)) { value = value.data; continue; }
+    if (value.result && typeof value.result === 'object') { value = value.result; continue; }
+    break;
+  }
+  return value && typeof value === 'object' &&
+    (_title(value) || value.episodes || value.description || value.cover || value.poster) ? value : null;
+}
 function getDetail(url, opts) {
   var id = _extractId(url);
-  if (!/^\d+$/.test(id)) return Promise.resolve(null);
+  if (!/^\\d+$/.test(id)) return Promise.resolve(null);
+  // Details and episodes are independent. A failed detail request should not
+  // erase usable episodes, and nested API response wrappers are normalized.
   return Promise.all([
-    _json(API + '/anime/' + encodeURIComponent(id)),
+    _json(API + '/anime/' + encodeURIComponent(id)).catch(function () { return null; }),
     _fetchEpisodes(id)
   ]).then(function (results) {
-    var response = results[0];
-    var anime = response && (response.data || response.anime || response);
-    if (!anime || typeof anime !== 'object' || response.error) return null;
+    var anime = _unwrapAnime(results[0]);
     var episodes = results[1] || [];
+    if (!anime && !episodes.length) return null;
+    anime = anime || {};
     var title = _title(anime) || anime.name || anime.english || anime.romaji || ('Anime ' + id);
     var count = _episodeCount(anime);
     if (!episodes.length && count > 0) {
