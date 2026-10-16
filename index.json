@@ -5,7 +5,7 @@
     {
       "id": "stremio-bridge",
       "name": "Stremio Bridge (Metadata + Streams)",
-      "version": "1.2.0",
+      "version": "1.2.1",
       "type": "movie",
       "lang": "en",
       "file": "providers/stremio-bridge.js",
@@ -36,8 +36,8 @@
           "title": "Maximum streams per add-on",
           "label": "Maximum streams per add-on",
           "description": "Limit the number of streams read from each configured add-on.",
-          "type": "number",
-          "default": 25
+          "type": "text",
+          "default": "25"
         },
         {
           "key": "includeTorrentStreams",
@@ -45,7 +45,7 @@
           "title": "Include torrent-only results",
           "label": "Include torrent-only results",
           "description": "Keep results that contain an infoHash but no direct HTTP stream URL.",
-          "type": "toggle",
+          "type": "bool",
           "default": false
         }
       ]
