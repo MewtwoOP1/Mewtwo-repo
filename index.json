@@ -1,6 +1,6 @@
 {
-  "name": "TMDB + Stremio for Zangetsu",
-  "description": "TMDB catalogue and user-configured Stremio add-on streams. This repository does not host or provide video files.",
+  "name": "Zangetsu Community Sources",
+  "description": "Community-maintained Zangetsu providers. These sources do not host video files.",
   "sources": [
     {
       "id": "tmdb-stremio",
@@ -56,6 +56,17 @@
           ]
         }
       ]
+    },
+    {
+      "id": "movies2watch",
+      "name": "Movies2Watch",
+      "version": "1.0.0",
+      "type": "movie",
+      "lang": "en",
+      "file": "providers/movies2watch.js",
+      "logo": "https://raw.githubusercontent.com/MewtwoOP1/Zangetsu-repo/main/assets/icon.svg",
+      "nsfw": false,
+      "settings": []
     }
   ]
 }
