@@ -38,9 +38,9 @@ This source handles movie and series metadata. Streams are requested from your c
 
 Uses MKissa's GraphQL catalogue and encrypted episode-source API. Playback depends on MKissa's rotating crypto handshake, supported third-party players, and any CAPTCHA or rate limits applied by the site.
 
-### HiAnime
+### AniKoto
 
-Pinned to one primary domain (hianime.dk). Search cards are normalized before detail and episode requests so `/watch/` is not accidentally duplicated. The source attempts direct media URLs exposed on the watch page or its player iframe; if a player does not expose a direct URL, playback can still fail. Mocked tests cover URL normalization and a sample iframe response, not live-site playback.
+Replaces the discontinued HiAnime site with the current AniKoto catalogue API and episode embed IDs. Search and metadata depend on the upstream AniKoto API/site. Playback attempts to resolve the provided MegaPlay embeds into native streams through Zangetsu's shared extractor; if an embed cannot be resolved, no native stream can be returned.
 
 ### AnimeSuge
 
