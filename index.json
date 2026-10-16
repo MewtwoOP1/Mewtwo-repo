@@ -1,11 +1,22 @@
 {
-  "name": "Zangetsu Stremio Bridge",
-  "description": "Connect user-configured Stremio metadata and streaming add-ons to Zangetsu.",
+  "name": "Zangetsu Extensions",
+  "description": "Separate TMDB metadata and Stremio stream sources for Zangetsu.",
   "sources": [
     {
+      "id": "tmdb-metadata",
+      "name": "TMDB Metadata",
+      "version": "1.0.0",
+      "type": "movie",
+      "lang": "en",
+      "file": "providers/tmdb-metadata.js",
+      "logo": "https://www.themoviedb.org/assets/2/v4/logos/round.svg",
+      "nsfw": false,
+      "settings": []
+    },
+    {
       "id": "stremio-bridge",
-      "name": "Stremio Bridge (Metadata + Streams)",
-      "version": "1.2.1",
+      "name": "Stremio Stream Bridge",
+      "version": "2.0.0",
       "type": "movie",
       "lang": "en",
       "file": "providers/stremio-bridge.js",
@@ -13,38 +24,42 @@
       "nsfw": false,
       "settings": [
         {
-          "key": "metadataAddonUrls",
-          "id": "metadataAddonUrls",
-          "title": "Metadata Add-on Manifest URLs",
-          "label": "Metadata add-ons",
-          "description": "Add Stremio add-ons that provide catalogs and searchable metadata. Paste manifest.json URLs, separated by commas or new lines. No TMDB API key is required by this bridge.",
-          "type": "text",
-          "default": ""
-        },
-        {
           "key": "addonUrls",
-          "id": "addonUrls",
-          "title": "Stream Add-on Manifest URLs",
-          "label": "Stream add-ons",
-          "description": "Add Stremio add-ons that provide playable streams. A combined add-on can be entered in both fields.",
+          "label": "Stream Add-on Manifest URLs",
           "type": "text",
           "default": ""
         },
         {
           "key": "maxStreamsPerAddon",
-          "id": "maxStreamsPerAddon",
-          "title": "Maximum streams per add-on",
           "label": "Maximum streams per add-on",
-          "description": "Limit the number of streams read from each configured add-on.",
-          "type": "text",
-          "default": "25"
+          "type": "enum",
+          "default": "25",
+          "options": [
+            {
+              "value": "5",
+              "label": "5"
+            },
+            {
+              "value": "10",
+              "label": "10"
+            },
+            {
+              "value": "25",
+              "label": "25"
+            },
+            {
+              "value": "50",
+              "label": "50"
+            },
+            {
+              "value": "100",
+              "label": "100"
+            }
+          ]
         },
         {
           "key": "includeTorrentStreams",
-          "id": "includeTorrentStreams",
-          "title": "Include torrent-only results",
           "label": "Include torrent-only results",
-          "description": "Keep results that contain an infoHash but no direct HTTP stream URL.",
           "type": "bool",
           "default": false
         }
