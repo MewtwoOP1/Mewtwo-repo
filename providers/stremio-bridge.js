@@ -1,15 +1,24 @@
 // Stremio addon bridge for Zangetsu.
-// Version 1.1.0. Uses the Zangetsu JS runtime's fetch/absUrl-compatible style.
+// Version 1.2.0. User-configurable metadata and streaming add-ons.
 // Addon URLs are provided by each user. No catalog provider is hardcoded.
 
-var BRIDGE_VERSION = '1.1.0';
+var BRIDGE_VERSION = '1.2.0';
 var SOURCE_SETTINGS = [
+  {
+    key: 'metadataAddonUrls',
+    id: 'metadataAddonUrls',
+    title: 'Metadata Add-on Manifest URLs',
+    label: 'Metadata add-ons',
+    description: 'Add Stremio add-ons that provide catalogs and searchable metadata. Paste manifest.json URLs, separated by commas or new lines. No TMDB API key is required by this bridge.',
+    type: 'text',
+    default: ''
+  },
   {
     key: 'addonUrls',
     id: 'addonUrls',
-    title: 'Stremio Add-on Manifest URLs',
-    label: 'Manifest URLs',
-    description: 'Paste complete manifest.json URLs for your own Stremio add-ons. Separate multiple URLs with commas or new lines.',
+    title: 'Stream Add-on Manifest URLs',
+    label: 'Stream add-ons',
+    description: 'Add Stremio add-ons that provide playable streams. A combined add-on can be entered in both fields.',
     type: 'text',
     default: ''
   },
@@ -60,23 +69,43 @@ function _addonBase(raw) {
   return value;
 }
 
-function _settings(opts) {
-  var o = opts || {};
-  var raw = o.addonUrls;
-  if (raw == null && typeof getSetting === 'function') {
-    try { raw = getSetting('addonUrls'); } catch (e) { raw = ''; }
-  }
-  var parts = String(raw || '').split(/[\n,;]+/);
+function _parseAddonUrls(raw) {
+  var parts = String(raw || '').split(/[\\n,;]+/);
   var urls = [], seen = {};
   for (var i = 0; i < parts.length; i++) {
     var base = _addonBase(parts[i]);
     if (base && !seen[base]) { seen[base] = true; urls.push(base); }
   }
-  var max = parseInt(o.maxStreamsPerAddon, 10);
+  return urls;
+}
+
+function _readSetting(opts, key) {
+  var value = opts && opts[key];
+  if (value == null && typeof getSetting === 'function') {
+    try { value = getSetting(key); } catch (e) { value = ''; }
+  }
+  return value;
+}
+
+function _settings(opts) {
+  var streamUrls = _parseAddonUrls(_readSetting(opts, 'addonUrls'));
+  var metadataUrls = _parseAddonUrls(_readSetting(opts, 'metadataAddonUrls'));
+  // Backward compatibility: combined add-ons entered in the old field may
+  // also expose catalogs and metadata. Dedicated metadata URLs take priority.
+  if (!metadataUrls.length) metadataUrls = streamUrls.slice(0);
+
+  var max = parseInt(_readSetting(opts, 'maxStreamsPerAddon'), 10);
   if (!max || max < 1) max = 25;
   if (max > 100) max = 100;
-  var includeTorrent = o.includeTorrentStreams === true || String(o.includeTorrentStreams).toLowerCase() === 'true';
-  return { urls: urls, max: max, includeTorrent: includeTorrent };
+  var includeValue = _readSetting(opts, 'includeTorrentStreams');
+  var includeTorrent = includeValue === true || String(includeValue).toLowerCase() === 'true';
+  return {
+    metadataUrls: metadataUrls,
+    streamUrls: streamUrls,
+    urls: streamUrls,
+    max: max,
+    includeTorrent: includeTorrent
+  };
 }
 
 function _fetchJson(url) {
@@ -91,23 +120,31 @@ function _fetchJson(url) {
 }
 
 function _endpoint(base, resource, type, id, extra) {
-  var path = base.replace(/\/$/, '') + '/' + resource + '/' +
-    encodeURIComponent(type) + '/' + encodeURIComponent(id) + '.json';
-  if (extra) path += (path.indexOf('?') >= 0 ? '&' : '?') + extra;
-  return path;
+  var path = base.replace(/\\/$/, '') + '/' + resource + '/' +
+    encodeURIComponent(type) + '/' + encodeURIComponent(id);
+  if (extra) path += '/' + extra;
+  return path + '.json';
 }
 
 function _toCard(meta) {
   if (!meta || !meta.id) return null;
   var type = meta.type === 'series' ? 'series' : 'movie';
+  var rawId = String(meta.id);
+  var tmdbId = meta.moviedb_id || meta.tmdbId || meta.tmdb_id || null;
+  var imdbId = meta.imdb_id || meta.imdbId || (rawId.indexOf('tt') === 0 ? rawId : null);
   return {
-    id: JSON.stringify({ id: String(meta.id), type: type, tmdbId: meta.moviedb_id ? Number(meta.moviedb_id) : undefined }),
+    id: JSON.stringify({
+      id: rawId,
+      type: type,
+      tmdbId: tmdbId ? Number(tmdbId) : undefined,
+      imdbId: imdbId || undefined
+    }),
     title: meta.name || meta.title || 'Untitled',
     cover: meta.poster || null,
     poster: meta.poster || null,
-    url: String(meta.id),
+    url: rawId,
     type: type,
-    year: meta.releaseInfo || null,
+    year: meta.releaseInfo || meta.year || null,
     description: meta.description || '',
     sourceId: 'stremio-bridge'
   };
@@ -125,17 +162,24 @@ function _allSettled(promises) {
 
 function getHome(opts) {
   var config = _settings(opts);
-  if (!config.urls.length) return Promise.resolve([]);
-  var tasks = config.urls.map(function (base) {
+  if (!config.metadataUrls.length) return Promise.resolve([]);
+  var tasks = config.metadataUrls.map(function (base) {
     return _fetchJson(base + '/manifest.json').then(function (manifest) {
       var catalogs = manifest && manifest.catalogs ? manifest.catalogs : [];
-      return Promise.all(catalogs.slice(0, 8).map(function (catalog) {
+      return Promise.all(catalogs.slice(0, 12).map(function (catalog) {
+        if (!catalog || !catalog.id) return null;
         var type = catalog.type || 'movie';
-        var id = catalog.id || 'top';
-        var extra = '';
-        return _fetchJson(_endpoint(base, 'catalog', type, id, extra)).then(function (data) {
+        if (type !== 'movie' && type !== 'series') return null;
+        var extra = catalog.extra || [];
+        for (var i = 0; i < extra.length; i++) {
+          if (extra[i] && extra[i].isRequired === true) return null;
+        }
+        return _fetchJson(_endpoint(base, 'catalog', type, catalog.id, '')).then(function (data) {
           var metas = data && data.metas ? data.metas : [];
-          return { title: (manifest.name || 'Stremio Add-on') + ' · ' + (catalog.name || id), items: metas.map(_toCard).filter(Boolean) };
+          return {
+            title: (manifest.name || 'Metadata Add-on') + ' · ' + (catalog.name || catalog.id),
+            items: metas.map(_toCard).filter(Boolean)
+          };
         }).catch(function () { return null; });
       }));
     }).catch(function () { return []; });
@@ -143,7 +187,9 @@ function getHome(opts) {
   return _allSettled(tasks).then(function (settled) {
     var rows = [];
     settled.forEach(function (r) {
-      if (r.ok && Array.isArray(r.value)) r.value.forEach(function (row) { if (row && row.items.length) rows.push(row); });
+      if (r.ok && Array.isArray(r.value)) {
+        r.value.forEach(function (row) { if (row && row.items && row.items.length) rows.push(row); });
+      }
     });
     return rows;
   });
@@ -152,16 +198,22 @@ function getHome(opts) {
 function search(query, page, opts) {
   var q = _trim(query);
   var config = _settings(opts);
-  if (!q || !config.urls.length) return Promise.resolve([]);
-  var jobs = config.urls.map(function (base) {
+  if (!q || !config.metadataUrls.length) return Promise.resolve([]);
+  var skip = Math.max(0, ((parseInt(page, 10) || 1) - 1) * 100);
+  var jobs = config.metadataUrls.map(function (base) {
     return _fetchJson(base + '/manifest.json').then(function (manifest) {
       var catalogs = (manifest && manifest.catalogs) || [];
-      var searches = catalogs.filter(function (c) {
-        return c && c.extra && c.extra.some(function (x) { return x.name === 'search'; });
-      }).slice(0, 10);
+      var searches = catalogs.filter(function (catalog) {
+        if (!catalog || !catalog.id || !catalog.extra) return false;
+        return catalog.extra.some(function (extra) { return extra && extra.name === 'search'; });
+      }).slice(0, 12);
       return Promise.all(searches.map(function (catalog) {
-        return _fetchJson(_endpoint(base, 'catalog', catalog.type || 'movie', catalog.id, 'search=' + encodeURIComponent(q)))
-          .then(function (data) { return (data && data.metas ? data.metas : []).map(_toCard).filter(Boolean); })
+        var extra = 'search=' + encodeURIComponent(q);
+        if (skip > 0) extra += '&skip=' + skip;
+        return _fetchJson(_endpoint(base, 'catalog', catalog.type || 'movie', catalog.id, extra))
+          .then(function (data) {
+            return (data && data.metas ? data.metas : []).map(_toCard).filter(Boolean);
+          })
           .catch(function () { return []; });
       })).then(function (lists) {
         return lists.reduce(function (all, list) { return all.concat(list); }, []);
@@ -193,10 +245,12 @@ function getDetail(rawId, opts) {
   var id = item.id || item.videoId;
   var type = item.type || 'movie';
   var config = _settings(opts);
-  if (!id || !config.urls.length) return Promise.resolve(null);
-  var jobs = config.urls.map(function (base) {
+  if (!id || !config.metadataUrls.length) return Promise.resolve(null);
+  var jobs = config.metadataUrls.map(function (base) {
     return _fetchJson(_endpoint(base, 'meta', type, id, '')).then(function (data) {
-      return data && data.meta ? data.meta : null;
+      if (data && data.meta) return data.meta;
+      if (data && Array.isArray(data.metas) && data.metas.length) return data.metas[0];
+      return null;
     }).catch(function () { return null; });
   });
   return Promise.all(jobs).then(function (metas) {
@@ -204,31 +258,56 @@ function getDetail(rawId, opts) {
     for (var i = 0; i < metas.length; i++) if (metas[i]) { meta = metas[i]; break; }
     if (!meta) return null;
     var series = (meta.type || type) === 'series';
+    var tmdbId = meta.moviedb_id || meta.tmdbId || meta.tmdb_id || item.tmdbId || null;
+    var imdbId = meta.imdb_id || meta.imdbId || item.imdbId ||
+      (String(meta.id || id).indexOf('tt') === 0 ? String(meta.id || id) : null);
     var episodes = [];
     if (series && Array.isArray(meta.videos)) {
       meta.videos.forEach(function (video, index) {
         episodes.push({
-          id: JSON.stringify({ type: 'series', videoId: video.id || id, season: video.season || 1, episode: video.episode || video.number || index + 1 }),
+          id: JSON.stringify({
+            type: 'series',
+            videoId: video.id || id,
+            season: video.season || 1,
+            episode: video.episode || video.number || index + 1,
+            imdbId: imdbId || undefined,
+            tmdbId: tmdbId ? Number(tmdbId) : undefined
+          }),
           title: video.name || video.title || ('Episode ' + (index + 1)),
           number: video.episode || video.number || index + 1,
           season: video.season || 1
         });
       });
     } else {
-      episodes.push({ id: JSON.stringify({ type: 'movie', videoId: meta.id || id }), title: meta.name || 'Full Movie', number: 1 });
+      episodes.push({
+        id: JSON.stringify({
+          type: 'movie',
+          videoId: meta.id || id,
+          imdbId: imdbId || undefined,
+          tmdbId: tmdbId ? Number(tmdbId) : undefined
+        }),
+        title: meta.name || meta.title || 'Full Movie',
+        number: 1
+      });
     }
     var result = {
-      id: JSON.stringify({ id: meta.id || id, type: series ? 'series' : 'movie' }),
+      id: JSON.stringify({
+        id: meta.id || id,
+        type: series ? 'series' : 'movie',
+        imdbId: imdbId || undefined,
+        tmdbId: tmdbId ? Number(tmdbId) : undefined
+      }),
       title: meta.name || meta.title || 'Untitled',
       cover: meta.poster || null,
       poster: meta.poster || null,
       description: meta.description || '',
       type: series ? 'series' : 'movie',
-      year: meta.releaseInfo || null,
+      year: meta.releaseInfo || meta.year || null,
       episodes: episodes,
       sourceId: 'stremio-bridge'
     };
-    if (meta.moviedb_id) { result.tmdbId = Number(meta.moviedb_id); result.tmdbIsTv = series; }
+    if (tmdbId) { result.tmdbId = Number(tmdbId); result.tmdbIsTv = series; }
+    if (imdbId) result.imdbId = imdbId;
     return result;
   });
 }
@@ -262,8 +341,8 @@ function _parseStreamId(raw) {
 function getVideoSources(rawEpisodeId, opts) {
   var config = _settings(opts);
   var parsed = _parseStreamId(rawEpisodeId);
-  if (!config.urls.length || !parsed.id) return Promise.resolve([]);
-  var jobs = config.urls.map(function (base) {
+  if (!config.streamUrls.length || !parsed.id) return Promise.resolve([]);
+  var jobs = config.streamUrls.map(function (base) {
     return _fetchJson(_endpoint(base, 'stream', parsed.type, parsed.id, '')).then(function (data) {
       var streams = data && data.streams ? data.streams.slice(0, config.max) : [];
       return streams.map(function (stream) { return _stream(stream, base, config); }).filter(Boolean);
