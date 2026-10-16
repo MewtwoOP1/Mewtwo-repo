@@ -60,7 +60,7 @@ function _readSetting(key) {
 
 function _parseAddonUrls(raw) {
   var source = String(raw || '');
-  var parts = source.split(/[,;\\r\\n]+/);
+  var parts = source.split(/[,;\r\n]+/);
   var out = [], seen = {};
   for (var i = 0; i < parts.length; i++) {
     var value = _trim(parts[i]);
@@ -171,21 +171,24 @@ function getVideoSources(episodeUrl, opts) {
   var parsed = _parseStreamId(episodeUrl);
   if (!parsed.ids.length) return Promise.resolve([]);
 
-  var jobs = [];
-  config.urls.forEach(function (base) {
-    parsed.ids.forEach(function (id) {
-      jobs.push(_json(_manifestUrl(base)).then(function (manifest) {
-        var resources = manifest && manifest.resources;
-        var hasStreams = !Array.isArray(resources) || resources.some(function (resource) {
-          return resource === 'stream' || (resource && resource.name === 'stream');
-        });
-        if (!hasStreams) return [];
+  var jobs = config.urls.map(function (base) {
+    return _json(_manifestUrl(base)).then(function (manifest) {
+      var resources = manifest && manifest.resources;
+      var hasStreams = !Array.isArray(resources) || resources.some(function (resource) {
+        return resource === 'stream' || (resource && resource.name === 'stream');
+      });
+      if (!hasStreams) return [];
+      return Promise.all(parsed.ids.map(function (id) {
         return _json(_streamEndpoint(base, parsed.type, id)).then(function (data) {
           var streams = data && Array.isArray(data.streams) ? data.streams.slice(0, config.max) : [];
           return streams.map(function (stream) { return _stream(stream, base, config); }).filter(Boolean);
         }).catch(function () { return []; });
-      }).catch(function () { return []; }));
-    });
+      })).then(function (lists) {
+        var out = [];
+        lists.forEach(function (list) { out = out.concat(list); });
+        return out;
+      });
+    }).catch(function () { return []; });
   });
 
   return Promise.all(jobs).then(function (lists) {
