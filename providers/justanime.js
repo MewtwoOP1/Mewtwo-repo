@@ -84,7 +84,7 @@ function _id(item) {
 }
 function _numericId(value) {
   var s = String(value == null ? '' : value);
-  if (!/^\\d+$/.test(s)) return null;
+  if (!/^\d+$/.test(s)) return null;
   var n = Number(s);
   return isFinite(n) && n > 0 ? n : null;
 }
