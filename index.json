@@ -5,12 +5,40 @@
     {
       "id": "stremio-bridge",
       "name": "Stremio Bridge (AIOStreams / Pengu)",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "type": "movie",
       "lang": "en",
       "file": "providers/stremio-bridge.js",
       "logo": "https://www.stremio.com/website/stremio-logo-small.png",
-      "nsfw": false
+      "nsfw": false,
+      "settings": [
+        {
+          "key": "addonUrls",
+          "id": "addonUrls",
+          "title": "Stremio Addon Manifest URLs",
+          "label": "Stremio Addon Manifest URLs (comma-separated)",
+          "description": "Paste your AIOStreams, Pengu, or Torrentio manifest.json URLs separated by commas.",
+          "type": "text",
+          "default": "https://v3-cinemeta.strem.io/manifest.json"
+        },
+        {
+          "key": "excludeNonHttp",
+          "id": "excludeNonHttp",
+          "title": "Direct HTTP/HLS Streams Only",
+          "label": "Direct HTTP/HLS Streams Only",
+          "description": "Skip raw P2P infoHash-only torrents that do not have an HTTP/debrid URL.",
+          "type": "toggle",
+          "default": true
+        },
+        {
+          "key": "maxStreamsPerAddon",
+          "id": "maxStreamsPerAddon",
+          "title": "Max Streams Per Addon",
+          "label": "Max Streams Per Addon",
+          "type": "number",
+          "default": 25
+        }
+      ]
     }
   ]
 }
