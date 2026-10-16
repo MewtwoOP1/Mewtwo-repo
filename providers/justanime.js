@@ -216,7 +216,7 @@ function _unwrapAnime(response) {
 }
 function getDetail(url, opts) {
   var id = _extractId(url);
-  if (!/^\\d+$/.test(id)) return Promise.resolve(null);
+  if (!/^\d+$/.test(id)) return Promise.resolve(null);
   // Details and episodes are independent. A failed detail request should not
   // erase usable episodes, and nested API response wrappers are normalized.
   return Promise.all([
