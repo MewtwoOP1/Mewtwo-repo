@@ -6,7 +6,7 @@ var SITE = 'https://justanime.to';
 var API = 'https://core.justanime.to/api';
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID)
   ? String(__SOURCE_ID) : 'justanime';
-var VERSION = '1.3.0';
+var VERSION = '1.4.0';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
   '(KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36';
 
@@ -82,13 +82,37 @@ function _id(item) {
   var id = item && (item.id || item.anilistId || item.anilist_id);
   return id == null ? '' : String(id);
 }
+function _numericId(value) {
+  var s = String(value == null ? '' : value);
+  if (!/^\d+$/.test(s)) return null;
+  var n = Number(s);
+  return isFinite(n) && n > 0 ? n : null;
+}
 function _card(item) {
   var id = _id(item), title = _title(item);
   if (!id || !title) return null;
+
+  // Zangetsu Mode uses the metadata catalogue for details and title-matches
+  // this provider only when resolving playback. Preserve a second title so
+  // AniList's romaji/English display preference can match JustAnime results.
+  var titleData = item && item.title && typeof item.title === 'object' ? item.title : {};
+  var alternatives = [
+    titleData.romaji, titleData.english, titleData.native,
+    item && item.romaji, item && item.english, item && item.englishTitle
+  ];
+  var englishTitle = null;
+  for (var i = 0; i < alternatives.length; i++) {
+    var candidate = _trim(alternatives[i]);
+    if (candidate && candidate !== title) { englishTitle = candidate; break; }
+  }
+
   return {
-    id: id, title: title, url: id, cover: _cover(item) || null,
+    id: id, title: title, englishTitle: englishTitle,
+    url: id, cover: _cover(item) || null,
     type: 'anime', sourceId: SOURCE_ID,
-    malId: item.idMal || item.malId || item.mal_id || null
+    malId: _numericId(item.idMal != null ? item.idMal :
+      (item.malId != null ? item.malId : item.mal_id)),
+    anilistId: _numericId(item.anilistId != null ? item.anilistId : item.anilist_id)
   };
 }
 function _listPayload(data) {
