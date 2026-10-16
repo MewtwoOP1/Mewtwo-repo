@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 jobs:
-  justanime:
+  checks:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -19,9 +19,5 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Run JustAnime mocked integration tests
-        run: node tests/justanime.test.js
-      - name: Run Ani.pm mocked integration tests
-        run: node tests/anipm.test.js
-      - name: Run AnimeX mocked integration tests
-        run: node tests/animex.test.js
+      - name: Validate providers and run tests
+        run: node scripts/check-and-run.mjs

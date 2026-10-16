@@ -33,26 +33,11 @@
           "type": "enum",
           "default": "25",
           "options": [
-            {
-              "value": "5",
-              "label": "5 streams"
-            },
-            {
-              "value": "10",
-              "label": "10 streams"
-            },
-            {
-              "value": "25",
-              "label": "25 streams"
-            },
-            {
-              "value": "50",
-              "label": "50 streams"
-            },
-            {
-              "value": "100",
-              "label": "100 streams"
-            }
+            { "value": "5", "label": "5 streams" },
+            { "value": "10", "label": "10 streams" },
+            { "value": "25", "label": "25 streams" },
+            { "value": "50", "label": "50 streams" },
+            { "value": "100", "label": "100 streams" }
           ]
         }
       ]
@@ -65,16 +50,6 @@
       "lang": "en",
       "file": "providers/animesuge.js",
       "logo": "https://www.google.com/s2/favicons?sz=256&domain=animesuge.cz",
-      "nsfw": false
-    },
-    {
-      "id": "animex",
-      "name": "AnimeX",
-      "version": "1.0.0",
-      "type": "anime",
-      "lang": "en",
-      "file": "providers/animex.js",
-      "logo": "https://animex.one/_app/immutable/assets/favicon.CdbYna26.png",
       "nsfw": false
     }
   ]

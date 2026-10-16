@@ -1,8 +1,8 @@
 # Zangetsu Community Sources
 
-Community-maintained JavaScript providers for the [Zangetsu](https://github.com/Spyou/Zangetsu) app. This repository currently includes **TMDB + Stremio** for movie/TV metadata and stream discovery, **AnimeSuge and AnimeX** as anime streaming sources.
+Community-maintained JavaScript providers for the [Zangetsu](https://github.com/Spyou/Zangetsu) app. The active catalogue currently contains **TMDB + Stremio** for movie/TV metadata and user-configured add-on streams, and **AnimeSuge** as an anime source.
 
-**This repository does not host, upload, store, or serve video files.** Providers retrieve metadata and URLs exposed by third-party APIs or websites. Availability and content are controlled by third parties, not this project.
+**This repository does not host, upload, store, or serve video files.** Providers request metadata or playback URLs from third-party services. Availability is controlled by those services and may change at any time.
 
 ## Install
 
@@ -12,37 +12,50 @@ In Zangetsu, open **Settings → Sources → Add repo** and add:
 https://raw.githubusercontent.com/MewtwoOP1/Zangetsu-repo/main/index.json
 ```
 
-Install the sources you want from the repository. For separate anime metadata and streaming, enable **Zangetsu Mode (Z Mode)** in the app. In Z Mode, AniList/MyAnimeList supplies anime metadata while an installed anime provider is used for playback. Open titles from the Z Mode catalogue to keep the detail screen independent from a provider's own catalogue. The source repository cannot switch the app's mode for you.
+Install the sources you want from the repository. For anime metadata with a separate playback source, enable **Zangetsu Mode (Z Mode)** in the app. In that mode, AniList/MyAnimeList supplies catalogue metadata while an installed anime provider supplies playback. This repository cannot change the app's mode for you.
 
-## Providers
+## Active providers
 
 ### TMDB + Stremio
 
 Combines TMDB metadata with stream discovery from Stremio-compatible add-ons that you configure.
 
-- **TMDB API Key (optional):** blank uses Zangetsu's built-in key; entering your own v3 API key is intended to use your credentials for TMDB requests.
-- **Stremio Add-on URLs:** enter one or more manifest URLs, separated by commas or new lines. Query parameters are preserved.
-- **Max streams per add-on:** choose 5, 10, 25, 50, or 100 results per configured add-on.
+- **TMDB API Key:** Optional. Leave blank to use the app's built-in key, or enter your own TMDB v3 API key.
+- **Stremio Add-on URLs:** Enter manifest URLs separated by commas or new lines. Query parameters are preserved.
+- **Max streams per add-on:** Limit results considered from each configured add-on to 5, 10, 25, 50, or 100.
 
-### AnimeX
-
-Uses AnimeX's GraphQL catalogue and public REST API (`graphql.animex.one` and `pp.animex.one`) to resolve anime metadata, episodes, subtitle/dub server lists, and stream URLs. Available providers and playback URLs depend on AnimeX and its media hosts; live playback should be verified in Zangetsu after installation.
+This source handles movie and series metadata. Streams are requested from your configured add-ons; this repository does not provide or proxy them.
 
 ### AnimeSuge
 
-Uses the AnimeSuge website (`animesuge.cz`) to search anime, list episodes, and resolve available player sources.
+Uses the AnimeSuge website (`animesuge.cz`) to search for anime, list episodes, and resolve player sources.
 
-- The provider supports the site's current search, episode-list, server-list, and player-source flow.
-- Available servers and playable links depend on AnimeSuge and its third-party player hosts; they can change or stop working without notice.
+- Available servers and playable links depend on AnimeSuge and third-party player hosts; they can change or stop working without notice.
 - In **Zangetsu Mode**, AniList/MyAnimeList remains responsible for anime metadata and AnimeSuge is used as a playback source.
-- Live-site availability can vary. Please test a currently available title in Zangetsu after installing the source.
+- Website and player availability varies. Test a current title in Zangetsu after installation.
+
+The active source list is defined in `index.json`. Removed providers are not part of the current catalogue.
+
+## Development and tests
+
+Requirements: Node.js 22 or newer. No package installation is required.
+
+Run the repository checks from the root directory:
+
+```sh
+node scripts/check-and-run.mjs
+```
+
+The check validates the manifest, ensures every listed provider file exists and is registered, checks provider metadata/settings and JavaScript syntax, then runs every `tests/*.test.js` file it finds. GitHub Actions uses the same command so removed providers cannot leave stale, hard-coded test steps behind.
+
+Tests use mocked responses. A passing mock test verifies the tested code paths against fixtures; it does **not** guarantee that a third-party website or its live playback hosts currently work.
 
 ## Disclaimers
 
 - No movies, shows, anime, subtitles, torrents, video files, or streaming servers are hosted by this repository.
-- Third-party metadata, artwork, websites, APIs, player hosts, and add-ons remain controlled by their respective operators and may have separate terms and policies.
+- Third-party websites, add-ons, APIs, metadata, artwork, and playback hosts remain controlled by their respective operators and may have separate terms and policies.
 - Users are responsible for ensuring their use of third-party services and any content they access complies with applicable laws and service terms.
-- This is an unofficial community project and is not affiliated with or endorsed by Zangetsu, TMDB, Stremio, AnimeSuge, or AnimeX.
+- This is an unofficial community project and is not affiliated with or endorsed by Zangetsu, TMDB, Stremio, or AnimeSuge.
 
 ## Credits
 

@@ -1,4 +1,6 @@
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
 
 const calls = [];
 global.__settings = {
@@ -36,11 +38,14 @@ global.fetch = async (url) => {
 };
 
 const provider = require("../providers/tmdb-stremio.js");
+const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "index.json"), "utf8"));
+const source = manifest.sources.find((item) => item.id === "tmdb-stremio");
 
 async function main() {
-  assert.equal(provider.version, "3.0.0");
-  assert.equal(provider.getInfo().name, "TMDB + Stremio");
-  assert.equal(provider.getInfo().logo, "https://raw.githubusercontent.com/MewtwoOP1/Zangetsu-repo/main/assets/icon.svg");
+  assert.ok(source, "TMDB + Stremio must be registered in index.json");
+  assert.equal(provider.version, source.version);
+  assert.equal(provider.getInfo().name, source.name);
+  assert.equal(provider.getInfo().logo, source.logo, "provider and manifest logos should stay in sync");
 
   const settings = provider.getSettings();
   assert.deepEqual(settings.map((setting) => setting.key), ["tmdbApiKey", "addonUrls", "maxStreamsPerAddon"]);
