@@ -84,8 +84,13 @@ function _trim(value) {
 }
 
 function _tmdbJson(path) {
+  var customKey = _combinedSettings().tmdbApiKey;
+  var headers = { Accept: 'application/json' };
+  // Keep the HTTP Host canonical while using the trailing-dot DNS form to
+  // avoid Zangetsu's built-in TMDB-key interceptor replacing a custom key.
+  if (customKey) headers.Host = 'api.themoviedb.org';
   return fetch(_tmdbRequestUrl(path), {
-    headers: { Accept: 'application/json' },
+    headers: headers,
     timeoutMs: 15000
   }).then(function (response) {
     if (response && response.status && response.status >= 400) {
@@ -463,13 +468,13 @@ function getVideoSources(episodeUrl, opts) {
       if (!hasStreams) return [];
       return Promise.all(parsed.ids.map(function (id) {
         return _json(_streamEndpoint(base, parsed.type, id)).then(function (data) {
-          var streams = data && Array.isArray(data.streams) ? data.streams.slice(0, config.max) : [];
+          var streams = data && Array.isArray(data.streams) ? data.streams : [];
           return streams.map(function (stream) { return _stream(stream, base, config); }).filter(Boolean);
         }).catch(function () { return []; });
       })).then(function (lists) {
         var out = [];
         lists.forEach(function (list) { out = out.concat(list); });
-        return out;
+        return out.slice(0, config.max);
       });
     }).catch(function () { return []; });
   });
