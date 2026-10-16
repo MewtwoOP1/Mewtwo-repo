@@ -28,8 +28,8 @@ var SOURCE_SETTINGS = [
     title: 'Maximum streams per add-on',
     label: 'Maximum streams per add-on',
     description: 'Limit the number of streams read from each configured add-on.',
-    type: 'number',
-    default: 25
+    type: 'text',
+    default: '25'
   },
   {
     key: 'includeTorrentStreams',
