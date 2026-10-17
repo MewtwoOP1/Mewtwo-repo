@@ -2,14 +2,14 @@
 // Uses one catalogue request, a detail page, a watch page, and the player API.
 // It avoids a WebView/Cloudflare challenge and returns the signed HLS master directly.
 var SOURCE_ID = (typeof __SOURCE_ID !== "undefined" && __SOURCE_ID) ? String(__SOURCE_ID) : "animixstream";
-var SITE = "https://www.animixstream.com";
+var SITE = "https://animixstream.com";
 var UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
 var DETAIL_TTL = 180000;
 var detailCache = Object.create(null);
 
 function getInfo() {
   return { name: "AnimixStream", lang: "hi", baseUrl: SITE,
-    logo: SITE + "/favicon.ico", type: "anime", version: "1.0.0" };
+    logo: SITE + "/favicon.ico", type: "anime", version: "1.0.1" };
 }
 function getSettings() { return []; }
 function _trim(s) {
@@ -159,7 +159,7 @@ function getVideoSources(episodeUrl, opts) {
 function getStreams(url, opts) { return getVideoSources(url, opts); }
 function getLinks(url, opts) { return getVideoSources(url, opts); }
 if (typeof module !== "undefined" && module.exports) module.exports = {
-  version: "1.0.0", getInfo: getInfo, getSettings: getSettings,
+  version: "1.0.1", getInfo: getInfo, getSettings: getSettings,
   getHome: getHome, search: search, getDetail: getDetail,
   getEpisodes: getEpisodes, getVideoSources: getVideoSources,
   getStreams: getStreams, getLinks: getLinks
