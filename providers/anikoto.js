@@ -264,7 +264,7 @@ function getDetail(url, opts) {
   function normalize(j, seriesId) {
     var anime = j && (j.anime || (j.data && (j.data.anime || j.data)) || j.series) || {};
     var eps = j && (Array.isArray(j.episodes) ? j.episodes : (j.data && Array.isArray(j.data.episodes) ? j.data.episodes : [])) || [];
-    if (!anime.title && !anime.name && !eps.length) return null;
+    if (!eps.length || (!anime.title && !anime.name)) return null;
     var title = anime.title || anime.name || anime.alternative || seriesId, episodes = [];
     eps.forEach(function (ep, i) {
       if (!ep) return;
