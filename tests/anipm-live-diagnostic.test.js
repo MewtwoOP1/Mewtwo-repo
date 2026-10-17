@@ -6,12 +6,13 @@ global.htmlText = function (s) {
 };
 global.fetch = async function (url, options) {
   options = options || {};
+  if (trace.length >= 14) { trace.push({ url: String(url), error: "diagnostic request cap reached" }); return { status: 599, body: "" }; }
   try {
     const response = await nativeFetch(String(url), {
       method: options.method || "GET",
       headers: options.headers || {},
       body: options.body,
-      signal: AbortSignal.timeout(Math.min(Number(options.timeoutMs) || 12000, 15000)),
+      signal: AbortSignal.timeout(4000),
       redirect: "follow"
     });
     const body = await response.text();
