@@ -16,46 +16,7 @@ Install the sources you want from the repository. For anime metadata with a sepa
 
 ## Active providers
 
-### AlmostOTT
-
-Uses TMDB for the catalogue, keeps VidLink's quality/subtitle resolver as one playback path, and also tries AlmostOTT's public movie/TV player choices through Zangetsu's shared extractor. Resolved streams are labeled by server, and available audio-language metadata is preserved. Unsupported or blocked player hosts are skipped independently so one failing server does not blank out other results. The provider does not host or proxy media; playback still depends on upstream APIs, extractors, and file hosts.
-
-- **TMDB API Key:** Optional. Leave blank to use the app's built-in key, or enter your own TMDB v3 API key.
-- **Playback:** VidLink's public resolver; quality options and captions vary by title. This is not a guarantee that every page or player choice on AlmostOTT will work in Zangetsu.
-
-### TMDB + Stremio
-
-Combines TMDB metadata with stream discovery from Stremio-compatible add-ons that you configure.
-
-- **TMDB API Key:** Optional. Leave blank to use the app's built-in key, or enter your own TMDB v3 API key.
-- **Stremio Add-on URLs:** Enter manifest URLs separated by commas or new lines. Query parameters are preserved.
-- **Max streams per add-on:** Limit results considered from each add-on to 5, 10, 25, 50, or 100.
-
-This source handles movie and series metadata. Streams are requested from your configured add-ons; this repository does not provide or proxy them.
-
-### AnimeSuge
-
-Uses the AnimeSuge site for anime search, episode listings and third-party player resolution. Availability depends on the catalogue and external player hosts.
-
-### HiAnime
-
-Uses the HiAnime catalogue and episode API with VidPlay and Zoko player extraction. The Zangetsu-compatible implementation is adapted from [Spyou/zangetsu-providers](https://github.com/Spyou/zangetsu-providers), not copied from the compiled Cloudstream plugin. As with all third-party sources, live catalogue and player availability can change.
-
-### HDHub4u
-
-Movie and series source with catalogue search, download-link parsing, and supported host resolution. This provider is adapted from [Spyou/zangetsu-providers](https://github.com/Spyou/zangetsu-providers), whose JavaScript implementation is compatible with Zangetsu; Phisher98's plugin manifest lists a separate compiled Cloudstream plugin. Some host pages may be unavailable or protected.
-
-### AniKoto
-
-Uses `https://anikotoapi.site` for recent-anime listings and series episode/embed data. Search still uses the site's search page because the public API documents recent listings and series lookup, but not a search endpoint. Episode embed URLs are passed to Zangetsu's shared extractor. The API is rate-limited and streaming availability depends on the external embed host.
-
-### AnV
-
-Uses AnV's catalogue API for search and title details. Its playback API requires a valid `shiro_watch` session cookie from the episode page; returned source URLs and subtitles are passed to the player with the session headers. If the runtime or site stops returning the session cookie, streams will not resolve.
-
-The active source list is defined in `index.json`. The HiAnime and HDHub4u provider logic is adapted under the upstream Zangetsu providers repository's MIT licence; see the source repository for its licence and history. Removed or non-working providers should not remain in the manifest.
-
-## Development and tests
+### Development and tests
 
 Requirements: Node.js 22 or newer. No package installation is required.
 

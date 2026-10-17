@@ -106,25 +106,6 @@
       "file": "providers/hdhub4u.js",
       "logo": "https://new5.hdhub4u.cl/favicon.ico",
       "nsfw": false
-    },
-    {
-      "id": "almostott",
-      "name": "AlmostOTT",
-      "version": "1.0.1",
-      "type": "movie",
-      "lang": "en",
-      "file": "providers/almostott.js",
-      "logo": "https://www.google.com/s2/favicons?sz=256&domain=almostott.aethoflix.world",
-      "nsfw": false,
-      "settings": [
-        {
-          "key": "tmdbApiKey",
-          "label": "TMDB API Key (optional; blank uses app default)",
-          "description": "Your personal TMDB v3 API key. Leave blank to use Zangetsu’s built-in key. Sent only to TMDB.",
-          "type": "text",
-          "default": ""
-        }
-      ]
     }
   ]
 }
