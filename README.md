@@ -18,7 +18,7 @@ Install the sources you want from the repository. For anime metadata with a sepa
 
 ### AlmostOTT
 
-Uses the public TMDB catalogue flow that powers AlmostOTT’s discovery interface and resolves playback through the public VidLink API used by one of AlmostOTT’s player options. The provider requests metadata separately from playback, returns available quality variants and subtitle tracks, and does not host or proxy the media. Availability depends on TMDB, the ID encoder, VidLink, and the upstream file host.
+Uses TMDB for the catalogue, keeps VidLink's quality/subtitle resolver as one playback path, and also tries AlmostOTT's public movie/TV player choices through Zangetsu's shared extractor. Resolved streams are labeled by server, and available audio-language metadata is preserved. Unsupported or blocked player hosts are skipped independently so one failing server does not blank out other results. The provider does not host or proxy media; playback still depends on upstream APIs, extractors, and file hosts.
 
 - **TMDB API Key:** Optional. Leave blank to use the app's built-in key, or enter your own TMDB v3 API key.
 - **Playback:** VidLink's public resolver; quality options and captions vary by title. This is not a guarantee that every page or player choice on AlmostOTT will work in Zangetsu.

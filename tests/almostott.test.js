@@ -66,7 +66,7 @@ async function main() {
 
   assert.ok(source, "AlmostOTT must be registered in index.json");
   assert.equal(source.file, "providers/almostott.js");
-  assert.equal(source.version, "1.0.0");
+  assert.equal(source.version, "1.0.1");
   assert.equal(provider.version, source.version);
   assert.equal(provider.getInfo().name, source.name);
   assert.equal(provider.getInfo().logo, source.logo);
@@ -99,7 +99,7 @@ async function main() {
   assert.equal(streams[0].url, "https://cdn.example/episode-1080.mp4?signature=mock");
   assert.equal(streams[0].container, "mp4");
   assert.equal(streams[0].kind, "raw");
-  assert.equal(streams[0].headers.Referer, "https://vidlink.pro/");
+  assert.equal(streams[0].headers.Referer, "https://vidlink.pro/tv/22/1/1");
   assert.equal(streams[0].headers.Origin, "https://vidlink.pro");
   assert.equal(streams[0].subtitles.length, 1);
   assert.equal(streams[0].subtitles[0].format, "srt");
@@ -121,11 +121,44 @@ async function main() {
   assert.equal(playerCalls.length, 3);
   assert.ok(encoderCalls.every((call) => !call.url.includes("test-user-key")));
   assert.ok(playerCalls.every((call) => !call.url.includes("test-user-key")));
-  assert.ok(playerCalls.every((call) => call.options.headers.Referer === "https://vidlink.pro/"));
+  assert.ok(playerCalls.every((call) => call.options.headers.Referer.startsWith("https://vidlink.pro/")));
   assert.ok(playerCalls.every((call) => call.options.headers.Origin === "https://vidlink.pro"));
 
   global.__settings.almostott.tmdbApiKey = "";
   assert.ok(provider._tmdbRequestUrl("/trending/movie/week").startsWith("https://api.themoviedb.org/3/"));
+
+  // A broken VidLink API route must not prevent trying alternate player hosts.
+  const embedCalls = [];
+  global.extractVideo = async (url, options) => {
+    embedCalls.push({ url, options });
+    if (url === "https://tgvid.lovable.app/embed/movie/33") {
+      return [{
+        url: "https://cdn.example/site-player.m3u8",
+        quality: "720p",
+        container: "hls",
+        label: "Extracted source",
+        audioLang: "English",
+        kind: "dub",
+      }];
+    }
+    return [];
+  };
+  const fallback = await provider.getVideoSources("tmdb://movie/33", {});
+  assert.equal(fallback.length, 1);
+  assert.equal(fallback[0].url, "https://cdn.example/site-player.m3u8");
+  assert.equal(fallback[0].server, "TgVid");
+  assert.equal(fallback[0].label, "AlmostOTT · TgVid · Extracted source · English Dub");
+  assert.ok(embedCalls.some((call) => call.url === "https://bingr.one/watch/movie/33"));
+  assert.ok(embedCalls.some((call) => call.url === "https://vidstuck.xyz/embed/movie/33?color=ffffff"));
+  assert.equal(
+    provider._almostottPlayerUrl(
+      { base: "https://bingr.one", movie: "/watch/movie/", tv: "/watch/tv/" },
+      { id: "22", type: "tv", season: 1, episode: 1 },
+    ),
+    "https://bingr.one/watch/tv/22/1/1",
+  );
+  delete global.extractVideo;
+
   console.log("AlmostOTT provider tests passed.");
 }
 
