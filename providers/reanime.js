@@ -137,7 +137,7 @@ function getDetail(url, opts) {
     item.status = String(_first(anime, ['status']) || 'unknown').toLowerCase();
     item.genres = Array.isArray(anime.genres) ? anime.genres.map(function (g) { return typeof g === 'string' ? g : _title(g); }) : [];
     item.year = _first(anime, ['year', 'release_year', 'aired_year']);
-    item.episodes = eps.map(_episode);
+    item.episodes = eps.map(function (ep, i) { var e = _episode(ep, i); e.url = slug + '|' + e.number; return e; });
     item.subCount = item.episodes.length;
     item.dubCount = 0;
     return item;
