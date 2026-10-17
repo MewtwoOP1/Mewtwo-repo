@@ -452,7 +452,7 @@ function _subtitleTracks(captions) {
   return out;
 }
 
-function _vidlinkSources(data, type) {
+function _vidlinkSources(data, type, playerPage) {
   var stream = data && data.stream;
   var qualities = stream && stream.qualities;
   var subtitles = _subtitleTracks(data && (data.captions || data.subtitles));
@@ -479,7 +479,7 @@ function _vidlinkSources(data, type) {
         container: container,
         headers: {
           'User-Agent': VIDLINK_UA,
-          Referer: VIDLINK_BASE + '/',
+          Referer: playerPage || VIDLINK_BASE + '/',
           Origin: VIDLINK_BASE
         },
         kind: 'raw',
@@ -499,7 +499,7 @@ function _vidlinkSources(data, type) {
       container: /\.m3u8(?:[?#]|$)/i.test(playlist) ? 'hls' : 'unknown',
       headers: {
         'User-Agent': VIDLINK_UA,
-        Referer: VIDLINK_BASE + '/',
+        Referer: playerPage || VIDLINK_BASE + '/',
         Origin: VIDLINK_BASE
       },
       kind: 'raw',
@@ -567,13 +567,13 @@ function _extractPlayerSources(parsed) {
 }
 
 function _vidlinkResolverSources(parsed) {
+  var playerPage = parsed.type === 'tv'
+    ? VIDLINK_BASE + '/tv/' + parsed.id + '/' + parsed.season + '/' + parsed.episode
+    : VIDLINK_BASE + '/movie/' + parsed.id;
   return _encodeVidlinkId(parsed.id).then(function (encoded) {
     var path = parsed.type === 'tv'
       ? '/api/b/tv/' + encodeURIComponent(encoded) + '/' + parsed.season + '/' + parsed.episode + '?multiLang=0'
       : '/api/b/movie/' + encodeURIComponent(encoded) + '?multiLang=0';
-    var playerPage = parsed.type === 'tv'
-      ? VIDLINK_BASE + '/tv/' + parsed.id + '/' + parsed.season + '/' + parsed.episode
-      : VIDLINK_BASE + '/movie/' + parsed.id;
     return _jsonRequest(VIDLINK_BASE + path, {
       headers: {
         Accept: 'application/json',
@@ -584,7 +584,7 @@ function _vidlinkResolverSources(parsed) {
       timeoutMs: 12000
     }, 'VidLink stream resolver');
   }).then(function (data) {
-    return _vidlinkSources(data, parsed.type);
+    return _vidlinkSources(data, parsed.type, playerPage);
   }).catch(function (error) {
     console.warn('AlmostOTT VidLink resolver failed:', String(error));
     return [];
