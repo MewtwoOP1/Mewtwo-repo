@@ -6,7 +6,7 @@ global.extractVideo=async function(url,opts){calls.push({url:String(url),extract
 global.__settings={};
 global.fetch=async function(url,options){
  url=String(url);calls.push({url,options:options||{}});
- if(url==="https://kototv.to/anime?q=Frieren")return {status:200,body:'<div class="item"><a href="/anime/frieren" title="Frieren: Beyond Journey\'s End"><img src="https://img.example/f.jpg">Frieren</a></div>'};
+ if(url==="https://kototv.to/anime?q=Frieren")return {status:200,body:'<div class="item"><a href="/anime/frieren" title="24 24 24 TV"><img src="https://img.example/f.jpg" alt="Frieren: Beyond Journey\'s End"><div class="name d-title">Frieren: Beyond Journey\'s End</div><span>24 TV</span></a></div>'};
  if(url==="https://kototv.to/")return {status:200,body:'<a title="Frieren" href="/anime/frieren"><span>Frieren</span></a>'};
  if(url==="https://kototv.to/anime/frieren/watch/1")return {status:200,body:'<h1>Frieren: Beyond Journey\'s End</h1><meta property="og:image" content="https://img.example/f.jpg"><a href="/anime/frieren/watch/1">Episode 1</a><iframe src="https://player.kototv.to/embed/frieren-1"></iframe>'};
  if(url==="https://player.kototv.to/embed/frieren-1")return {status:200,body:'<script>var player = {"file":"https://cdn.example/frieren-1080p.m3u8"};</script>'};
