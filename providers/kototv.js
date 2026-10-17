@@ -3,7 +3,7 @@ var SOURCE_ID=(typeof __SOURCE_ID!=="undefined"&&__SOURCE_ID)?String(__SOURCE_ID
 var SITE="https://kototv.to",PLAYER="https://player.kototv.to";
 function readDomain(){try{var s=typeof __settings!=="undefined"&&__settings?__settings[SOURCE_ID]:null;var d=s&&s.domain?String(s.domain):SITE;return ["https://kototv.to","https://anineko.site","https://aniorbit.cc","https://anispark.cc","https://animeflux.cc","https://aninova.cc","https://anipulse.cc","https://anirush.cc","https://aniblaze.cc","https://hiotaku.cc","https://www.aniwatch.rest"].indexOf(d)>=0?d:SITE;}catch(e){return SITE;}}
 var UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
-function getInfo(){return {name:"KotoTV",lang:"en",baseUrl:readDomain(),logo:"https://www.google.com/s2/favicons?sz=256&domain=kototv.to",type:"anime",version:"1.0.8"};}
+function getInfo(){return {name:"KotoTV",lang:"en",baseUrl:readDomain(),logo:"https://www.google.com/s2/favicons?sz=256&domain=kototv.to",type:"anime",version:"1.0.9"};}
 function getSettings(){return [{key:"domain",label:"Domain",description:"Choose the exact domain this source should use. No automatic failover.",type:"enum",default:"https://kototv.to",options:[{"value":"https://kototv.to","label":"kototv.to"},{"value":"https://anineko.site","label":"anineko.site"},{"value":"https://aniorbit.cc","label":"aniorbit.cc"},{"value":"https://anispark.cc","label":"anispark.cc"},{"value":"https://animeflux.cc","label":"animeflux.cc"},{"value":"https://aninova.cc","label":"aninova.cc"},{"value":"https://anipulse.cc","label":"anipulse.cc"},{"value":"https://anirush.cc","label":"anirush.cc"},{"value":"https://aniblaze.cc","label":"aniblaze.cc"},{"value":"https://hiotaku.cc","label":"hiotaku.cc"},{"value":"https://www.aniwatch.rest","label":"www.aniwatch.rest"}]}];}
 function txt(s){return htmlText(String(s||"")).trim();}
 function isSiteHost(hostname){var domains=["kototv.to","anineko.site","aniorbit.cc","anispark.cc","animeflux.cc","aninova.cc","anipulse.cc","anirush.cc","aniblaze.cc","hiotaku.cc","www.aniwatch.rest"];hostname=String(hostname||"").toLowerCase();return domains.indexOf(hostname)>=0;}
@@ -55,23 +55,25 @@ function cards(d){
 }
 function search(q,page,opts){
  q=String(q||"").trim();if(!q)return Promise.resolve([]);
- return get(SITE+"/anime?q="+encodeURIComponent(q),readDomain()+"/").then(function(h){
-  var out=[],seen={},re=/<a\b([^>]*)>([\s\S]*?)<\/a>/gi,m;
-  while((m=re.exec(h))&&out.length<40){
+ var base=readDomain();
+ return get(base+"/anime?q="+encodeURIComponent(q),base+"/").then(function(h){
+  h=String(h||"");var out=[],seen={},re=/<a\b([^>]*)>([\s\S]*?)<\/a>/gi,m;
+  while((m=re.exec(h))&&out.length<60){
    var href=attrValue(m[1],"href");if(!href)continue;
    href=href.replace(/^https?:\/\/[^/]+/i,"");
-   var hit=href.match(/^\/anime\/([^/?#]+)/i);if(!hit)continue;
-   var id=hit[1],title=txt(attrValue(m[1],"title")||m[2].replace(/<[^>]*>/g," "));
+   var hit=href.match(/(?:^|\/)anime\/([^/?#]+)/i);if(!hit)continue;
+   var id=hit[1],title=txt(attrValue(m[1],"title")||attrValue(m[1],"aria-label")||m[2].replace(/<[^>]*>/g," "));
    if(!title||title.length<2||seen[id])continue;
    seen[id]=1;
-   var chunk=h.slice(m.index,m.index+2500),im=(chunk.match(/<img\b[^>]*(?:data-src|data-lazy-src|src)=["']([^"']+)/i)||[])[1]||null;
+   var chunk=h.slice(Math.max(0,m.index-700),Math.min(h.length,m.index+2500));
+   var im=(chunk.match(/<img\b[^>]*(?:data-src|data-lazy-src|src)=["']([^"']+)/i)||[])[1]||null;
    out.push({id:id,title:title,url:id,cover:im?im.replace(/&amp;/g,"&"):null,type:"anime",sourceId:SOURCE_ID});
   }
   return out;
  }).catch(function(){return [];});
 }
 function getHome(opts){
- return get(SITE+"/",readDomain()+"/").then(function(h){
+ return get(readDomain()+"/",readDomain()+"/").then(function(h){
   var o=[],seen={},r=/<a\b([^>]*)>([\s\S]*?)<\/a>/gi,m;
   while((m=r.exec(h))&&o.length<40){
    var href=attrValue(m[1],"href");if(!href)continue;
@@ -86,7 +88,7 @@ function getHome(opts){
 }
 function getDetail(slug,opts){
  slug=String(slug||"").replace(/^https?:\/\/[^/]+/i,"").replace(/^\/?anime\//i,"").split(/[/?#]/)[0];
- return get(SITE+"/anime/"+encodeURIComponent(slug)+"/watch/1",readDomain()+"/").then(function(h){
+ return get(readDomain()+"/anime/"+encodeURIComponent(slug)+"/watch/1",readDomain()+"/").then(function(h){
   var title=txt((h.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i)||[])[1]||slug);
   var poster=(h.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)/i)||[])[1]||
    (h.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i)||[])[1]||null;
@@ -163,4 +165,4 @@ function getVideoSources(url,opts){
 }
 function getStreams(id,opts){return getVideoSources(id,opts);}
 function getLinks(id,opts){return getVideoSources(id,opts);}
-if(typeof module!=="undefined"&&module.exports)module.exports={version:"1.0.8",getInfo:getInfo,getSettings:getSettings,getHome:getHome,search:search,getDetail:getDetail,getEpisodes:getEpisodes,getVideoSources:getVideoSources,getStreams:getStreams,getLinks:getLinks};
+if(typeof module!=="undefined"&&module.exports)module.exports={version:"1.0.9",getInfo:getInfo,getSettings:getSettings,getHome:getHome,search:search,getDetail:getDetail,getEpisodes:getEpisodes,getVideoSources:getVideoSources,getStreams:getStreams,getLinks:getLinks};
