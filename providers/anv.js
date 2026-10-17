@@ -226,6 +226,8 @@ function _expandQualities(masterUrl, headers) {
 
 /* ---------------------------------- API ------------------------------------ */
 
+function getSettings() { return []; }
+
 function getInfo() {
   return {
     name: 'Anv', id: 'anv', baseUrl: _ANV, lang: 'en',
