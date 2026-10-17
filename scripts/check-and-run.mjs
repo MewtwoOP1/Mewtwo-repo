@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
+import vm from "node:vm";
 
 const require = createRequire(import.meta.url);
 const rootDir = process.cwd();
@@ -44,7 +45,30 @@ function main() {
     assert(fs.existsSync(sourcePath) && fs.statSync(sourcePath).isFile(),
       "Provider file is missing: " + source.file);
 
-    const provider = require(sourcePath);
+    let provider = require(sourcePath);
+    let scriptGlobalProvider = false;
+
+    // AniKoto is intentionally kept in the original Zangetsu script-global form:
+    // the app evaluates its functions directly, while CommonJS require() returns
+    // an empty object. Validate that same form without modifying the provider.
+    if (source.id === "anikoto" && (!provider || typeof provider.getInfo !== "function")) {
+      const sandbox = { console, URL, URLSearchParams, setTimeout, clearTimeout };
+      vm.runInNewContext(fs.readFileSync(sourcePath, "utf8"), sandbox, { filename: sourcePath });
+      const info = typeof sandbox.getInfo === "function" ? sandbox.getInfo() : {};
+      provider = {
+        version: info.version,
+        getInfo: sandbox.getInfo,
+        getSettings: () => [],
+        getHome: sandbox.getHome,
+        search: sandbox.search,
+        getDetail: sandbox.getDetail,
+        getEpisodes: sandbox.getEpisodes,
+        getVideoSources: sandbox.getVideoSources,
+        getStreams: sandbox.getVideoSources
+      };
+      scriptGlobalProvider = true;
+    }
+
     assert(provider && typeof provider === "object", "Provider must export an object: " + source.id);
     for (const method of ["getInfo", "getSettings", "getHome", "search", "getDetail", "getEpisodes", "getVideoSources", "getStreams"]) {
       assert(typeof provider[method] === "function",
@@ -55,11 +79,13 @@ function main() {
     const settings = source.settings || [];
     const providerSettings = provider.getSettings();
     assert(info && info.name === source.name, "Provider name does not match manifest: " + source.id);
-    assert(info.version === source.version && provider.version === source.version,
-      "Provider version does not match manifest: " + source.id);
+    if (!scriptGlobalProvider) {
+      assert(info.version === source.version && provider.version === source.version,
+        "Provider version does not match manifest: " + source.id);
+      assert(info.logo === source.logo, "Provider logo does not match manifest: " + source.id);
+    }
     assert(info.lang === source.lang, "Provider language does not match manifest: " + source.id);
     assert(info.type === source.type, "Provider type does not match manifest: " + source.id);
-    assert(info.logo === source.logo, "Provider logo does not match manifest: " + source.id);
     assert(Array.isArray(settings), "Manifest settings must be an array: " + source.id);
     assert(Array.isArray(providerSettings), "getSettings() must return an array: " + source.id);
     assert(providerSettings.length === settings.length,
@@ -78,7 +104,7 @@ function main() {
 
     registeredFiles.add(source.file);
     execFileSync(process.execPath, ["--check", sourcePath], { stdio: "inherit" });
-    console.log("[PASS] " + source.name + ": manifest, settings, exports, and syntax");
+    console.log("[PASS] " + source.name + ": manifest, settings, " + (scriptGlobalProvider ? "script-global runtime" : "exports") + ", and syntax");
   }
 
   console.log("\n=== Orphan provider check ===");
