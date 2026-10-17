@@ -1,245 +1,462 @@
-// AnV anime provider for Zangetsu.
-// Uses AnV's public catalogue API and session-bound episode source API.
-var SOURCE_ID = (typeof __SOURCE_ID !== "undefined" && __SOURCE_ID) ? String(__SOURCE_ID) : "anv";
-var SITE = "https://anv.to";
-var UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36";
+/*
+ * Zangetsu source — Anv (anv.to)
+ * Anime with SUB and DUB variants, direct HLS via the site's own API.
+ *
+ * Site model (verified live 2026-10-17):
+ * - Metadata comes from a GraphQL-style proxy: POST /api/catalog
+ *   {operation, variables} -> {data}. Operations: HomeAnime (hero/trending
+ *   rows), SearchAnime {search, page, perPage}, AnimeDetail {slug}.
+ *   Media objects are AniList-shaped: id is the site's own catalog id
+ *   (e.g. 1000000958 for Naruto — NOT the real AniList id), slug,
+ *   title{english, romaji}, coverImage{extraLarge}, episodes, idMal,
+ *   nextAiringEpisode. /api/recent-episodes (GET) gives latest releases.
+ * - Playback: POST /api/episode {anilistId, malId, episode, first:true}
+ *   where anilistId = the full catalog id above (the site's client passes
+ *   it verbatim; any other id space silently resolves a different show).
+ *   -> {status:'ready', variants:[{id:'sub'|'dub', sources:[{label, url,
+ *   tracks}]}]}. Stream URLs are relative /stream/<token>/index.m3u8?k=...
+ * - EVERYTHING under /api/episode and /stream/ is gated by the `shiro_watch`
+ *   cookie, which anv.to sets (HttpOnly) on WATCH page loads only
+ *   (GET /anime/<slug>-episode-<n>). The source warms a session by fetching
+ *   the episode's own watch page and capturing Set-Cookie (guarded: not
+ *   every runtime exposes response headers), then sends the cookie on the
+ *   episode API, playlist expansions, and every stream entry.
+ * - Server caveat (byte-verified): servers "Pear" and "Banana" serve CLEAN
+ *   MPEG-TS segments; server "Orange" prefixes every segment with a fake
+ *   PNG header that ffmpeg/mpv probing rejects (detects png_pipe). Orange
+ *   is therefore skipped whenever a clean server exists for the episode.
+ * - Signed /stream/ URLs expire — always resolved fresh at runtime.
+ */
 
-function getInfo() {
-  return { name: "AnV", lang: "en", baseUrl: SITE, logo: "https://www.google.com/s2/favicons?sz=256&domain=anv.to", type: "anime", version: "1.0.3" };
+var _ANV = 'https://anv.to';
+var _ANV_UA = 'Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36';
+
+/* ---------------------------------- session -------------------------------- */
+
+var _anvCookie = '';      /* "shiro_watch=<value>" once captured */
+var _anvCookieAt = 0;
+
+function _nowMs() {
+  try { return Date.now(); } catch (e) { return 0; }
 }
-function getSettings() { return []; }
-function _txt(value) { return htmlText(String(value == null ? "" : value)).replace(/\s+/g, " ").trim(); }
-function _body(response) {
-  if (!response || (response.status && response.status >= 400)) throw Error("AnV HTTP " + (response && response.status || "error"));
-  if (typeof response.body === "string") return response.body;
-  if (response.body && typeof response.body === "object") return JSON.stringify(response.body);
-  return "";
-}
-function _header(headers, name) {
-  if (!headers) return "";
-  if (typeof headers.get === "function") {
-    var found = headers.get(name) || headers.get(name.toLowerCase());
-    if (found) return String(found);
+
+function _captureCookie(setCookie) {
+  if (!setCookie) return;
+  var m = /(?:^|[,;]\s*)shiro_watch=([^;,\s]+)/.exec(String(setCookie));
+  if (m) {
+    _anvCookie = 'shiro_watch=' + m[1];
+    _anvCookieAt = _nowMs();
   }
-  var keys = Object.keys(headers);
-  for (var i = 0; i < keys.length; i++) if (keys[i].toLowerCase() === name.toLowerCase()) return String(headers[keys[i]] || "");
-  return "";
 }
-var _cookie = "";
-function _rememberCookie(headers) {
-  var raw = _header(headers, "set-cookie");
-  var match = raw.match(/(?:^|[,;]\s*)shiro_watch=([^;,\s]+)/i);
-  if (match) _cookie = "shiro_watch=" + match[1];
-  return _cookie;
+
+/* --------------------------------- fetching -------------------------------- */
+
+function _raceTimeout(promise, ms, fallback) {
+  var hasTimers = typeof setTimeout === 'function' && typeof clearTimeout === 'function';
+  if (!hasTimers) return promise;
+  return Promise.race([
+    promise,
+    new Promise(function (resolve) { setTimeout(function () { resolve(fallback); }, ms); })
+  ]);
 }
-function _fetchRaw(url, options) {
-  return fetch(url, options || {}).then(function (response) {
-    var body = _body(response);
-    return { body: body, status: response.status || 200, headers: response.headers || null };
+
+/* Fetch that returns body text + the raw Set-Cookie header (when the runtime
+ * exposes response headers). Always sends the session cookie once captured
+ * and captures a fresh one from any response that sets it. */
+function _fetchFull(url, opts) {
+  opts = opts || {};
+  var h = { 'User-Agent': _ANV_UA, 'Accept-Language': 'en-US,en;q=0.9' };
+  if (_anvCookie) h['Cookie'] = _anvCookie;
+  if (opts.headers) { for (var k in opts.headers) h[k] = opts.headers[k]; }
+  var init = { headers: h };
+  if (opts.method) init.method = opts.method;
+  if (opts.body) init.body = opts.body;
+  return _raceTimeout(fetch(url, init).then(function (r) {
+    if (!r) throw new Error('Anv: empty response for ' + url);
+    var setCookie = '';
+    try {
+      if (r.headers) {
+        if (typeof r.headers.getSetCookie === 'function') {
+          var arr = r.headers.getSetCookie();
+          if (arr && arr.length) setCookie = arr.join('; ');
+        }
+        if (!setCookie && typeof r.headers.get === 'function') setCookie = r.headers.get('set-cookie') || '';
+        else if (!setCookie && r.headers['set-cookie']) setCookie = String(r.headers['set-cookie']);
+      }
+    } catch (e) {}
+    _captureCookie(setCookie);
+    return r.text().then(function (t) {
+      return { ok: !!r.ok, status: r.status, body: t };
+    });
+  }), 20000, null).then(function (v) {
+    if (v == null) throw new Error('Anv: timeout for ' + url);
+    return v;
   });
 }
-function _jsonResponse(response) {
-  try { return JSON.parse(response.body || "null"); }
-  catch (e) { throw Error("AnV returned invalid JSON"); }
-}
-function _jsonPost(path, payload, referer, cookie) {
-  var headers = {
-    "User-Agent": UA,
-    "Accept": "application/json",
-    "Content-Type": "application/json",
-    "Origin": SITE,
-    "Referer": referer || SITE + "/"
-  };
-  if (cookie) headers.Cookie = cookie;
-  return _fetchRaw(SITE + path, {
-    method: "POST",
-    headers: headers,
-    credentials: "include",
-    body: JSON.stringify(payload)
-  }).then(_jsonResponse);
-}
-function _catalog(operation, variables) {
-  return _jsonPost("/api/catalog", { operation: operation, variables: variables || {} }, SITE + "/").then(function (root) {
-    var data = root && root.data || {};
-    return data.Page || data.page || data.pageData || data;
+
+function _fetchText(url, headers) {
+  return _fetchFull(url, { headers: headers }).then(function (res) {
+    if (!res.ok) throw new Error('Anv: HTTP ' + res.status + ' for ' + url);
+    return res.body;
   });
 }
-function _mediaTitle(media) {
-  var t = media && media.title || {};
-  return _txt(t.english || t.romaji || t.native || media && media.slug || "");
+
+function _fetchJson(url, headers) {
+  return _fetchText(url, headers).then(function (t) {
+    try { return JSON.parse(t); }
+    catch (e) { throw new Error('Anv: bad JSON from ' + url); }
+  });
 }
-function _poster(media) {
-  var c = media && media.coverImage || {};
+
+function _postJson(url, obj, headers) {
+  var h = { 'Content-Type': 'application/json', 'Accept': 'application/json' };
+  if (headers) { for (var k in headers) h[k] = headers[k]; }
+  return _fetchFull(url, { method: 'POST', body: JSON.stringify(obj), headers: h }).then(function (res) {
+    if (!res.ok) throw new Error('Anv: HTTP ' + res.status + ' for ' + url);
+    try { return JSON.parse(res.body); }
+    catch (e) { throw new Error('Anv: bad JSON from ' + url); }
+  });
+}
+
+/* Warm the shiro_watch session: the cookie is set on watch-page loads.
+ * A warm-up younger than 45 min is reused. If the runtime hides response
+ * headers the capture simply stays empty and calls proceed anyway (a
+ * native cookie jar, when present, still makes them work). */
+function _ensureSession(watchPath) {
+  var fresh = _anvCookie && _anvCookieAt && (_nowMs() - _anvCookieAt) < 45 * 60 * 1000;
+  if (fresh) return Promise.resolve();
+  return _fetchFull(_ANV + (watchPath || '/'), { headers: { 'Accept': 'text/html' } })
+    .then(function () {}, function () {});
+}
+
+/* --------------------------------- helpers --------------------------------- */
+
+function _abs(u) {
+  if (!u) return '';
+  u = String(u);
+  if (/^https?:\/\//i.test(u)) return u;
+  if (u.charAt(0) === '/') return _ANV + u;
+  return _ANV + '/' + u;
+}
+
+function _decodeEntities(s) {
+  return String(s == null ? '' : s)
+    .replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#0?39;/g, "'")
+    .replace(/&apos;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/&nbsp;/g, ' ');
+}
+
+function _stripTags(s) {
+  if (typeof htmlText === 'function') return htmlText(String(s || ''));
+  return String(s || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function _title(m) {
+  var t = (m && m.title) || {};
+  return _decodeEntities(t.english || t.romaji || t.native || 'Unknown');
+}
+
+function _cover(m) {
+  var c = (m && m.coverImage) || {};
   return c.extraLarge || c.large || null;
 }
-function _item(media) {
-  if (!media || !media.slug) return null;
-  var title = _mediaTitle(media);
-  if (!title) return null;
+
+function _item(m) {
+  if (!m || !m.slug) return null;
   return {
-    id: String(media.slug), title: title,
-    url: SITE + "/anime/" + String(media.slug),
-    cover: _poster(media), type: "anime", sourceId: SOURCE_ID,
-    year: media.seasonYear || null
+    id: 'anv-' + m.id,
+    title: _title(m),
+    cover: _cover(m),
+    url: 'anv://anime/' + m.slug,
+    type: m.format === 'MOVIE' ? 'movie' : 'anime'
   };
 }
-function getHome(opts) {
-  return _catalog("HomeAnime", {}).then(function (data) {
+
+function _items(list) {
+  var out = [];
+  var seen = {};
+  for (var i = 0; i < (list || []).length; i++) {
+    var it = _item(list[i]);
+    if (it && !seen[it.url]) { seen[it.url] = true; out.push(it); }
+  }
+  return out;
+}
+
+/* Catalog proxy (no cookie needed, but the session rides along when warm). */
+function _catalog(operation, variables) {
+  return _postJson(_ANV + '/api/catalog', { operation: operation, variables: variables || {} })
+    .then(function (j) {
+      if (!j || !j.data) throw new Error('Anv: empty catalog response for ' + operation);
+      return j.data;
+    });
+}
+
+/* ------------------------------- HLS expand -------------------------------- */
+
+/* Parse a master playlist into [{h, url}] variant entries (dedupe by
+ * height, keep first), ascending by height. */
+function _parseMaster(text, baseUrl) {
+  if (!text || text.indexOf('#EXTM3U') < 0) return [];
+  var lines = String(text).split(/\r?\n/);
+  var out = [];
+  var seen = {};
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i];
+    if (line.indexOf('#EXT-X-STREAM-INF') === -1) continue;
+    var rm = /RESOLUTION=(\d+)x(\d+)/.exec(line);
+    var h = rm ? parseInt(rm[2], 10) : 0;
+    var uri = null;
+    for (var j = i + 1; j < lines.length; j++) {
+      var u = String(lines[j]).replace(/^\s+|\s+$/g, '');
+      if (u && u.charAt(0) !== '#') { uri = u; break; }
+    }
+    if (!uri || !h || seen[h]) continue;
+    seen[h] = true;
+    out.push({ h: h, url: _abs(uri) });
+  }
+  out.sort(function (a, b) { return a.h - b.h; });
+  return out;
+}
+
+function _expandQualities(masterUrl, headers) {
+  return _fetchText(masterUrl, headers).then(function (t) {
+    return _parseMaster(t, masterUrl);
+  }, function () { return []; });
+}
+
+/* ---------------------------------- API ------------------------------------ */
+
+function getSettings() { return []; }
+
+function getInfo() {
+  return {
+    name: 'Anv', id: 'anv', baseUrl: _ANV, lang: 'en',
+    logo: _ANV + '/brand/blob.svg', type: 'anime', version: '1.0.3'
+  };
+}
+
+function getHome() {
+  var catalogP = _catalog('HomeAnime', {}).then(function (data) {
     var rows = [];
-    var hero = ((data.hero || {}).media || []).map(_item).filter(Boolean);
-    var trending = ((data.trending || {}).media || []).map(_item).filter(Boolean);
-    if (hero.length) rows.push({ title: "Spotlight", items: hero });
-    if (trending.length) rows.push({ title: "Trending Now", items: trending });
+    var hero = _items((data.hero || {}).media);
+    if (hero.length) rows.push({ title: 'Spotlight', items: hero });
+    var trending = _items((data.trending || {}).media);
+    if (trending.length) rows.push({ title: 'Trending Now', items: trending });
     return rows;
-  }).catch(function () { return []; }).then(function (rows) {
-    return _fetchRaw(SITE + "/api/recent-episodes", { headers: { "User-Agent": UA, "Accept": "application/json" } })
-      .then(function (r) {
-        var j = JSON.parse(r.body || "{}");
-        var media = (j.schedules || []).map(function (s) { return s && s.media; }).filter(Boolean).map(_item).filter(Boolean);
-        if (media.length) rows.push({ title: "Latest Episodes", items: media });
-        return rows;
-      }).catch(function () { return rows; });
+  }, function () { return []; });
+
+  var recentP = _fetchJson(_ANV + '/api/recent-episodes').then(function (j) {
+    var media = [];
+    var sched = (j && j.schedules) || [];
+    for (var i = 0; i < sched.length; i++) { if (sched[i] && sched[i].media) media.push(sched[i].media); }
+    var items = _items(media);
+    return items.length ? [{ title: 'Latest Episodes', items: items }] : [];
+  }, function () { return []; });
+
+  return Promise.all([catalogP, recentP]).then(function (parts) {
+    return parts[0].concat(parts[1]);
   });
 }
-function search(query, page, opts) {
-  query = String(query || "").trim();
-  if (!query) return Promise.resolve([]);
-  return _catalog("SearchAnime", {
-    page: Math.max(1, Number(page) || 1), perPage: 24, search: query
-  }).then(function (result) {
-    return (result.media || result.Media || []).map(_item).filter(Boolean);
-  }).catch(function () { return []; });
-}
-function _slugFromUrl(url) {
-  var s = String(url || "").replace(/^https?:\/\/[^/]+/i, "").replace(/^\/+|\/+$/g, "");
-  s = s.replace(/^anime\//i, "").split(/[?#]/)[0].replace(/-episode-\d+$/i, "");
-  return s;
-}
-function _detail(slug) {
-  return _catalog("AnimeDetail", { slug: slug }).then(function (data) {
-    var media = data.media || data.Media || data.anime || null;
-    if (!media || !media.id) throw Error("AnV title detail not found");
-    return media;
-  });
-}
-function _episodePageUrl(slug, episode) {
-  return SITE + "/anime/" + slug + "-episode-" + episode;
-}
-function _episodeCookie(slug, episode, force) {
-  if (_cookie && !force) return Promise.resolve(_cookie);
-  return _fetchRaw(_episodePageUrl(slug, episode), {
-    headers: { "User-Agent": UA, "Accept": "text/html,application/xhtml+xml,*/*", "Referer": SITE + "/" },
-    credentials: "include"
-  }).then(function (result) {
-    _rememberCookie(result.headers);
-    if (!_cookie) {
-      var embedded = result.body.match(/shiro_watch=([^;"'\s]+)/i);
-      if (embedded) _cookie = "shiro_watch=" + embedded[1];
-    }
-    return _cookie;
-  });
-}
-function _episodeSources(id, malId, episode, slug) {
-  var pageUrl = _episodePageUrl(slug, episode);
-  return _episodeCookie(slug, episode, false).then(function (cookie) {
-    if (!cookie) throw Error("AnV session cookie was not returned by the episode page");
-    return _jsonPost("/api/episode", { anilistId: id, malId: malId || null, episode: episode, first: true }, pageUrl, cookie);
-  }).then(function (root) {
-    if (root && root.status === "ready") return root;
-    throw Error("AnV episode sources are not ready");
-  }).catch(function (error) {
-    if (String(error && error.message || error).indexOf("403") < 0) throw error;
-    return _episodeCookie(slug, episode, true).then(function (cookie) {
-      if (!cookie) throw error;
-      return _jsonPost("/api/episode", { anilistId: id, malId: malId || null, episode: episode, first: true }, pageUrl, cookie);
+
+function search(query) {
+  return _catalog('SearchAnime', { search: String(query || ''), page: 1, perPage: 24 })
+    .then(function (data) {
+      return _items(((data.Page || {}).media) || []);
     });
+}
+
+function _detailFromSlug(slug) {
+  return _catalog('AnimeDetail', { slug: slug }).then(function (data) {
+    var m = data.Media;
+    if (!m) throw new Error('Anv: title not found');
+    /* Some releasing shows (e.g. One Piece) have episodes:null AND no
+     * nextAiringEpisode in the catalog, which would yield an empty episode
+     * list. The watch page's own data carries the count — read it from
+     * there. (This fetch also warms the play session early.) */
+    if (m.episodes == null && !m.nextAiringEpisode && m.format !== 'MOVIE') {
+      return _fetchText(_ANV + '/anime/' + slug + '-episode-1', { 'Accept': 'text/html' })
+        .then(function (html) {
+          var at = html.indexOf('"initial"');
+          var seg = at >= 0 ? html.substring(at, at + 900) : '';
+          var em = /"episodes":(\d+)/.exec(seg);
+          if (em) m.episodes = parseInt(em[1], 10);
+          return m;
+        }, function () { return m; });
+    }
+    return m;
   });
 }
-function getDetail(url, opts) {
-  var slug = _slugFromUrl(url);
-  if (!slug) return Promise.reject(Error("AnV invalid title URL"));
-  return _detail(slug).then(function (media) {
-    var id = Number(media.id), malId = media.idMal == null ? null : Number(media.idMal);
-    var aired = media.nextAiringEpisode && Number(media.nextAiringEpisode.episode) - 1 || 0;
-    var streams = Array.isArray(media.streamingEpisodes) ? media.streamingEpisodes : [];
-    var total = streams.length ? Math.max(streams.length, aired) : Math.max(Number(media.episodes) || 0, aired);
-    total = Math.min(total, 500);
-    var eps = [];
-    for (var n = 1; n <= total; n++) {
-      var entry = streams[n - 1] || {};
-      var title = _txt(entry.title || "");
-      title = title.replace(/^Episode\s+\d+\s*[—:-]\s*/i, "").trim() || ("Episode " + n);
-      var data = { id: id, malId: malId, slug: slug, episode: n, variant: "sub" };
-      eps.push({
-        id: "anv://" + encodeURIComponent(JSON.stringify(data)),
-        url: "anv://" + encodeURIComponent(JSON.stringify(data)),
-        number: n, title: title, cover: entry.thumbnail || null, type: "anime"
-      });
-    }
-    var t = media.title || {};
-    return {
-      id: slug, title: _mediaTitle(media), url: SITE + "/anime/" + slug,
-      cover: _poster(media), backdrop: media.bannerImage || null,
-      description: _txt(media.description || ""), genres: media.genres || [],
-      year: media.seasonYear || null, type: media.format === "MOVIE" ? "movie" : "anime",
-      sourceId: SOURCE_ID, episodes: eps,
-      ids: { anilist: id, mal: malId }
+
+function _releasedCount(m) {
+  var n = (typeof m.episodes === 'number' && m.episodes > 0) ? m.episodes : 0;
+  if (m.nextAiringEpisode && typeof m.nextAiringEpisode.episode === 'number') {
+    var released = m.nextAiringEpisode.episode - 1;
+    if (released >= 0 && (n === 0 || released < n)) n = released;
+  }
+  if (n < 1) n = (m.format === 'MOVIE') ? 1 : 0;
+  return n;
+}
+
+function _episodeList(m) {
+  var count = _releasedCount(m);
+  /* The episode API's anilistId is the FULL catalog id (1000000958 for
+   * Naruto) — the site's own client passes R.id verbatim. Deriving the
+   * real AniList id (id - 1e9) resolves a DIFFERENT show on their backend
+   * (verified by subtitle content, 2026-10-17). */
+  var anilistId = (typeof m.id === 'number') ? m.id : 0;
+  var eps = [];
+  for (var i = 1; i <= count; i++) {
+    eps.push({
+      id: 'anv-ep-' + anilistId + '-' + i,
+      title: 'Episode ' + i,
+      url: 'anv://ep/' + m.slug + '/' + anilistId + '/' + (m.idMal || 0) + '/' + i,
+      number: i
+    });
+  }
+  return eps;
+}
+
+function getDetail(url) {
+  var slug = String(url || '').replace('anv://anime/', '');
+  return _detailFromSlug(slug).then(function (m) {
+    var detail = {
+      id: 'anv-' + m.id,
+      title: _title(m),
+      cover: _cover(m),
+      type: m.format === 'MOVIE' ? 'movie' : 'anime',
+      url: 'anv://anime/' + m.slug,
+      episodes: _episodeList(m)
     };
+    if (m.bannerImage) detail.banner = String(m.bannerImage);
+    if (m.description) detail.description = _decodeEntities(_stripTags(m.description));
+    if (m.seasonYear) detail.year = String(m.seasonYear);
+    return detail;
   });
 }
-function getEpisodes(url, opts) {
-  return getDetail(url, opts).then(function (detail) { return detail.episodes || []; });
+
+function getEpisodes(url) {
+  var slug = String(url || '').replace('anv://anime/', '');
+  return _detailFromSlug(slug).then(function (m) { return _episodeList(m); });
 }
-function _parseEpisodeData(value) {
-  var raw = String(value || "").replace(/^anv:\/\//, "");
-  try { return JSON.parse(decodeURIComponent(raw)); } catch (e) { return null; }
+
+/* ------------------------------ video sources ------------------------------ */
+
+var _LANG_CODES = { english: 'en', spanish: 'es', french: 'fr', german: 'de', portuguese: 'pt', arabic: 'ar', hindi: 'hi', japanese: 'ja', italian: 'it', russian: 'ru' };
+
+function _trackSubs(tracks) {
+  var subs = [];
+  for (var i = 0; i < (tracks || []).length; i++) {
+    var t = tracks[i] || {};
+    if (!t.src) continue;
+    var label = String(t.label || t.lang || t.srclang || 'English');
+    var code = _LANG_CODES[label.toLowerCase()] || (label.length === 2 ? label.toLowerCase() : 'en');
+    subs.push({ url: _abs(t.src), lang: code, label: label });
+  }
+  return subs;
 }
-function _absolute(url) {
-  if (!url) return null;
-  if (/^https?:\/\//i.test(url)) return url;
-  return SITE + (String(url).charAt(0) === "/" ? "" : "/") + url;
-}
-function getVideoSources(url, opts) {
-  var ep = _parseEpisodeData(url);
-  if (!ep || !ep.id || !ep.slug || !(Number(ep.episode) > 0)) return Promise.reject(Error("AnV invalid episode data"));
-  return _episodeSources(Number(ep.id), ep.malId, Number(ep.episode), String(ep.slug)).then(function (root) {
-    var variants = Array.isArray(root.variants) ? root.variants : [];
-    var out = [], seen = {}, tracksSeen = {};
-    var requested = String((opts && opts.category) || ep.variant || "sub").toLowerCase();
-    variants.forEach(function (variant) {
-      var vId = String(variant.id || "").toLowerCase();
-      if (vId !== "sub" && vId !== "dub") return;
-      if (requested !== "both" && vId !== requested) return;
-      (variant.sources || []).forEach(function (source) {
-        var stream = _absolute(source.url);
-        if (!stream) return;
-        var repeat = seen[stream] || 0;
-        seen[stream] = repeat + 1;
-        if (repeat) stream += (stream.indexOf("?") >= 0 ? "&" : "?") + "f=" + repeat;
-        var tracks = [];
-        (source.tracks || []).forEach(function (track) {
-          var subUrl = _absolute(track.src);
-          if (!subUrl || tracksSeen[subUrl]) return;
-          tracksSeen[subUrl] = 1;
-          tracks.push({ url: subUrl, lang: track.language || "und", label: _txt(track.label || track.language || "Subtitle") });
-        });
-        var label = (vId === "dub" ? "Dub" : "Sub") + " - " + _txt(source.label || "Server");
-        var height = Number((String(source.label || "").match(/(\d{3,4})p/i) || [])[1]) || null;
-        out.push({
-          url: stream, label: label, quality: height || "Auto",
-          container: "hls", kind: vId, headers: {
-            "User-Agent": UA, "Referer": _episodePageUrl(ep.slug, ep.episode),
-            "Cookie": _cookie
-          }, subtitles: tracks
-        });
+
+/* One server's entries: variants ascending, Auto (master) LAST. */
+function _serverStreams(server, variant, referer, subs) {
+  var masterUrl = _abs(server.url);
+  var headers = { 'Referer': referer, 'User-Agent': _ANV_UA };
+  if (_anvCookie) headers['Cookie'] = _anvCookie;
+  var kind = variant.id === 'dub' ? 'dub' : 'sub';
+  var tag = (variant.label || variant.id) + ' · ' + server.label;
+  return _expandQualities(masterUrl, headers).then(function (variants) {
+    var out = [];
+    for (var i = 0; i < variants.length; i++) {
+      out.push({
+        url: variants[i].url, quality: variants[i].h + 'p',
+        label: tag + ' · ' + variants[i].h + 'p',
+        container: 'hls', headers: headers,
+        subtitles: subs, kind: kind
       });
+    }
+    out.push({
+      url: masterUrl, quality: 'auto',
+      label: tag + ' · Auto',
+      container: 'hls', headers: headers,
+      subtitles: subs, kind: kind
     });
-    if (!out.length) throw Error("AnV returned no source URLs for this audio mode");
     return out;
   });
 }
-function getStreams(id, opts) { return getVideoSources(id, opts); }
-function getLinks(id, opts) { return getVideoSources(id, opts); }
-if (typeof module !== "undefined" && module.exports) {
-  module.exports = { version: "1.0.3", getInfo: getInfo, getSettings: getSettings, getHome: getHome, search: search, getDetail: getDetail, getEpisodes: getEpisodes, getVideoSources: getVideoSources, getStreams: getStreams, getLinks: getLinks };
+
+function _episodeRequest(aId, malId, epNum) {
+  var body = { anilistId: aId, episode: epNum, first: true };
+  if (malId) body.malId = malId;
+  return _postJson(_ANV + '/api/episode', body, { 'Referer': _ANV + '/' })
+    .then(function (j) { return j; }, function () { return null; });
+}
+
+function getVideoSources(epUrl) {
+  var parts = String(epUrl || '').replace('anv://ep/', '').split('/');
+  var slug = parts[0] || '';
+  var aId = parseInt(parts[1], 10) || 0;
+  var malId = parseInt(parts[2], 10) || 0;
+  var epNum = parseInt(parts[3], 10) || 1;
+  if (!slug || !aId) return Promise.reject(new Error('Anv: bad episode reference'));
+  var watchPath = '/anime/' + slug + '-episode-' + epNum;
+  var referer = _ANV + watchPath;
+
+  return _ensureSession(watchPath).then(function () {
+    return _episodeRequest(aId, malId, epNum);
+  }).then(function (data) {
+    if (data && data.status === 'ready' && data.variants && data.variants.length) return data;
+    /* One retry with a forced re-warm — the backend sometimes needs a
+     * second beat, and a stale cookie should not fail the episode. */
+    _anvCookie = ''; _anvCookieAt = 0;
+    return _ensureSession(watchPath).then(function () {
+      return _episodeRequest(aId, malId, epNum);
+    }).then(function (data2) {
+      if (data2 && data2.status === 'ready' && data2.variants && data2.variants.length) return data2;
+      var reason = (data2 && data2.reason) || (data && data.reason) || 'unavailable';
+      throw new Error('Anv: episode ' + epNum + ' ' + reason);
+    });
+  }).then(function (data) {
+    /* Split variants into clean servers (Pear/Banana — plain TS segments)
+     * and Orange (PNG-prefixed segments the app player cannot probe).
+     * Orange is only used when an episode has no clean server at all. */
+    var jobs = [];
+    var dubs = [];
+    var subsGroup = [];
+    var variants = data.variants.slice();
+    /* Dub group first, sub group last: the app auto-plays the last link,
+     * and sub is this site's canonical default. */
+    variants.sort(function (a, b) {
+      var ka = a.id === 'dub' ? 0 : 1;
+      var kb = b.id === 'dub' ? 0 : 1;
+      return ka - kb;
+    });
+    for (var vi = 0; vi < variants.length; vi++) {
+      (function (variant) {
+        var servers = variant.sources || [];
+        var clean = [];
+        var orange = [];
+        for (var si = 0; si < servers.length; si++) {
+          if (/orange/i.test(String(servers[si].label || ''))) orange.push(servers[si]);
+          else clean.push(servers[si]);
+        }
+        var use = clean.length ? clean : orange;
+        var subs = _trackSubs(servers.length ? servers[0].tracks : []);
+        for (var ui = 0; ui < use.length; ui++) {
+          (function (server) {
+            var p = _serverStreams(server, variant, referer, subs);
+            if (variant.id === 'dub') dubs.push(p); else subsGroup.push(p);
+          })(use[ui]);
+        }
+      })(variants[vi]);
+    }
+    jobs = dubs.concat(subsGroup);
+    return Promise.all(jobs).then(function (groups) {
+      var out = [];
+      for (var gi = 0; gi < groups.length; gi++) out = out.concat(groups[gi]);
+      if (!out.length) throw new Error('Anv: no playable server resolved for episode ' + epNum);
+      return out;
+    });
+  });
+}
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { getInfo: getInfo, getHome: getHome, search: search, getDetail: getDetail, getEpisodes: getEpisodes, getVideoSources: getVideoSources };
 }
