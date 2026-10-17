@@ -96,6 +96,26 @@
       "file": "providers/anv.js",
       "logo": "https://www.google.com/s2/favicons?sz=256&domain=anv.to",
       "nsfw": false
+    },
+    {
+      "id": "hianime",
+      "name": "HiAnime",
+      "version": "1.2.2",
+      "type": "anime",
+      "lang": "en",
+      "file": "providers/hianime.js",
+      "logo": "https://hianime.at/favicon.ico",
+      "nsfw": false
+    },
+    {
+      "id": "hdhub4u",
+      "name": "HDHub4u",
+      "version": "1.2.4",
+      "type": "movie",
+      "lang": "hi",
+      "file": "providers/hdhub4u.js",
+      "logo": "https://new5.hdhub4u.cl/favicon.ico",
+      "nsfw": false
     }
   ]
 }
