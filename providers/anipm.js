@@ -69,11 +69,13 @@ function _title(item) {
   return _trim(item && (item.title || item.english || item.name || item.native) || 'Untitled');
 }
 function _titles(item) {
+  // Only trust explicitly named AniList-ID fields. A provider's generic
+  // `anilist` field may be its own catalogue ID, not a real AniList ID.
   return {
     englishTitle: _trim(item && (item.title || item.english) || ''),
     nativeTitle: _trim(item && (item.native || item.nativeTitle) || ''),
     malId: _num(item && (item.malId || item.mal_id)),
-    anilistId: _num(item && (item.anilistId || item.anilist_id || item.anilist))
+    anilistId: _num(item && (item.anilistId || item.anilist_id))
   };
 }
 function _card(item) {
