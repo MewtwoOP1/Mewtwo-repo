@@ -377,6 +377,7 @@ function _parsePlaybackEpisode(raw) {
     if (!item) {
       var parsedUrl = _parseTmdbUrl(value);
       if (!parsedUrl) return null;
+      if (parsedUrl.type === 'tv') return null;
       return { id: parsedUrl.id, type: parsedUrl.type, season: 0, episode: 0 };
     }
   }
