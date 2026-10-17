@@ -94,7 +94,7 @@ global.fetch = async function (url, options) {
     return { status: 200, body: JSON.stringify({ source: "https://media.settlar.io/frieren/dub/master.m3u8", subtitles: [] }) };
   }
   if (url === "https://media.settlar.io/frieren/dub/master.m3u8") {
-    return { status: 200, body: "#EXTM3U\\n#EXT-X-STREAM-INF:BANDWIDTH=900000,RESOLUTION=1280x720\\n720.m3u8\\n" };
+    return { status: 200, body: "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=900000,RESOLUTION=1280x720\n720.m3u8\n" };
   }
   if (url === "https://ani.pm/api/anime/playback-bootstrap/settlar/6351?ep=3&lang=sub") {
     return { status: 200, body: JSON.stringify({ availability: { sub: true, dub: false }, effectiveLanguage: "sub" }) };
@@ -112,7 +112,7 @@ global.fetch = async function (url, options) {
     return { status: 200, body: JSON.stringify({ sources: { file: "https://cdn.megaplay.buzz/playlist/master.m3u8" } }) };
   }
   if (url === "https://cdn.megaplay.buzz/playlist/master.m3u8") {
-    return { status: 200, body: "#EXTM3U\\n#EXT-X-STREAM-INF:BANDWIDTH=900000,RESOLUTION=1280x720\\n720.m3u8\\n" };
+    return { status: 200, body: "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=900000,RESOLUTION=1280x720\n720.m3u8\n" };
   }
 
   // Legacy endpoint is only used after the current playback flow fails.
