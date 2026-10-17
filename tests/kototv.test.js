@@ -13,7 +13,7 @@ global.fetch=async function(url,options){
  return {status:404,body:"not found"};
 };
 async function main(){
- assert.equal(provider.version,"1.0.6");
+ assert.equal(provider.version,"1.0.7");
  assert.equal(provider.getInfo().name,"KotoTV");
  assert.equal(provider.getInfo().baseUrl,"https://kototv.to");
  assert.deepEqual(await provider.search("",1,{}),[]);
