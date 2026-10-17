@@ -113,11 +113,11 @@ function _kotoResolveEmbed(embed,watchUrl){
  function add(u){if(!u)return;u=String(u).replace(/&amp;/g,"&");try{u=new URL(u,embed).toString();}catch(e){return;}if(/^https?:\/\//i.test(u)&&!seen[u]){seen[u]=1;candidates.push(u);}}
  return get(embed,watchUrl).then(function(page){
   page=String(page||"").replace(/\\\//g,"/").replace(/&amp;/g,"&");
-  var re=/<iframe\\b([^>]*)>/gi,m;
+  var re=/<iframe\b([^>]*)>/gi,m;
   while((m=re.exec(page))&&candidates.length<12)add(attrValue(m[1],"src"));
-  var urlRe=/(https?:\\/\\/[^\\s"'<>\\\\]+?\\.m3u8(?:\\?[^\\s"'<>\\\\]*)?)/gi;
+  var urlRe=/(https?:\/\/[^\s"'<>\\]+?\.m3u8(?:\?[^\s"'<>\\]*)?)/gi;
   while((m=urlRe.exec(page))&&candidates.length<12)add(m[1]);
-  var jsonRe=/(?:file|source|url)\\s*[:=]\\s*["']([^"']+)["']/gi;
+  var jsonRe=/(?:file|source|url)\s*[:=]\s*["']([^"']+)["']/gi;
   while((m=jsonRe.exec(page))&&candidates.length<12)if(/m3u8|player|stream/i.test(m[1]))add(m[1]);
   if(typeof extractVideo!=="function")throw Error("KotoTV: shared extractor unavailable");
   var unique=candidates.filter(function(x,i,a){return a.indexOf(x)===i;});
