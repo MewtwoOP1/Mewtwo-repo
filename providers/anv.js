@@ -231,7 +231,7 @@ function getSettings() { return []; }
 function getInfo() {
   return {
     name: 'AnV', id: 'anv', baseUrl: _ANV, lang: 'en',
-    logo: _ANV + '/brand/blob.svg', type: 'anime', version: '1.0.3'
+    logo: 'https://www.google.com/s2/favicons?sz=256&domain=anv.to', type: 'anime', version: '1.0.3'
   };
 }
 
