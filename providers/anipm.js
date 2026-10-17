@@ -12,7 +12,7 @@ var cache = {};
 
 function getInfo() {
   return { name: 'Ani.pm', lang: 'en', baseUrl: SITE,
-    logo: SITE + '/favicon.ico', type: 'anime', version: '1.0.3' };
+    logo: SITE + '/favicon.ico', type: 'anime', version: '1.0.4' };
 }
 function getSettings() { return []; }
 function _mode(opts) { return (opts && opts.category === 'dub') ? 'dub' : 'sub'; }
@@ -244,11 +244,12 @@ function _serverList(j, cat) {
   return Array.isArray(list) ? list : [];
 }
 function _serverRequest(key, title) {
-  // Pass AniList IDs through unchanged. Do not apply +/- offsets or derive an
-  // AniList ID from Ani.pm's own catalogue ID; the API expects the real ID.
+  // Match AnV's verified ID handling: Ani.pm's playback endpoint receives the
+  // source catalogue ID unchanged in its "anilistId" parameter. This is key.id,
+  // not the separate real AniList metadata ID. Never add/subtract an offset.
   var params = 'title=' + encodeURIComponent(title || '')
     + '&ep=' + encodeURIComponent(key.episode)
-    + (key.anilistId ? '&anilistId=' + encodeURIComponent(String(key.anilistId)) : '')
+    + (key.id ? '&anilistId=' + encodeURIComponent(String(key.id)) : '')
     + (key.malId ? '&malId=' + encodeURIComponent(key.malId) : '');
   return _json(API + '/src/servers?' + params, SITE + '/').then(function (j) {
     return { json: j, list: _serverList(j, key.category) };
