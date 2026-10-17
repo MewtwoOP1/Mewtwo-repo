@@ -98,6 +98,36 @@
       "nsfw": false
     },
     {
+      "id": "fourkhdhub",
+      "name": "4K HDHub",
+      "version": "1.0.6",
+      "type": "movie",
+      "lang": "en",
+      "file": "providers/fourkhdhub.js",
+      "logo": "https://4khdhub.link/favicon.ico",
+      "nsfw": false
+    },
+    {
+      "id": "vegamovies",
+      "name": "VegaMovies",
+      "version": "1.0.4",
+      "type": "movie",
+      "lang": "hi",
+      "file": "providers/vegamovies.js",
+      "logo": "https://vegamovies.mq/favicon.ico",
+      "nsfw": false
+    },
+    {
+      "id": "uhdmovies",
+      "name": "UHD Movies",
+      "version": "1.0.3",
+      "type": "movie",
+      "lang": "hi",
+      "file": "providers/uhdmovies.js",
+      "logo": "https://uhdmovies.autos/favicon.ico",
+      "nsfw": false
+    },
+    {
       "id": "hdhub4u",
       "name": "HDHub4u",
       "version": "1.2.4",
