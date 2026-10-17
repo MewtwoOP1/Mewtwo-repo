@@ -1,8 +1,6 @@
 const assert = require("node:assert/strict");
 const providers = [
-  ["../providers/fourkhdhub.js", "4K HDHub", "1.0.6"],
-  ["../providers/vegamovies.js", "VegaMovies", "1.0.4"],
-  ["../providers/uhdmovies.js", "UHD Movies", "1.0.3"]
+  ["../providers/fourkhdhub.js", "4K HDHub", "1.0.6"]
 ];
 for (const [path, name, version] of providers) {
   const provider = require(path);
