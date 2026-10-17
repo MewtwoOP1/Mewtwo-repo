@@ -48,7 +48,7 @@ global.fetch = async function (url, options) {
 };
 const provider = require("../providers/anipm.js");
 async function main() {
-  assert.equal(provider.version, "1.0.1");
+  assert.equal(provider.version, "1.0.2");
   assert.equal(provider.getInfo().name, "Ani.pm");
   assert.equal(provider.getInfo().type, "anime");
   assert.deepEqual(provider.getSettings(), []);
