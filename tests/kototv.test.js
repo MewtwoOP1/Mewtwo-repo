@@ -1,5 +1,5 @@
 const assert=require("node:assert/strict");
-global.htmlText=function(s){return String(s||"").replace(/<[^>]*>/g," ").replace(/&amp;/g,"&").replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/\\s+/g," ").trim();};
+global.htmlText=function(s){return String(s||"").replace(/<[^>]*>/g," ").replace(/&amp;/g,"&").replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/\s+/g," ").trim();};
 const provider=require("../providers/kototv.js");
 const calls=[];
 global.fetch=async function(url,options){
