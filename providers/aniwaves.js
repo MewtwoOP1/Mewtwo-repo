@@ -70,14 +70,15 @@ function _cardStarts(html) {
   return starts;
 }
 function _classContent(html, token) {
-  var source = String(html || ""), re = /<(h1|h2|h3|h4|span|div|p)\\b([^>]*)>/gi, m;
+  var source = String(html || ""), lower = source.toLowerCase();
+  var re = /<(h1|h2|h3|h4|span|div|p)\b([^>]*)>/gi, m;
   while ((m = re.exec(source)) !== null) {
     if (!_classMatch(m[2], token)) continue;
-    var close = new RegExp("<\\\\/" + m[1] + "\\\\s*>", "ig");
-    close.lastIndex = re.lastIndex;
-    var end = close.exec(source);
-    if (!end) continue;
-    var inner = source.substring(re.lastIndex, end.index);
+    var closeAt = lower.indexOf("</" + m[1].toLowerCase(), re.lastIndex);
+    if (closeAt < 0) continue;
+    var closeEnd = source.indexOf(">", closeAt);
+    if (closeEnd < 0) continue;
+    var inner = source.substring(re.lastIndex, closeAt);
     return { attrs: m[2], inner: inner, text: _text(inner) };
   }
   return null;
