@@ -15,15 +15,17 @@ function _attr(tag, name) {
   var match = String(tag || "").match(new RegExp("\\b" + name + "\\s*=\\s*([\\\"'])([\\s\\S]*?)\\1", "i"));
   return match ? match[2].replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").replace(/&amp;/g, "&") : "";
 }
-function _get(url, referer) {
-  return fetch(url, { headers: { "User-Agent": UA, "Accept": "text/html,application/json,*/*", "Referer": referer || SITE + "/" } })
+function _get(url, referer, extraHeaders) {
+  var requestHeaders = { "User-Agent": UA, "Accept": "text/html,application/json,*/*", "Referer": referer || SITE + "/" };
+  Object.keys(extraHeaders || {}).forEach(function (key) { requestHeaders[key] = extraHeaders[key]; });
+  return fetch(url, { headers: requestHeaders })
     .then(function (r) {
       if (!r || r.status >= 400) throw Error("TwoDHive HTTP " + (r && r.status || "error") + " at " + url);
       return String(r.body == null ? "" : r.body);
     });
 }
-function _json(url, referer) {
-  return _get(url, referer).then(function (body) { try { return JSON.parse(body); } catch (e) { throw Error("TwoDHive returned invalid JSON"); } });
+function _json(url, referer, extraHeaders) {
+  return _get(url, referer, extraHeaders).then(function (body) { try { return JSON.parse(body); } catch (e) { throw Error("TwoDHive returned invalid JSON"); } });
 }
 function _abs(url, base) {
   if (!url) return null;
@@ -231,8 +233,9 @@ function getVideoSources(url, opts) {
     var id = (html.match(/\bdata-id=["'](\d+)["']/i) || html.match(/\bdata-realid=["'](\d+)["']/i) || [])[1];
     if (!id) throw Error("TwoDHive MegaPlay player ID not found");
     var headers = { "User-Agent": UA, "Accept": "*/*", "X-Requested-With": "XMLHttpRequest", "Origin": MEGA, "Referer": playerUrl };
-    return _json(MEGA + "/stream/getSourcesNew?id=" + encodeURIComponent(id) + "&type=" + mode, playerUrl).catch(function () {
-      return _json(MEGA + "/stream/getSources?id=" + encodeURIComponent(id) + "&type=" + mode, playerUrl);
+    var ajaxHeaders = { "Accept": "*/*", "X-Requested-With": "XMLHttpRequest", "Origin": MEGA };
+    return _json(MEGA + "/stream/getSourcesNew?id=" + encodeURIComponent(id) + "&type=" + mode, playerUrl, ajaxHeaders).catch(function () {
+      return _json(MEGA + "/stream/getSources?id=" + encodeURIComponent(id) + "&type=" + mode, playerUrl, ajaxHeaders);
     }).then(function (root) {
       return _streamFile(root).then(function (rawUrl) {
         if (!rawUrl && typeof extractVideo === "function") {
