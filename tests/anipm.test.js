@@ -81,7 +81,7 @@ global.fetch = async function (url, options) {
     ].join("\n") };
   }
   // Legacy endpoint is only used after the current playback flow fails.
-  if (url === "https://ani.pm/api/anime/src/servers?title=Legacy%20Series&ep=1&anilistId=154587") {
+  if (url.indexOf("https://ani.pm/api/anime/src/servers?title=Legacy%20Series&ep=1&anilistId=154587") === 0) {
     return { status: 200, body: JSON.stringify({ sub: [
       { kind: "embed", name: "Must be ignored", url: "https://embed.example/watch/1", priority: 99 },
       { kind: "file", name: "Legacy MP4", url: "/api/anime/src/file?t=legacy", priority: 5 }
@@ -145,7 +145,7 @@ async function main() {
   assert.equal(legacyStreams.length, 1);
   assert.equal(legacyStreams[0].url, "https://ani.pm/api/anime/src/file?t=legacy");
   assert.equal(legacyStreams[0].container, "mp4");
-  assert.ok(calls.some(c => c.url === "https://ani.pm/api/anime/src/servers?title=Legacy%20Series&ep=1&anilistId=154587"));
+  assert.ok(calls.some(c => c.url.indexOf("https://ani.pm/api/anime/src/servers?title=Legacy%20Series&ep=1&anilistId=154587") === 0));
   assert.ok(!legacyStreams.some(s => s.url.indexOf("embed.example") >= 0),
     "iframe rows must not be mislabeled as direct playable streams");
 
