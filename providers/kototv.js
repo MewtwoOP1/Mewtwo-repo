@@ -83,13 +83,36 @@ function getVideoSources(url,opts){
  try{slug=decodeURIComponent(p[0]);}catch(e){slug=p[0];}
  var n=parseInt(p[1],10);if(!slug||!(n>0))return Promise.reject(Error("KotoTV: invalid episode URL"));
  var watchUrl=SITE+"/anime/"+encodeURIComponent(slug)+"/watch/"+n;
+ function parseApiSources(payload,referer){
+  var root=payload;try{if(typeof root==="string")root=JSON.parse(root);}catch(e){return [];}
+  var found=[],visited=[];
+  function scan(v,depth){
+   if(!v||depth>6||typeof v!=="object"||visited.indexOf(v)>=0)return;visited.push(v);
+   if(Array.isArray(v)){v.forEach(function(x){scan(x,depth+1);});return;}
+   var u=v.file||v.src||v.url;
+   if(typeof u==="string"&&/^https?:\/\//i.test(u)&&/\.(?:m3u8|mp4|mpd)(?:[?#]|$)/i.test(u)){
+    uniquePush(found,{url:u.replace(/\\\//g,"/"),quality:v.quality||v.label||"Auto",container:/\.m3u8(?:$|[?#])/i.test(u)?"hls":(/\.mpd(?:$|[?#])/i.test(u)?"dash":"mp4"),headers:{Referer:referer,Origin:(new URL(referer)).origin,"User-Agent":UA}});
+   }
+   Object.keys(v).forEach(function(k){if(v[k]&&typeof v[k]==="object")scan(v[k],depth+1);});
+  }
+  scan(root,0);return found;
+ }
+ function sourceApi(target,html){
+   var id=(html.match(/\bdata-id=["'](\d+)["']/i)||[])[1];if(!id)return Promise.resolve([]);
+   var type=/\/dub(?:[/?#]|$)/i.test(target)?"dub":"sub",origin;
+  try{origin=new URL(target).origin;}catch(e){return Promise.resolve([]);}
+  return get(origin+"/stream/getSources?id="+encodeURIComponent(id)+"&type="+type,target).then(function(body){return parseApiSources(body,target);}).catch(function(){return [];});
+ }
  function walk(target,ref,depth,seen){
   if(depth>4||seen[target])return Promise.resolve([]);seen[target]=1;
   return get(target,ref||watchUrl).then(function(html){
    var direct=mediaFrom(html,target);if(direct.length)return direct;
-   var frames=[],m,re=/<iframe\b([^>]*)>/gi;
-   while((m=re.exec(html))&&frames.length<8){var src=attrValue(m[1],"src");if(!src)continue;try{var abs=new URL(src,target).toString();if(/^https?:\/\//i.test(abs)&&frames.indexOf(abs)<0)frames.push(abs);}catch(e){}}
-   return Promise.all(frames.map(function(next){return walk(next,target,depth+1,seen).catch(function(){return [];});})).then(function(groups){var out=[];groups.forEach(function(g){g.forEach(function(s){uniquePush(out,s);});});return out;});
+   return sourceApi(target,html).then(function(apiSources){
+    if(apiSources.length)return apiSources;
+    var frames=[],m,re=/<iframe\b([^>]*)>/gi;
+    while((m=re.exec(html))&&frames.length<8){var src=attrValue(m[1],"src");if(!src)continue;try{var abs=new URL(src,target).toString();if(/^https?:\/\//i.test(abs)&&frames.indexOf(abs)<0)frames.push(abs);}catch(e){}}
+    return Promise.all(frames.map(function(next){return walk(next,target,depth+1,seen).catch(function(){return [];});})).then(function(groups){var out=[];groups.forEach(function(g){g.forEach(function(s){uniquePush(out,s);});});return out;});
+   });
   });
  }
  return get(watchUrl,SITE+"/").then(function(html){
