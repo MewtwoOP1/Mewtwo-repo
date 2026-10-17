@@ -110,7 +110,7 @@
     {
       "id": "animesalt",
       "name": "AnimeSalt",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "type": "anime",
       "lang": "hi",
       "file": "providers/animesalt.js",
