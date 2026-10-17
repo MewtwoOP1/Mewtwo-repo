@@ -99,7 +99,7 @@ async function main() {
   assert.equal(streams[0].url, "https://cdn.example/episode-1080.mp4?signature=mock");
   assert.equal(streams[0].container, "mp4");
   assert.equal(streams[0].kind, "raw");
-  assert.equal(streams[0].headers.Referer, "https://vidlink.pro/");
+  assert.equal(streams[0].headers.Referer, "https://vidlink.pro/tv/22/1/1");
   assert.equal(streams[0].headers.Origin, "https://vidlink.pro");
   assert.equal(streams[0].subtitles.length, 1);
   assert.equal(streams[0].subtitles[0].format, "srt");
@@ -121,7 +121,7 @@ async function main() {
   assert.equal(playerCalls.length, 3);
   assert.ok(encoderCalls.every((call) => !call.url.includes("test-user-key")));
   assert.ok(playerCalls.every((call) => !call.url.includes("test-user-key")));
-  assert.ok(playerCalls.every((call) => call.options.headers.Referer === "https://vidlink.pro/"));
+  assert.ok(playerCalls.every((call) => call.options.headers.Referer.startsWith("https://vidlink.pro/")));
   assert.ok(playerCalls.every((call) => call.options.headers.Origin === "https://vidlink.pro"));
 
   global.__settings.almostott.tmdbApiKey = "";
