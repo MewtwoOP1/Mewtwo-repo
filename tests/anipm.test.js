@@ -48,7 +48,7 @@ global.fetch = async function (url, options) {
 };
 const provider = require("../providers/anipm.js");
 async function main() {
-  assert.equal(provider.version, "1.0.2");
+  assert.equal(provider.version, "1.0.3");
   assert.equal(provider.getInfo().name, "Ani.pm");
   assert.equal(provider.getInfo().type, "anime");
   assert.deepEqual(provider.getSettings(), []);
@@ -77,6 +77,12 @@ async function main() {
   assert.equal(streams[1].container, "mp4");
   assert.equal(streams[0].subtitles[0].url, "https://ani.pm/api/anime/src/vtt?t=sub");
   assert.equal(streams[0].headers.Referer, "https://ani.pm/");
+  // The AniList ID must reach Ani.pm exactly as received (no +/- 1 offset).
+  const serverCall = calls.find(c => c.url.includes("/api/anime/src/servers?"));
+  assert.ok(serverCall, "server endpoint should be requested");
+  assert.match(serverCall.url, /[?&]anilistId=154587(?:&|$)/);
+  assert.doesNotMatch(serverCall.url, /[?&]anilistId=154586(?:&|$)/);
+  assert.doesNotMatch(serverCall.url, /[?&]anilistId=154588(?:&|$)/);
   const dubDetail = await provider.getDetail(results[0].url, {category:"dub"});
   assert.match(dubDetail.episodes[0].url, /^anipm-episode:\/\/dub\|/);
   const dubStreams = await provider.getVideoSources(dubDetail.episodes[0].url, {});
