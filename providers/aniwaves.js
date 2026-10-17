@@ -70,9 +70,15 @@ function _cardStarts(html) {
   return starts;
 }
 function _classContent(html, token) {
-  var re = /<(h1|h2|h3|h4|span|div|p)\b([^>]*)>([\s\S]*?)<\/\1\s*>/gi, m;
-  while ((m = re.exec(String(html || ""))) !== null) {
-    if (_classMatch(m[2], token)) return { attrs: m[2], inner: m[3], text: _text(m[3]) };
+  var source = String(html || ""), re = /<(h1|h2|h3|h4|span|div|p)\\b([^>]*)>/gi, m;
+  while ((m = re.exec(source)) !== null) {
+    if (!_classMatch(m[2], token)) continue;
+    var close = new RegExp("<\\\\/" + m[1] + "\\\\s*>", "ig");
+    close.lastIndex = re.lastIndex;
+    var end = close.exec(source);
+    if (!end) continue;
+    var inner = source.substring(re.lastIndex, end.index);
+    return { attrs: m[2], inner: inner, text: _text(inner) };
   }
   return null;
 }
