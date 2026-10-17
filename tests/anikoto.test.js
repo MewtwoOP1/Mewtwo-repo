@@ -11,7 +11,7 @@ global.fetch=async function(url,options){url=String(url);options=options||{};cal
  if(url==="https://vidtube.site/stream/getSources?id=77&type=sub"){assert.equal(options.headers.Referer,"https://vidtube.site/embed/9001");return {status:200,body:JSON.stringify({sources:{file:"https://cdn.example/frieren.m3u8"},tracks:[{kind:"captions",label:"English",file:"https://cdn.example/en.vtt"}]})};}
  if(url==="https://anikotoapi.site/recent-anime?page=1&per_page=24")return {status:200,body:JSON.stringify({data:[{slug:"frieren",title:"Frieren",poster:"https://img.example/f.jpg"}]})};
  return {status:404,body:"not found"};};
-async function main(){assert.equal(provider.version,"1.0.8");assert.equal(provider.getInfo().name,"AniKoto");
+async function main(){assert.equal(provider.version,"1.0.9");assert.equal(provider.getInfo().name,"AniKoto");
  const results=await provider.search("Frieren",1,{});assert.equal(results.length,1);assert.equal(results[0].url,"frieren");
  const detail=await provider.getDetail(results[0].url,{});assert.equal(detail.title,"Frieren: Beyond Journey's End");assert.equal(detail.episodes.length,1);
  const streams=await provider.getVideoSources(detail.episodes[0].url,{});assert.equal(streams.length,1);assert.equal(streams[0].url,"https://cdn.example/frieren.m3u8");assert.equal(streams[0].container,"hls");assert.equal(streams[0].subtitles[0].url,"https://cdn.example/en.vtt");
