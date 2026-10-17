@@ -9,7 +9,11 @@ global.fetch = async (url, opts) => {
   if (url.includes('/movie/12?append_to_response')) return {status:200, body:JSON.stringify({id:12,title:'Test Movie',release_date:'2024-01-01',overview:'A test',genres:[{name:'Drama'}],poster_path:'/p.jpg',external_ids:{imdb_id:'tt123'}})};
   if (url.includes('/tv/34?append_to_response')) return {status:200, body:JSON.stringify({id:34,name:'Test Show',first_air_date:'2023-01-01',seasons:[{season_number:1}],external_ids:{imdb_id:'tt456'}})};
   if (url.includes('/tv/34/season/1')) return {status:200, body:JSON.stringify({episodes:[{episode_number:1,name:'Pilot'}]})};
-  if (url.includes('/streams?')) return {status:200, body:JSON.stringify({streams:[{name:'MovieBox (Hindi)',proxy_url:'https://worker.example/video.mp4',resolution:'1080',codec:'h264'},{name:'no url'}]})};
+  if (url.includes('/get-latest-app-pkgs')) return {status:200, headers:{'x-user':JSON.stringify({token:'test-token'})}, body:'{}'};
+  if (url.endsWith('/subject/search')) return {status:200, body:JSON.stringify({data:{items:[{id:'sub-1',title:'Test Show',lanName:'Hindi'}]}})};
+  if (url.includes('/web/post/list/subject')) return {status:200, body:JSON.stringify({data:{items:[{subject:{detailPath:'test-show'}}]}})};
+  if (url.includes('/subject/download?')) return {status:200, body:JSON.stringify({data:{downloads:[{url:'https://worker.example/video.mp4',resolution:'1080p'},{url:'https://bad.example/vip.mp4',resolution:'4K',vipLocked:true}]}})};
+  if (url.includes('/subject/play?')) return {status:200, body:JSON.stringify({data:{streams:[{url:'https://worker.example/video.mp4',resolution:'1080p'},{url:'https://worker.example/alt.m3u8',resolution:'720p'}]}})};
   return {status:404, body:'{}'};
 };
 const p = require('../providers/moviebox.js');
@@ -28,10 +32,12 @@ async function main() {
   assert.equal(tv.episodes.length, 1);
   assert.equal(tv.episodes[0].url, 'moviebox://tv/34/1/1');
   const streams = await p.getVideoSources('moviebox://tv/34/1/1');
-  assert.equal(streams.length, 1);
+  assert.equal(streams.length, 2);
   assert.equal(streams[0].url, 'https://worker.example/video.mp4');
   assert.equal(streams[0].quality, '1080p');
-  assert.ok(calls.some(c => c.url.includes('/streams?tmdb_id=34&type=tv')));
+  assert.ok(calls.some(c => c.url.endsWith('/subject/search')));
+  assert.ok(calls.some(c => c.url.includes('/subject/download?subjectId=sub-1&se=1&ep=1')));
+  assert.ok(streams.every(s => s.headers && s.headers.Referer));
   assert.deepEqual(await p.getVideoSources('moviebox://tv/34'), []);
   console.log('MovieBox mocked catalogue, TMDB episode mapping, stream parsing and invalid episode tests passed.');
 }
