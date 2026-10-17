@@ -117,8 +117,8 @@ async function main() {
 
   const encoderCalls = calls.filter((call) => call.url.includes("enc-dec.app"));
   const playerCalls = calls.filter((call) => call.url.includes("vidlink.pro/api/b/"));
-  assert.equal(encoderCalls.length, 2);
-  assert.equal(playerCalls.length, 2);
+  assert.equal(encoderCalls.length, 3);
+  assert.equal(playerCalls.length, 3);
   assert.ok(encoderCalls.every((call) => !call.url.includes("test-user-key")));
   assert.ok(playerCalls.every((call) => !call.url.includes("test-user-key")));
   assert.ok(playerCalls.every((call) => call.options.headers.Referer === "https://vidlink.pro/"));
