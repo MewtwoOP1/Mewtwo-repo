@@ -151,12 +151,12 @@ function getEpisodes(url, opts) {
 }
 function _anilistId(anime) {
   var id = _first(anime, ['anilist', 'anilist_id', 'anilistId']);
-  if (id && /^\\d+$/.test(String(id))) return String(id);
+  if (id && /^\d+$/.test(String(id))) return String(id);
   var covers = anime && anime.cover_image;
   if (covers && typeof covers === 'object') {
     var keys = ['extra_large', 'large', 'medium'];
     for (var i = 0; i < keys.length; i++) {
-      var m = String(covers[keys[i]] || '').match(/\\/bx(\\d+)-/);
+      var m = String(covers[keys[i]] || '').match(/\/bx(\d+)-/);
       if (m) return m[1];
     }
   }
@@ -167,7 +167,7 @@ function _mapResolvedStreams(data, audio) {
   var out = [], seen = {};
   streams.forEach(function (s) {
     var u = String(s && s.url || '');
-    if (!/^https?:\\/\\//i.test(u) || !/\\.(m3u8|mp4|m4v)(\\?|$)/i.test(u) || seen[u]) return;
+    if (!/^https?:\/\//i.test(u) || !/\.(m3u8|mp4|m4v)(\?|$)/i.test(u) || seen[u]) return;
     seen[u] = 1;
     var headers = {};
     var rawHeaders = s.headers && typeof s.headers === 'object' ? s.headers : {};
@@ -180,13 +180,13 @@ function _mapResolvedStreams(data, audio) {
         url: String(sub.url),
         lang: String(sub.srclang || sub.lang || sub.language || sub.label || 'Sub'),
         label: String(sub.label || sub.language || sub.srclang || 'Sub'),
-        format: /\\.srt(\\?|$)/i.test(String(sub.url)) ? 'srt' : 'vtt',
+        format: /\.srt(\?|$)/i.test(String(sub.url)) ? 'srt' : 'vtt',
         'default': !!sub['default']
       });
     });
     out.push({
       url: u, quality: 'Auto', label: String(s.server || s.name || 'Re:Anime'),
-      container: /\\.m3u8(\\?|$)/i.test(u) ? 'hls' : 'mp4',
+      container: /\.m3u8(\?|$)/i.test(u) ? 'hls' : 'mp4',
       headers: Object.keys(headers).length ? headers : HEADERS,
       kind: audio, audioLang: audio === 'dub' ? 'en' : 'ja', subtitles: subs
     });
