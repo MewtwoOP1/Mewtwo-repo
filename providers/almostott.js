@@ -1,5 +1,5 @@
-// AlmostOTT catalogue and VidLink playback provider for Zangetsu.
-// Catalogue metadata follows TMDB's public API; playback uses the public VidLink resolver selected by AlmostOTT.
+// AlmostOTT catalogue and multi-server playback provider for Zangetsu.
+// Catalogue metadata uses TMDB; playback tries the resolver API and player embeds offered by AlmostOTT.
 // No video sources are hosted by this repository.
 
 var TMDB_API = 'https://api.themoviedb.org/3';
@@ -9,24 +9,12 @@ var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID) ? String(__S
 
 function getInfo() {
   return {
-    name: 'TMDB + Stremio',
-    lang: 'en',
-    baseUrl: 'https://www.themoviedb.org',
-    logo: 'https://www.google.com/s2/favicons?sz=256&domain=themoviedb.org',
-    type: 'movie',
-    version: '3.0.0'
-  };
-}
-
-
-function getInfo() {
-  return {
     name: 'AlmostOTT',
     lang: 'en',
     baseUrl: 'https://almostott.aethoflix.world',
     logo: 'https://www.google.com/s2/favicons?sz=256&domain=almostott.aethoflix.world',
     type: 'movie',
-    version: '1.0.0'
+    version: '1.0.1'
   };
 }
 
@@ -521,19 +509,76 @@ function _vidlinkSources(data, type) {
   return out;
 }
 
-function getVideoSources(episodeUrl, opts) {
-  var parsed = _parsePlaybackEpisode(episodeUrl);
-  if (!parsed) return Promise.resolve([]);
+// These are the movie/TV player choices exposed by AlmostOTT's public player selector.
+// They are iframe/player endpoints, so resolve them through Zangetsu's shared extractor
+// instead of returning the embed pages as if they were playable video files.
+var ALMOSTOTT_PLAYERS = [
+  { name: 'TgVid', base: 'https://tgvid.lovable.app', movie: '/embed/movie/', tv: '/embed/tv/' },
+  { name: 'VidStuck', base: 'https://vidstuck.xyz', movie: '/embed/movie/', tv: '/embed/tv/', query: '?color=ffffff' },
+  { name: 'ZXCStream', base: 'https://zxcstream.xyz', movie: '/player/movie/', tv: '/player/tv/' },
+  { name: 'Bingr', base: 'https://bingr.one', movie: '/watch/movie/', tv: '/watch/tv/' },
+  { name: 'NXShA', base: 'https://nxsha.space', movie: '/embed/movie/', tv: '/embed/tv/' },
+  { name: 'Flix', base: 'https://flix.vumeto.xyz', movie: '/embed/movie/', tv: '/embed/tv/' }
+];
 
+function _almostottPlayerUrl(player, parsed) {
+  var path = parsed.type === 'tv'
+    ? player.tv + parsed.id + '/' + parsed.season + '/' + parsed.episode
+    : player.movie + parsed.id;
+  return player.base + path + (player.query || '');
+}
+
+function _withPlayerLabel(source, player) {
+  if (!source || typeof source.url !== 'string' || !/^https?:\/\//i.test(source.url)) return null;
+  var copy = {};
+  Object.keys(source).forEach(function (key) { copy[key] = source[key]; });
+  var existing = _trim(source.label || source.name || '');
+  var parts = ['AlmostOTT', player.name];
+  if (existing && existing.toLowerCase().indexOf(player.name.toLowerCase()) < 0) parts.push(existing);
+  var language = _trim(source.audioLang || source.language || '');
+  var kind = _trim(source.kind || '').toLowerCase();
+  if (language) parts.push(language + (kind === 'dub' ? ' Dub' : kind === 'sub' ? ' Sub' : ''));
+  copy.label = parts.join(' · ');
+  copy.server = player.name;
+  return copy;
+}
+
+function _extractPlayerSources(parsed) {
+  if (typeof extractVideo !== 'function') return Promise.resolve([]);
+  var jobs = ALMOSTOTT_PLAYERS.map(function (player) {
+    var embedUrl = _almostottPlayerUrl(player, parsed);
+    return Promise.resolve().then(function () {
+      return extractVideo(embedUrl, {
+        headers: { Referer: 'https://almostott.aethoflix.world/' }
+      });
+    }).then(function (sources) {
+      if (!Array.isArray(sources)) return [];
+      return sources.map(function (source) { return _withPlayerLabel(source, player); }).filter(Boolean);
+    }).catch(function (error) {
+      console.warn('AlmostOTT ' + player.name + ' extractor failed:', String(error));
+      return [];
+    });
+  });
+  return Promise.all(jobs).then(function (lists) {
+    var out = [];
+    lists.forEach(function (list) { out = out.concat(list); });
+    return out;
+  });
+}
+
+function _vidlinkResolverSources(parsed) {
   return _encodeVidlinkId(parsed.id).then(function (encoded) {
     var path = parsed.type === 'tv'
       ? '/api/b/tv/' + encodeURIComponent(encoded) + '/' + parsed.season + '/' + parsed.episode + '?multiLang=0'
       : '/api/b/movie/' + encodeURIComponent(encoded) + '?multiLang=0';
+    var playerPage = parsed.type === 'tv'
+      ? VIDLINK_BASE + '/tv/' + parsed.id + '/' + parsed.season + '/' + parsed.episode
+      : VIDLINK_BASE + '/movie/' + parsed.id;
     return _jsonRequest(VIDLINK_BASE + path, {
       headers: {
         Accept: 'application/json',
         'User-Agent': VIDLINK_UA,
-        Referer: VIDLINK_BASE + '/',
+        Referer: playerPage,
         Origin: VIDLINK_BASE
       },
       timeoutMs: 12000
@@ -541,7 +586,31 @@ function getVideoSources(episodeUrl, opts) {
   }).then(function (data) {
     return _vidlinkSources(data, parsed.type);
   }).catch(function (error) {
-    console.warn('AlmostOTT playback lookup failed:', String(error));
+    console.warn('AlmostOTT VidLink resolver failed:', String(error));
+    return [];
+  });
+}
+
+function _dedupeSources(lists) {
+  var out = [], seen = {};
+  (lists || []).forEach(function (list) {
+    (list || []).forEach(function (source) {
+      if (!source || typeof source.url !== 'string') return;
+      var key = source.url;
+      if (!seen[key]) { seen[key] = true; out.push(source); }
+    });
+  });
+  return out;
+}
+
+function getVideoSources(episodeUrl, opts) {
+  var parsed = _parsePlaybackEpisode(episodeUrl);
+  if (!parsed) return Promise.resolve([]);
+  return Promise.all([
+    _vidlinkResolverSources(parsed),
+    _extractPlayerSources(parsed)
+  ]).then(_dedupeSources).catch(function (error) {
+    console.warn('AlmostOTT source lookup failed:', String(error));
     return [];
   });
 }
@@ -567,6 +636,8 @@ if (typeof module !== 'undefined' && module.exports) {
     _parseTmdbUrl: _parseTmdbUrl,
     _parsePlaybackEpisode: _parsePlaybackEpisode,
     _encodeVidlinkId: _encodeVidlinkId,
-    _vidlinkSources: _vidlinkSources
+    _vidlinkSources: _vidlinkSources,
+    _almostottPlayerUrl: _almostottPlayerUrl,
+    _extractPlayerSources: _extractPlayerSources
   };
 }
