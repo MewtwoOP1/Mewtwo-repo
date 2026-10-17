@@ -13,9 +13,10 @@ global.fetch=async function(url,options){
  return {status:404,body:"not found"};
 };
 async function main(){
- assert.equal(provider.version,"1.0.9");
+ assert.equal(provider.version,"1.1.0");
  assert.equal(provider.getInfo().name,"KotoTV");
  assert.equal(provider.getInfo().baseUrl,"https://kototv.to");
+ assert.deepEqual(provider.getSettings(),[],"original KotoTV has no domain settings");
  assert.deepEqual(await provider.search("",1,{}),[]);
  const results=await provider.search("Frieren",1,{});
  assert.equal(results.length,1);assert.equal(results[0].id,"frieren");assert.equal(results[0].title,"Frieren: Beyond Journey's End");
