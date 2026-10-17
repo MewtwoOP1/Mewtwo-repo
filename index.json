@@ -70,7 +70,7 @@
     {
       "id": "kototv",
       "name": "KotoTV",
-      "version": "1.0.7",
+      "version": "1.0.8",
       "type": "anime",
       "lang": "en",
       "file": "providers/kototv.js",
@@ -135,7 +135,7 @@
     {
       "id": "anikoto",
       "name": "AniKoto",
-      "version": "1.0.1",
+      "version": "1.0.8",
       "type": "anime",
       "lang": "en",
       "file": "providers/anikoto.js",
@@ -155,7 +155,7 @@
     {
       "id": "animeworldindia",
       "name": "Anime World India",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "type": "anime",
       "lang": "en",
       "file": "providers/animeworldindia.js",
@@ -165,7 +165,7 @@
     {
       "id": "twodhive",
       "name": "TwoDHive",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "type": "anime",
       "lang": "en",
       "file": "providers/twodhive.js",
