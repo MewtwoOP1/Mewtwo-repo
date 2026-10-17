@@ -12,9 +12,10 @@ var cache = {};
 
 function getInfo() {
   return { name: 'Ani.pm', lang: 'en', baseUrl: SITE,
-    logo: SITE + '/favicon.ico', type: 'anime', version: '1.0.0' };
+    logo: SITE + '/favicon.ico', type: 'anime', version: '1.0.1' };
 }
 function getSettings() { return []; }
+function _mode(opts) { return (opts && opts.category === 'dub') ? 'dub' : 'sub'; }
 function _trim(s) { return String(s == null ? '' : s).replace(/^\s+|\s+$/g, ''); }
 function _num(v) {
   if (v === null || v === undefined || v === '') return null;
@@ -301,7 +302,7 @@ function getLinks(url, opts) { return getVideoSources(url, opts); }
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    version: '1.0.0', getInfo: getInfo, getSettings: getSettings,
+    version: '1.0.1', getInfo: getInfo, getSettings: getSettings,
     getHome: getHome, popular: popular, search: search, getDetail: getDetail,
     getEpisodes: getEpisodes, getVideoSources: getVideoSources,
     getStreams: getStreams, getLinks: getLinks
