@@ -461,5 +461,5 @@ function getStreams(url, opts) { return getVideoSources(url, opts); }
 function getLinks(url, opts) { return getVideoSources(url, opts); }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { getInfo: getInfo, getSettings: getSettings, getHome: getHome, search: search, getDetail: getDetail, getEpisodes: getEpisodes, getVideoSources: getVideoSources, getStreams: getStreams, getLinks: getLinks };
+  module.exports = { version: '1.0.3', getInfo: getInfo, getSettings: getSettings, getHome: getHome, search: search, getDetail: getDetail, getEpisodes: getEpisodes, getVideoSources: getVideoSources, getStreams: getStreams, getLinks: getLinks };
 }
