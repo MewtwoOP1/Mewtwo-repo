@@ -37,7 +37,7 @@ var MAPPER = 'https://mapper.nekostream.site/api/mal/';
 
 function getInfo() {
   return { name: 'AniKoto', lang: 'en', baseUrl: SITE,
-    logo: SITE + '/favicon.ico', type: 'anime', version: '1.0.8' };
+    logo: 'https://www.google.com/s2/favicons?sz=256&domain=anikototv.to', type: 'anime', version: '1.0.8' };
 }
 function getSettings() { return []; }
 
