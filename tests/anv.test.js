@@ -34,7 +34,7 @@ global.fetch = async function (url, options) {
   return { status: 404, body: "not found" };
 };
 async function main() {
-  assert.equal(provider.version, "1.0.0");
+  assert.equal(provider.version, "1.0.3");
   assert.equal(provider.getInfo().name, "AnV");
   assert.deepEqual(await provider.search("", 1, {}), []);
   const results = await provider.search("Frieren", 1, {});
