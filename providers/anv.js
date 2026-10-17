@@ -195,7 +195,7 @@ function getVideoSources(url, opts) {
   return _episodeSources(Number(ep.id), ep.malId, Number(ep.episode), String(ep.slug)).then(function (root) {
     var variants = Array.isArray(root.variants) ? root.variants : [];
     var out = [], seen = {}, tracksSeen = {};
-    var requested = String(ep.variant || (opts && opts.category) || "sub").toLowerCase();
+    var requested = String((opts && opts.category) || ep.variant || "sub").toLowerCase();
     variants.forEach(function (variant) {
       var vId = String(variant.id || "").toLowerCase();
       if (vId !== "sub" && vId !== "dub") return;
