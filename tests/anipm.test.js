@@ -119,7 +119,16 @@ async function main() {
   assert.match(detail.episodes[0].url, /^anipm-episode:\/\/sub\|6351\|/);
   assert.match(detail.episodes[0].url, /\\|settlar\\|6351\\|Frieren%3A%20Beyond%20Journey's%20End$/);
 
-  const streams = await provider.getVideoSources(detail.episodes[0].url, {});
+  const savedUrlConstructor = global.URL;
+  let streams;
+  try {
+    // QuickJS does not guarantee a browser URL constructor; links still must
+    // be absolute when the HLS master uses relative rendition paths.
+    global.URL = undefined;
+    streams = await provider.getVideoSources(detail.episodes[0].url, {});
+  } finally {
+    global.URL = savedUrlConstructor;
+  }
   assert.equal(streams.length, 2, "HLS master variants should be returned, best quality first");
   assert.equal(streams[0].url, "https://media.settlar.io/frieren/1080/index.m3u8");
   assert.equal(streams[0].container, "hls");
