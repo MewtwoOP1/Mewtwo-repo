@@ -133,16 +133,6 @@
       ]
     },
     {
-      "id": "mkissa",
-      "name": "MKissa",
-      "version": "1.0.1",
-      "type": "anime",
-      "lang": "en",
-      "file": "providers/mkissa.js",
-      "logo": "https://www.google.com/s2/favicons?sz=256&domain=mkissa.to",
-      "nsfw": false
-    },
-    {
       "id": "anikoto",
       "name": "AniKoto",
       "version": "1.0.1",
@@ -150,6 +140,36 @@
       "lang": "en",
       "file": "providers/anikoto.js",
       "logo": "https://www.google.com/s2/favicons?sz=256&domain=anikototv.to",
+      "nsfw": false
+    },
+    {
+      "id": "anv",
+      "name": "AnV",
+      "version": "1.0.0",
+      "type": "anime",
+      "lang": "en",
+      "file": "providers/anv.js",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=anv.to",
+      "nsfw": false
+    },
+    {
+      "id": "animeworldindia",
+      "name": "Anime World India",
+      "version": "1.0.0",
+      "type": "anime",
+      "lang": "en",
+      "file": "providers/animeworldindia.js",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=watchanimeworld.one",
+      "nsfw": false
+    },
+    {
+      "id": "twodhive",
+      "name": "TwoDHive",
+      "version": "1.0.0",
+      "type": "anime",
+      "lang": "en",
+      "file": "providers/twodhive.js",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=2dhive.com",
       "nsfw": false
     }
   ]
