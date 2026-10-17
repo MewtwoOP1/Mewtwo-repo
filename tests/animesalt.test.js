@@ -1,7 +1,7 @@
 const assert = require("node:assert/strict");
 global.htmlText = function (s) {
   return String(s || "").replace(/<[^>]*>/g, " ").replace(/&amp;/g, "&")
-    .replace(/&#39;|&apos;/g, "'").replace(/&quot;/g, '"').replace(/\\s+/g, " ").trim();
+    .replace(/&#39;|&apos;/g, "'").replace(/&quot;/g, '"').replace(/\s+/g, " ").trim();
 };
 global.absUrl = function (href, base) { try { return new URL(href, base).href; } catch (_) { return href; } };
 const provider = require("../providers/animesalt.js");
