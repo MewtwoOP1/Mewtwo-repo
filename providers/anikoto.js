@@ -125,7 +125,7 @@ function _validDisplayTitle(value) {
 function _pickDisplayTitle(attrs, inner, card) {
   var values = [], v;
   ['data-jp','data-title','title','aria-label'].forEach(function (name) {
-    var re = new RegExp('\\b' + name + '\\s*=\\s*(["\\'])(.*?)\\1', 'i');
+    var re = new RegExp("\\b" + name + "\\s*=\\s*(['\\\"])(.*?)\\1", "i");
     var found = String(attrs || '').match(re);
     if (found && found[2]) values.push(found[2]);
   });
