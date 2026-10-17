@@ -5,8 +5,8 @@ global.fetch = async function (url) {
     { slug: "solo-leveling-abc", title: "Solo Leveling", cover_image: { large: "https://img.example/solo.jpg" } }
   ] }) };
   if (url === "https://reanime.to/api/watch/solo-leveling-abc/1") return { status: 200, body: JSON.stringify({
-    anime: { slug: "solo-leveling-abc", title: "Solo Leveling", description: "Hunters fight monsters." },
-    episode_links: []
+    anime: { slug: "solo-leveling-abc", title: "Solo Leveling", description: "Hunters fight monsters.", anilist: 123 },
+    episode_links: [{ serverName: "HD-2", dataType: "sub", dataLink: "https://flixcloud.cc/e/token?v=2" }]
   }) };
   if (url === "https://reanime.to/api/episodes/solo-leveling-abc") return { status: 200, body: JSON.stringify([
     { number: 1, title: "I'm Used to It", id: "1" }, { number: 2, title: "If I Had One More Chance", id: "2" }
@@ -17,10 +17,6 @@ global.fetch = async function (url) {
       { serverName: "HD-2", dataType: "sub", dataLink: "https://flixcloud.cc/e/token?v=2" },
       { serverName: "Direct", dataType: "sub", dataLink: "https://cdn.example/episode.m3u8" }
     ]
-  }) };
-  if (url === "https://reanime.to/api/watch/solo-leveling-abc/1") return { status: 200, body: JSON.stringify({
-    anime: { slug: "solo-leveling-abc", title: "Solo Leveling", anilist: 123 },
-    episode_links: [{ serverName: "HD-2", dataType: "sub", dataLink: "https://flixcloud.cc/e/token?v=2" }]
   }) };
   if (url === "https://lvrcdn2.rewcrew.lv/watch/reanime/123/sub/reanime-1") return { status: 200, body: JSON.stringify({
     streams: [{ url: "https://cdn.example/resolved.m3u8", type: "hls", server: "HD-2", referer: "https://flixcloud.cc/" }]
