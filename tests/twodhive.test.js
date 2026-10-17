@@ -1,10 +1,15 @@
 const assert = require("node:assert/strict");
+const nodeCrypto = require("node:crypto");
 global.htmlText = function (s) {
   return String(s || "").replace(/<[^>]*>/g, " ").replace(/&amp;/g, "&").replace(/&quot;/g, '"')
     .replace(/&#39;|&apos;/g, "'").replace(/\s+/g, " ").trim();
 };
 const provider = require("../providers/twodhive.js");
 const calls = [];
+const aesKey = Buffer.alloc(32); Buffer.from("i?LMTAx0Q6,:}50U").copy(aesKey);
+const aesIv = Buffer.from("W0;27ToaUpl_P%'c");
+const cipher = nodeCrypto.createCipheriv("aes-256-cbc",aesKey,aesIv);
+const encrypted = Buffer.concat([cipher.update(JSON.stringify({file:"https://cdn.example/master.m3u8"}),"utf8"),cipher.final()]).toString("base64url");
 const card = '<a href="/anime?anime=52991"><h3><span class="truncate">Frieren: Beyond Journey&#39;s End</span></h3><img src="https://img.example/frieren.jpg" alt="Frieren"></a>';
 global.fetch = async function (url, options) {
   url = String(url); options = options || {}; calls.push({ url, options });
@@ -17,17 +22,17 @@ global.fetch = async function (url, options) {
   if (url === "https://megaplay.buzz/stream/mal/52991/1/sub") return { status: 200, body: '<div data-id="99"></div>' };
   if (url === "https://megaplay.buzz/stream/getSourcesNew?id=99&type=sub") {
     assert.equal(options.headers["X-Requested-With"], "XMLHttpRequest");
-    assert.equal(options.headers.Origin, "https://megaplay.buzz");
-    return { status: 200, body: JSON.stringify({ sources: { file: "https://cdn.example/master.m3u8" }, tracks: [{ kind: "captions", label: "English", file: "https://cdn.example/en.vtt" }] }) };
+    assert.equal(options.headers.Referer, "https://megaplay.buzz/stream/mal/52991/1/sub");
+    return { status: 200, body: JSON.stringify({ enc: encrypted, tracks: [{ kind: "captions", label: "English", file: "https://cdn.example/en.vtt" }] }) };
   }
   if (url === "https://megaplay.buzz/stream/getSources?id=99&type=sub") throw Error("fallback should not run");
-  if (url === "https://cdn.example/master.m3u8") {
+  if (url.startsWith("https://cdn.example/master.m3u8")) {
     return { status: 200, body: "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=3000000,RESOLUTION=1920x1080\nhigh.m3u8\n" };
   }
   return { status: 404, body: "not found" };
 };
 async function main() {
-  assert.equal(provider.version, "1.0.0");
+  assert.equal(provider.version, "1.0.1");
   assert.equal(provider.getInfo().name, "TwoDHive");
   const results = await provider.search("Frieren", 1, {});
   assert.equal(results.length, 1);
