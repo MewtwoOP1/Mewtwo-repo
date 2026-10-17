@@ -110,7 +110,7 @@
     {
       "id": "almostott",
       "name": "AlmostOTT",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "type": "movie",
       "lang": "en",
       "file": "providers/almostott.js",
