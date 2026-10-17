@@ -13,7 +13,7 @@ global.fetch=async function(url,options){
  return {status:404,body:"not found"};
 };
 async function main(){
- assert.equal(provider.version,"1.0.7");
+ assert.equal(provider.version,"1.0.8");
  assert.equal(provider.getInfo().name,"KotoTV");
  assert.equal(provider.getInfo().baseUrl,"https://kototv.to");
  assert.deepEqual(await provider.search("",1,{}),[]);
@@ -27,7 +27,7 @@ async function main(){
  assert.equal(streams.length,1);
  assert.equal(streams[0].url,"https://cdn.example/frieren-1080p.m3u8");
  assert.equal(streams[0].container,"hls");
- assert.ok(calls.some(c=>c.extract&&c.url==="https://player.kototv.to/embed/frieren-1"),"Zangetsu shared extractor must receive the actual player iframe URL");
+ assert.equal(streams[0].headers.Referer,"https://player.kototv.to/embed/frieren-1","direct HLS gets player Referer");
  assert.ok(calls.some(c=>c.url==="https://kototv.to/anime?q=Frieren"),"search should use current catalog route");
  assert.ok(calls.some(c=>c.url==="https://kototv.to/anime/frieren/watch/1"),"detail and playback should use current watch route");
  assert.ok(calls.some(c=>c.url==="https://player.kototv.to/embed/frieren-1"),"player iframe should be requested at its actual host");
