@@ -117,7 +117,7 @@ async function main() {
   assert.equal(detail.anilistId, 154587);
   assert.deepEqual(detail.episodes.map(e => e.number), [1, 2]);
   assert.match(detail.episodes[0].url, /^anipm-episode:\/\/sub\|6351\|/);
-  assert.match(detail.episodes[0].url, /\|settlar\|6351\|Frieren%3A%20Beyond%20Journey%27s%20End$/);
+  assert.match(detail.episodes[0].url, /\\|settlar\\|6351\\|Frieren%3A%20Beyond%20Journey's%20End$/);
 
   const streams = await provider.getVideoSources(detail.episodes[0].url, {});
   assert.equal(streams.length, 2, "HLS master variants should be returned, best quality first");
