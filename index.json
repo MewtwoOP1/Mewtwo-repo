@@ -70,7 +70,7 @@
     {
       "id": "kototv",
       "name": "KotoTV",
-      "version": "1.1.1",
+      "version": "1.0.0",
       "type": "anime",
       "lang": "en",
       "file": "providers/kototv.js",
@@ -115,16 +115,6 @@
       "lang": "hi",
       "file": "providers/hdhub4u.js",
       "logo": "https://new5.hdhub4u.cl/favicon.ico",
-      "nsfw": false
-    },
-    {
-      "id": "animixstream",
-      "name": "AnimixStream",
-      "version": "1.0.1",
-      "type": "anime",
-      "lang": "hi",
-      "file": "providers/animixstream.js",
-      "logo": "https://animixstream.com/favicon.ico",
       "nsfw": false
     }
   ]

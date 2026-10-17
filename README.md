@@ -75,7 +75,7 @@ Tests use mocked responses. Passing mock tests verify the tested code paths agai
 
 ## Credits
 
-The provider manifest and JavaScript interface follow the self-contained source model documented by [Spyou/zangetsu-providers](https://github.com/Spyou/zangetsu-providers). AniWaves is ported from [KSHITIJ8473/raghav](https://github.com/KSHITIJ8473/raghav)'s CloudStream implementation; AnimixStream is adapted from [Spyou/Zangetsu-spyou-provider](https://github.com/Spyou/Zangetsu-spyou-provider). This repository is independently maintained and is not the official Zangetsu provider repository.
+The provider manifest and JavaScript interface follow the self-contained source model documented by [Spyou/zangetsu-providers](https://github.com/Spyou/zangetsu-providers). This repository is independently maintained and is not the official Zangetsu provider repository.
 
 ## License
 
