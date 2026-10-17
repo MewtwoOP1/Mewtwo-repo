@@ -1,6 +1,6 @@
 # Zangetsu Community Sources
 
-Community-maintained JavaScript providers for the [Zangetsu](https://github.com/Spyou/Zangetsu) app. The active catalogue currently contains **TMDB + Stremio** for movie/TV metadata and user-configured add-on streams, **AnimeSuge**, **KotoTV**, and **MKissa** as anime sources.
+Community-maintained JavaScript providers for the [Zangetsu](https://github.com/Spyou/Zangetsu) app. The catalogue includes TMDB + Stremio for movie/TV metadata and configured add-on streams, plus anime sources maintained for Zangetsu.
 
 **This repository does not host, upload, store, or serve video files.** Providers request metadata or playback URLs from third-party services. Availability is controlled by those services and may change at any time.
 
@@ -22,35 +22,37 @@ Combines TMDB metadata with stream discovery from Stremio-compatible add-ons tha
 
 - **TMDB API Key:** Optional. Leave blank to use the app's built-in key, or enter your own TMDB v3 API key.
 - **Stremio Add-on URLs:** Enter manifest URLs separated by commas or new lines. Query parameters are preserved.
-- **Max streams per add-on:** Limit results considered from each configured add-on to 5, 10, 25, 50, or 100.
+- **Max streams per add-on:** Limit results considered from each add-on to 5, 10, 25, 50, or 100.
 
 This source handles movie and series metadata. Streams are requested from your configured add-ons; this repository does not provide or proxy them.
 
+### AnimeSuge
+
+Uses the AnimeSuge site for anime search, episode listings and third-party player resolution. Availability depends on the catalogue and external player hosts.
+
 ### KotoTV
 
-- **Domain setting:** select one listed site domain manually. The provider does not switch domains automatically.
-- Search results and detail pages are parsed from the selected KotoTV-compatible site.
-- Playback URLs are resolved from the player host returned by the watch page. The provider keeps that external host intact and passes a player-origin referer to the stream.
-- The provider does not bypass logins, paywalls, DRM, or anti-bot protection.
-- **Verification:** automated tests use mocked site/player responses, including a regression check that player requests go to the external player host. The live site cannot be reached from this development runtime, so passing tests do not prove current live playback.
-
-### MKissa
-
-Uses MKissa's GraphQL catalogue and encrypted episode-source API. Playback depends on MKissa's rotating crypto handshake, supported third-party players, and any CAPTCHA or rate limits applied by the site.
+- **Domain setting:** Select one listed compatible domain manually; the provider does not switch domains automatically.
+- The provider passes the external player iframe URL through Zangetsu's shared extractor.
+- Automated tests use mocked responses. Passing tests do not prove current live playback.
 
 ### AniKoto
 
-Replaces the discontinued HiAnime site with the current AniKoto catalogue API and episode embed IDs. Search and metadata depend on the upstream AniKoto API/site. Playback attempts to resolve the provided MegaPlay embeds into native streams through Zangetsu's shared extractor; if an embed cannot be resolved, no native stream can be returned.
+Uses the AniKoto catalogue API and episode embed IDs. Playback attempts to resolve MegaPlay-family embeds into native streams through the player's source API and Zangetsu's shared extractor. Catalogue/API and external player availability can change independently.
 
-### AnimeSuge
+### AnV
 
-Uses the AnimeSuge website (`animesuge.cz`) to search for anime, list episodes, and resolve player sources.
+Uses AnV's catalogue API for search and title details. Its playback API requires a valid `shiro_watch` session cookie from the episode page; returned source URLs and subtitles are passed to the player with the session headers. If the runtime or site stops returning the session cookie, streams will not resolve.
 
-- Available servers and playable links depend on AnimeSuge and third-party player hosts; they can change or stop working without notice.
-- In **Zangetsu Mode**, AniList/MyAnimeList remains responsible for anime metadata and AnimeSuge is used as a playback source.
-- Website and player availability varies. Test a current title in Zangetsu after installation.
+### Anime World India
 
-The active source list is defined in `index.json`. Removed providers are not part of the current catalogue.
+Uses the current `watchanimeworld.one` domain, WordPress search/series pages and season-selection endpoint. Playback resolves Zephyrix's `getVideo` response and passes other supported embeds to Zangetsu's shared extractor. Third-party player support can change independently from the catalogue site.
+
+### TwoDHive
+
+Uses TwoDHive's catalogue/detail pages and the MegaPlay source API. The provider handles encrypted MegaPlay source responses, HLS quality playlists, CDN signing where required and subtitles. It currently targets the native MegaPlay path; other site servers that require a CloudStream-only WebView challenge are not guaranteed to resolve.
+
+The active source list is defined in `index.json`. Removed or non-working providers should not remain in the manifest.
 
 ## Development and tests
 
@@ -62,16 +64,16 @@ Run the repository checks from the root directory:
 node scripts/check-and-run.mjs
 ```
 
-The check validates the manifest, ensures every listed provider file exists and is registered, checks provider metadata/settings and JavaScript syntax, then runs every `tests/*.test.js` file it finds. GitHub Actions uses the same command so removed providers cannot leave stale, hard-coded test steps behind.
+The check validates the manifest, ensures every listed provider file exists and is registered, checks provider metadata/settings and JavaScript syntax, then runs every `tests/*.test.js` file it finds. GitHub Actions uses the same command.
 
-Tests use mocked responses. A passing mock test verifies the tested code paths against fixtures; it does **not** guarantee that a third-party website or its live playback hosts currently work.
+Tests use mocked responses. Passing mock tests verify the tested code paths against fixtures; they do **not** guarantee that a third-party website or its live playback hosts currently work.
 
 ## Disclaimers
 
 - No movies, shows, anime, subtitles, torrents, video files, or streaming servers are hosted by this repository.
 - Third-party websites, add-ons, APIs, metadata, artwork, and playback hosts remain controlled by their respective operators and may have separate terms and policies.
 - Users are responsible for ensuring their use of third-party services and any content they access complies with applicable laws and service terms.
-- This is an unofficial community project and is not affiliated with or endorsed by Zangetsu, TMDB, Stremio, or AnimeSuge.
+- This is an unofficial community project and is not affiliated with or endorsed by Zangetsu, TMDB, Stremio, or any source website.
 
 ## Credits
 
