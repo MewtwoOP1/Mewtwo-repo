@@ -39,6 +39,29 @@ function outputHtmlFacts(url, html, finalUrl, status, ctype) {
     for (const m of html.matchAll(re)) hints.push(clean(m[0]).slice(0,350));
   }
   out("BOOTSTRAP HINTS:\n" + (uniq(hints).slice(0,25).join("\n") || "(none)"));
+  const scriptBlocks = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)]
+    .filter(m => !/\bsrc\s*=/i.test(m[1]) && m[2].length > 500);
+  out("INLINE SCRIPT BLOCKS: " + scriptBlocks.length + " lens=" + JSON.stringify(scriptBlocks.map(m => m[2].length).sort((a,b)=>b-a).slice(0,15)));
+  const bigScripts = scriptBlocks.map(m => m[2]).sort((a,b)=>b.length-a.length).slice(0,4);
+  for (let i = 0; i < bigScripts.length; i++) {
+    const js = bigScripts[i];
+    out("\nINLINE JS #" + (i+1) + " chars=" + js.length);
+    const hostnames = uniq([...js.matchAll(/https?:\/\/([a-z0-9.-]+\.[a-z]{2,})(?=[:\/?#"'\\s])/gi)].map(m => m[1].toLowerCase()));
+    out("JS HOSTS: " + JSON.stringify(hostnames.slice(0,100)));
+    const routeStrings = [];
+    const literal = /"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'/g;
+    for (const m of js.matchAll(literal)) {
+      const s = m[0].slice(1,-1).replace(/\\\//g,"/");
+      if (s.length < 260 && /(?:\/api\/|api\.tmdb\.org|api\.themoviedb\.org|livetgtv|graphql|\/3\/(?:search|movie|tv|discover|trending|find)|youtube|youtube-nocookie|player|embed|stream|episode|source|watch|jiotv|supabase|firebase|ott)/i.test(s)) routeStrings.push(s);
+    }
+    out("LIKELY API/PLAYER STRINGS:\n" + uniq(routeStrings).slice(0,180).map(s=>s.replace(/([?&](?:api[_-]?key|token|authorization)=)[^&\s"'\\]+/gi,"$1[REDACTED]").replace(/((?:api[_-]?key|apiKey)\s*[:=]\s*["'])[^"']+(["'])/gi,"$1[REDACTED]$2")).join("\n"));
+    const contexts = [];
+    for (const m of js.matchAll(/(?:api\.tmdb\.org|api\.themoviedb\.org|livetgtv\.lovable\.app|fetch\s*\(|axios(?:\.[a-z]+)?\s*\(|XMLHttpRequest|\/api\/|graphql|iframe|player|embed|stream|videoSources|watchProviders|jiotv)/ig)) {
+      const ctx = js.slice(Math.max(0,m.index-170), Math.min(js.length,m.index+420));
+      contexts.push(ctx.replace(/\s+/g," ").replace(/([?&](?:api[_-]?key|token|authorization)=)[^&\s"'\\]+/gi,"$1[REDACTED]").slice(0,650));
+    }
+    out("NETWORK/PLAYER CONTEXTS:\n" + uniq(contexts).slice(0,100).join("\n---\n"));
+  }
   htmlAssets(html, finalUrl);
 }
 function extractStrings(js) {
