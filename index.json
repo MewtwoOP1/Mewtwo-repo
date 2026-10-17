@@ -108,13 +108,13 @@
       "nsfw": false
     },
     {
-      "id": "animesalt",
-      "name": "AnimeSalt",
-      "version": "1.0.1",
+      "id": "anipm",
+      "name": "Ani.pm",
+      "version": "1.0.0",
       "type": "anime",
-      "lang": "hi",
-      "file": "providers/animesalt.js",
-      "logo": "https://animesalt.cx/favicon.ico",
+      "lang": "en",
+      "file": "providers/anipm.js",
+      "logo": "https://ani.pm/favicon.ico",
       "nsfw": false
     }
   ]
