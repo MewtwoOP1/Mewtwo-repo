@@ -106,6 +106,16 @@
       "file": "providers/hdhub4u.js",
       "logo": "https://new5.hdhub4u.cl/favicon.ico",
       "nsfw": false
+    },
+    {
+      "id": "reanime",
+      "name": "Re:Anime",
+      "version": "1.0.0",
+      "type": "anime",
+      "lang": "en",
+      "file": "providers/reanime.js",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=reanime.to",
+      "nsfw": false
     }
   ]
 }
