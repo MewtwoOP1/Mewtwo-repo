@@ -401,7 +401,7 @@ function getVideoSources(episodeUrl) {
 // CommonJS adapter for repository regression tests and local validation.
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    version: '1.0.4', getInfo: getInfo, getHome: getHome, search: search,
+    version: '1.0.4', getSettings: function () { return []; }, getInfo: getInfo, getHome: getHome, search: search,
     getDetail: getDetail, getEpisodes: getEpisodes, getVideoSources: getVideoSources,
     getStreams: function (url, opts) { return getVideoSources(url, opts); },
     getLinks: function (url, opts) { return getVideoSources(url, opts); }
