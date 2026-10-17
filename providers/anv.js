@@ -457,6 +457,9 @@ function getVideoSources(epUrl) {
   });
 }
 
+function getStreams(url, opts) { return getVideoSources(url, opts); }
+function getLinks(url, opts) { return getVideoSources(url, opts); }
+
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { getInfo: getInfo, getSettings: getSettings, getHome: getHome, search: search, getDetail: getDetail, getEpisodes: getEpisodes, getVideoSources: getVideoSources };
+  module.exports = { getInfo: getInfo, getSettings: getSettings, getHome: getHome, search: search, getDetail: getDetail, getEpisodes: getEpisodes, getVideoSources: getVideoSources, getStreams: getStreams, getLinks: getLinks };
 }
