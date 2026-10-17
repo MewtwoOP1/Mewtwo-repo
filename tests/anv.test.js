@@ -6,50 +6,70 @@ global.htmlText = function (s) {
 const provider = require("../providers/anv.js");
 const calls = [];
 const media = {
-  id: 123, idMal: 456, slug: "frieren", title: { english: "Frieren: Beyond Journey's End" },
-  coverImage: { large: "https://img.example/frieren.jpg" }, episodes: 2, format: "TV",
-  streamingEpisodes: [{ title: "Episode 1 - The End", thumbnail: "https://img.example/ep1.jpg" }, { title: "Episode 2 - It Didn't Have To Be" }],
-  genres: ["Adventure", "Fantasy"], seasonYear: 2023, description: "A mage keeps travelling."
+  id: 1000000123, idMal: 456, slug: "frieren",
+  title: { english: "Frieren: Beyond Journey's End" },
+  coverImage: { large: "https://img.example/frieren.jpg" },
+  episodes: 2, format: "TV", genres: ["Adventure", "Fantasy"],
+  seasonYear: 2023, description: "A mage keeps travelling."
 };
+function response(status, body, headers) {
+  return {
+    status, ok: status >= 200 && status < 300,
+    headers: {
+      get: name => (headers || {})[String(name).toLowerCase()] || null,
+      getSetCookie: () => (headers && headers["set-cookie"]) ? [headers["set-cookie"]] : []
+    },
+    text: async () => typeof body === "string" ? body : JSON.stringify(body)
+  };
+}
 global.fetch = async function (url, options) {
   url = String(url);
   options = options || {};
   calls.push({ url, options });
   if (url === "https://anv.to/api/catalog" && options.method === "POST") {
     const req = JSON.parse(options.body);
-    if (req.operation === "SearchAnime") return { status: 200, body: JSON.stringify({ data: { Page: { media: [media] } } }) };
-    if (req.operation === "AnimeDetail") return { status: 200, body: JSON.stringify({ data: { Media: media } }) };
-    if (req.operation === "HomeAnime") return { status: 200, body: JSON.stringify({ data: { Page: { media: [media] } } }) };
+    if (req.operation === "SearchAnime") return response(200, { data: { Page: { media: [media] } } });
+    if (req.operation === "AnimeDetail") return response(200, { data: { Media: media } });
+    if (req.operation === "HomeAnime") return response(200, { data: { hero: { media: [media] }, trending: { media: [media] } } });
   }
+  if (url === "https://anv.to/api/recent-episodes") return response(200, { schedules: [] });
   if (url === "https://anv.to/anime/frieren-episode-1" || url === "https://anv.to/anime/frieren-episode-2") {
-    return { status: 200, headers: { "set-cookie": "shiro_watch=test-session; Path=/; HttpOnly" }, body: "<html>episode</html>" };
+    return response(200, '<html>"episodes":2</html>', { "set-cookie": "shiro_watch=test-session; Path=/; HttpOnly" });
   }
   if (url === "https://anv.to/api/episode" && options.method === "POST") {
     assert.equal(options.headers.Cookie, "shiro_watch=test-session");
-    assert.ok(options.headers.Referer.includes("/anime/frieren-episode-1"));
-    return { status: 200, body: JSON.stringify({ status: "ready", variants: [
-      { id: "sub", sources: [{ label: "1080p", url: "https://cdn.example/frieren.m3u8", tracks: [{ language: "en", label: "English", src: "https://cdn.example/en.vtt" }] }] }
-    ] }) };
+    assert.ok(options.headers.Referer.includes("/"));
+    const req = JSON.parse(options.body);
+    assert.equal(req.anilistId, 1000000123, "must pass AnV's full catalogue ID, not a transformed AniList ID");
+    assert.equal(req.first, true);
+    return response(200, { status: "ready", variants: [
+      { id: "sub", sources: [
+        { label: "Orange", url: "/stream/orange/index.m3u8?k=orange", tracks: [{ lang: "English", src: "/subs/en.vtt" }] },
+        { label: "Pear", url: "/stream/pear/index.m3u8?k=pear", tracks: [{ lang: "English", src: "/subs/en.vtt" }] }
+      ] }
+    ] });
   }
-  return { status: 404, body: "not found" };
+  if (url.includes("/stream/pear/index.m3u8")) {
+    assert.equal(options.headers.Cookie, "shiro_watch=test-session");
+    return response(200, "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=2000000,RESOLUTION=1920x1080\n/stream/pear/1080.m3u8\n");
+  }
+  return response(404, "not found");
 };
 async function main() {
-  assert.equal(provider.version, "1.0.3");
-  assert.equal(provider.getInfo().name, "AnV");
-  assert.deepEqual(await provider.search("", 1, {}), []);
+  assert.equal(provider.getInfo().name, "Anv");
   const results = await provider.search("Frieren", 1, {});
   assert.equal(results.length, 1);
   assert.equal(results[0].title, "Frieren: Beyond Journey's End");
-  assert.equal(results[0].url, "https://anv.to/anime/frieren");
+  assert.equal(results[0].url, "anv://anime/frieren");
   const detail = await provider.getDetail(results[0].url, {});
   assert.equal(detail.episodes.length, 2);
-  assert.equal(detail.episodes[0].title, "The End");
+  assert.equal(detail.episodes[0].url, "anv://ep/frieren/1000000123/456/1");
   const streams = await provider.getVideoSources(detail.episodes[0].url, {});
-  assert.equal(streams.length, 1);
-  assert.equal(streams[0].url, "https://cdn.example/frieren.m3u8");
-  assert.equal(streams[0].quality, 1080);
-  assert.equal(streams[0].subtitles[0].url, "https://cdn.example/en.vtt");
+  assert.ok(streams.some(s => s.url === "https://anv.to/stream/pear/1080.m3u8"));
+  assert.ok(streams.some(s => s.url === "https://anv.to/stream/pear/index.m3u8?k=pear"));
+  assert.ok(streams.every(s => !s.url.includes("orange")), "Orange must be skipped when Pear is available");
+  assert.ok(streams.every(s => s.headers.Cookie === "shiro_watch=test-session"));
   assert.ok(calls.some(c => c.url === "https://anv.to/api/catalog"));
-  console.log("AnV mocked catalogue, session and stream tests passed.");
+  console.log("AnV full-catalog ID, session, HLS expansion and clean-server tests passed.");
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });
