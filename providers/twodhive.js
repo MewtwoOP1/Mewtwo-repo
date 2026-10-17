@@ -8,7 +8,7 @@ var AES_KEY = "i?LMTAx0Q6,:}50U";
 var AES_IV = "W0;27ToaUpl_P%'c";
 var CDN_TOKEN_KEY = "MpCdnT0k3n!9f2K#xQ7vL5mR8wN1pY4s";
 
-function getInfo() { return { name: "TwoDHive", lang: "en", baseUrl: SITE, logo: "https://www.google.com/s2/favicons?sz=256&domain=2dhive.com", type: "anime", version: "1.0.1" }; }
+function getInfo() { return { name: "TwoDHive", lang: "en", baseUrl: SITE, logo: "https://www.google.com/s2/favicons?sz=256&domain=2dhive.com", type: "anime", version: "1.0.2" }; }
 function getSettings() { return []; }
 function _txt(s) { return htmlText(String(s == null ? "" : s)).replace(/\s+/g, " ").trim(); }
 function _attr(tag, name) {
@@ -264,6 +264,29 @@ function _variants(masterUrl, text) {
   }
   return out;
 }
+function _fallbackEpisodeSources(pageUrl, playerUrl, mode) {
+  if (typeof extractVideo !== "function") return Promise.resolve([]);
+  return _get(pageUrl, SITE + "/").then(function (html) {
+    var urls = [playerUrl], seen = {}, re = /<iframe\b([^>]*)>/gi, m;
+    seen[playerUrl] = 1;
+    while ((m = re.exec(String(html || ""))) && urls.length < 16) {
+      var attrs = m[1], raw = (attrs.match(/(?:src|data-src|data-url)=["']([^"']+)/i) || [])[1];
+      if (!raw) continue;
+      try { raw = new URL(raw.replace(/&amp;/g,"&"), pageUrl).toString(); } catch (e) { continue; }
+      if (!/^https?:\/\//i.test(raw) || seen[raw]) continue;
+      seen[raw] = 1; urls.push(raw);
+    }
+    return Promise.all(urls.map(function (u) {
+      return Promise.resolve(extractVideo(u, { headers: { "User-Agent": UA, "Referer": pageUrl }, kind: mode, audioLang: mode === "dub" ? "en" : "ja" })).catch(function () { return []; });
+    })).then(function (groups) {
+      var out = [], found = {};
+      groups.forEach(function (items) { (items || []).forEach(function (x) {
+        if (x && x.url && !found[x.url]) { found[x.url] = 1; out.push(x); }
+      }); });
+      return out;
+    });
+  }).catch(function () { return []; });
+}
 function getVideoSources(url, opts) {
   var ep = _parseEpisodeUrl(url, opts);
   if (!ep || !(ep.id > 0) || !(ep.episode > 0)) return Promise.reject(Error("TwoDHive invalid episode URL"));
@@ -313,9 +336,15 @@ function getVideoSources(url, opts) {
       });
     });
   });
+  }).catch(function (primaryError) {
+    return _fallbackEpisodeSources(pageUrl, playerUrl, mode).then(function (items) {
+      if (items && items.length) return items;
+      throw primaryError;
+    });
+  });
 }
 function getStreams(id, opts) { return getVideoSources(id, opts); }
 function getLinks(id, opts) { return getVideoSources(id, opts); }
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { version: "1.0.1", getInfo: getInfo, getSettings: getSettings, getHome: getHome, search: search, getDetail: getDetail, getEpisodes: getEpisodes, getVideoSources: getVideoSources, getStreams: getStreams, getLinks: getLinks };
+  module.exports = { version: "1.0.2", getInfo: getInfo, getSettings: getSettings, getHome: getHome, search: search, getDetail: getDetail, getEpisodes: getEpisodes, getVideoSources: getVideoSources, getStreams: getStreams, getLinks: getLinks };
 }
