@@ -68,16 +68,6 @@
       "nsfw": false
     },
     {
-      "id": "kototv",
-      "name": "KotoTV",
-      "version": "1.0.1",
-      "type": "anime",
-      "lang": "en",
-      "file": "providers/kototv.js",
-      "logo": "https://www.google.com/s2/favicons?sz=256&domain=kototv.to",
-      "nsfw": false
-    },
-    {
       "id": "anikoto",
       "name": "AniKoto",
       "version": "1.2.0",
@@ -90,7 +80,7 @@
     {
       "id": "anv",
       "name": "AnV",
-      "version": "1.0.0",
+      "version": "1.0.3",
       "type": "anime",
       "lang": "en",
       "file": "providers/anv.js",
