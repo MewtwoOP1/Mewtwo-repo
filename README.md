@@ -30,6 +30,14 @@ This source handles movie and series metadata. Streams are requested from your c
 
 Uses the AnimeSuge site for anime search, episode listings and third-party player resolution. Availability depends on the catalogue and external player hosts.
 
+### HiAnime
+
+Uses the HiAnime catalogue and episode API with VidPlay and Zoko player extraction. The Zangetsu-compatible implementation is adapted from [Spyou/zangetsu-providers](https://github.com/Spyou/zangetsu-providers), not copied from the compiled Cloudstream plugin. As with all third-party sources, live catalogue and player availability can change.
+
+### HDHub4u
+
+Movie and series source with catalogue search, download-link parsing, and supported host resolution. This provider is adapted from [Spyou/zangetsu-providers](https://github.com/Spyou/zangetsu-providers), whose JavaScript implementation is compatible with Zangetsu; Phisher98's plugin manifest lists a separate compiled Cloudstream plugin. Some host pages may be unavailable or protected.
+
 ### KotoTV
 
 Uses the original single-domain `kototv.to` route with no domain selector or mirror failover. The provider passes external player URLs through Zangetsu's shared extractor. Automated tests use mocked responses and do not prove current live playback.
@@ -42,7 +50,7 @@ Uses `https://anikotoapi.site` for recent-anime listings and series episode/embe
 
 Uses AnV's catalogue API for search and title details. Its playback API requires a valid `shiro_watch` session cookie from the episode page; returned source URLs and subtitles are passed to the player with the session headers. If the runtime or site stops returning the session cookie, streams will not resolve.
 
-The active source list is defined in `index.json`. Removed or non-working providers should not remain in the manifest.
+The active source list is defined in `index.json`. The HiAnime and HDHub4u provider logic is adapted under the upstream Zangetsu providers repository's MIT licence; see the source repository for its licence and history. Removed or non-working providers should not remain in the manifest.
 
 ## Development and tests
 
