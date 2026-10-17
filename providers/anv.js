@@ -458,5 +458,5 @@ function getVideoSources(epUrl) {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { getInfo: getInfo, getHome: getHome, search: search, getDetail: getDetail, getEpisodes: getEpisodes, getVideoSources: getVideoSources };
+  module.exports = { getInfo: getInfo, getSettings: getSettings, getHome: getHome, search: search, getDetail: getDetail, getEpisodes: getEpisodes, getVideoSources: getVideoSources };
 }
