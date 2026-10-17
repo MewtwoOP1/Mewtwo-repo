@@ -32,7 +32,7 @@ global.fetch = async function (url, options) {
   return { status: 404, body: "not found" };
 };
 async function main() {
-  assert.equal(provider.version, "1.0.1");
+  assert.equal(provider.version, "1.0.2");
   assert.equal(provider.getInfo().name, "TwoDHive");
   const results = await provider.search("Frieren", 1, {});
   assert.equal(results.length, 1);
