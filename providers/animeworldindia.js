@@ -4,7 +4,7 @@ var SOURCE_ID = (typeof __SOURCE_ID !== "undefined" && __SOURCE_ID) ? String(__S
 var SITE = "https://watchanimeworld.one";
 var UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 
-function getInfo() { return { name: "Anime World India", lang: "en", baseUrl: SITE, logo: "https://www.google.com/s2/favicons?sz=256&domain=watchanimeworld.one", type: "anime", version: "1.0.1" }; }
+function getInfo() { return { name: "Anime World India", lang: "en", baseUrl: SITE, logo: "https://www.google.com/s2/favicons?sz=256&domain=watchanimeworld.one", type: "anime", version: "1.0.2" }; }
 function getSettings() { return []; }
 function _text(s) { return htmlText(String(s == null ? "" : s)).replace(/\s+/g, " ").trim(); }
 function _attr(tag, name) {
@@ -152,7 +152,7 @@ function _zephyrix(url, referer) {
   var hostMatch = String(url).match(/^(https?:\/\/[^/]+)/i);
   if (!idMatch || !hostMatch) return Promise.resolve([]);
   var id = idMatch[1], player = hostMatch[1], postUrl = player + "/player/index.php?data=" + id + "&do=getVideo";
-  var payload = "hash=" + encodeURIComponent(id) + "&r=" + encodeURIComponent(SITE + "/");
+  var payload = "hash=" + encodeURIComponent(id) + "&r=" + encodeURIComponent(referer || SITE + "/");
   return _fetch(postUrl, {
     method: "POST",
     headers: {
@@ -168,8 +168,8 @@ function _zephyrix(url, referer) {
     stream = _absolute(stream, player + "/");
     if (!stream) return [];
     return [{ url: stream, label: "Anime World India", quality: "Auto", container: "hls",
-      headers: { "User-Agent": UA, "Accept": "*/*", "Referer": player + "/" },
-      referer: player + "/", kind: "sub", subtitles: [] }];
+      headers: { "User-Agent": UA, "Accept": "*/*", "Referer": player + "/video/" + id },
+      referer: player + "/video/" + id, kind: "sub", subtitles: [] }];
   }).catch(function () { return []; });
 }
 function getVideoSources(url, opts) {
@@ -197,5 +197,5 @@ function getVideoSources(url, opts) {
 function getStreams(id, opts) { return getVideoSources(id, opts); }
 function getLinks(id, opts) { return getVideoSources(id, opts); }
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { version: "1.0.1", getInfo: getInfo, getSettings: getSettings, getHome: getHome, search: search, getDetail: getDetail, getEpisodes: getEpisodes, getVideoSources: getVideoSources, getStreams: getStreams, getLinks: getLinks };
+  module.exports = { version: "1.0.2", getInfo: getInfo, getSettings: getSettings, getHome: getHome, search: search, getDetail: getDetail, getEpisodes: getEpisodes, getVideoSources: getVideoSources, getStreams: getStreams, getLinks: getLinks };
 }
