@@ -106,16 +106,6 @@
       "file": "providers/hdhub4u.js",
       "logo": "https://new5.hdhub4u.cl/favicon.ico",
       "nsfw": false
-    },
-    {
-      "id": "anipm",
-      "name": "Ani.pm",
-      "version": "1.0.7",
-      "type": "anime",
-      "lang": "en",
-      "file": "providers/anipm.js",
-      "logo": "https://ani.pm/favicon.ico",
-      "nsfw": false
     }
   ]
 }
