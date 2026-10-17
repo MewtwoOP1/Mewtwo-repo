@@ -55,7 +55,6 @@ async function main() {
   assert.equal(detail.title, "Frieren: Beyond Journey's End");
   assert.equal(detail.malId, 52991);
   assert.equal(detail.anilistId, 154587);
-  console.log("DEBUG Ani.pm detail", JSON.stringify(detail), calls.map(c => c.url));
   assert.deepEqual(detail.episodes.map(e => e.number), [1,2]);
   assert.match(detail.episodes[0].url, /^anipm-episode:\/\/sub\|6351\|/);
   const streams = await provider.getVideoSources(detail.episodes[0].url, {});
