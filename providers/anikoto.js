@@ -254,37 +254,61 @@ function _epUrl(cat, serverIds, sub, dub, num, token) {
 }
 
 function getDetail(url, opts) {
-  var id = String(url || '').replace(/^anikotoapi:\/\//, '');
-  try { id = decodeURIComponent(id); } catch (e) {}
-  return fetch(API + '/series/' + encodeURIComponent(id), { headers: { 'Accept': 'application/json' } })
-    .then(function (r) { if (!r || r.status >= 400) throw Error('AniKoto API HTTP error'); return r.body || ''; })
-    .then(function (body) {
-      var j; try { j = typeof body === 'string' ? JSON.parse(body || '{}') : body; } catch (e) { j = {}; }
-      var anime = j.anime || (j.data && (j.data.anime || j.data)) || j.series || {};
-      var eps = Array.isArray(j.episodes) ? j.episodes : (j.data && Array.isArray(j.data.episodes) ? j.data.episodes : []);
-      var title = anime.title || anime.name || anime.alternative || id;
-      var episodes = [];
-      eps.forEach(function (ep, i) {
-        if (!ep) return;
-        var num = Number(ep.number || ep.episode || ep.episode_number || i + 1);
-        var embeds = ep.embed_url || ep.embedUrl || {};
-        var sub = typeof embeds.sub === 'string' ? embeds.sub : (ep.sub || ep.embed_sub || '');
-        var dub = typeof embeds.dub === 'string' ? embeds.dub : (ep.dub || ep.embed_dub || '');
-        ['sub','dub'].forEach(function (kind) {
-          var embed = kind === 'sub' ? sub : dub;
-          if (!embed) return;
-          var token = 'anikotoapi://' + encodeURIComponent(JSON.stringify({ id: id, number: num, kind: kind, embed: embed }));
-          episodes.push({ id: String(num) + (kind === 'dub' ? '-dub' : '-sub'), number: num,
-            title: 'Episode ' + num + (kind === 'dub' ? ' (Dub)' : ' (Sub)'), audio: kind,
-            url: token, embedUrl: embed });
+  var requested = String(url || '').replace(/^anikotoapi:\/\//, '');
+  try { requested = decodeURIComponent(requested); } catch (e) {}
+  function requestSeries(seriesId) {
+    return fetch(API + '/series/' + encodeURIComponent(seriesId), { headers: { 'Accept': 'application/json' } })
+      .then(function (r) { if (!r || r.status >= 400) throw Error('AniKoto API HTTP error'); return r.body || ''; })
+      .then(function (body) { var j; try { j = typeof body === 'string' ? JSON.parse(body || '{}') : body; } catch (e) { j = {}; } return j; });
+  }
+  function normalize(j, seriesId) {
+    var anime = j && (j.anime || (j.data && (j.data.anime || j.data)) || j.series) || {};
+    var eps = j && (Array.isArray(j.episodes) ? j.episodes : (j.data && Array.isArray(j.data.episodes) ? j.data.episodes : [])) || [];
+    if (!anime.title && !anime.name && !eps.length) return null;
+    var title = anime.title || anime.name || anime.alternative || seriesId, episodes = [];
+    eps.forEach(function (ep, i) {
+      if (!ep) return;
+      var num = Number(ep.number || ep.episode || ep.episode_number || i + 1);
+      var embeds = ep.embed_url || ep.embedUrl || {};
+      var sub = typeof embeds.sub === 'string' ? embeds.sub : (ep.sub || ep.embed_sub || '');
+      var dub = typeof embeds.dub === 'string' ? embeds.dub : (ep.dub || ep.embed_dub || '');
+      ['sub','dub'].forEach(function (kind) {
+        var embed = kind === 'sub' ? sub : dub;
+        if (!embed) return;
+        var token = 'anikotoapi://' + encodeURIComponent(JSON.stringify({ id: seriesId, number: num, kind: kind, embed: embed }));
+        episodes.push({ id: String(num) + (kind === 'dub' ? '-dub' : '-sub'), number: num,
+          title: 'Episode ' + num + (kind === 'dub' ? ' (Dub)' : ' (Sub)'), audio: kind,
+          url: token, embedUrl: embed });
+      });
+    });
+    return { id: String(anime.id != null ? anime.id : seriesId), title: title,
+      url: String(anime.id != null ? anime.id : seriesId),
+      cover: anime.poster || anime.poster_url || anime.posterUrl || anime.image || null,
+      banner: anime.banner || anime.cover || null, description: anime.synopsis || anime.description || '',
+      genres: anime.genres || [], type: 'anime', sourceId: SOURCE_ID, episodes: episodes,
+      subCount: episodes.filter(function (e) { return e.audio === 'sub'; }).length,
+      dubCount: episodes.filter(function (e) { return e.audio === 'dub'; }).length };
+  }
+  return requestSeries(requested).then(function (j) {
+    var detail = normalize(j, requested);
+    if (detail) return detail;
+    return fetch(API + '/recent-anime?page=1&per_page=60', { headers: { 'Accept': 'application/json' } })
+      .then(function (r) { if (!r || r.status >= 400) throw Error('AniKoto API recent-list lookup failed'); return r.body || ''; })
+      .then(function (body) {
+        var list; try { list = typeof body === 'string' ? JSON.parse(body || '{}') : body; } catch (e) { list = {}; }
+        var rows = Array.isArray(list.data) ? list.data : (Array.isArray(list.results) ? list.results : []);
+        var norm = function (v) { return String(v || '').toLowerCase().replace(/[^a-z0-9]/g, ''); };
+        var row = rows.filter(function (x) {
+          return String(x.id) === requested || String(x.slug || '') === requested || norm(x.title || x.name) === norm(requested);
+        })[0];
+        if (!row || row.id == null) throw Error('AniKoto API could not map this search result to a series ID');
+        return requestSeries(row.id).then(function (j2) {
+          var detail2 = normalize(j2, row.id);
+          if (!detail2) throw Error('AniKoto API returned no series details');
+          return detail2;
         });
       });
-      return { id: id, title: title, url: id, cover: anime.poster || anime.poster_url || anime.posterUrl || anime.image || null,
-        banner: anime.banner || anime.cover || null, description: anime.synopsis || anime.description || '',
-        genres: anime.genres || [], type: 'anime', sourceId: SOURCE_ID, episodes: episodes,
-        subCount: episodes.filter(function (e) { return e.audio === 'sub'; }).length,
-        dubCount: episodes.filter(function (e) { return e.audio === 'dub'; }).length };
-    });
+  });
 }
 
 function getEpisodes(url, opts) { return getDetail(url, opts).then(function (d) { return d.episodes; }); }
