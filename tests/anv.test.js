@@ -53,7 +53,7 @@ global.fetch = async function (url, options) {
   return response(404, "not found");
 };
 async function main() {
-  assert.equal(provider.getInfo().name, "Anv");
+  assert.equal(provider.getInfo().name, "AnV");
   assert.deepEqual(provider.getSettings(), []);
   const results = await provider.search("Frieren", 1, {});
   assert.equal(results.length, 1);
@@ -62,6 +62,7 @@ async function main() {
   const detail = await provider.getDetail(results[0].url, {});
   assert.equal(detail.episodes.length, 2);
   assert.equal(detail.episodes[0].url, "anv://ep/frieren/1000000123/456/1");
+  assert.equal(detail.ids, undefined, "AnV catalogue IDs must not be mislabeled as AniList IDs");
   const streams = await provider.getVideoSources(detail.episodes[0].url, {});
   assert.ok(streams.some(s => s.url === "https://anv.to/stream/pear/1080.m3u8"));
   assert.ok(streams.some(s => s.url === "https://anv.to/stream/pear/index.m3u8?k=pear"));
