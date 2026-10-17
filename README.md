@@ -32,25 +32,15 @@ Uses the AnimeSuge site for anime search, episode listings and third-party playe
 
 ### KotoTV
 
-- **Domain setting:** Select one listed compatible domain manually; the provider does not switch domains automatically.
-- The provider passes the external player iframe URL through Zangetsu's shared extractor.
-- Automated tests use mocked responses. Passing tests do not prove current live playback.
+Uses the original single-domain `kototv.to` route with no domain selector or mirror failover. The provider passes external player URLs through Zangetsu's shared extractor. Automated tests use mocked responses and do not prove current live playback.
 
 ### AniKoto
 
-Uses the AniKoto catalogue API and episode embed IDs. Playback attempts to resolve MegaPlay-family embeds into native streams through the player's source API and Zangetsu's shared extractor. Catalogue/API and external player availability can change independently.
+Uses `https://anikotoapi.site` for recent-anime listings and series episode/embed data. Search still uses the site's search page because the public API documents recent listings and series lookup, but not a search endpoint. Episode embed URLs are passed to Zangetsu's shared extractor. The API is rate-limited and streaming availability depends on the external embed host.
 
 ### AnV
 
 Uses AnV's catalogue API for search and title details. Its playback API requires a valid `shiro_watch` session cookie from the episode page; returned source URLs and subtitles are passed to the player with the session headers. If the runtime or site stops returning the session cookie, streams will not resolve.
-
-### Anime World India
-
-Uses the current `watchanimeworld.one` domain, WordPress search/series pages and season-selection endpoint. Playback resolves Zephyrix's `getVideo` response and passes other supported embeds to Zangetsu's shared extractor. Third-party player support can change independently from the catalogue site.
-
-### TwoDHive
-
-Uses TwoDHive's catalogue/detail pages and the MegaPlay source API. The provider handles encrypted MegaPlay source responses, HLS quality playlists, CDN signing where required and subtitles. It currently targets the native MegaPlay path; other site servers that require a CloudStream-only WebView challenge are not guaranteed to resolve.
 
 The active source list is defined in `index.json`. Removed or non-working providers should not remain in the manifest.
 
