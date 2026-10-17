@@ -5,6 +5,25 @@ var UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, lik
 function getInfo(){return {name:"KotoTV",lang:"en",baseUrl:SITE,logo:"https://www.google.com/s2/favicons?sz=256&domain=kototv.to",type:"anime",version:"1.1.0"};}
 function getSettings(){return [];}
 function txt(s){return htmlText(String(s||"")).trim();}
+
+function realTitle(value){
+ var s=txt(value).replace(/\s+/g," ").trim();
+ if(!s||s.length<2||s.length>300)return "";
+ var meaningful=s.replace(/\b(?:tv|movie|movies|ova|ona|special|episode|episodes|sub|dub|hd|sd|season|series)\b/gi," ").replace(/[0-9]+/g," ").replace(/[^A-Za-z\u00C0-\u024F\u3040-\u30ff\u3400-\u9fff]/g,"");
+ return meaningful?s:"";
+}
+function pickTitle(attrs,inner,card){
+ var candidates=[],v;
+ ["data-jp","data-title","title","aria-label"].forEach(function(n){v=attrValue(attrs,n);if(v)candidates.push(v);});
+ var blocks=String(card||"")+" "+String(inner||"");
+ var re=/<(?:h[1-6]|span|div|p)[^>]*class=["'][^"']*(?:name|title|d-title|film-name)[^"']*["'][^>]*>([\s\S]*?)<\/(?:h[1-6]|span|div|p)>/gi,m;
+ while((m=re.exec(blocks))&&candidates.length<20)candidates.push(m[1].replace(/<[^>]*>/g," "));
+ re=/data-jp=["']([^"']+)["']/gi;while((m=re.exec(blocks))&&candidates.length<25)candidates.push(m[1]);
+ re=/<img\b[^>]*alt=["']([^"']+)["']/gi;while((m=re.exec(blocks))&&candidates.length<30)candidates.push(m[1]);
+ candidates.push(String(inner||"").replace(/<[^>]*>/g," "));
+ for(var i=0;i<candidates.length;i++){var title=realTitle(candidates[i]);if(title)return title;}
+ return "";
+}
 function get(url,ref){return fetch(String(url||""),{headers:{"User-Agent":UA,"Accept":"text/html,application/json,*/*","Referer":ref||SITE+"/"}}).then(function(r){if(!r||r.status>=400)throw Error("KotoTV HTTP "+(r&&r.status||"error"));var b=r.body==null?"":r.body;if(!b)throw Error("Empty response");return b;});}
 function attrValue(tag,name){var re=new RegExp("\\b"+name+"\\s*=\\s*([\"'])(.*?)\\1","i"),m=String(tag||"").match(re);return m?m[2]:null;}
 function norm(s){return String(s||"").toLowerCase().replace(/[^a-z0-9]/g,"");}
@@ -41,10 +60,12 @@ function search(q,page,opts){
    var href=attrValue(m[1],"href");if(!href)continue;
    href=href.replace(/^https?:\/\/[^/]+/i,"");
    var hit=href.match(/(?:^|\/)anime\/([^/?#]+)/i);if(!hit)continue;
-   var id=hit[1],title=txt(attrValue(m[1],"title")||attrValue(m[1],"aria-label")||m[2].replace(/<[^>]*>/g," "));
-   if(!title||title.length<2||seen[id])continue;
+   var id=hit[1];
+   var cardStart=Math.max(h.lastIndexOf('<div',m.index),h.lastIndexOf('<article',m.index),0);
+   var chunk=h.slice(cardStart,Math.min(h.length,m.index+3000));
+   var title=pickTitle(m[1],m[2],chunk);
+   if(!title||seen[id])continue;
    seen[id]=1;
-   var chunk=h.slice(Math.max(0,m.index-700),Math.min(h.length,m.index+2500));
    var im=(chunk.match(/<img\b[^>]*(?:data-src|data-lazy-src|src)=["']([^"']+)/i)||[])[1]||null;
    out.push({id:id,title:title,url:id,cover:im?im.replace(/&amp;/g,"&"):null,type:"anime",sourceId:SOURCE_ID});
   }
@@ -58,7 +79,8 @@ function getHome(opts){
    var href=attrValue(m[1],"href");if(!href)continue;
    var path=href.replace(/^https?:\/\/[^/]+/i,"");
    var hit=path.match(/^\/anime\/([^/?#]+)/i);if(!hit)continue;
-   var id=hit[1],title=txt(attrValue(m[1],"title")||m[2].replace(/<[^>]*>/g," "));
+   var id=hit[1],cardStart=Math.max(h.lastIndexOf('<div',m.index),h.lastIndexOf('<article',m.index),0);
+   var card=h.slice(cardStart,Math.min(h.length,m.index+3000)),title=pickTitle(m[1],m[2],card);
    if(!title||seen[id])continue;
    seen[id]=1;o.push({id:id,title:title,url:id,type:"anime",sourceId:SOURCE_ID});
   }
