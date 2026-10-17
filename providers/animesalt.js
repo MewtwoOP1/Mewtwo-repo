@@ -18,7 +18,7 @@ var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
 
 function getInfo() {
   return { name: 'AnimeSalt', lang: 'hi', baseUrl: MIRRORS[0],
-    logo: MIRRORS[0] + '/favicon.ico', type: 'anime', version: '1.0.0' };
+    logo: MIRRORS[0] + '/favicon.ico', type: 'anime', version: '1.0.1' };
 }
 
 function _trim(s) { return String(s == null ? '' : s).replace(/^\s+|\s+$/g, ''); }
@@ -102,7 +102,7 @@ function _epScheme(cat, pageUrl) { return 'animesalt://' + cat + '|' + encodeURI
 // Parse /episode/{slug}-SxE/ links out of an HTML fragment (page or ajax season).
 function _episodesFromHtml(html, main, cat) {
   var out = [], seen = {}, m;
-  var re = /<a[^>]+href=['"]([^'"]+\/episode\/[a-z0-9-]+-(\d+)x(\d+)\/?)['"][^>]*>([\s\S]*?)<\/a>/gi;
+  var re = /<a[^>]+href=['"]([^'"]*\/episode\/[a-z0-9-]+-(\d+)x(\d+)\/?)['"][^>]*>([\s\S]*?)<\/a>/gi;
   while ((m = re.exec(html)) !== null) {
     var url = _abs(m[1], main);
     if (seen[url]) continue; seen[url] = 1;
