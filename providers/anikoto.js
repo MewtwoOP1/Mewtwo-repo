@@ -248,7 +248,7 @@ function getHome(opts) {
       rows.forEach(function (x) {
         if (!x) return;
         var id = String(x.id != null ? x.id : (x.slug || ''));
-        var title = String(x.title || x.name || x.alternative || id);
+        var title = _apiTitle(x.title, x.alternative || x.name || id);
         if (!id || !title) return;
         items.push({ id: id, title: title, url: id, cover: x.poster || x.poster_url || x.posterUrl || x.image || null,
           type: 'anime', sourceId: SOURCE_ID, description: x.synopsis || x.description || '' });
