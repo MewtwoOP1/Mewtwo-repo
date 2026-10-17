@@ -37,7 +37,7 @@ var MAPPER = 'https://mapper.nekostream.site/api/mal/';
 
 function getInfo() {
   return { name: 'AniKoto', lang: 'en', baseUrl: SITE,
-    logo: 'https://www.google.com/s2/favicons?sz=256&domain=anikototv.to', type: 'anime', version: '1.0.9' };
+    logo: 'https://www.google.com/s2/favicons?sz=256&domain=anikototv.to', type: 'anime', version: '1.1.0' };
 }
 function getSettings() { return []; }
 
@@ -205,24 +205,22 @@ function _gridCards(seg) {
   return out;
 }
 function getHome(opts) {
-  return _get(SITE + '/home', SITE + '/').then(function (html) {
-    var s = _sections(html), rows = [];
-    var spot = _spotlight(s.hotest || html);
-    if (spot.length) rows.push({ title: 'Spotlight', items: spot });
-    var top = _gridCards(s['top-anime']);
-    if (top.length) rows.push({ title: 'Top Anime', items: top });
-    var recent = _gridCards(s['recent-update']);
-    if (recent.length) rows.push({ title: 'Recently Updated', items: recent });
-    return rows;
-  }).catch(function () { return []; }).then(function (rows) {
-    if (rows.length) return rows;
-    // Fallback: the JSON API's recent list if the /home scrape yielded nothing.
-    return _json(API + '/recent-anime?page=1&per_page=24').then(function (j) {
-      var data = (j && j.data) || [], items = [];
-      for (var k = 0; k < data.length; k++) { var cc = _apiCard(data[k]); if (cc) items.push(cc); }
+  return fetch(API + '/recent-anime?page=1&per_page=24', { headers: { 'Accept': 'application/json' } })
+    .then(function (r) { if (!r || r.status >= 400) throw Error('AniKoto API HTTP error'); return r.body || ''; })
+    .then(function (body) {
+      var j; try { j = typeof body === 'string' ? JSON.parse(body || '{}') : body; } catch (e) { j = {}; }
+      var rows = Array.isArray(j.data) ? j.data : (Array.isArray(j.results) ? j.results : (Array.isArray(j.anime) ? j.anime : []));
+      var items = [];
+      rows.forEach(function (x) {
+        if (!x) return;
+        var id = String(x.id != null ? x.id : (x.slug || ''));
+        var title = String(x.title || x.name || x.alternative || id);
+        if (!id || !title) return;
+        items.push({ id: id, title: title, url: id, cover: x.poster || x.poster_url || x.posterUrl || x.image || null,
+          type: 'anime', sourceId: SOURCE_ID, description: x.synopsis || x.description || '' });
+      });
       return items.length ? [{ title: 'Recently Updated', items: items }] : [];
     }).catch(function () { return []; });
-  });
 }
 
 // ── Detail + episodes ───────────────────────────────────────────────────────
@@ -256,59 +254,37 @@ function _epUrl(cat, serverIds, sub, dub, num, token) {
 }
 
 function getDetail(url, opts) {
-  var slug = String(url);
-  var cat = _mode(opts);
-  return _get(SITE + '/watch/' + encodeURIComponent(slug), SITE + '/').then(function (html) {
-    var animeId = (html.match(/data-id="(\d+)"/) || [])[1];
-    // The canonical clean title is the <h1 class="… d-title">; og:title is
-    // marketing fluff ("Watch X Anime Online Free"), used only as a fallback.
-    var title = htmlText((html.match(/<h1[^>]*class="[^"]*d-title[^"]*"[^>]*>([^<]+)<\/h1>/) || [])[1] || '').trim()
-      || _cleanTitle((html.match(/og:title"\s+content="([^"]+)"/) || [])[1]) || slug;
-    var poster = (html.match(/og:image"\s+content="([^"]+)"/) || [])[1] || null;
-    var synopsis = (html.match(/class="synopsis[^"]*"[^>]*>([\s\S]*?)<\/div>/) || [])[1] || '';
-    var base = {
-      id: slug, title: title, url: slug, cover: poster,
-      description: htmlText(synopsis).trim(), status: 'unknown',
-      genres: _genres(html), studios: [], type: 'anime', sourceId: SOURCE_ID,
-      episodes: [], year: _year(html), malId: null, subCount: 0, dubCount: 0
-    };
-    if (!animeId) return base;
-    return _ajax('/ajax/episode/list/' + animeId).then(function (j) {
-      var lhtml = (j && typeof j.result === 'string') ? j.result : '';
-      var out = [], subN = 0, dubN = 0, mal = null;
-      var re = /<a\b([^>]*\bdata-id="\d+"[^>]*)>/g, m;
-      while ((m = re.exec(lhtml)) !== null) {
-        var attrs = m[1];
-        var serverIds = (attrs.match(/data-ids="([^"]+)"/) || [])[1];
-        if (!serverIds) continue; // no servers → not playable
-        var num = parseInt((attrs.match(/data-num="(\d+)"/) || [])[1] || '0', 10);
-        var sub = (attrs.match(/data-sub="(\d+)"/) || [])[1] === '1';
-        var dub = (attrs.match(/data-dub="(\d+)"/) || [])[1] === '1';
-        if (!sub && !dub) continue;
-        // The mapper is keyed per episode, so slug/timestamp come off THIS
-        // anchor; data-slug is the episode number the API wants, not the show
-        // slug. All three or none — a partial token is a 404.
-        var epMal = (attrs.match(/data-mal="(\d+)"/) || [])[1];
-        var epSlug = (attrs.match(/data-slug="([^"]+)"/) || [])[1];
-        var epTs = (attrs.match(/data-timestamp="(\d+)"/) || [])[1];
-        var token = (epMal && epSlug && epTs)
-          ? (epMal + '/' + encodeURIComponent(epSlug) + '/' + epTs) : null;
-        if (!mal) mal = epMal || null;
-        if (sub) subN++;
-        if (dub) dubN++;
-        var initCat = (cat === 'dub' && dub) || (cat === 'sub' && !sub && dub) ? 'dub' : 'sub';
-        var title2 = (attrs.match(/title="([^"]+)"/) || [])[1];
-        out.push({ id: cat + ':' + num, number: num,
-          title: title2 ? htmlText(title2).trim() : ('Episode ' + num),
-          url: _epUrl(initCat, serverIds, sub, dub, num, token) });
-      }
-      base.episodes = out;
-      base.subCount = subN;
-      base.dubCount = dubN;
-      base.malId = mal ? parseInt(mal, 10) : null;
-      return base;
-    }).catch(function () { return base; });
-  });
+  var id = String(url || '').replace(/^anikotoapi:\/\//, '');
+  try { id = decodeURIComponent(id); } catch (e) {}
+  return fetch(API + '/series/' + encodeURIComponent(id), { headers: { 'Accept': 'application/json' } })
+    .then(function (r) { if (!r || r.status >= 400) throw Error('AniKoto API HTTP error'); return r.body || ''; })
+    .then(function (body) {
+      var j; try { j = typeof body === 'string' ? JSON.parse(body || '{}') : body; } catch (e) { j = {}; }
+      var anime = j.anime || (j.data && (j.data.anime || j.data)) || j.series || {};
+      var eps = Array.isArray(j.episodes) ? j.episodes : (j.data && Array.isArray(j.data.episodes) ? j.data.episodes : []);
+      var title = anime.title || anime.name || anime.alternative || id;
+      var episodes = [];
+      eps.forEach(function (ep, i) {
+        if (!ep) return;
+        var num = Number(ep.number || ep.episode || ep.episode_number || i + 1);
+        var embeds = ep.embed_url || ep.embedUrl || {};
+        var sub = typeof embeds.sub === 'string' ? embeds.sub : (ep.sub || ep.embed_sub || '');
+        var dub = typeof embeds.dub === 'string' ? embeds.dub : (ep.dub || ep.embed_dub || '');
+        ['sub','dub'].forEach(function (kind) {
+          var embed = kind === 'sub' ? sub : dub;
+          if (!embed) return;
+          var token = 'anikotoapi://' + encodeURIComponent(JSON.stringify({ id: id, number: num, kind: kind, embed: embed }));
+          episodes.push({ id: String(num) + (kind === 'dub' ? '-dub' : '-sub'), number: num,
+            title: 'Episode ' + num + (kind === 'dub' ? ' (Dub)' : ' (Sub)'), audio: kind,
+            url: token, embedUrl: embed });
+        });
+      });
+      return { id: id, title: title, url: id, cover: anime.poster || anime.poster_url || anime.posterUrl || anime.image || null,
+        banner: anime.banner || anime.cover || null, description: anime.synopsis || anime.description || '',
+        genres: anime.genres || [], type: 'anime', sourceId: SOURCE_ID, episodes: episodes,
+        subCount: episodes.filter(function (e) { return e.audio === 'sub'; }).length,
+        dubCount: episodes.filter(function (e) { return e.audio === 'dub'; }).length };
+    });
 }
 
 function getEpisodes(url, opts) { return getDetail(url, opts).then(function (d) { return d.episodes; }); }
@@ -334,200 +310,26 @@ function _srvRank(name) {
   return 5;
 }
 
-function getVideoSources(episodeUrl) {
-  var raw = String(episodeUrl).replace('anikoto://', '');
-  var parts = raw.split('/');
-  var cat = (parts[0] === 'dub') ? 'dub' : 'sub';
-  var serverIds = parts[1] ? decodeURIComponent(parts[1]) : '';
-  // <mal>/<ep>/<timestamp>, already url-safe from _epUrl. Absent on urls saved
-  // before the token existed, which just means no mapper fallback for them.
-  var token = (parts[4] && parts[5] && parts[6])
-    ? (parts[4] + '/' + parts[5] + '/' + parts[6]) : null;
-  if (!serverIds) return Promise.reject(new Error('AniKoto: no server ids'));
-
-  return _ajax('/ajax/server/list?servers=' + encodeURIComponent(serverIds)).then(function (j) {
-    var lhtml = (j && typeof j.result === 'string') ? j.result : '';
-    var servers = _parseServers(lhtml);
-    var want = [];
-    for (var i = 0; i < servers.length; i++) {
-      var s = servers[i];
-      var ok = (cat === 'dub') ? (s.type === 'dub') : (s.type === 'sub' || s.type === 'hsub');
-      if (ok) want.push(s);
-    }
-    if (!want.length) want = servers;
-    want.sort(function (a, b) { return _srvRank(a.name) - _srvRank(b.name); });
-    return _tryServers(want, 0, cat);
-  }).catch(function (err) {
-    // Only once the episode's own servers are exhausted — VidPlay is a direct
-    // m3u8 and one request cheaper, so it stays first.
-    return _mapperServers(token, cat, err);
-  });
-}
-
-// Extra servers for episodes whose own list is all dead hosts. The site's
-// player asks the same API and appends whatever it returns as ordinary servers,
-// so an entry's `url` is just another link id for the /ajax/server?get= route
-// above — it drops straight back into _tryServers.
-//
-// Only the `url` entries are used. An entry can also carry a `download` map of
-// quality -> redirector link, but those all end up on kwik, and kwik blocks
-// every HTTP/1.1 request outright (Cloudflare 1020, cookies and User-Agent make
-// no difference — same request over HTTP/2 gets a 200). The host's fetch is
-// dart:io, which only speaks HTTP/1.1, so following those links would just be
-// three more round-trips to a guaranteed 403. Worth revisiting if fetch ever
-// rides a client that negotiates HTTP/2.
-function _mapperServers(token, cat, err) {
-  if (!token) throw err;
-  return _json(MAPPER + token, SITE + '/').then(function (j) {
-    var extra = [];
-    for (var name in j) {
-      var e = j[name];
-      if (name === 'status' || !e || typeof e !== 'object') continue;
-      var bucket = e[cat];
-      if (bucket && bucket.url) {
-        extra.push({ type: cat, linkId: String(bucket.url), name: name });
-      }
-    }
-    if (!extra.length) throw err;
-    return _tryServers(extra, 0, cat);
-  }).catch(function () { throw err; }); // keep the original "no playable server"
-}
-
-// Resolve servers in preference order; take the first that yields a known embed
-// host, then extract its m3u8. A host that no longer returns a plain file (see
-// PLAYER_RE) just throws and we fall through to the next server.
-function _tryServers(list, i, cat) {
-  if (i >= list.length) return Promise.reject(new Error('AniKoto: no playable server'));
-  return _ajax('/ajax/server?get=' + encodeURIComponent(list[i].linkId)).then(function (j) {
-    var url = j && j.result && (typeof j.result === 'object' ? j.result.url : null);
-    if (url && PLAYER_RE.test(url)) return _extractPlayer(url, cat);
-    return _tryServers(list, i + 1, cat);
-  }).catch(function () { return _tryServers(list, i + 1, cat); });
-}
-
-// Embed page → data-id → getSources(New) (plain m3u8 + subtitle tracks).
-// When the VTT pack encode id differs from the video pack (common on dub),
-// MegaPlay's intro/outro markers on the sibling pack give the post-OP skew so
-// softsubs line up without a user delay preference.
-function _cdnEncodeId(url) {
-  var segs = String(url || '').split('/');
-  var last = null;
-  for (var i = 0; i < segs.length; i++) {
-    if (/^[a-f0-9]{32}$/i.test(segs[i])) last = segs[i];
-  }
-  return last;
-}
-// The sub/hsub/dub cut an embed URL was issued for.
-function _cutOf(embed) {
-  return (String(embed || '').match(/\/(sub|hsub|dub)\/?(?:[?#]|$)/i) || [])[1] || null;
-}
-function _siblingEmbed(embed) {
-  return String(embed || '').replace(/\/(dub|sub)(?=\/?($|\?))/i, function (_, x) {
-    return '/' + (String(x).toLowerCase() === 'dub' ? 'sub' : 'dub');
-  });
-}
-function _packSkew(playing, sibling) {
-  if (!playing || !sibling) return null;
-  var skew = null;
-  var after = null;
-  // Prefer intro.end: post-OP content length matches across packs; averaging
-  // with outro.start over-corrects when ED tails differ.
-  if (playing.intro && sibling.intro
-      && typeof playing.intro.end === 'number'
-      && typeof sibling.intro.end === 'number') {
-    skew = playing.intro.end - sibling.intro.end;
-    after = sibling.intro.end;
-  } else if (playing.outro && sibling.outro
-      && typeof playing.outro.start === 'number'
-      && typeof sibling.outro.start === 'number') {
-    skew = playing.outro.start - sibling.outro.start;
-    if (sibling.intro && typeof sibling.intro.end === 'number') {
-      after = sibling.intro.end;
-    }
-  }
-  if (skew == null || Math.abs(skew) < 5 || Math.abs(skew) > 45) return null;
-  return { seconds: skew, afterSeconds: after == null ? 0 : after };
-}
-
-function _extractPlayer(embed, cat) {
-  var base = (embed.match(/^(https?:\/\/[^/]+)/) || [])[1] || 'https://vidtube.site';
-  // Sources are keyed by the embed's data-id, which is shared across the
-  // sub/hsub/dub cuts — the audio comes from `type`, so carry over the one this
-  // embed was issued for or a dub episode comes back with the sub stream.
-  var type = _cutOf(embed) || cat;
-  return _get(embed, SITE + '/').then(function (mhtml) {
-    var dataId = (mhtml.match(/data-id="(\d+)"/) || [])[1];
-    if (!dataId) throw new Error('AniKoto: no embed id');
-    return fetch(_sourcesUrl(base, dataId, type), {
-      headers: { 'User-Agent': UA, 'Referer': embed, 'X-Requested-With': 'XMLHttpRequest' }
-    }).then(function (r) {
-      var j; try { j = JSON.parse(r.body || 'null'); } catch (e) { throw new Error('AniKoto: bad getSources'); }
-      var file = _fileFromSources(j);
-      if (!file) throw new Error('AniKoto: no stream file');
-      var subs = [];
-      var tracks = (j && j.tracks) || [];
-      for (var i = 0; i < tracks.length; i++) {
-        var t = tracks[i];
-        if (!t || !t.file) continue;
-        if (t.kind && t.kind !== 'captions' && t.kind !== 'subtitles') continue;
-        subs.push({ url: t.file, lang: t.label || 'Sub', label: t.label || 'Sub',
-          format: /\.srt(\?|$)/i.test(t.file) ? 'srt' : 'vtt', 'default': !!t['default'] });
-      }
-      var hdrs = { 'User-Agent': UA, 'Referer': base + '/', 'Origin': base };
-      var videoEnc = _cdnEncodeId(file);
-      var subEnc = subs.length ? _cdnEncodeId(subs[0].url) : null;
-      var needSibling = videoEnc && subEnc && videoEnc !== subEnc;
-
-      function finish(skew) {
-        var mk = function (u, q) {
-          var o = { url: u, quality: q, container: /\.m3u8(\?|$)/i.test(u) ? 'hls' : 'mp4',
-            headers: hdrs, kind: cat, audioLang: cat === 'dub' ? 'en' : 'ja', subtitles: subs };
-          if (skew) {
-            o.subtitleSkewSeconds = skew.seconds;
-            o.subtitleSkewAfterSeconds = skew.afterSeconds;
-          }
-          return o;
-        };
-        // Hand back the master only. Probing master.m3u8 here (to expand
-        // 1080p/720p rows) hits Cloudflare on fetch.nexabloom.top and the
-        // native CfSolver routinely blows the app's 8s per-source budget —
-        // resolve then reports "episode not available" even though we already
-        // had a playable URL. Exo/the player pick HLS renditions themselves.
-        return [mk(file, 'auto')];
-      }
-
-      if (!needSibling) return finish(null);
-      var sibEmbed = _siblingEmbed(embed);
-      if (!sibEmbed || sibEmbed === embed) return finish(null);
-      return _get(sibEmbed, SITE + '/').then(function (shtml) {
-        var sid = (shtml.match(/data-id="(\d+)"/) || [])[1];
-        if (!sid) return null;
-        // Same id as the playing cut on hosts that share it, so the cut has to
-        // be carried too or this reads back the pack we already have.
-        return fetch(_sourcesUrl(base, sid,
-            _cutOf(sibEmbed) || (type === 'dub' ? 'sub' : 'dub')), {
-          headers: { 'User-Agent': UA, 'Referer': sibEmbed, 'X-Requested-With': 'XMLHttpRequest' }
-        }).then(function (sr) {
-          var sj; try { sj = JSON.parse(sr.body || 'null'); } catch (e) { sj = null; }
-          return sj;
-        });
-      }).then(function (sj) {
-        // Prefer intro.end delta (post-OP body length matches across packs).
-        // Dart blends this with the VTT OP-gap delta on fetch (~11s here).
-        // intro/outro stay plaintext next to `enc`, so skew still works.
-        var skew = _packSkew(j, sj);
-        if (skew) {
-          try {
-            console.log('[zangetsu-sub-timing] anikoto pack skew '
-              + skew.seconds.toFixed(3) + 's after ' + skew.afterSeconds.toFixed(3)
-              + 's via intro-markers'
-              + ' (video=' + videoEnc + ' vtt=' + subEnc + ')');
-          } catch (e) {}
-        }
-        return finish(skew);
-      }).catch(function () { return finish(null); });
+function getVideoSources(episodeUrl, opts) {
+  var raw = String(episodeUrl || '');
+  if (raw.indexOf('anikotoapi://') !== 0) return Promise.resolve([]);
+  var data;
+  try { data = JSON.parse(decodeURIComponent(raw.slice('anikotoapi://'.length))); } catch (e) { return Promise.resolve([]); }
+  if (!data || !data.embed) return Promise.resolve([]);
+  if (typeof extractVideo !== 'function') return Promise.resolve([{
+    url: data.embed, label: 'AniKoto API · ' + String(data.kind || 'sub').toUpperCase(),
+    quality: 'Auto', container: 'unknown', headers: { Referer: data.embed },
+    referer: data.embed, kind: data.kind || 'sub'
+  }]);
+  return Promise.resolve(extractVideo(data.embed, {
+    headers: { 'User-Agent': UA, 'Referer': data.embed },
+    kind: data.kind || 'sub', audioLang: data.kind === 'dub' ? 'en' : 'ja'
+  })).then(function (items) {
+    return (Array.isArray(items) ? items : []).map(function (item) {
+      return Object.assign({}, item, { kind: data.kind || 'sub', referer: data.embed,
+        headers: Object.assign({ 'User-Agent': UA, 'Referer': data.embed }, item && item.headers || {}) });
     });
-  });
+  }).catch(function () { return []; });
 }
 
 // ── MegaPlay AES-256-CBC (sandbox has CTR only) ─────────────────────────────
