@@ -74,7 +74,7 @@ function mediaFrom(html,referer){
  var h=String(html||"").replace(/\\\//g,"/").replace(/&amp;/g,"&"),m,out=[];
  m=h.match(/window\.__P\s*=\s*["']([^"']+)["']/);
  if(m){var d=decode(m[1]),u=d&&(d.src||d.url||d.file);if(u&&/^https?:\/\//i.test(u))uniquePush(out,{url:String(u),quality:d.quality||"Auto",container:/\.m3u8(?:$|[?#])/i.test(u)?"hls":(/\.mpd(?:$|[?#])/i.test(u)?"dash":"mp4"),headers:{Referer:referer||SITE+"/","User-Agent":UA},subtitles:Array.isArray(d.subtitles)?d.subtitles.filter(function(s){return s&&(s.src||s.url);}).map(function(s){return {url:s.src||s.url,lang:s.lang||s.label||"en",label:s.label||s.lang||"English",format:"vtt"};}):[]});}
- var re=/(?:file|src|source|url)\s*["']?\s*[:=]\s*["'](https?:\/\/[^"'<>\\s\\]+\\.(?:m3u8|mp4|mpd)(?:\?[^"'<>\\s\\]*)?)/gi;
+ var re=/(?:file|src|source|url)\s*["']?\s*[:=]\s*["'](https?:\/\/[^"'<> ]+\.(?:m3u8|mp4|mpd)(?:\?[^"'<> ]*)?)/gi;
  while((m=re.exec(h))&&out.length<8)uniquePush(out,{url:m[1],quality:"Auto",container:/\.m3u8(?:$|[?#])/i.test(m[1])?"hls":(/\.mpd(?:$|[?#])/i.test(m[1])?"dash":"mp4"),headers:{Referer:referer||SITE+"/","User-Agent":UA}});
  return out;
 }
