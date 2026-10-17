@@ -80,6 +80,41 @@ global.fetch = async function (url, options) {
       ""
     ].join("\n") };
   }
+
+  if (url === "https://ani.pm/api/anime/playback-bootstrap/settlar/6351?ep=2&lang=sub") {
+    return { status: 200, body: JSON.stringify({ availability: { sub: false, dub: true }, effectiveLanguage: "dub" }) };
+  }
+  if (url === "https://ani.pm/api/anime/playback-bootstrap/settlar/6351?ep=2&lang=dub") {
+    return { status: 200, body: JSON.stringify({ settlarSelection: "dub-selection", effectiveLanguage: "dub", availability: { sub: false, dub: true } }) };
+  }
+  if (url === "https://ani.pm/api/anime/settlar/session?selection=dub-selection&provider=anipm&ep=2&channel=dub&telemetry=0") {
+    return { status: 200, body: JSON.stringify({ embedUrl: "https://embed.settlar.io/embed/v1?t=dub-token" }) };
+  }
+  if (url === "https://embed.settlar.io/api/embed/session?t=dub-token") {
+    return { status: 200, body: JSON.stringify({ source: "https://media.settlar.io/frieren/dub/master.m3u8", subtitles: [] }) };
+  }
+  if (url === "https://media.settlar.io/frieren/dub/master.m3u8") {
+    return { status: 200, body: "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=900000,RESOLUTION=1280x720\n720.m3u8\n" };
+  }
+  if (url === "https://ani.pm/api/anime/playback-bootstrap/settlar/6351?ep=3&lang=sub") {
+    return { status: 200, body: JSON.stringify({ availability: { sub: true, dub: false }, effectiveLanguage: "sub" }) };
+  }
+  if (url === "https://ani.pm/api/anime/playback-bootstrap/settlar/6351?ep=3&lang=dub") {
+    return { status: 200, body: JSON.stringify({ availability: { sub: true, dub: false }, effectiveLanguage: "dub" }) };
+  }
+  if (url === "https://ani.pm/api/anime/playback-bootstrap/settlar/6351?ep=3&lang=sub&backup=1") {
+    return { status: 200, body: JSON.stringify({ availability: { sub: true, dub: false }, effectiveLanguage: "sub", backupEmbed: { available: true, url: "https://megaplay.buzz/stream/s-2/77/sub" } }) };
+  }
+  if (url === "https://megaplay.buzz/stream/s-2/77/sub") {
+    return { status: 200, body: '<div data-id="77"></div>' };
+  }
+  if (url === "https://megaplay.buzz/stream/getSources?id=77") {
+    return { status: 200, body: JSON.stringify({ sources: { file: "https://cdn.megaplay.buzz/playlist/master.m3u8" } }) };
+  }
+  if (url === "https://cdn.megaplay.buzz/playlist/master.m3u8") {
+    return { status: 200, body: "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=900000,RESOLUTION=1280x720\n720.m3u8\n" };
+  }
+
   // Legacy endpoint is only used after the current playback flow fails.
   if (url.indexOf("https://ani.pm/api/anime/src/servers?title=Legacy%20Series&ep=1&anilistId=154587") === 0) {
     return { status: 200, body: JSON.stringify({ sub: [
@@ -93,8 +128,8 @@ global.fetch = async function (url, options) {
 const provider = require("../providers/anipm.js");
 
 async function main() {
-  assert.equal(provider.version, "1.0.6");
-  assert.equal(provider.getInfo().version, "1.0.6");
+  assert.equal(provider.version, "1.0.7");
+  assert.equal(provider.getInfo().version, "1.0.7");
   assert.equal(provider.getInfo().name, "Ani.pm");
   assert.equal(provider.getInfo().type, "anime");
   assert.deepEqual(provider.getSettings(), []);
@@ -137,6 +172,23 @@ async function main() {
   assert.equal(streams[0].subtitles[0].url, "https://media.settlar.io/sub.vtt");
   assert.equal(streams[0].subtitles[0].file, "https://media.settlar.io/sub.vtt");
   assert.equal(streams[0].kind, "sub");
+
+
+  // If the requested language is unavailable, retry the alternate language.
+  const dubStreams = await provider.getVideoSources(detail.episodes[1].url, {});
+  assert.equal(dubStreams.length, 1);
+  assert.equal(dubStreams[0].kind, "dub");
+  assert.equal(dubStreams[0].audioLang, "en");
+  assert.equal(dubStreams[0].url, "https://media.settlar.io/frieren/dub/720.m3u8");
+
+  // If the primary player has no stream, ask for backupEmbed and resolve MegaPlay.
+  const backupEpisode = "anipm-episode://sub|6351|frieren-beyond-journey-end|3|52991|154587|settlar|6351|Frieren%3A%20Beyond%20Journey's%20End";
+  const backupStreams = await provider.getVideoSources(backupEpisode, {});
+  assert.equal(backupStreams.length, 1);
+  assert.equal(backupStreams[0].label, "Ani.pm · MegaPlay · Sub · 720p");
+  assert.equal(backupStreams[0].container, "hls");
+  assert.equal(backupStreams[0].url, "https://cdn.megaplay.buzz/playlist/720.m3u8");
+  assert.ok(calls.some(c => c.url === "https://ani.pm/api/anime/playback-bootstrap/settlar/6351?ep=3&lang=sub&backup=1"));
 
   // The current route (search -> routeId -> series -> bootstrap -> Settlar
   // session -> embed session -> HLS master) must complete without the stale API.
