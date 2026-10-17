@@ -39,7 +39,7 @@ async function main() {
   assert.equal(streams.length, 1);
   assert.equal(streams[0].url, "https://cdn.example/master.txt");
   assert.equal(streams[0].container, "hls", "Zephyrix securedLink stays HLS even with .txt extension");
-  assert.equal(streams[0].headers.Referer, "https://zephyrix.example/video/abc123");
+  assert.equal(streams[0].headers.Referer, "https://zephyrix.example/video/abcdef01");
   assert.ok(calls.some(call => call.url.includes("/player/index.php?data=abcdef01&do=getVideo")));
   console.log("Anime World India mocked catalogue and Zephyrix playback tests passed.");
 }
