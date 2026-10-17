@@ -37,7 +37,7 @@ var MAPPER = 'https://mapper.nekostream.site/api/mal/';
 
 function getInfo() {
   return { name: 'AniKoto', lang: 'en', baseUrl: SITE,
-    logo: 'https://www.google.com/s2/favicons?sz=256&domain=anikototv.to', type: 'anime', version: '1.0.8' };
+    logo: 'https://www.google.com/s2/favicons?sz=256&domain=anikototv.to', type: 'anime', version: '1.0.9' };
 }
 function getSettings() { return []; }
 
@@ -117,22 +117,28 @@ function _slugFromWatch(href) {
 // ── Search: scrape /filter?keyword= result cards ────────────────────────────
 function search(query, page, opts) {
   var q = String(query || '').trim();
-  if (q.length < 1) return Promise.resolve([]);
+  if (!q) return Promise.resolve([]);
   var url = SITE + '/filter?keyword=' + encodeURIComponent(q) + '&page=' + (page || 1);
   return _get(url, SITE + '/').then(function (html) {
-    var out = [], seen = {};
-    var chunks = html.split('<div class="item');
-    for (var i = 1; i < chunks.length; i++) {
-      var c = chunks[i];
-      var slug = _slugFromWatch((c.match(/href="([^"]*\/watch\/[^"]+)"/) || [])[1]);
+    html = String(html || '');
+    var out = [], seen = {}, re = /<a\b([^>]*href=["'][^"']*\/watch\/[^"']+["'][^>]*)>([\s\S]*?)<\/a>/gi, m;
+    while ((m = re.exec(html)) && out.length < 60) {
+      var href = (m[1].match(/href=["']([^"']+)["']/i) || [])[1] || '';
+      var slug = _slugFromWatch(href);
       if (!slug || seen[slug]) continue;
-      var title = (c.match(/class="name d-title"[^>]*>([^<]+)</) || [])[1]
-        || (c.match(/data-jp="([^"]+)"/) || [])[1];
-      var poster = (c.match(/<img[^>]+data-src="([^"]+)"/) || c.match(/<img[^>]+src="([^"]+)"/) || [])[1];
-      if (!title) continue;
+      var cardStart = Math.max(html.lastIndexOf('<div', m.index), html.lastIndexOf('<article', m.index), 0);
+      var card = html.slice(cardStart, Math.min(html.length, m.index + 2500));
+      var title = (m[1].match(/data-jp=["']([^"']+)["']/i) || [])[1]
+        || (m[1].match(/title=["']([^"']+)["']/i) || [])[1]
+        || (m[2].match(/class=["'][^"']*(?:name|title|d-title)[^"']*["'][^>]*>([^<]+)/i) || [])[1]
+        || m[2].replace(/<[^>]*>/g, ' ');
+      if (!title) title = (card.match(/data-jp=["']([^"']+)["']/i) || [])[1]
+        || (card.match(/class=["'][^"']*(?:name|title|d-title)[^"']*["'][^>]*>([^<]+)/i) || [])[1];
+      title = htmlText(title || '').trim();
+      if (!title || title.length > 300) continue;
+      var poster = (card.match(/<img[^>]+(?:data-src|data-lazy-src|src)=["']([^"']+)["']/i) || [])[1] || null;
       seen[slug] = 1;
-      out.push({ id: slug, title: htmlText(title).trim(), url: slug,
-        cover: poster || null, type: 'anime', sourceId: SOURCE_ID });
+      out.push({ id: slug, title: title, url: slug, cover: poster, type: 'anime', sourceId: SOURCE_ID });
     }
     return out;
   }).catch(function () { return []; });
@@ -572,4 +578,4 @@ function _aesCbcDecrypt(ct,key,iv){
 }
 function _bytesToStr(b){var s='',i=0;while(i<b.length){var c=b[i++];if(c<0x80)s+=String.fromCharCode(c);else if(c<0xE0)s+=String.fromCharCode(((c&0x1f)<<6)|(b[i++]&0x3f));else if(c<0xF0)s+=String.fromCharCode(((c&0x0f)<<12)|((b[i++]&0x3f)<<6)|(b[i++]&0x3f));else{var cp=((c&0x07)<<18)|((b[i++]&0x3f)<<12)|((b[i++]&0x3f)<<6)|(b[i++]&0x3f);cp-=0x10000;s+=String.fromCharCode(0xD800+(cp>>10),0xDC00+(cp&0x3FF));}}return s;}
 
-if(typeof module!=="undefined"&&module.exports)module.exports={version:"1.0.8",getInfo:getInfo,getSettings:getSettings,getHome:getHome,search:search,getDetail:getDetail,getEpisodes:getEpisodes,getVideoSources:getVideoSources,getStreams:getVideoSources,getLinks:getVideoSources};
+if(typeof module!=="undefined"&&module.exports)module.exports={version:"1.0.9",getInfo:getInfo,getSettings:getSettings,getHome:getHome,search:search,getDetail:getDetail,getEpisodes:getEpisodes,getVideoSources:getVideoSources,getStreams:getVideoSources,getLinks:getVideoSources};
