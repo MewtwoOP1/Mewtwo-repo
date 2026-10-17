@@ -114,6 +114,42 @@ function _slugFromWatch(href) {
   return m ? m[1] : null;
 }
 
+function _validDisplayTitle(value) {
+  var s = htmlText(String(value || '')).replace(/\s+/g, ' ').trim();
+  if (!s || s.length < 2 || s.length > 300) return '';
+  var meaningful = s.replace(/\b(?:tv|movie|movies|ova|ona|special|episode|episodes|sub|dub|hd|sd|season|series)\b/gi, ' ')
+    .replace(/[0-9]+/g, ' ')
+    .replace(/[^A-Za-z\u00C0-\u024F\u3040-\u30ff\u3400-\u9fff]/g, '');
+  return meaningful ? s : '';
+}
+function _pickDisplayTitle(attrs, inner, card) {
+  var values = [], v;
+  ['data-jp','data-title','title','aria-label'].forEach(function (name) {
+    var re = new RegExp('\\b' + name + '\\s*=\\s*(["\\'])(.*?)\\1', 'i');
+    var found = String(attrs || '').match(re);
+    if (found && found[2]) values.push(found[2]);
+  });
+  var blocks = String(card || '') + ' ' + String(inner || '');
+  var re = /<(?:h[1-6]|span|div|p)[^>]*class=["'][^"']*(?:name|title|d-title|film-name)[^"']*["'][^>]*>([\s\S]*?)<\/(?:h[1-6]|span|div|p)>/gi, m;
+  while ((m = re.exec(blocks)) && values.length < 20) values.push(m[1].replace(/<[^>]*>/g, ' '));
+  re = /data-jp=["']([^"']+)["']/gi;
+  while ((m = re.exec(blocks)) && values.length < 25) values.push(m[1]);
+  re = /<img\b[^>]*alt=["']([^"']+)["']/gi;
+  while ((m = re.exec(blocks)) && values.length < 30) values.push(m[1]);
+  values.push(String(inner || '').replace(/<[^>]*>/g, ' '));
+  for (var i = 0; i < values.length; i++) {
+    v = _validDisplayTitle(values[i]);
+    if (v) return v;
+  }
+  return '';
+}
+function _apiTitle(value, fallback) {
+  var t = value;
+  if (t && typeof t === 'object') t = t.english || t.romaji || t.native || t.userPreferred || '';
+  t = _validDisplayTitle(t || fallback || '');
+  return t;
+}
+
 // ── Search: scrape /filter?keyword= result cards ────────────────────────────
 function search(query, page, opts) {
   var q = String(query || '').trim();
@@ -128,14 +164,8 @@ function search(query, page, opts) {
       if (!slug || seen[slug]) continue;
       var cardStart = Math.max(html.lastIndexOf('<div', m.index), html.lastIndexOf('<article', m.index), 0);
       var card = html.slice(cardStart, Math.min(html.length, m.index + 2500));
-      var title = (m[1].match(/data-jp=["']([^"']+)["']/i) || [])[1]
-        || (m[1].match(/title=["']([^"']+)["']/i) || [])[1]
-        || (m[2].match(/class=["'][^"']*(?:name|title|d-title)[^"']*["'][^>]*>([^<]+)/i) || [])[1]
-        || m[2].replace(/<[^>]*>/g, ' ');
-      if (!title) title = (card.match(/data-jp=["']([^"']+)["']/i) || [])[1]
-        || (card.match(/class=["'][^"']*(?:name|title|d-title)[^"']*["'][^>]*>([^<]+)/i) || [])[1];
-      title = htmlText(title || '').trim();
-      if (!title || title.length > 300) continue;
+      var title = _pickDisplayTitle(m[1], m[2], card);
+      if (!title) continue;
       var poster = (card.match(/<img[^>]+(?:data-src|data-lazy-src|src)=["']([^"']+)["']/i) || [])[1] || null;
       seen[slug] = 1;
       out.push({ id: slug, title: title, url: slug, cover: poster, type: 'anime', sourceId: SOURCE_ID });
@@ -146,10 +176,14 @@ function search(query, page, opts) {
 
 // ── Home: /home spotlight (hero) + recent from the JSON API ──────────────────
 function _apiCard(a) {
-  if (!a || !a.slug) return null;
-  return { id: a.slug, title: a.title || a.alternative || a.slug, url: a.slug,
-    cover: a.poster || null, type: 'anime', sourceId: SOURCE_ID,
-    subCount: a.is_sub ? 1 : 0, dubCount: 0 };
+  if (!a) return null;
+  var id = String(a.id != null ? a.id : (a.slug || ''));
+  var title = _apiTitle(a.title, a.alternative || a.name || '');
+  if (!id || !title) return null;
+  return { id: id, title: title, url: id,
+    cover: a.poster || a.poster_url || a.posterUrl || a.image || null,
+    type: 'anime', sourceId: SOURCE_ID,
+    subCount: a.is_sub ? 1 : 0, dubCount: a.is_dub ? 1 : 0 };
 }
 // Slice the /home page into its section containers (#hotest / #top-anime /
 // #recent-update), each bounded by the next section so cards don't bleed across.
