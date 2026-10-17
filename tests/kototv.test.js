@@ -13,7 +13,7 @@ global.fetch=async function(url,options){
  return {status:404,body:"not found"};
 };
 async function main(){
- assert.equal(provider.version,"1.1.0");
+ assert.equal(provider.version,"1.1.1");
  assert.equal(provider.getInfo().name,"KotoTV");
  assert.equal(provider.getInfo().baseUrl,"https://kototv.to");
  assert.deepEqual(provider.getSettings(),[],"original KotoTV has no domain settings");

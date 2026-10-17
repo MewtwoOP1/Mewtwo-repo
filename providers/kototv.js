@@ -2,7 +2,7 @@
 var SOURCE_ID=(typeof __SOURCE_ID!=="undefined"&&__SOURCE_ID)?String(__SOURCE_ID):"kototv";
 var SITE="https://kototv.to",PLAYER="https://player.kototv.to";
 var UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
-function getInfo(){return {name:"KotoTV",lang:"en",baseUrl:SITE,logo:"https://www.google.com/s2/favicons?sz=256&domain=kototv.to",type:"anime",version:"1.1.0"};}
+function getInfo(){return {name:"KotoTV",lang:"en",baseUrl:SITE,logo:"https://www.google.com/s2/favicons?sz=256&domain=kototv.to",type:"anime",version:"1.1.1"};}
 function getSettings(){return [];}
 function txt(s){return htmlText(String(s||"")).trim();}
 
@@ -101,8 +101,14 @@ function getDetail(slug,opts){
    var hit=href.match(/^\/anime\/[^/]+\/watch\/(\d+)/i);
    if(!hit)continue;
    var n=Number(hit[1]);if(!n||seen[n])continue;seen[n]=1;
-   var label=txt(m[2].replace(/<[^>]*>/g," "));
-   eps.push({id:"kototv://"+encodeURIComponent(slug)+"/"+n,number:n,title:label||"Episode "+n,url:"kototv://"+encodeURIComponent(slug)+"/"+n});
+   var label=txt(m[2].replace(/<[^>]*>/g," ")).replace(/\s+/g," ").trim();
+   // The watch selector can link to the same episode using labels such as
+   // "Soft Sub", "Soft Dub", "Sub", or "Dub". These are audio/server options,
+   // not episode titles; showing them as titles confuses the episode/player flow.
+   if(/^(?:(?:soft|hard|multi)[\s-]*)?(?:sub(?:bed|title)?s?|dub(?:bed)?s?|audio|watch|play)(?:\s*[-:]?\s*(?:sub|dub))?$/i.test(label)) label="";
+   if(/^episode\s*\d+\s*[-:]?\s*(?:soft\s*)?(?:sub|dub)$/i.test(label)) label="";
+   if(!label || label.length>140) label="Episode "+n;
+   eps.push({id:"kototv://"+encodeURIComponent(slug)+"/"+n,number:n,title:label,url:"kototv://"+encodeURIComponent(slug)+"/"+n});
   }
   eps.sort(function(a,b){return a.number-b.number;});
   return {id:slug,title:title||slug,url:slug,cover:poster?poster.replace(/&amp;/g,"&"):null,description:txt(desc),type:"anime",sourceId:SOURCE_ID,episodes:eps};
@@ -166,4 +172,4 @@ function getVideoSources(url,opts){
 }
 function getStreams(id,opts){return getVideoSources(id,opts);}
 function getLinks(id,opts){return getVideoSources(id,opts);}
-if(typeof module!=="undefined"&&module.exports)module.exports={version:"1.1.0",getInfo:getInfo,getSettings:getSettings,getHome:getHome,search:search,getDetail:getDetail,getEpisodes:getEpisodes,getVideoSources:getVideoSources,getStreams:getStreams,getLinks:getLinks};
+if(typeof module!=="undefined"&&module.exports)module.exports={version:"1.1.1",getInfo:getInfo,getSettings:getSettings,getHome:getHome,search:search,getDetail:getDetail,getEpisodes:getEpisodes,getVideoSources:getVideoSources,getStreams:getStreams,getLinks:getLinks};

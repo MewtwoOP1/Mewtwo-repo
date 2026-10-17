@@ -42,14 +42,6 @@ Movie and series source with catalogue search, download-link parsing, and suppor
 
 Uses the original single-domain `kototv.to` route with no domain selector or mirror failover. The provider passes external player URLs through Zangetsu's shared extractor. Automated tests use mocked responses and do not prove current live playback.
 
-### AniWaves
-
-Uses AniWaves' catalogue and episode/server AJAX endpoints. The provider only resolves a few prioritized servers in parallel and hands supported external players to Zangetsu's shared extractor; it skips thumbnail enrichment and browser-only fallbacks to keep playback startup lean. The provider logic is ported from [Raghav's CloudStream AniWaves source](https://github.com/KSHITIJ8473/raghav).
-
-### AnimixStream
-
-Hindi multi-audio anime source. Episode pages expose a player API that returns the signed HLS master directly, avoiding a browser session or custom stream proxy. Playback depends on the site's player API and CDN being available. Adapted from [Spyou's Zangetsu provider sources](https://github.com/Spyou/Zangetsu-spyou-provider).
-
 ### AniKoto
 
 Uses `https://anikotoapi.site` for recent-anime listings and series episode/embed data. Search still uses the site's search page because the public API documents recent listings and series lookup, but not a search endpoint. Episode embed URLs are passed to Zangetsu's shared extractor. The API is rate-limited and streaming availability depends on the external embed host.
