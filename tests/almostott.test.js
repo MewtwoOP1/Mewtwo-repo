@@ -112,6 +112,7 @@ async function main() {
   assert.equal(movieStreams[0].url, "https://cdn.example/movie-480.mp4");
 
   assert.deepEqual(await provider.getVideoSources("not-a-tmdb-episode", {}), []);
+  assert.deepEqual(await provider.getVideoSources("tmdb://tv/22", {}), [], "TV playback requires an episode number");
   assert.deepEqual(await provider.getVideoSources(JSON.stringify({ tmdbId: 22, type: "series" }), {}), []);
 
   const encoderCalls = calls.filter((call) => call.url.includes("enc-dec.app"));
