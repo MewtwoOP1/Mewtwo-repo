@@ -106,6 +106,16 @@
       "file": "providers/hdhub4u.js",
       "logo": "https://new5.hdhub4u.cl/favicon.ico",
       "nsfw": false
+    },
+    {
+      "id": "moviebox",
+      "name": "MovieBox",
+      "version": "1.0.0",
+      "type": "movie",
+      "lang": "en",
+      "file": "providers/moviebox.js",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=themoviebox.org",
+      "nsfw": false
     }
   ]
 }
