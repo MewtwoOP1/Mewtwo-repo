@@ -324,6 +324,7 @@ function _currentPlayback(key, category, withBackup) {
     return _json(API + alt, SITE + '/');
   }).catch(function () { return null; });
 }
+
 function _streamsFromBootstrap(boot, key, category) {
   var lang = category || key.category;
   if (!boot || !boot.settlarSelection) return Promise.resolve([]);
@@ -374,84 +375,7 @@ function _streamsFromBootstrap(boot, key, category) {
     });
   }).catch(function () { return []; });
 }
-function _serverList(j, cat) {
-  if (!j) return [];
-  var data = j.data && !Array.isArray(j.data) ? j.data : j;
-  return Array.isArray(data[cat]) ? data[cat] : [];
-}
 
-function _serverRequest(key, title, id) {
-  var params = 'title=' + encodeURIComponent(title || '') + '&ep=' + encodeURIComponent(key.episode)
-    + (id ? '&anilistId=' + encodeURIComponent(String(id)) : '')
-    + (key.malId ? '&malId=' + encodeURIComponent(key.malId) : '');
-  return _json(API + '/src/servers?' + params, SITE + '/').then(function (j) {
-    return { json: j, list: _serverList(j, key.category) };
-  });
-}
-function _currentPlayback(key) {
-  var source = key.source === 'anilist' ? 'anilist' : 'settlar';
-  var path = '/playback-bootstrap/' + source + '/' + encodeURIComponent(key.id)
-    + '?ep=' + encodeURIComponent(key.episode) + '&lang=' + encodeURIComponent(key.category);
-  return _json(API + path, SITE + '/').then(function (boot) {
-    if (!boot) {
-      if (key.source) return [];
-      var alt = '/playback-bootstrap/anilist/' + encodeURIComponent(key.id)
-        + '?ep=' + encodeURIComponent(key.episode) + '&lang=' + encodeURIComponent(key.category);
-      return _json(API + alt, SITE + '/').then(function (fallbackBoot) { return _streamsFromBootstrap(fallbackBoot, key); });
-    }
-    if (boot.effectiveLanguage && boot.effectiveLanguage !== key.category) return [];
-    if (boot.availability && boot.availability[key.category] === false) return [];
-    return _streamsFromBootstrap(boot, key);
-  }).catch(function () { return []; });
-}
-function _streamsFromBootstrap(boot, key) {
-  if (!boot || !boot.settlarSelection) return Promise.resolve([]);
-  var sessPath = '/settlar/session?selection=' + encodeURIComponent(boot.settlarSelection)
-    + '&provider=anipm&ep=' + encodeURIComponent(key.episode)
-    + '&channel=' + encodeURIComponent(key.category) + '&telemetry=0';
-  return _json(API + sessPath, SITE + '/').then(function (session) {
-    if (!session || !session.embedUrl) return [];
-    var tokenMatch = String(session.embedUrl).match(/[?&]t=([^&#]+)/);
-    if (!tokenMatch) return [];
-    var hostMatch = String(session.embedUrl).match(/^(https?:\/\/[^/]+)/);
-    var host = hostMatch ? hostMatch[1] : 'https://embed.settlar.io';
-    var hdrs = {
-      'User-Agent': UA, 'Accept': 'application/json', 'Accept-Language': 'en-US,en;q=0.9',
-      'Referer': session.embedUrl, 'Sec-Fetch-Site': 'same-origin',
-      'Sec-Fetch-Mode': 'cors', 'Sec-Fetch-Dest': 'empty'
-    };
-    return _jsonRequest(host + '/api/embed/session?t=' + tokenMatch[1], hdrs).then(function (data) {
-      if (!data || !data.source) return [];
-      var subtitles = [], seenSubs = [], tracks = Array.isArray(data.subtitles) ? data.subtitles.slice() : [];
-      tracks.sort(function (a, b) { return (b.default ? 1 : 0) - (a.default ? 1 : 0); });
-      for (var i = 0; i < tracks.length; i++) {
-        var tr = tracks[i] || {}, u = _absolute(tr.url || tr.file, session.embedUrl);
-        if (!u || seenSubs.indexOf(u) >= 0) continue;
-        seenSubs.push(u);
-        subtitles.push({ url: u, file: u, lang: tr.srclang || tr.lang || tr.label || 'und',
-          label: tr.label || tr.srclang || tr.lang || 'Subtitles',
-          format: /\.vtt(?:\?|$)/i.test(u) ? 'vtt' : (/\.srt(?:\?|$)/i.test(u) ? 'srt' : 'unknown') });
-      }
-      return fetch(data.source, { headers: { 'User-Agent': UA }, timeoutMs: 12000 }).then(function (r) {
-        var status = Number(r && r.status) || 0;
-        if (!r || (status && (status < 200 || status >= 300))) return [];
-        var body = r.body || '';
-        if (body.indexOf('#EXTM3U') < 0) return [];
-        var variants = _parseMaster(body, data.source);
-        if (!variants.length) variants = [{ url: data.source, height: 0 }];
-        var out = [];
-        for (var v = 0; v < variants.length; v++) {
-          var h = variants[v].height;
-          out.push({ url: variants[v].url, quality: h ? h + 'p' : 'auto',
-            label: 'Ani.pm · ' + (key.category === 'dub' ? 'Dub' : 'Sub') + ' · ' + (h ? h + 'p' : 'Auto'),
-            container: 'hls', headers: {}, kind: key.category,
-            audioLang: key.category === 'dub' ? 'en' : 'ja', subtitles: subtitles });
-        }
-        return out;
-      }).catch(function () { return []; });
-    });
-  }).catch(function () { return []; });
-}
 function _parseMaster(text, masterUrl) {
   if (!text || String(text).indexOf('#EXTM3U') < 0) return [];
   if (/#EXT-X-MEDIA:[^\r\n]*TYPE=AUDIO/i.test(text)) return [];
