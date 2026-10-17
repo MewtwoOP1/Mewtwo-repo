@@ -306,7 +306,7 @@ function getLinks(url, opts) { return getVideoSources(url, opts); }
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    version: '1.0.2', getInfo: getInfo, getSettings: getSettings,
+    version: '1.0.3', getInfo: getInfo, getSettings: getSettings,
     getHome: getHome, popular: popular, search: search, getDetail: getDetail,
     getEpisodes: getEpisodes, getVideoSources: getVideoSources,
     getStreams: getStreams, getLinks: getLinks
