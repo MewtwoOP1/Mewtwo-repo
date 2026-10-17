@@ -62,7 +62,7 @@ async function main() {
   const localIdResult = await provider.search("LocalIdCollision", 1, {});
   assert.equal(localIdResult.length, 1);
   assert.equal(localIdResult[0].anilistId, null);
-  assert.match(localIdResult[0].url, /^anipm:\/\/1000000958\\|/);
+  assert.match(localIdResult[0].url, /^anipm:\/\/1000000958\|/);
   const detail = await provider.getDetail(results[0].url, {category:"sub"});
   assert.equal(detail.title, "Frieren: Beyond Journey's End");
   assert.equal(detail.malId, 52991);
