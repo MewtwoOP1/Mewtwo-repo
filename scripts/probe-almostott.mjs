@@ -106,5 +106,37 @@ while (queue.length && processed < MAX_FILES && totalBytes < MAX_TOTAL_BYTES) {
     for (const m of js.matchAll(/(["'])([^"']{1,240}\.m?js(?:\?[^"']*)?)\1/g)) addScriptUrl(m[2], r.url);
   } catch (e) { out("\n=== ASSET ERROR === " + url + " :: " + e.message); }
 }
+
+// Probe publicly advertised resolver JSON shapes, without saving signed URLs.
+async function publicJsonProbe(label, url, headers = {}) {
+  try {
+    const r = await fetch(url, {headers:{"User-Agent":UA,"Accept":"application/json",...headers}, signal:AbortSignal.timeout(12000), redirect:"follow"});
+    const txt = await r.text();
+    let j = null; try { j = JSON.parse(txt); } catch {}
+    const redactUrl = v => typeof v === "string" ? v.replace(/([?&](?:token|key|sig|signature|expires|api_key|auth)=)[^&\s]+/gi,"$1[REDACTED]") : v;
+    function summarize(v, depth=0) {
+      if (Array.isArray(v)) return {type:"array",length:v.length,first:v.length?summarize(v[0],depth+1):null};
+      if (v && typeof v==="object") {
+        const o={}; for (const [k,val] of Object.entries(v).slice(0,30)) {
+          if (depth>3) {o[k]=typeof val;continue;}
+          if (typeof val==="string") o[k]=redactUrl(val).slice(0,250);
+          else o[k]=summarize(val,depth+1);
+        } return o;
+      }
+      return typeof v==="string" ? redactUrl(v).slice(0,250) : v;
+    }
+    out("\n=== PUBLIC API PROBE "+label+" === HTTP="+r.status+" type="+(r.headers.get("content-type")||"")+" final="+r.url+" chars="+txt.length);
+    out(JSON.stringify(j ? summarize(j) : txt.slice(0,500)));
+    return j;
+  } catch (e) { out("\n=== PUBLIC API PROBE "+label+" ERROR === "+e.message); return null; }
+}
+const enc = await publicJsonProbe("VidLink ID encoder","https://enc-dec.app/api/enc-vidlink?text=105248");
+const encId = enc && (enc.result || enc.data?.result);
+if (typeof encId === "string" && encId.length > 0 && encId.length < 300) {
+  await publicJsonProbe("VidLink movie endpoint","https://vidlink.pro/api/b/movie/"+encodeURIComponent(encId)+"?multiLang=0",{"Referer":"https://vidlink.pro/","Origin":"https://vidlink.pro"});
+  await publicJsonProbe("VidLink TV endpoint","https://vidlink.pro/api/b/tv/"+encodeURIComponent(encId)+"/1/1?multiLang=0",{"Referer":"https://vidlink.pro/","Origin":"https://vidlink.pro"});
+}
+await publicJsonProbe("TMDB mirror endpoint","https://api.tmdb.org/3/movie/550");
+
 out("\n=== SUMMARY ===");
 out("visited=" + visited.size + " processed=" + processed + " bytes=" + totalBytes + " queuedRemaining=" + queue.length);
