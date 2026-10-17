@@ -5,7 +5,7 @@ var SITE = "https://anv.to";
 var UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36";
 
 function getInfo() {
-  return { name: "AnV", lang: "en", baseUrl: SITE, logo: "https://www.google.com/s2/favicons?sz=256&domain=anv.to", type: "anime", version: "1.0.0" };
+  return { name: "AnV", lang: "en", baseUrl: SITE, logo: "https://www.google.com/s2/favicons?sz=256&domain=anv.to", type: "anime", version: "1.0.3" };
 }
 function getSettings() { return []; }
 function _txt(value) { return htmlText(String(value == null ? "" : value)).replace(/\s+/g, " ").trim(); }
@@ -133,7 +133,7 @@ function _episodeSources(id, malId, episode, slug) {
   var pageUrl = _episodePageUrl(slug, episode);
   return _episodeCookie(slug, episode, false).then(function (cookie) {
     if (!cookie) throw Error("AnV session cookie was not returned by the episode page");
-    return _jsonPost("/api/episode", { anilistId: id, malId: malId || null, episode: episode }, pageUrl, cookie);
+    return _jsonPost("/api/episode", { anilistId: id, malId: malId || null, episode: episode, first: true }, pageUrl, cookie);
   }).then(function (root) {
     if (root && root.status === "ready") return root;
     throw Error("AnV episode sources are not ready");
@@ -141,7 +141,7 @@ function _episodeSources(id, malId, episode, slug) {
     if (String(error && error.message || error).indexOf("403") < 0) throw error;
     return _episodeCookie(slug, episode, true).then(function (cookie) {
       if (!cookie) throw error;
-      return _jsonPost("/api/episode", { anilistId: id, malId: malId || null, episode: episode }, pageUrl, cookie);
+      return _jsonPost("/api/episode", { anilistId: id, malId: malId || null, episode: episode, first: true }, pageUrl, cookie);
     });
   });
 }
@@ -231,5 +231,5 @@ function getVideoSources(url, opts) {
 function getStreams(id, opts) { return getVideoSources(id, opts); }
 function getLinks(id, opts) { return getVideoSources(id, opts); }
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { version: "1.0.0", getInfo: getInfo, getSettings: getSettings, getHome: getHome, search: search, getDetail: getDetail, getEpisodes: getEpisodes, getVideoSources: getVideoSources, getStreams: getStreams, getLinks: getLinks };
+  module.exports = { version: "1.0.3", getInfo: getInfo, getSettings: getSettings, getHome: getHome, search: search, getDetail: getDetail, getEpisodes: getEpisodes, getVideoSources: getVideoSources, getStreams: getStreams, getLinks: getLinks };
 }
