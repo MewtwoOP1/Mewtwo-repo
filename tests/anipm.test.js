@@ -14,6 +14,12 @@ global.fetch = async function (url, options) {
       synopsis:"An elf mage travels on."
     }]})};
   }
+  if (url === "https://ani.pm/api/anime/catalog?q=LocalIdCollision&page=1") {
+    return {status:200, body:JSON.stringify({items:[{
+      id:1000000958, slug:"local-id-collision", title:"Local Catalogue ID Test",
+      anilist:1000000958
+    }]})};
+  }
   if (url === "https://ani.pm/api/anime/catalog?q=Bleach&page=1") {
     return {status:200, body:JSON.stringify({items:[]})};
   }
@@ -51,6 +57,12 @@ async function main() {
   assert.equal(results[0].title, "Frieren: Beyond Journey's End");
   assert.equal(results[0].malId, 52991);
   assert.equal(results[0].anilistId, 154587);
+  // A large source catalogue ID must not be mistaken for an AniList ID just
+  // because the source uses the ambiguous field name `anilist`.
+  const localIdResult = await provider.search("LocalIdCollision", 1, {});
+  assert.equal(localIdResult.length, 1);
+  assert.equal(localIdResult[0].anilistId, null);
+  assert.match(localIdResult[0].url, /^anipm:\/\/1000000958\\|/);
   const detail = await provider.getDetail(results[0].url, {category:"sub"});
   assert.equal(detail.title, "Frieren: Beyond Journey's End");
   assert.equal(detail.malId, 52991);
