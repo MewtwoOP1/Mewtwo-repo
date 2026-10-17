@@ -116,6 +116,26 @@
       "file": "providers/hdhub4u.js",
       "logo": "https://new5.hdhub4u.cl/favicon.ico",
       "nsfw": false
+    },
+    {
+      "id": "aniwaves",
+      "name": "AniWaves",
+      "version": "1.0.0",
+      "type": "anime",
+      "lang": "en",
+      "file": "providers/aniwaves.js",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=aniwaves.ru",
+      "nsfw": false
+    },
+    {
+      "id": "animixstream",
+      "name": "AnimixStream",
+      "version": "1.0.0",
+      "type": "anime",
+      "lang": "hi",
+      "file": "providers/animixstream.js",
+      "logo": "https://www.animixstream.com/favicon.ico",
+      "nsfw": false
     }
   ]
 }
