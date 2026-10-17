@@ -38,10 +38,6 @@ Uses the HiAnime catalogue and episode API with VidPlay and Zoko player extracti
 
 Movie and series source with catalogue search, download-link parsing, and supported host resolution. This provider is adapted from [Spyou/zangetsu-providers](https://github.com/Spyou/zangetsu-providers), whose JavaScript implementation is compatible with Zangetsu; Phisher98's plugin manifest lists a separate compiled Cloudstream plugin. Some host pages may be unavailable or protected.
 
-### KotoTV
-
-Uses the original single-domain `kototv.to` route with no domain selector or mirror failover. The provider passes external player URLs through Zangetsu's shared extractor. Automated tests use mocked responses and do not prove current live playback.
-
 ### AniKoto
 
 Uses `https://anikotoapi.site` for recent-anime listings and series episode/embed data. Search still uses the site's search page because the public API documents recent listings and series lookup, but not a search endpoint. Episode embed URLs are passed to Zangetsu's shared extractor. The API is rate-limited and streaming availability depends on the external embed host.

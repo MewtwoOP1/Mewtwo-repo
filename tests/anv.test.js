@@ -17,9 +17,9 @@ global.fetch = async function (url, options) {
   calls.push({ url, options });
   if (url === "https://anv.to/api/catalog" && options.method === "POST") {
     const req = JSON.parse(options.body);
-    if (req.operation === "BrowseAnime") return { status: 200, body: JSON.stringify({ data: { Page: { media: [media] } } }) };
+    if (req.operation === "SearchAnime") return { status: 200, body: JSON.stringify({ data: { Page: { media: [media] } } }) };
     if (req.operation === "AnimeDetail") return { status: 200, body: JSON.stringify({ data: { Media: media } }) };
-    if (req.operation === "PopularAnime") return { status: 200, body: JSON.stringify({ data: { Page: { media: [media] } } }) };
+    if (req.operation === "HomeAnime") return { status: 200, body: JSON.stringify({ data: { Page: { media: [media] } } }) };
   }
   if (url === "https://anv.to/anime/frieren-episode-1" || url === "https://anv.to/anime/frieren-episode-2") {
     return { status: 200, headers: { "set-cookie": "shiro_watch=test-session; Path=/; HttpOnly" }, body: "<html>episode</html>" };
@@ -34,7 +34,7 @@ global.fetch = async function (url, options) {
   return { status: 404, body: "not found" };
 };
 async function main() {
-  assert.equal(provider.version, "1.0.0");
+  assert.equal(provider.version, "1.0.3");
   assert.equal(provider.getInfo().name, "AnV");
   assert.deepEqual(await provider.search("", 1, {}), []);
   const results = await provider.search("Frieren", 1, {});

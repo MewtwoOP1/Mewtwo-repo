@@ -5,7 +5,7 @@ var SITE = "https://anv.to";
 var UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36";
 
 function getInfo() {
-  return { name: "AnV", lang: "en", baseUrl: SITE, logo: "https://www.google.com/s2/favicons?sz=256&domain=anv.to", type: "anime", version: "1.0.0" };
+  return { name: "AnV", lang: "en", baseUrl: SITE, logo: "https://www.google.com/s2/favicons?sz=256&domain=anv.to", type: "anime", version: "1.0.3" };
 }
 function getSettings() { return []; }
 function _txt(value) { return htmlText(String(value == null ? "" : value)).replace(/\s+/g, " ").trim(); }
@@ -84,18 +84,28 @@ function _item(media) {
   };
 }
 function getHome(opts) {
-  return _catalog("PopularAnime", { page: 1, sort: ["TRENDING_DESC"] }).then(function (page) {
-    var media = page.media || page.Media || [];
-    var items = media.map(_item).filter(Boolean);
-    return items.length ? [{ title: "Trending Anime", items: items }] : [];
-  }).catch(function () { return []; });
+  return _catalog("HomeAnime", {}).then(function (data) {
+    var rows = [];
+    var hero = ((data.hero || {}).media || []).map(_item).filter(Boolean);
+    var trending = ((data.trending || {}).media || []).map(_item).filter(Boolean);
+    if (hero.length) rows.push({ title: "Spotlight", items: hero });
+    if (trending.length) rows.push({ title: "Trending Now", items: trending });
+    return rows;
+  }).catch(function () { return []; }).then(function (rows) {
+    return _fetchRaw(SITE + "/api/recent-episodes", { headers: { "User-Agent": UA, "Accept": "application/json" } })
+      .then(function (r) {
+        var j = JSON.parse(r.body || "{}");
+        var media = (j.schedules || []).map(function (s) { return s && s.media; }).filter(Boolean).map(_item).filter(Boolean);
+        if (media.length) rows.push({ title: "Latest Episodes", items: media });
+        return rows;
+      }).catch(function () { return rows; });
+  });
 }
 function search(query, page, opts) {
   query = String(query || "").trim();
   if (!query) return Promise.resolve([]);
-  return _catalog("BrowseAnime", {
-    page: Math.max(1, Number(page) || 1), perPage: 28,
-    sort: ["POPULARITY_DESC"], search: query
+  return _catalog("SearchAnime", {
+    page: Math.max(1, Number(page) || 1), perPage: 24, search: query
   }).then(function (result) {
     return (result.media || result.Media || []).map(_item).filter(Boolean);
   }).catch(function () { return []; });
@@ -133,7 +143,7 @@ function _episodeSources(id, malId, episode, slug) {
   var pageUrl = _episodePageUrl(slug, episode);
   return _episodeCookie(slug, episode, false).then(function (cookie) {
     if (!cookie) throw Error("AnV session cookie was not returned by the episode page");
-    return _jsonPost("/api/episode", { anilistId: id, malId: malId || null, episode: episode }, pageUrl, cookie);
+    return _jsonPost("/api/episode", { anilistId: id, malId: malId || null, episode: episode, first: true }, pageUrl, cookie);
   }).then(function (root) {
     if (root && root.status === "ready") return root;
     throw Error("AnV episode sources are not ready");
@@ -141,7 +151,7 @@ function _episodeSources(id, malId, episode, slug) {
     if (String(error && error.message || error).indexOf("403") < 0) throw error;
     return _episodeCookie(slug, episode, true).then(function (cookie) {
       if (!cookie) throw error;
-      return _jsonPost("/api/episode", { anilistId: id, malId: malId || null, episode: episode }, pageUrl, cookie);
+      return _jsonPost("/api/episode", { anilistId: id, malId: malId || null, episode: episode, first: true }, pageUrl, cookie);
     });
   });
 }
@@ -231,5 +241,5 @@ function getVideoSources(url, opts) {
 function getStreams(id, opts) { return getVideoSources(id, opts); }
 function getLinks(id, opts) { return getVideoSources(id, opts); }
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { version: "1.0.0", getInfo: getInfo, getSettings: getSettings, getHome: getHome, search: search, getDetail: getDetail, getEpisodes: getEpisodes, getVideoSources: getVideoSources, getStreams: getStreams, getLinks: getLinks };
+  module.exports = { version: "1.0.3", getInfo: getInfo, getSettings: getSettings, getHome: getHome, search: search, getDetail: getDetail, getEpisodes: getEpisodes, getVideoSources: getVideoSources, getStreams: getStreams, getLinks: getLinks };
 }
