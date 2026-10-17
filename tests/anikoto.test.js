@@ -7,6 +7,8 @@ global.fetch=async function(url,options){
  url=String(url);calls.push({url,options:options||{}});
  if(url==="https://anikototv.to/search?keyword=Frieren")return {status:200,body:'<div><img src="https://img.example/f.jpg"><a class="name d-title" href="/watch/frieren/ep-1" data-jp="Frieren: Beyond Journey\'s End">Frieren</a></div>'};
  if(url==="https://anikototv.to/watch/frieren/ep-1")return {status:200,body:'<div id="player" data-id="42"></div>'};
+ if(url==="https://megaplay.buzz/stream/s-2/9001/sub")return {status:200,body:'<div id="megaplay-player" data-id="77"></div>'};
+ if(url==="https://megaplay.buzz/stream/getSourcesNew?id=77&type=sub")return {status:200,body:JSON.stringify({sources:{file:"https://cdn.example/episode.m3u8"},tracks:[]})};
  if(url==="https://anikotoapi.site/recent-anime?page=1&per_page=30")return {status:200,body:JSON.stringify({data:[{id:42,title:"Frieren",poster:"https://img.example/f.jpg"}]})};
  if(url==="https://anikotoapi.site/series/42")return {status:200,body:JSON.stringify({data:{anime:{id:42,title:"Frieren: Beyond Journey's End",poster:"https://img.example/f.jpg"},episodes:[{number:1,title:"Episode 1",episode_embed_id:"9001",embed_url:{sub:"https://megaplay.buzz/stream/s-2/9001/sub"}}]}})};
  return {status:404,body:"not found"};
@@ -22,7 +24,7 @@ async function main(){
  const streams=await provider.getVideoSources(detail.episodes[0].url,{});
  assert.equal(streams.length,1);assert.equal(streams[0].url,"https://cdn.example/episode.m3u8");
  assert.ok(calls.some(c=>c.url==="https://anikotoapi.site/series/42"));
- assert.ok(calls.some(c=>c.url==="https://megaplay.buzz/stream/s-2/9001/sub"&&c.opts),"AniKoto embed should go through Zangetsu's shared extractor");
+ assert.ok(calls.some(c=>c.url==="https://megaplay.buzz/stream/getSourcesNew?id=77&type=sub"),"AniKoto should resolve MegaPlay through its native source endpoint");
  console.log("AniKoto replacement mocked integration tests passed.");
 }
 main().catch(e=>{console.error(e);process.exitCode=1;});
