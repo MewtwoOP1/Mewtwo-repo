@@ -230,7 +230,7 @@ function getSettings() { return []; }
 
 function getInfo() {
   return {
-    name: 'Anv', id: 'anv', baseUrl: _ANV, lang: 'en',
+    name: 'AnV', id: 'anv', baseUrl: _ANV, lang: 'en',
     logo: _ANV + '/brand/blob.svg', type: 'anime', version: '1.0.3'
   };
 }
