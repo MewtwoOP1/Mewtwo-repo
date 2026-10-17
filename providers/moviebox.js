@@ -75,27 +75,125 @@ function getDetail(url) {
 }
 function getEpisodes(url) { return getDetail(url).then(function(d) { return d && Array.isArray(d.episodes) ? d.episodes : []; }); }
 function getVideoSources(episodeUrlValue) { return getStreams(episodeUrlValue); }
+function _mbUnwrap(obj) {
+  if (!obj || typeof obj !== 'object') return {};
+  if (obj.data && obj.data.data) return obj.data.data;
+  if (obj.data) return obj.data;
+  return obj;
+}
+function _mbBody(response) {
+  var body = response && response.body != null ? response.body : '';
+  if (typeof body !== 'string') return body;
+  try { return JSON.parse(body || 'null'); } catch (e) { return null; }
+}
+function _mbHeaders(response) {
+  var h = response && response.headers || {}, out = {};
+  Object.keys(h).forEach(function(k) { out[String(k).toLowerCase()] = h[k]; });
+  return out;
+}
+function _mbRequest(url, method, body, headers) {
+  var opts = { method: method || 'GET', headers: headers || {}, timeoutMs: 20000 };
+  if (body != null) {
+    opts.body = JSON.stringify(body);
+    opts.headers['Content-Type'] = 'application/json';
+  }
+  return fetch(url, opts).then(function(r) {
+    if (r && r.status >= 400) throw new Error('MovieBox HTTP ' + r.status);
+    return { body: _mbBody(r), headers: _mbHeaders(r) };
+  });
+}
 function getStreams(value, opts, seasonArg, episodeArg) {
   var p = parseMedia(value);
-  if (!p && value != null && isFinite(Number(value))) p = { id: Number(value), type: opts === 'tv' || opts === 'series' ? 'tv' : 'movie', season: Number(seasonArg) || 0, episode: Number(episodeArg) || 0 };
+  if (!p && value != null && isFinite(Number(value))) {
+    p = { id: Number(value), type: opts === 'tv' || opts === 'series' ? 'tv' : 'movie',
+      season: Number(seasonArg) || 0, episode: Number(episodeArg) || 0 };
+  }
   if (!p || !p.id) return Promise.resolve([]);
-  var url = WORKER + '/streams?tmdb_id=' + encodeURIComponent(p.id) + '&type=' + encodeURIComponent(p.type) + '&proxy=' + encodeURIComponent(WORKER);
-  if (p.type === 'tv') { if (!(p.season || Number(seasonArg)) || !(p.episode || Number(episodeArg))) return Promise.resolve([]); url += '&se=' + (p.season || Number(seasonArg)) + '&ep=' + (p.episode || Number(episodeArg)); }
-  return json(url, { Accept: 'application/json', 'User-Agent': 'Nuvio/1.0' }).then(function(data) {
-    var raw = Array.isArray(data) ? data : data && Array.isArray(data.streams) ? data.streams : [];
-    var out = [], seen = {};
-    raw.forEach(function(s) {
-      if (!s || typeof s !== 'object') return;
-      var streamUrl = s.proxy_url || s.url || '';
-      if (!/^https?:\/\//i.test(streamUrl) || seen[streamUrl]) return;
-      seen[streamUrl] = true;
-      var q = s.resolution ? String(s.resolution).match(/(\d+)/) : null;
-      var name = trim(s.name || 'MovieBox');
-      var langMatch = name.match(/\(([^)]+)\)/);
-      out.push({ url: streamUrl, quality: q ? q[1] + 'p' : 'Auto', label: 'MovieBox · ' + (q ? q[1] + 'p' : 'Auto') + (langMatch ? ' · ' + langMatch[1] : '') + (s.codec ? ' · ' + s.codec : ''), container: /\.m3u8(?:[?#]|$)/i.test(streamUrl) ? 'hls' : /\.(mp4|m4v|webm)(?:[?#]|$)/i.test(streamUrl) ? 'mp4' : 'unknown', headers: {}, kind: 'raw' });
-    });
-    out.sort(function(a,b) { return (parseInt(b.quality,10)||0) - (parseInt(a.quality,10)||0); });
-    return out;
+  if (p.type === 'tv' && (!(p.season || Number(seasonArg)) || !(p.episode || Number(episodeArg)))) return Promise.resolve([]);
+  var titlePath = '/' + (p.type === 'tv' ? 'tv/' : 'movie/') + p.id + '?append_to_response=external_ids';
+  return tmdb(titlePath).then(function(meta) {
+    if (!meta) return [];
+    var title = trim(meta.title || meta.name || '');
+    if (!title) return [];
+    var isTv = p.type === 'tv';
+    var season = p.season || Number(seasonArg) || 1;
+    var episode = p.episode || Number(episodeArg) || 1;
+    var api = 'https://h5-api.aoneroom.com';
+    var ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+    return _mbRequest(api + '/wefeed-h5api-bff/app/get-latest-app-pkgs?app_name=moviebox', 'GET', null, { 'User-Agent': ua })
+      .then(function(pkg) {
+        var xuser = pkg.headers['x-user'] || pkg.headers['X-User'] || '';
+        var token = '';
+        try { token = (JSON.parse(String(xuser)) || {}).token || ''; } catch (e) {}
+        if (!token) return [];
+        var baseHeaders = {
+          'X-Client-Info': '{"timezone":"Asia/Kolkata"}',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Accept': 'application/json',
+          'Referer': api,
+          'Host': 'h5-api.aoneroom.com',
+          'Authorization': 'Bearer ' + token,
+          'User-Agent': ua
+        };
+        return _mbRequest(api + '/wefeed-h5api-bff/subject/search', 'POST',
+          { keyword: title, page: 1, perPage: 24, subjectType: isTv ? 2 : 1 }, Object.assign({}, baseHeaders))
+          .then(function(searchResponse) {
+            var items = _mbUnwrap(searchResponse.body).items || [];
+            var want = title.toLowerCase().replace(/\sS\d+.*$/i, '').trim();
+            var selected = null, language = 'Original';
+            for (var i = 0; i < items.length; i++) {
+              var it = items[i], candidate = trim(it.title || it.name).toLowerCase();
+              if (candidate && (candidate === want || candidate.indexOf(want) !== -1 || want.indexOf(candidate) !== -1)) {
+                selected = it; break;
+              }
+            }
+            if (!selected && items.length) selected = items[0];
+            if (!selected) return [];
+            var subjectId = selected.id || selected.subjectId;
+            language = selected.lanName || selected.language || language;
+            if (!subjectId) return [];
+            var detailUrl = 'https://h5.aoneroom.com/wefeed-h5-bff/web/post/list/subject?id=' + encodeURIComponent(subjectId);
+            return _mbRequest(detailUrl, 'GET', null, { 'User-Agent': ua, 'Accept': 'application/json' }).then(function(detail) {
+              var detailItems = detail.body && detail.body.data && detail.body.data.items || [];
+              var detailPath = detailItems.length && detailItems[0].subject ? detailItems[0].subject.detailPath || '' : '';
+              var params = 'subjectId=' + encodeURIComponent(subjectId)
+                + (isTv ? '&se=' + encodeURIComponent(season) + '&ep=' + encodeURIComponent(episode) : '')
+                + (detailPath ? '&detailPath=' + encodeURIComponent(detailPath) : '');
+              var referer = 'https://fmoviesunblocked.net/spa/videoPlayPage/movies/' + detailPath
+                + '?id=' + encodeURIComponent(subjectId) + '&type=/movie/detail';
+              var playHeaders = { 'Referer': referer, 'Origin': 'https://fmoviesunblocked.net', 'User-Agent': ua };
+              function collect(path) {
+                return _mbRequest(api + path + params, 'GET', null, Object.assign({}, baseHeaders, {
+                  'Referer': referer, 'Origin': 'https://fmoviesunblocked.net'
+                })).then(function(resp) {
+                  var data = _mbUnwrap(resp.body), arr = data.downloads || data.streams || [], out = [];
+                  (arr || []).forEach(function(stream) {
+                    if (!stream || !stream.url || stream.vipLocked) return;
+                    var res = stream.resolution || stream.resolutions || 'Auto';
+                    var url = String(stream.url);
+                    if (!/^https?:\/\//i.test(url)) return;
+                    out.push({ url: url, quality: String(res), label: 'MovieBox [' + language + '] · ' + res,
+                      name: 'MovieBox', source: 'MovieBox', container: /\.m3u8(?:[?#]|$)/i.test(url) ? 'hls' : /\.mp4(?:[?#]|$)/i.test(url) ? 'mp4' : 'unknown',
+                      headers: playHeaders, kind: 'raw', audioLang: '', subtitles: [] });
+                  });
+                  var captions = data.captions || [];
+                  captions.forEach(function(c) {
+                    if (!c || !c.url) return;
+                    out.forEach(function(s) { s.subtitles.push({ url: c.url, language: c.lan || c.lanName || 'en', name: (c.lanName || c.lan || 'Subtitle') + ' [MovieBox]' }); });
+                  });
+                  return out;
+                }).catch(function() { return []; });
+              }
+              return Promise.all([collect('/wefeed-h5api-bff/subject/download?'), collect('/wefeed-h5api-bff/subject/play?')])
+                .then(function(rows) {
+                  var out = [], seen = {};
+                  rows.forEach(function(row) { row.forEach(function(s) { if (s && s.url && !seen[s.url]) { seen[s.url] = true; out.push(s); } }); });
+                  out.sort(function(a,b) { return (parseInt(b.quality,10)||0) - (parseInt(a.quality,10)||0); });
+                  return out;
+                });
+            });
+          });
+      }).catch(function(e) { console.warn('MovieBox source failed:', String(e)); return []; });
   }).catch(function() { return []; });
 }
 if (typeof module !== 'undefined' && module.exports) module.exports = { version: VERSION, getInfo: getInfo, getSettings: getSettings, getHome: getHome, search: search, getDetail: getDetail, getEpisodes: getEpisodes, getVideoSources: getVideoSources, getStreams: getStreams };
