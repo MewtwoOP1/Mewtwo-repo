@@ -32,7 +32,7 @@ global.fetch = async function (url, options) {
 };
 
 async function main() {
-  assert.equal(provider.version, "1.0.0");
+  assert.equal(provider.version, "1.0.1");
   assert.equal(provider.getInfo().name, "AnimixStream");
   assert.equal(provider.getInfo().lang, "hi");
   assert.deepEqual(provider.getSettings(), []);
