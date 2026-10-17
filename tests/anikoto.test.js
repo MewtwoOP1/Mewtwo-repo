@@ -13,7 +13,7 @@ global.fetch=async function(url,options){
 };
 async function main(){
  assert.equal(provider.getInfo().name,"AniKoto");
- assert.equal(provider.version,"1.0.0");
+ assert.equal(provider.version,"1.0.1");
  const found=await provider.search("Frieren",1,{});
  assert.equal(found.length,1);assert.equal(found[0].sourceId,"anikoto");
  const detail=await provider.getDetail(found[0].url,{});
