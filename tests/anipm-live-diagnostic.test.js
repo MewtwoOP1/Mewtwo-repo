@@ -1,5 +1,31 @@
 const nativeFetch = global.fetch.bind(global);
 const trace = [];
+const probes = [
+  ["Ani.pm API", "https://ani.pm/api/anime/search?q=Frieren"],
+  ["AnimeSuge", "https://animesuge.cz/"],
+  ["AniKoto", "https://anikototv.to/"],
+  ["AnV API", "https://anv.to/api/recent-episodes"],
+  ["HiAnime", "https://hianime.at/"],
+  ["HDHub4u", "https://new5.hdhub4u.cl/"]
+];
+await Promise.all(probes.map(async ([name, url]) => {
+  try {
+    const r = await nativeFetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/json;q=0.9,*/*;q=0.8"
+      },
+      signal: AbortSignal.timeout(4000),
+      redirect: "follow"
+    });
+    const body = await r.text();
+    console.log("[LIVE-PROBE]", name, r.status, r.headers.get("content-type") || "",
+      body.slice(0, 100).replace(/\s+/g, " "));
+  } catch (e) {
+    console.log("[LIVE-PROBE]", name, "ERROR", String(e).slice(0, 120));
+  }
+}));
+
 global.htmlText = function (s) {
   return String(s || "").replace(/<[^>]*>/g, " ").replace(/&amp;/g, "&")
     .replace(/&#39;|&apos;/g, "'").replace(/&quot;/g, '"').replace(/\s+/g, " ").trim();
