@@ -3,7 +3,7 @@ var SOURCE_ID=(typeof __SOURCE_ID!=="undefined"&&__SOURCE_ID)?String(__SOURCE_ID
 var SITE="https://kototv.to",PLAYER="https://player.kototv.to";
 function readDomain(){try{var s=typeof __settings!=="undefined"&&__settings?__settings[SOURCE_ID]:null;var d=s&&s.domain?String(s.domain):SITE;return ["https://kototv.to","https://anineko.site","https://aniorbit.cc","https://anispark.cc","https://animeflux.cc","https://aninova.cc","https://anipulse.cc","https://anirush.cc","https://aniblaze.cc","https://hiotaku.cc","https://www.aniwatch.rest"].indexOf(d)>=0?d:SITE;}catch(e){return SITE;}}
 var UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
-function getInfo(){return {name:"KotoTV",lang:"en",baseUrl:readDomain(),logo:"https://www.google.com/s2/favicons?sz=256&domain=kototv.to",type:"anime",version:"1.0.6"};}
+function getInfo(){return {name:"KotoTV",lang:"en",baseUrl:readDomain(),logo:"https://www.google.com/s2/favicons?sz=256&domain=kototv.to",type:"anime",version:"1.0.7"};}
 function getSettings(){return [{key:"domain",label:"Domain",description:"Choose the exact domain this source should use. No automatic failover.",type:"enum",default:"https://kototv.to",options:[{"value":"https://kototv.to","label":"kototv.to"},{"value":"https://anineko.site","label":"anineko.site"},{"value":"https://aniorbit.cc","label":"aniorbit.cc"},{"value":"https://anispark.cc","label":"anispark.cc"},{"value":"https://animeflux.cc","label":"animeflux.cc"},{"value":"https://aninova.cc","label":"aninova.cc"},{"value":"https://anipulse.cc","label":"anipulse.cc"},{"value":"https://anirush.cc","label":"anirush.cc"},{"value":"https://aniblaze.cc","label":"aniblaze.cc"},{"value":"https://hiotaku.cc","label":"hiotaku.cc"},{"value":"https://www.aniwatch.rest","label":"www.aniwatch.rest"}]}];}
 function txt(s){return htmlText(String(s||"")).trim();}
 function isSiteHost(hostname){var domains=["kototv.to","anineko.site","aniorbit.cc","anispark.cc","animeflux.cc","aninova.cc","anipulse.cc","anirush.cc","aniblaze.cc","hiotaku.cc","www.aniwatch.rest"];hostname=String(hostname||"").toLowerCase();return domains.indexOf(hostname)>=0;}
@@ -108,6 +108,25 @@ function getDetail(slug,opts){
 function getEpisodes(id,opts){return getDetail(id,opts).then(function(d){return d.episodes||[];});}
 function b64(s){var chars="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/",map={},out=[],buf=0,bits=0;for(var i=0;i<64;i++)map[chars.charAt(i)]=i;s=String(s||"");for(var j=0;j<s.length;j++){var c=s.charAt(j);if(c==="="||map[c]==null)continue;buf=(buf<<6)|map[c];bits+=6;if(bits>=8){bits-=8;out.push((buf>>bits)&255);buf&=(1<<bits)-1;}}return out;}
 function decode(blob){var a=b64(blob),key="otaku-embed-v1",s="";for(var i=0;i<a.length;i++)s+=String.fromCharCode(a[i]^key.charCodeAt(i%key.length));try{return JSON.parse(decodeURIComponent(escape(s)));}catch(e){return null;}}
+function _kotoResolveEmbed(embed,watchUrl){
+ var candidates=[embed],seen={},jobs=[];
+ function add(u){if(!u)return;u=String(u).replace(/&amp;/g,"&");try{u=new URL(u,embed).toString();}catch(e){return;}if(/^https?:\/\//i.test(u)&&!seen[u]){seen[u]=1;candidates.push(u);}}
+ return get(embed,watchUrl).then(function(page){
+  page=String(page||"").replace(/\\\//g,"/").replace(/&amp;/g,"&");
+  var re=/<iframe\\b([^>]*)>/gi,m;
+  while((m=re.exec(page))&&candidates.length<12)add(attrValue(m[1],"src"));
+  var urlRe=/(https?:\\/\\/[^\\s"'<>\\\\]+?\\.m3u8(?:\\?[^\\s"'<>\\\\]*)?)/gi;
+  while((m=urlRe.exec(page))&&candidates.length<12)add(m[1]);
+  var jsonRe=/(?:file|source|url)\\s*[:=]\\s*["']([^"']+)["']/gi;
+  while((m=jsonRe.exec(page))&&candidates.length<12)if(/m3u8|player|stream/i.test(m[1]))add(m[1]);
+  if(typeof extractVideo!=="function")throw Error("KotoTV: shared extractor unavailable");
+  var unique=candidates.filter(function(x,i,a){return a.indexOf(x)===i;});
+  return Promise.all(unique.map(function(u){return Promise.resolve(extractVideo(u,{headers:{"User-Agent":UA,"Referer":u===embed?watchUrl:embed},kind:"sub",audioLang:"ja"})).catch(function(){return [];});})).then(function(groups){
+   var out=[];groups.forEach(function(g){(Array.isArray(g)?g:[]).forEach(function(s){if(s&&s.url&&!out.some(function(x){return x.url===s.url;}))out.push(s);});});
+   if(!out.length)throw Error("KotoTV: player page and nested embeds yielded no playable streams");return out;
+  });
+ });
+}
 function getVideoSources(url,opts){
  var p=String(url||"").replace(/^kototv:\/\//,"").split("/"),slug;
  try{slug=decodeURIComponent(p[0]);}catch(e){slug=p[0];}
@@ -127,7 +146,7 @@ function getVideoSources(url,opts){
   if(!iframes.length)throw Error("KotoTV: no player iframe found on watch page");
   if(typeof extractVideo!=="function")throw Error("KotoTV: shared player extractor unavailable");
   return Promise.all(iframes.map(function(embed){
-   return Promise.resolve(extractVideo(embed,{headers:{"User-Agent":UA,"Referer":watchUrl},kind:"sub",audioLang:"ja"})).catch(function(){return [];});
+   return _kotoResolveEmbed(embed,watchUrl).catch(function(){return [];});
   })).then(function(groups){
    var out=[];groups.forEach(function(group){(Array.isArray(group)?group:[]).forEach(function(s){
     if(s&&s.url&&!out.some(function(x){return x.url===s.url;}))out.push(s);
@@ -139,4 +158,4 @@ function getVideoSources(url,opts){
 }
 function getStreams(id,opts){return getVideoSources(id,opts);}
 function getLinks(id,opts){return getVideoSources(id,opts);}
-if(typeof module!=="undefined"&&module.exports)module.exports={version:"1.0.6",getInfo:getInfo,getSettings:getSettings,getHome:getHome,search:search,getDetail:getDetail,getEpisodes:getEpisodes,getVideoSources:getVideoSources,getStreams:getStreams,getLinks:getLinks};
+if(typeof module!=="undefined"&&module.exports)module.exports={version:"1.0.7",getInfo:getInfo,getSettings:getSettings,getHome:getHome,search:search,getDetail:getDetail,getEpisodes:getEpisodes,getVideoSources:getVideoSources,getStreams:getStreams,getLinks:getLinks};
