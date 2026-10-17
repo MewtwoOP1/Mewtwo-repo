@@ -4,7 +4,7 @@
 // returns direct media URLs it can actually identify as playable, rather than
 // pretending an embed page is an HLS stream.
 
-var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID) ? String(__SOURCE_ID) : 'rean ime';
+var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID) ? String(__SOURCE_ID) : 'reanime';
 var SITE = 'https://reanime.to';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 var HEADERS = { 'User-Agent': UA, 'Accept': 'application/json, */*', 'Referer': SITE + '/' };
