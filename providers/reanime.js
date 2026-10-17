@@ -6,6 +6,9 @@
 
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID) ? String(__SOURCE_ID) : 'reanime';
 var SITE = 'https://reanime.to';
+// Public resolver fallback for FlixCloud's rotating embed decryption.
+// Catalogue/search still use Re:Anime directly; no AniList API query is made.
+var STREAM_API = 'https://lvrcdn2.rewcrew.lv';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 var HEADERS = { 'User-Agent': UA, 'Accept': 'application/json, */*', 'Referer': SITE + '/' };
 
@@ -146,6 +149,50 @@ function getDetail(url, opts) {
 function getEpisodes(url, opts) {
   return getDetail(url, opts).then(function (d) { return d.episodes || []; });
 }
+function _anilistId(anime) {
+  var id = _first(anime, ['anilist', 'anilist_id', 'anilistId']);
+  if (id && /^\\d+$/.test(String(id))) return String(id);
+  var covers = anime && anime.cover_image;
+  if (covers && typeof covers === 'object') {
+    var keys = ['extra_large', 'large', 'medium'];
+    for (var i = 0; i < keys.length; i++) {
+      var m = String(covers[keys[i]] || '').match(/\\/bx(\\d+)-/);
+      if (m) return m[1];
+    }
+  }
+  return null;
+}
+function _mapResolvedStreams(data, audio) {
+  var streams = Array.isArray(data && data.streams) ? data.streams : [];
+  var out = [], seen = {};
+  streams.forEach(function (s) {
+    var u = String(s && s.url || '');
+    if (!/^https?:\\/\\//i.test(u) || !/\\.(m3u8|mp4|m4v)(\\?|$)/i.test(u) || seen[u]) return;
+    seen[u] = 1;
+    var headers = {};
+    var rawHeaders = s.headers && typeof s.headers === 'object' ? s.headers : {};
+    Object.keys(rawHeaders).forEach(function (k) { headers[k] = String(rawHeaders[k]); });
+    if (!headers.Referer && s.referer) headers.Referer = String(s.referer);
+    var subs = [];
+    (Array.isArray(s.subtitles) ? s.subtitles : []).forEach(function (sub) {
+      if (!sub || !sub.url) return;
+      subs.push({
+        url: String(sub.url),
+        lang: String(sub.srclang || sub.lang || sub.language || sub.label || 'Sub'),
+        label: String(sub.label || sub.language || sub.srclang || 'Sub'),
+        format: /\\.srt(\\?|$)/i.test(String(sub.url)) ? 'srt' : 'vtt',
+        'default': !!sub['default']
+      });
+    });
+    out.push({
+      url: u, quality: 'Auto', label: String(s.server || s.name || 'Re:Anime'),
+      container: /\\.m3u8(\\?|$)/i.test(u) ? 'hls' : 'mp4',
+      headers: Object.keys(headers).length ? headers : HEADERS,
+      kind: audio, audioLang: audio === 'dub' ? 'en' : 'ja', subtitles: subs
+    });
+  });
+  return out;
+}
 function getVideoSources(episodeUrl, opts) {
   var raw = String(episodeUrl || '');
   var p = raw.split('|');
@@ -174,8 +221,19 @@ function getVideoSources(episodeUrl, opts) {
         subtitles: []
       });
     });
-    if (!out.length) throw new Error('Re:Anime: no direct media URLs; available FlixCloud embeds need a compatible decryptor');
-    return out;
+    if (out.length) return out;
+    // FlixCloud embed URLs cannot be played directly. Resolve through the
+    // public Anivexa endpoint using the ID already present in Re:Anime's own
+    // metadata/cover URL; this does not call AniList itself.
+    var aid = _anilistId(watch.anime || watch.data || {});
+    if (!aid) throw new Error('Re:Anime: no direct media URLs and no embedded media ID for FlixCloud resolution');
+    var audio = (opts && String(opts.category || '').toLowerCase() === 'dub') ? 'dub' : 'sub';
+    var route = STREAM_API + '/watch/reanime/' + encodeURIComponent(aid) + '/' + audio + '/rean' + 'ime-' + ep;
+    return _json(route).then(function (resolved) {
+      var playable = _mapResolvedStreams(resolved, audio);
+      if (!playable.length) throw new Error('Re:Anime: resolver returned no direct playable streams');
+      return playable;
+    });
   });
 }
 function getStreams(id, opts) { return getVideoSources(id, opts); }
