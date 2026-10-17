@@ -130,6 +130,11 @@ async function publicJsonProbe(label, url, headers = {}) {
     return j;
   } catch (e) { out("\n=== PUBLIC API PROBE "+label+" ERROR === "+e.message); return null; }
 }
+const movieEnc = await publicJsonProbe("VidLink movie ID encoder","https://enc-dec.app/api/enc-vidlink?text=550");
+const movieEncId = movieEnc && (movieEnc.result || movieEnc.data?.result);
+if (typeof movieEncId === "string" && movieEncId.length > 0 && movieEncId.length < 300) {
+  await publicJsonProbe("VidLink movie resolver with movie ID","https://vidlink.pro/api/b/movie/"+encodeURIComponent(movieEncId)+"?multiLang=0",{"Referer":"https://vidlink.pro/","Origin":"https://vidlink.pro"});
+}
 const enc = await publicJsonProbe("VidLink ID encoder","https://enc-dec.app/api/enc-vidlink?text=105248");
 const encId = enc && (enc.result || enc.data?.result);
 if (typeof encId === "string" && encId.length > 0 && encId.length < 300) {
