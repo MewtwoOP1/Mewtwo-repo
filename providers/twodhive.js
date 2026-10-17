@@ -335,7 +335,6 @@ function getVideoSources(url, opts) {
         });
       });
     });
-  });
   }).catch(function (primaryError) {
     return _fallbackEpisodeSources(pageUrl, playerUrl, mode).then(function (items) {
       if (items && items.length) return items;
