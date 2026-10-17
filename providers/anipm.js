@@ -12,7 +12,7 @@ var cache = {};
 
 function getInfo() {
   return { name: 'Ani.pm', lang: 'en', baseUrl: SITE,
-    logo: SITE + '/favicon.ico', type: 'anime', version: '1.0.5' };
+    logo: SITE + '/favicon.ico', type: 'anime', version: '1.0.6' };
 }
 function getSettings() { return []; }
 function _mode(opts) { return (opts && opts.category === 'dub') ? 'dub' : 'sub'; }
@@ -22,9 +22,31 @@ function _num(v) {
   var n = Number(v);
   return isFinite(n) && n > 0 ? n : null;
 }
+
 function _absolute(url, base) {
   if (!url) return null;
-  try { return new URL(String(url), base || SITE + '/').href; } catch (e) { return String(url); }
+  var value = String(url);
+  if (/^https?:\/\//i.test(value)) return value;
+  if (value.indexOf('//') === 0) return 'https:' + value;
+
+  var originBase = String(base || SITE + '/');
+  try {
+    if (typeof URL === 'function') return new URL(value, originBase).href;
+  } catch (e) {}
+
+  // QuickJS runtimes do not always expose the browser URL constructor. Resolve
+  // relative playlist/subtitle URLs without it so the player never receives a
+  // bare "1080/index.m3u8" path. Strip query/hash first (signed master URLs
+  // can carry tokens), then resolve against the containing directory.
+  var cleanBase = originBase.split('#')[0].split('?')[0];
+  var originMatch = cleanBase.match(/^(https?:\/\/[^/]+)/i);
+  var origin = originMatch ? originMatch[1] : SITE;
+  if (value.charAt(0) === '/') return origin + value;
+  if (!originMatch) cleanBase = SITE + '/' + cleanBase.replace(/^\/+/, '');
+  if (cleanBase.charAt(cleanBase.length - 1) !== '/') {
+    cleanBase = cleanBase.substring(0, cleanBase.lastIndexOf('/') + 1);
+  }
+  return cleanBase + value;
 }
 function _headers(ref) {
   return {
@@ -442,7 +464,7 @@ function getLinks(url, opts) { return getVideoSources(url, opts); }
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    version: '1.0.5', getInfo: getInfo, getSettings: getSettings,
+    version: '1.0.6', getInfo: getInfo, getSettings: getSettings,
     getHome: getHome, popular: popular, search: search, getDetail: getDetail,
     getEpisodes: getEpisodes, getVideoSources: getVideoSources,
     getStreams: getStreams, getLinks: getLinks
