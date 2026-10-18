@@ -5,21 +5,13 @@
     {
       "id": "vidflix",
       "name": "VidFlix",
-      "version": "1.0.1",
+      "version": "1.1.0",
       "type": "movie",
       "lang": "en",
       "file": "providers/vidflix.js",
       "logo": "https://www.google.com/s2/favicons?sz=256&domain=vidflix.site",
       "nsfw": false,
-      "settings": [
-        {
-          "key": "resolverUrl",
-          "label": "VidCore resolver URL",
-          "description": "Resolver API base URL. The default points to a candidate deployment; change it to any reachable compatible VidCore resolver (base URL, not /api/resolve).",
-          "type": "text",
-          "default": "https://advmtaxi-vidcore.hf.space"
-        }
-      ]
+      "settings": []
     },
     {
       "id": "tmdb-stremio",
