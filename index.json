@@ -68,6 +68,35 @@
       "nsfw": false
     },
     {
+      "id": "anipm",
+      "name": "Ani.pm",
+      "version": "1.4.0",
+      "type": "anime",
+      "lang": "en",
+      "file": "providers/anipm.js",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=ani.pm",
+      "nsfw": false,
+      "settings": [
+        {
+          "key": "language",
+          "label": "Preferred audio",
+          "description": "Prefer sub or dub when both are available.",
+          "type": "enum",
+          "default": "sub",
+          "options": [
+            {
+              "value": "sub",
+              "label": "Sub first"
+            },
+            {
+              "value": "dub",
+              "label": "Dub first"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "id": "anikoto",
       "name": "AniKoto",
       "version": "1.2.0",
@@ -538,7 +567,7 @@
     {
       "id": "megaplay",
       "name": "MegaPlay",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "type": "anime",
       "lang": "en",
       "file": "providers/megaplay.js",
@@ -546,13 +575,13 @@
       "nsfw": false
     },
     {
-      "id": "mew-aniem",
-      "name": "Mew-Aniem",
+      "id": "rareanimes",
+      "name": "RareAnimes",
       "version": "1.0.0",
       "type": "anime",
-      "lang": "en",
-      "file": "providers/mew-aniem.js",
-      "logo": "https://www.google.com/s2/favicons?sz=256&domain=anivexa-api9.onrender.com",
+      "lang": "hi",
+      "file": "providers/rareanimes.js",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=rareanimes.mov",
       "nsfw": false
     }
   ]
