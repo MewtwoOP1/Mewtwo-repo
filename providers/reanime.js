@@ -108,6 +108,14 @@ function _first(o, keys) {
   }
   return null;
 }
+
+// Preserve the source's AniList ID verbatim as a decimal string. The API contract
+// is /api/flix/{anilist_id}/{episode}; ID arithmetic silently breaks lookup.
+function _anilistId(o) {
+  var raw = _first(o, ['anilist_id', 'anilistId', 'anilist']);
+  var id = raw == null ? '' : String(raw).trim();
+  return /^\d+$/.test(id) && id !== '0' ? id : '';
+}
 function _arr(o) {
   if (Array.isArray(o)) return o;
   if (!o || typeof o !== 'object') return [];
@@ -207,7 +215,7 @@ function getDetail(url) {
   ]).then(function (res) {
     var d = res[0] && (res[0].data || res[0].anime || res[0]);
     var episodes = _arr(res[1]);
-    var anilistId = Number(_first(d, ['anilist_id', 'anilistId', 'anilist']) || 0);
+    var anilistId = _anilistId(d);
     var item = _item(d) || { id: slug, url: slug, title: slug, type: 'anime', sourceId: SOURCE_ID };
     item.id = slug; item.url = slug;
     item.description = String(d.description || '');
@@ -266,17 +274,22 @@ function getVideoSources(episodeUrl, opts) {
   var parts = String(episodeUrl || '').split('|');
   var slug = parts[0] || '';
   var epNum = Number(parts[1] || 0);
-  var aid = Number(parts[3] || 0);
+  var aid = String(parts[3] || '').trim();
   if (!slug || !(epNum > 0)) return Promise.reject(new Error('Re:Anime: invalid episode reference'));
   var audio = opts && String(opts.category || '').toLowerCase() === 'dub' ? 'dub' : 'sub';
-  var getAid = aid > 0 ? Promise.resolve(aid) :
+  var aidIsValid = /^\d+$/.test(aid) && aid !== '0';
+  var getAid = aidIsValid ? Promise.resolve(aid) :
     _detailData(slug).then(function (d) {
       var data = d && (d.data || d.anime || d);
-      return Number(_first(data, ['anilist_id', 'anilistId', 'anilist']) || 0);
+      return _anilistId(data);
     });
   return getAid.then(function (anilistId) {
-    if (!(anilistId > 0)) throw new Error('Re:Anime API detail did not return anilist_id');
-    return _json(FLIX_API + '/' + anilistId + '/' + epNum, SITE + '/watch/' + slug + '?ep=' + epNum);
+    // Re:Anime's flix API expects its exact anilist_id. Never increment,
+    // decrement, remap, or pass it through ID arithmetic.
+    if (!/^\d+$/.test(String(anilistId || '')) || String(anilistId) === '0') {
+      throw new Error('Re:Anime API detail did not return a valid anilist_id');
+    }
+    return _json(FLIX_API + '/' + String(anilistId) + '/' + epNum, SITE + '/watch/' + slug + '?ep=' + epNum);
   }).then(function (data) {
     var servers = _arr(data);
     var tasks = [];
