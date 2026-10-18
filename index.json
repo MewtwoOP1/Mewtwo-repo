@@ -544,6 +544,16 @@
       "file": "providers/mmani.js",
       "logo": "https://www.google.com/s2/favicons?sz=256&domain=mmani.com",
       "nsfw": false
+    },
+    {
+      "id": "anizone",
+      "name": "AniZone",
+      "version": "1.0.0",
+      "type": "anime",
+      "lang": "en",
+      "file": "providers/anizone.js",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=anizone.to",
+      "nsfw": false
     }
   ]
 }
