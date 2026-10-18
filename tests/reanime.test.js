@@ -69,6 +69,8 @@ async function main() {
   const detail = await provider.getDetail("solo-leveling-abc", {});
   assert.equal(detail.episodes.length, 2);
   assert.equal(detail.episodes[0].number, 1);
+  assert.equal(detail.episodes[0].url, "solo-leveling-abc|1|episode-one|123",
+    "AniList ID must be carried verbatim with no +/- offset");
   const streams = await provider.getVideoSources("solo-leveling-abc|2|episode-two|123", {});
   assert.equal(streams.length, 1);
   assert.equal(streams[0].url, "https://cdn.example/episode.m3u8");
