@@ -1,7 +1,7 @@
 // MegaPlay — Anikoto catalogue + MegaPlay embed playback for Zangetsu.
 // Version is mirrored in index.json; bump both whenever this source changes.
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID) ? String(__SOURCE_ID) : 'megaplay';
-var VERSION = '1.0.1';
+var VERSION = '1.0.2';
 var CATALOG = 'https://anikototv.to';
 var API = 'https://anikotoapi.site';
 var BASE = 'https://megaplays.se';
@@ -46,6 +46,7 @@ function _episodes(html, animeId, slug) {
   var out = [], seen = {}, re = /<a\b([^>]*data-id=["'](\d+)[^>]*?)>([\s\S]*?)<\/a>/gi, m;
   while ((m = re.exec(String(html || ''))) !== null) {
     var attrs = m[1], id = m[2];
+    var serverIds = (attrs.match(/data-ids=[\"']([^\"']+)/i) || [])[1] || '';
     var num = (attrs.match(/data-num=["']([^"']+)/i) || [])[1] || String(out.length + 1);
     var hasSub = /data-sub=["'](?:1|true|yes)/i.test(attrs), hasDub = /data-dub=["'](?:1|true|yes)/i.test(attrs);
     if (!hasSub && !hasDub) hasSub = true;
@@ -54,7 +55,7 @@ function _episodes(html, animeId, slug) {
       if ((lang === 'sub' && !hasSub) || (lang === 'dub' && !hasDub)) return;
       var key = id + '/' + lang; if (seen[key]) return; seen[key] = true;
       out.push({ id: id + '-' + lang, title: label + (lang === 'dub' ? ' (Dub)' : ' (Sub)'), number: Number(num) || null,
-        url: 'megaplay://' + encodeURIComponent(id) + '/' + lang + '/' + encodeURIComponent(num), type: 'anime', category: lang,
+        url: 'megaplay://' + encodeURIComponent(id) + '/' + lang + '/' + encodeURIComponent(num) + '/' + encodeURIComponent(serverIds), type: 'anime', category: lang,
         episodeId: id, animeId: animeId || null, slug: slug, sourceId: SOURCE_ID });
     });
   }
@@ -161,14 +162,15 @@ function _aesCbcDecrypt(ct,key,iv){
 function _bytesToStr(b){var s='',i=0;while(i<b.length){var c=b[i++];if(c<0x80)s+=String.fromCharCode(c);else if(c<0xE0)s+=String.fromCharCode(((c&0x1f)<<6)|(b[i++]&0x3f));else if(c<0xF0)s+=String.fromCharCode(((c&0x0f)<<12)|((b[i++]&0x3f)<<6)|(b[i++]&0x3f));else{var cp=((c&0x07)<<18)|((b[i++]&0x3f)<<12)|((b[i++]&0x3f)<<6)|(b[i++]&0x3f);cp-=0x10000;s+=String.fromCharCode(0xD800+(cp>>10),0xDC00+(cp&0x3FF));}}return s;}
 // Resolve the actual media source; /stream/s-2 is a player page, not a video file.
 function _megaExtract(embedUrl, lang) {
-  return _get(embedUrl, BASE + '/').then(function(html) {
+  var embedOrigin = (String(embedUrl).match(/^https?:\/\/[^/]+/i) || [BASE])[0];
+  return _get(embedUrl, embedOrigin + '/').then(function(html) {
     var dataId = (html.match(/data-id=["']([^"']+)["']/i) || [])[1];
     if (!dataId) throw new Error('MegaPlay: embed page has no data-id');
     var scriptUrls = [], re = /<script\b[^>]+src=["']([^"']+)["'][^>]*>/gi, m;
     while ((m = re.exec(html)) !== null) {
       var u = m[1];
       if (/^(?:https?:)?\/\//i.test(u)) scriptUrls.push(u.indexOf('//') === 0 ? 'https:' + u : u);
-      else scriptUrls.push(BASE + (u.charAt(0) === '/' ? '' : '/') + u);
+      else scriptUrls.push(embedOrigin + (u.charAt(0) === '/' ? '' : '/') + u);
     }
     return Promise.all(scriptUrls.map(function(u) { return _get(u, embedUrl); })).then(function(scripts) {
       var script = '', routes = [];
@@ -184,7 +186,7 @@ function _megaExtract(embedUrl, lang) {
       for (var j = 0; j < routes.length; j++) if (routes[j] !== legacy && routes[j].indexOf(legacy) === 0) { modern = routes[j]; break; }
       function source(route) {
         if (!route) return Promise.resolve(null);
-        var endpoint = BASE + '/' + route + '?id=' + encodeURIComponent(dataId) + '&id=' + encodeURIComponent(dataId) + '&type=' + encodeURIComponent(lang);
+        var endpoint = embedOrigin + '/' + route + '?id=' + encodeURIComponent(dataId) + '&id=' + encodeURIComponent(dataId) + '&type=' + encodeURIComponent(lang);
         return _json(endpoint, embedUrl, true).then(function(j) {
           var file = _fileFromSources(j);
           return file ? { file: file, data: j } : null;
@@ -205,13 +207,58 @@ function _megaExtract(embedUrl, lang) {
     });
   });
 }
+function _ajax(path) {
+  return _get(CATALOG + path, CATALOG + '/', true).then(function(body) {
+    try { return JSON.parse(body || 'null'); } catch (_) { return null; }
+  }).catch(function() { return null; });
+}
+function _parseServers(html) {
+  var out = [], re = /data-type=["'](\\w+)["']([\\s\\S]*?)(?=data-type=["']|$)/g, m;
+  while ((m = re.exec(String(html || ''))) !== null) {
+    var type = m[1], block = m[2], lr = /data-link-id=["']([^"']+)["'][^>]*>([^<]*)</g, lm;
+    while ((lm = lr.exec(block)) !== null) out.push({ type: type, linkId: lm[1], name: String(lm[2] || '').trim() });
+  }
+  return out;
+}
+function _tryServerList(list, i, lang) {
+  if (i >= list.length) return Promise.resolve([]);
+  return _ajax('/ajax/server?get=' + encodeURIComponent(list[i].linkId)).then(function(j) {
+    var result = j && j.result;
+    var embed = result && typeof result === 'object' ? result.url : '';
+    if (typeof embed === 'string' && /https?:\\/\\/(?:[^/]+\\.)?(?:megaplay\\.[a-z]+|megaplays\\.se|vidtube\\.[a-z]+)/i.test(embed)) {
+      return _megaExtract(embed, lang).catch(function() { return _tryServerList(list, i + 1, lang); });
+    }
+    return _tryServerList(list, i + 1, lang);
+  }).catch(function() { return _tryServerList(list, i + 1, lang); });
+}
 function getVideoSources(episodeUrl) {
   var raw = String(episodeUrl || '').replace(/^megaplay:\/\//i, '').split('/');
   var id = decodeURIComponent(raw[0] || '');
-  if (!/^\d+$/.test(id)) return Promise.resolve([]);
+  if (!/^\\d+$/.test(id)) return Promise.resolve([]);
   var lang = raw[1] === 'dub' ? 'dub' : 'sub';
-  var embedUrl = BASE + '/stream/s-2/' + encodeURIComponent(id) + '/' + lang;
-  return _megaExtract(embedUrl, lang).catch(function() { return []; });
+  var serverIds = '';
+  try { serverIds = decodeURIComponent(raw[3] || ''); } catch (_) {}
+  // Older saved episode URLs did not carry server_ids; retain the direct route
+  // as a compatibility fallback, but new episodes always resolve the site's
+  // real episode → server list → server?get → player chain.
+  if (!serverIds) {
+    var oldEmbed = BASE + '/stream/s-2/' + encodeURIComponent(id) + '/' + lang;
+    return _megaExtract(oldEmbed, lang).catch(function() { return []; });
+  }
+  return _ajax('/ajax/server/list?servers=' + encodeURIComponent(serverIds)).then(function(j) {
+    var markup = j && typeof j.result === 'string' ? j.result : '';
+    var servers = _parseServers(markup);
+    var wanted = servers.filter(function(s) {
+      var type = String(s.type || '').toLowerCase();
+      return lang === 'dub' ? type === 'dub' : (type === 'sub' || type === 'hsub');
+    });
+    if (!wanted.length) wanted = servers;
+    wanted.sort(function(a,b) {
+      function rank(s) { var n = String(s.name || '').toLowerCase(); return /megaplay|vidstream|\\bhd\\b/.test(n) ? 0 : /vidplay|vidtube/.test(n) ? 1 : 5; }
+      return rank(a) - rank(b);
+    });
+    return _tryServerList(wanted, 0, lang);
+  }).catch(function() { return []; });
 }
 function getStreams(url) { return getVideoSources(url); }
 if (typeof module !== 'undefined' && module.exports) module.exports = { version: VERSION, getInfo: getInfo, getSettings: getSettings, getHome: getHome, search: search, getDetail: getDetail, getEpisodes: getEpisodes, getVideoSources: getVideoSources, getStreams: getStreams };
