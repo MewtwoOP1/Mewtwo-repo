@@ -81,7 +81,7 @@ async function main() {
   assert.equal(ep1.length, 1);
   assert.equal(ep1[0].url, 'https://cdn.example/naruto-ep1.m3u8');
   assert.equal(ep1[0].container, 'hls');
-  assert.ok(calls.some(c => c.url === 'https://codedew.com/multiquality/?url=ARGON01'));
+  assert.ok(calls.some(c => c.url === 'https://argon.razorshell.space/embed/ARGON01'), 'MultiQuality URL should resolve to Argon embed');
   assert.ok(calls.some(c => c.url === 'https://argon.razorshell.space/embed/ARGON01'));
   const ep2 = await provider.getVideoSources(detail.episodes[1].url);
   assert.equal(ep2.length, 1);
