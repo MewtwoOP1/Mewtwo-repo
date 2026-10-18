@@ -71,7 +71,7 @@ function _cards(html) {
     var cover = img && ((img[0].match(/data-src=["']([^"']+)["']/i) || [])[1]
       || (img[0].match(/src=["']([^"']+)["']/i) || [])[1]);
     out.push({ id: slug, title: _text(title), englishTitle: _text(title),
-      url: slug, cover: cover ? _url(cover) : null, type: 'anime', sourceId: SOURCE_ID,
+      url: _url(href), cover: cover ? _url(cover) : null, type: 'anime', sourceId: SOURCE_ID,
       episodes: [], subCount: 0, dubCount: 0 });
   }
   // Senshi's newer frontend may use different card wrappers; accept simple title links as fallback.
@@ -81,7 +81,7 @@ function _cards(html) {
       var slug2 = _slugFromUrl(m[1]), title2 = _text(m[2]);
       if (!slug2 || !title2 || title2.length > 120 || seen[slug2]) continue;
       seen[slug2] = 1;
-      out.push({ id: slug2, title: title2, englishTitle: title2, url: slug2,
+      out.push({ id: slug2, title: title2, englishTitle: title2, url: _url(m[1]),
         cover: null, type: 'anime', sourceId: SOURCE_ID, episodes: [], subCount: 0, dubCount: 0 });
     }
   }
