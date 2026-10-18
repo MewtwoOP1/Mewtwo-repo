@@ -6,7 +6,7 @@ var SITE = 'https://justanime.to';
 var API = 'https://core.justanime.to/api';
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID)
   ? String(__SOURCE_ID) : 'justanime';
-var VERSION = '1.9.3';
+var VERSION = '1.9.4';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
   '(KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36';
 
@@ -105,6 +105,15 @@ function _numericId(value) {
   var n = Number(s);
   return isFinite(n) && n > 0 ? n : null;
 }
+// Take the first VALID ID, not merely the first non-null field. Some API
+// deployments may include an empty/zero alias alongside the canonical id.
+function _firstNumericId(values) {
+  for (var i = 0; i < values.length; i++) {
+    var id = _numericId(values[i]);
+    if (id !== null) return id;
+  }
+  return null;
+}
 var _cardCache = {};
 function _card(item) {
   var id = _id(item), title = _title(item);
@@ -128,8 +137,7 @@ function _card(item) {
     id: id, title: title, englishTitle: englishTitle,
     url: id, cover: _cover(item) || null,
     type: 'anime', sourceId: SOURCE_ID,
-    malId: _numericId(item.idMal != null ? item.idMal :
-      (item.malId != null ? item.malId : item.mal_id)),
+    malId: _firstNumericId([item.idMal, item.malId, item.mal_id]),
     // JustAnime's catalogue IS AniList's catalogue: the API's `id` is the
     // AniList ID (the detail payload is the AniList Media schema and carries
     // the MAL ID separately as `idMal` — e.g. Frieren id 154587 / idMal
@@ -140,8 +148,7 @@ function _card(item) {
     // AniList now refuses/rate-limits, which surfaces in the app as the
     // repeated "AniList is having a moment" failure. An explicit field, if
     // the API ever sends one, still wins over the catalogue ID.
-    anilistId: _numericId(item.anilistId != null ? item.anilistId :
-      (item.anilist_id != null ? item.anilist_id : item.id))
+    anilistId: _firstNumericId([item.anilistId, item.anilist_id, item.id])
   };
   // Keep the last good search/home card available to detail resolution. The
   // episode API can succeed while the detail API temporarily fails; don't
@@ -354,12 +361,10 @@ function _fetchDetail(url, opts) {
       description: _stripHtml(anime.description || anime.synopsis || ''),
       status: anime.status || 'unknown', genres: genres, studios: [],
       type: 'anime', sourceId: SOURCE_ID, year: anime.seasonYear || anime.year || null,
-      malId: anime.idMal || anime.malId || anime.mal_id || (cachedCard && cachedCard.malId) || null,
-      // The detail payload never carries an `anilistId` field either; its
-      // `id` is the AniList ID (see _card). Fall back to it last so a detail
-      // opened without a preceding search/home card still ships the ID
-      // instead of having it deleted as empty below.
-      anilistId: anime.anilistId || anime.anilist_id || (cachedCard && cachedCard.anilistId) || _numericId(anime.id) || null,
+      malId: _firstNumericId([anime.idMal, anime.malId, anime.mal_id, cachedCard && cachedCard.malId]),
+      // Preserve valid explicit IDs, but skip empty/zero/invalid aliases so
+      // the cached card or the catalogue's numeric id can still identify it.
+      anilistId: _firstNumericId([anime.anilistId, anime.anilist_id, cachedCard && cachedCard.anilistId, anime.id]),
       episodes: episodes, subCount: count || episodes.length, dubCount: count || episodes.length
     };
     // Optional metadata must be absent, not an empty placeholder: consumers
