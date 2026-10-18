@@ -45,4 +45,4 @@ The provider manifest and JavaScript interface follow the self-contained source 
 
 The code in this repository is licensed under the MIT License. See [LICENSE](LICENSE). Third-party names, logos, APIs, metadata, and content remain the property of their respective owners and are subject to their own terms.
 
-The mock regression suite includes: title extraction that rejects numeric-only KotoTV/AniKoto cards, AniKoto API title-object normalization, HiAnime catalogue-to-player resolution, and HDHub4u movie detail/direct-media handling.
+The mock regression suite includes: exact JustAnime AniList-ID passthrough, AniList/MAL field separation, detail fallback, ordered episodes, retry behaviour and stream URL handling; title extraction and API normalization for AniKoto; HiAnime catalogue-to-player resolution; and HDHub4u movie detail/direct-media handling.
