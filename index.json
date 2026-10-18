@@ -68,35 +68,6 @@
       "nsfw": false
     },
     {
-      "id": "anipm",
-      "name": "Ani.pm",
-      "version": "1.4.1",
-      "type": "anime",
-      "lang": "en",
-      "file": "providers/anipm.js",
-      "logo": "https://www.google.com/s2/favicons?sz=256&domain=ani.pm",
-      "nsfw": false,
-      "settings": [
-        {
-          "key": "language",
-          "label": "Preferred audio",
-          "description": "Prefer sub or dub when both are available.",
-          "type": "enum",
-          "default": "sub",
-          "options": [
-            {
-              "value": "sub",
-              "label": "Sub first"
-            },
-            {
-              "value": "dub",
-              "label": "Dub first"
-            }
-          ]
-        }
-      ]
-    },
-    {
       "id": "anikoto",
       "name": "AniKoto",
       "version": "1.2.0",
@@ -555,16 +526,6 @@
       ]
     },
     {
-      "id": "yuzono-animeworldindia-hi",
-      "name": "AnimeWorld India (Hindi, Yuzono)",
-      "version": "1.0.0",
-      "type": "anime",
-      "lang": "hi",
-      "file": "providers/yuzono-animeworldindia-hi.js",
-      "logo": "https://www.google.com/s2/favicons?sz=256&domain=anime-world.co",
-      "nsfw": false
-    },
-    {
       "id": "megaplay",
       "name": "MegaPlay",
       "version": "1.0.2",
@@ -575,13 +536,13 @@
       "nsfw": false
     },
     {
-      "id": "anime-hindi",
-      "name": "Anime Hindi",
+      "id": "allanime",
+      "name": "AllAnime",
       "version": "1.0.0",
       "type": "anime",
-      "lang": "hi",
-      "file": "providers/anime-hindi.js",
-      "logo": "https://www.google.com/s2/favicons?sz=256&domain=anime-api-xza2.onrender.com",
+      "lang": "en",
+      "file": "providers/allanime.js",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=allanime-api.mdtahseen7378.workers.dev",
       "nsfw": false
     }
   ]

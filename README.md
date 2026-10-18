@@ -45,4 +45,4 @@ The provider manifest and JavaScript interface follow the self-contained source 
 
 The code in this repository is licensed under the MIT License. See [LICENSE](LICENSE). Third-party names, logos, APIs, metadata, and content remain the property of their respective owners and are subject to their own terms.
 
-The active anime providers include Anime Hindi v1.0.0, integrated with the documented ZeroTwo-Py Hindi Anime API endpoints for search, details, episodes, and streams, plus Ani.pm, AniKoto, AnV, HiAnime, AnimeSuge, AnimeWorld India, and MegaPlay. Ani.pm v1.4.1 includes an explicit regression check that AniList IDs are passed through unchanged. API availability and third-party playback still require live verification.
+The active anime providers include AllAnime v1.0.0, integrated with the live AllAnime Direct Cloudflare Worker API for search, details, sub/dub episode lists, and playback URL resolution, alongside AniKoto, AnV, HiAnime, AnimeSuge, and MegaPlay. The Worker root endpoint confirmed the API is running; playback was not tested end-to-end in the Zangetsu player.
