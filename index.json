@@ -1,0 +1,549 @@
+{
+  "name": "𝑴𝒆𝒘𝒕𝒘𝒐♡ Repo",
+  "description": "𝑴𝒆𝒘𝒕𝒘𝒐♡ community sources for Zangetsu. Third-party provider integrations; this repository does not host video files.",
+  "sources": [
+    {
+      "id": "tmdb-stremio",
+      "name": "TMDB + Stremio",
+      "version": "3.0.0",
+      "type": "movie",
+      "lang": "en",
+      "file": "providers/tmdb-stremio.js",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=themoviedb.org",
+      "nsfw": false,
+      "settings": [
+        {
+          "key": "tmdbApiKey",
+          "label": "TMDB API Key (optional; blank uses app default)",
+          "description": "Your personal TMDB v3 API key. Leave blank to use Zangetsu’s built-in key. Sent only to TMDB.",
+          "type": "text",
+          "default": ""
+        },
+        {
+          "key": "addonUrls",
+          "label": "Stremio Add-on URLs (manifest URLs; comma/newline separated)",
+          "description": "One or more Stremio-compatible add-on manifest URLs. Add-ons provide streams; this repository does not host video.",
+          "type": "text",
+          "default": ""
+        },
+        {
+          "key": "maxStreamsPerAddon",
+          "label": "Max streams per add-on (limit results from each add-on)",
+          "description": "Maximum number of streams considered per configured add-on.",
+          "type": "enum",
+          "default": "25",
+          "options": [
+            {
+              "value": "5",
+              "label": "5 streams"
+            },
+            {
+              "value": "10",
+              "label": "10 streams"
+            },
+            {
+              "value": "25",
+              "label": "25 streams"
+            },
+            {
+              "value": "50",
+              "label": "50 streams"
+            },
+            {
+              "value": "100",
+              "label": "100 streams"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "animesuge",
+      "name": "AnimeSuge",
+      "version": "1.0.3",
+      "type": "anime",
+      "lang": "en",
+      "file": "providers/animesuge.js",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=animesuge.cz",
+      "nsfw": false
+    },
+    {
+      "id": "anikoto",
+      "name": "AniKoto",
+      "version": "1.2.0",
+      "type": "anime",
+      "lang": "en",
+      "file": "providers/anikoto.js",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=anikotoapi.site",
+      "nsfw": false
+    },
+    {
+      "id": "anv",
+      "name": "AnV",
+      "version": "1.0.4",
+      "type": "anime",
+      "lang": "en",
+      "file": "providers/anv.js",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=anv.to",
+      "nsfw": false
+    },
+    {
+      "id": "hianime",
+      "name": "HiAnime",
+      "version": "1.2.2",
+      "type": "anime",
+      "lang": "en",
+      "file": "providers/hianime.js",
+      "logo": "https://hianime.at/favicon.ico",
+      "nsfw": false
+    },
+    {
+      "id": "hdhub4u",
+      "name": "HDHub4u",
+      "version": "1.2.4",
+      "type": "movie",
+      "lang": "hi",
+      "file": "providers/hdhub4u.js",
+      "logo": "https://new5.hdhub4u.cl/favicon.ico",
+      "nsfw": false
+    },
+    {
+      "id": "serenity-animekai",
+      "name": "AnimeKai (Unoriginal)",
+      "version": "0.2.9",
+      "type": "anime",
+      "lang": "en",
+      "file": "providers/serenity-animekai.js",
+      "logo": "https://animekaitv.to/favicon.ico",
+      "nsfw": false,
+      "settings": [
+        {
+          "key": "audioLanguage",
+          "label": "Audio language override",
+          "description": "Audio language override.",
+          "type": "enum",
+          "default": "auto",
+          "options": [
+            {
+              "value": "auto",
+              "label": "Detect automatically"
+            },
+            {
+              "value": "en",
+              "label": "English"
+            },
+            {
+              "value": "ja",
+              "label": "Japanese"
+            },
+            {
+              "value": "zh",
+              "label": "Chinese"
+            },
+            {
+              "value": "ko",
+              "label": "Korean"
+            },
+            {
+              "value": "hi",
+              "label": "Hindi"
+            },
+            {
+              "value": "es",
+              "label": "Spanish"
+            },
+            {
+              "value": "fr",
+              "label": "French"
+            },
+            {
+              "value": "de",
+              "label": "German"
+            },
+            {
+              "value": "pt",
+              "label": "Portuguese"
+            },
+            {
+              "value": "ru",
+              "label": "Russian"
+            },
+            {
+              "value": "ar",
+              "label": "Arabic"
+            }
+          ]
+        },
+        {
+          "key": "timeout",
+          "label": "Request timeout",
+          "description": "Request timeout.",
+          "type": "enum",
+          "default": "12000",
+          "options": [
+            {
+              "value": "8000",
+              "label": "8 seconds"
+            },
+            {
+              "value": "12000",
+              "label": "12 seconds"
+            }
+          ]
+        },
+        {
+          "key": "audio",
+          "label": "Episode audio",
+          "description": "Episode audio.",
+          "type": "enum",
+          "default": "both",
+          "options": [
+            {
+              "value": "both",
+              "label": "Sub and dub"
+            },
+            {
+              "value": "sub",
+              "label": "Sub only"
+            },
+            {
+              "value": "dub",
+              "label": "Dub only"
+            }
+          ]
+        },
+        {
+          "key": "subtitles",
+          "label": "Include subtitle tracks",
+          "description": "Whether to return subtitle tracks when available.",
+          "type": "bool",
+          "default": true
+        },
+        {
+          "key": "homeOrder",
+          "label": "Home section order",
+          "description": "Home section order.",
+          "type": "enum",
+          "default": "popular",
+          "options": [
+            {
+              "value": "popular",
+              "label": "Popular"
+            },
+            {
+              "value": "latest",
+              "label": "Latest updates"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "serenity-aniwave",
+      "name": "AniWave (Unoriginal)",
+      "version": "0.2.9",
+      "type": "anime",
+      "lang": "en",
+      "file": "providers/serenity-aniwave.js",
+      "logo": "https://animewave.to/favicon.ico",
+      "nsfw": false,
+      "settings": [
+        {
+          "key": "audioLanguage",
+          "label": "Audio language override",
+          "description": "Audio language override.",
+          "type": "enum",
+          "default": "auto",
+          "options": [
+            {
+              "value": "auto",
+              "label": "Detect automatically"
+            },
+            {
+              "value": "en",
+              "label": "English"
+            },
+            {
+              "value": "ja",
+              "label": "Japanese"
+            },
+            {
+              "value": "zh",
+              "label": "Chinese"
+            },
+            {
+              "value": "ko",
+              "label": "Korean"
+            },
+            {
+              "value": "hi",
+              "label": "Hindi"
+            },
+            {
+              "value": "es",
+              "label": "Spanish"
+            },
+            {
+              "value": "fr",
+              "label": "French"
+            },
+            {
+              "value": "de",
+              "label": "German"
+            },
+            {
+              "value": "pt",
+              "label": "Portuguese"
+            },
+            {
+              "value": "ru",
+              "label": "Russian"
+            },
+            {
+              "value": "ar",
+              "label": "Arabic"
+            }
+          ]
+        },
+        {
+          "key": "timeout",
+          "label": "Request timeout",
+          "description": "Request timeout.",
+          "type": "enum",
+          "default": "12000",
+          "options": [
+            {
+              "value": "8000",
+              "label": "8 seconds"
+            },
+            {
+              "value": "12000",
+              "label": "12 seconds"
+            }
+          ]
+        },
+        {
+          "key": "audio",
+          "label": "Episode audio",
+          "description": "Episode audio.",
+          "type": "enum",
+          "default": "both",
+          "options": [
+            {
+              "value": "both",
+              "label": "Sub and dub"
+            },
+            {
+              "value": "sub",
+              "label": "Sub only"
+            },
+            {
+              "value": "dub",
+              "label": "Dub only"
+            }
+          ]
+        },
+        {
+          "key": "subtitles",
+          "label": "Include subtitle tracks",
+          "description": "Whether to return subtitle tracks when available.",
+          "type": "bool",
+          "default": true
+        },
+        {
+          "key": "homeOrder",
+          "label": "Home section order",
+          "description": "Home section order.",
+          "type": "enum",
+          "default": "popular",
+          "options": [
+            {
+              "value": "popular",
+              "label": "Popular"
+            },
+            {
+              "value": "latest",
+              "label": "Latest updates"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "serenity-cinestream",
+      "name": "CineStream",
+      "version": "0.2.9",
+      "type": "movie",
+      "lang": "en",
+      "file": "providers/serenity-cinestream.js",
+      "logo": "https://v3-cinemeta.strem.io/favicon.ico",
+      "nsfw": false,
+      "settings": [
+        {
+          "key": "audioLanguage",
+          "label": "Audio language override",
+          "description": "Audio language override.",
+          "type": "enum",
+          "default": "auto",
+          "options": [
+            {
+              "value": "auto",
+              "label": "Detect automatically"
+            },
+            {
+              "value": "en",
+              "label": "English"
+            },
+            {
+              "value": "ja",
+              "label": "Japanese"
+            },
+            {
+              "value": "zh",
+              "label": "Chinese"
+            },
+            {
+              "value": "ko",
+              "label": "Korean"
+            },
+            {
+              "value": "hi",
+              "label": "Hindi"
+            },
+            {
+              "value": "es",
+              "label": "Spanish"
+            },
+            {
+              "value": "fr",
+              "label": "French"
+            },
+            {
+              "value": "de",
+              "label": "German"
+            },
+            {
+              "value": "pt",
+              "label": "Portuguese"
+            },
+            {
+              "value": "ru",
+              "label": "Russian"
+            },
+            {
+              "value": "ar",
+              "label": "Arabic"
+            }
+          ]
+        },
+        {
+          "key": "timeout",
+          "label": "Request timeout",
+          "description": "Request timeout.",
+          "type": "enum",
+          "default": "12000",
+          "options": [
+            {
+              "value": "8000",
+              "label": "8 seconds"
+            },
+            {
+              "value": "12000",
+              "label": "12 seconds"
+            }
+          ]
+        },
+        {
+          "key": "streamServer",
+          "label": "Stream servers",
+          "description": "Stream servers.",
+          "type": "enum",
+          "default": "all",
+          "options": [
+            {
+              "value": "all",
+              "label": "All available"
+            },
+            {
+              "value": "1",
+              "label": "Server 1"
+            },
+            {
+              "value": "2",
+              "label": "Server 2"
+            },
+            {
+              "value": "3",
+              "label": "Server 3"
+            }
+          ]
+        },
+        {
+          "key": "sameTitle",
+          "label": "Same-title preference",
+          "description": "Same-title preference.",
+          "type": "enum",
+          "default": "series",
+          "options": [
+            {
+              "value": "series",
+              "label": "Prefer series"
+            },
+            {
+              "value": "movie",
+              "label": "Prefer movie"
+            }
+          ]
+        },
+        {
+          "key": "catalog",
+          "label": "Browse and search",
+          "description": "Browse and search.",
+          "type": "enum",
+          "default": "both",
+          "options": [
+            {
+              "value": "both",
+              "label": "Movies and series"
+            },
+            {
+              "value": "movie",
+              "label": "Movies"
+            },
+            {
+              "value": "series",
+              "label": "Series"
+            }
+          ]
+        },
+        {
+          "key": "subtitles",
+          "label": "Include subtitle tracks",
+          "description": "Whether to return subtitle tracks when available.",
+          "type": "bool",
+          "default": true
+        }
+      ]
+    },
+    {
+      "id": "megaplay",
+      "name": "MegaPlay",
+      "version": "1.0.2",
+      "type": "anime",
+      "lang": "en",
+      "file": "providers/megaplay.js",
+      "logo": "https://megaplays.se/favicon.ico",
+      "nsfw": false
+    },
+    {
+      "id": "mmani",
+      "name": "MMani",
+      "version": "1.0.1",
+      "type": "anime",
+      "lang": "en",
+      "file": "providers/mmani.js",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=mmani.com",
+      "nsfw": false
+    }
+  ]
+}
