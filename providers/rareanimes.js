@@ -390,6 +390,7 @@ function _decodeBase64Binary(input) {
     if (bits >= 8) {
       bits -= 8;
       out += String.fromCharCode((buffer >> bits) & 255);
+      buffer &= bits ? ((1 << bits) - 1) : 0;
     }
   }
   return out;
