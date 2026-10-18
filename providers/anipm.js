@@ -5,7 +5,7 @@ var SITE = 'https://ani.pm';
 var API = SITE + '/api';
 var EMBED = 'https://embed.settlar.io';
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID) ? String(__SOURCE_ID) : 'anipm';
-var VERSION = '1.3.7';
+var VERSION = '1.3.8';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36';
 var _seriesCache = {};
 var _detailCache = {};
@@ -142,9 +142,13 @@ function _card(item, legacy) {
     _anilistId(item), urlAniListMatch && urlAniListMatch[1]
   ]);
   // Source-native IDs route detail and playback; tracker IDs are separate.
-  var sourceId = item.id != null ? item.id : (item.slug != null ? item.slug :
+  var aniUrlId = urlAniListMatch && urlAniListMatch[1] ? _num(urlAniListMatch[1]) : null;
+  // Partner API rows can include an internal item.id while their canonical
+  // /ani/<id> URL points at the AniList ID expected by /series and /embed.
+  // When that URL is explicit, it is the authoritative playback ID.
+  var sourceId = legacy && aniUrlId !== null ? aniUrlId : (item.id != null ? item.id : (item.slug != null ? item.slug :
     (explicitAniListId !== null ? explicitAniListId :
-      _firstNum([item.malId, item.mal_id, item.mal, item.idMal])));
+      _firstNum([item.malId, item.mal_id, item.mal, item.idMal]))));
   var ref = legacy ? _legacyRef(sourceId, explicitAniListId) : _newRef(item);
   if (!title || !ref || !ref.id || ref.id === 'undefined') return null;
   var alt = item.englishTitle || item.english || item.romaji || item.nativeTitle;
@@ -265,7 +269,7 @@ function _parseRef(value) {
 }
 function _bootstrap(ref, episode, language) {
   var url = API + '/anime/playback-bootstrap/' + encodeURIComponent(ref.source) + '/' + encodeURIComponent(ref.id) +
-    '?ep=' + encodeURIComponent(episode) + '&lang=' + encodeURIComponent(language) + '&routes=e4';
+    '?ep=' + encodeURIComponent(episode) + '&lang=' + encodeURIComponent(language) + '&routes=e4&backup=1';
   return _json(url, SITE + '/');
 }
 function _core(data) { return data && (data.core || data.anime || (data.data && data.data.core) || (data.data && data.data.anime)) || null; }
@@ -432,11 +436,53 @@ function getEpisodes(url, opts) {
   }).catch(function(){return [];});
 }
 function _isHttp(url) { return /^https?:\/\//i.test(String(url || '')); }
-function _legacyStreams(id, ep, language) {
+function _legacyBootstrapStreams(id, ep, language, anilistId) {
+  // The partner embed can be blocked by a Cloudflare challenge in native
+  // clients. Ani.pm's newer bootstrap can expose the independent MegaPlay
+  // backup route, so try it before declaring the episode unavailable.
+  if (anilistId == null || String(anilistId) === '') {
+    return Promise.reject(new Error('Ani.pm returned no playable streams'));
+  }
+  var ref = {source:'anilist', id:String(anilistId), legacy:false};
+  function resolve(lang) {
+    return _bootstrap(ref,ep,lang).then(function(boot) {
+      var selection = boot && boot.settlarSelection;
+      if (selection) {
+        return _streamUrl(ref,ep,lang,lang,selection).then(function(stream) {
+          return stream ? [stream] : null;
+        }).catch(function(){ return null; }).then(function(rows) {
+          if (rows && rows.length) return rows;
+          var backup = boot && (boot.backupEmbed || (boot.data && boot.data.backupEmbed));
+          var backupUrl = typeof backup === 'string' ? backup : (backup && backup.url);
+          if (_isHttp(backupUrl) && (!backup || typeof backup !== 'object' || backup.available !== false)) {
+            return [{url:backupUrl,quality:'Embed',container:'embed',kind:'embed',embed:true,downloadable:false,
+              label:'Ani.pm MegaPlay Backup',headers:{'User-Agent':UA,'Referer':SITE+'/'}}];
+          }
+          return null;
+        });
+      }
+      var backup = boot && (boot.backupEmbed || (boot.data && boot.data.backupEmbed));
+      var backupUrl = typeof backup === 'string' ? backup : (backup && backup.url);
+      if (_isHttp(backupUrl) && (!backup || typeof backup !== 'object' || backup.available !== false)) {
+        return [{url:backupUrl,quality:'Embed',container:'embed',kind:'embed',embed:true,downloadable:false,
+          label:'Ani.pm MegaPlay Backup',headers:{'User-Agent':UA,'Referer':SITE+'/'}}];
+      }
+      return null;
+    }).catch(function(){return null;});
+  }
+  return resolve(language).then(function(rows) {
+    if (rows && rows.length) return rows;
+    return resolve(language === 'sub' ? 'dub' : 'sub');
+  }).then(function(rows) {
+    if (rows && rows.length) return rows;
+    throw new Error('Ani.pm returned no playable streams');
+  });
+}
+function _legacyStreams(id, ep, language, anilistId) {
   function resolve(lang) {
     var embedUrl = SITE + '/embed/ani/' + encodeURIComponent(id) + '/' + encodeURIComponent(ep) + '/' + lang;
     return _text(embedUrl,SITE + '/').then(function(html) {
-      var match = html.match(/id="anipm-embed-config">([^<]+)<\/script>/);
+      var match = html.match(/id="anipm-embed-config">([^<]+)<\\/script>/);
       if (!match) throw new Error('Ani.pm embed config missing');
       var config = JSON.parse(match[1]), nonce = config && config.nonce;
       if (!nonce) throw new Error('Ani.pm embed nonce missing');
@@ -446,7 +492,7 @@ function _legacyStreams(id, ep, language) {
         if (!session.token) throw new Error('Ani.pm session token missing');
         return _json(EMBED + '/api/embed/session?t=' + encodeURIComponent(session.token),EMBED + '/').then(function(stream) {
           if (!stream.source) throw new Error('Settlar stream missing');
-          return [{url:stream.source,quality:'Auto',container:(stream.kind === 'hls' || /\.m3u8(?:[?#]|$)/i.test(stream.source))?'hls':'mp4',
+          return [{url:stream.source,quality:'Auto',container:(stream.kind === 'hls' || /\\.m3u8(?:[?#]|$)/i.test(stream.source))?'hls':'mp4',
             headers:{'User-Agent':UA,'Referer':EMBED+'/'},kind:'raw',label:'Ani.pm '+lang.toUpperCase(),
             subtitles:(stream.subtitles || []).filter(function(x){return x && x.url;}).map(function(x){var lbl=x.label||x.srclang||'Unknown';return {url:x.url,file:x.url,lang:lbl,label:lbl};})}];
         });
@@ -455,7 +501,11 @@ function _legacyStreams(id, ep, language) {
   }
   var langs=[language,language==='sub'?'dub':'sub'];
   return Promise.all(langs.map(function(lang){return resolve(lang).catch(function(){return [];});}))
-    .then(function(rows){var out=[];rows.forEach(function(list){out=out.concat(list);});if(!out.length)throw new Error('Ani.pm returned no playable streams');return out;});
+    .then(function(rows){
+      var out=[]; rows.forEach(function(list){out=out.concat(list);});
+      if(out.length) return out;
+      return _legacyBootstrapStreams(id,ep,language,anilistId);
+    });
 }
 function _streamUrl(ref, ep, lang, channel, selection) {
   var url = API + '/anime/settlar/session?selection=' + encodeURIComponent(selection) + '&provider=anipm&ep=' +
@@ -487,7 +537,7 @@ function getVideoSources(episodeUrl, opts) {
   var ref = _parseRef(split[0]);
   if (!ref || !isFinite(ep) || ep < 1) return Promise.reject(new Error('Ani.pm: invalid episode reference'));
   var language = _settings().language;
-  if (ref.legacy) return _legacyStreams(ref.id,ep,language);
+  if (ref.legacy) return _legacyStreams(ref.id,ep,language,ref.anilistIdIsExplicit ? ref.anilistId : null);
   function resolveWith(data, lang) {
     var packages = _packages(data), pkg = packages[String(ep)] || {};
     if (pkg[lang] !== true && pkg[lang + 'hard'] !== true) return Promise.resolve(null);
