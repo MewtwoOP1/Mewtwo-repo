@@ -170,7 +170,6 @@ function _resolveUrl(request) {
 }
 function _toAbsolute(url) {
   var s = String(url || '');
-  if (/^https?:\/\//i.test(s)) return s;
   var base = _resolverBase();
   if (!base) return '';
   if (!/^https?:\/\//i.test(s)) return base + (s.charAt(0) === '/' ? '' : '/') + s;
