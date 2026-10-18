@@ -57,16 +57,20 @@ const provider = require("../providers/reanime.js");
 async function main() {
   assert.equal(provider.getInfo().name, "Re:Anime");
   assert.equal(provider.getInfo().type, "anime");
-  assert.equal(provider.getInfo().version, "1.2.1");
-  assert.equal(provider.version, "1.2.1");
+  assert.equal(provider.getInfo().version, "1.2.2");
+  assert.equal(provider.version, "1.2.2");
   const results = await provider.search("Solo Leveling", 1, {});
   assert.equal(results.length, 1);
   assert.equal(results[0].id, "solo-leveling-abc");
   assert.equal(results[0].cover, "https://img.example/solo.jpg");
+  assert.equal(results[0].anilistId, 123,
+    "Search cards must carry anilistId, or the app re-resolves the title via AniList");
   const fallback = await provider.search("CloudflareFallback", 1, {});
   assert.equal(fallback.length, 1, "Re:Anime must rotate to a supported upstream domain after a Cloudflare Moment page");
   assert.equal(fallback[0].id, "cloudflare-fallback-title");
   const detail = await provider.getDetail("solo-leveling-abc", {});
+  assert.equal(detail.anilistId, 123,
+    "Detail must carry anilistId, or the app re-resolves the title via AniList");
   assert.equal(detail.episodes.length, 2);
   assert.equal(detail.episodes[0].number, 1);
   assert.equal(detail.episodes[0].url, "solo-leveling-abc|1|episode-one|123",

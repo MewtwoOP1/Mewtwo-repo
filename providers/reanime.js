@@ -15,7 +15,7 @@ var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, l
 function getInfo() {
   return { name: 'Re:Anime', lang: 'en', baseUrl: SITE,
     logo: 'https://www.google.com/s2/favicons?sz=256&domain=reanime.to',
-    type: 'anime', version: '1.2.1' };
+    type: 'anime', version: '1.2.2' };
 }
 function getSettings() { return []; }
 
@@ -161,6 +161,7 @@ function _item(o) {
   return {
     id: slug, url: slug, title: _title(o), name: _title(o),
     cover: _cover(o), poster: _cover(o), type: 'anime', sourceId: SOURCE_ID,
+    anilistId: Number(_anilistId(o)) || undefined,
     subCount: Number(o.subbed || 0), dubCount: Number(o.dubbed || 0)
   };
 }
@@ -234,6 +235,7 @@ function getDetail(url) {
     item.genres = Array.isArray(d.genres) ? d.genres : [];
     item.year = d.season_year || (d.start_date && d.start_date.year) || null;
     item.malId = Number(d.mal_id || 0) || undefined;
+    item.anilistId = Number(anilistId) || item.anilistId;
     item.episodes = episodes.map(function (ep, i) { return _episode(ep, i, slug, anilistId); });
     item.subCount = Number(d.subbed || 0) || item.episodes.length;
     item.dubCount = Number(d.dubbed || 0);
@@ -391,7 +393,7 @@ function getLinks(id, opts) { return getVideoSources(id, opts); }
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    version: '1.2.1', getInfo: getInfo, getSettings: getSettings,
+    version: '1.2.2', getInfo: getInfo, getSettings: getSettings,
     getHome: getHome, popular: popular, search: search,
     getDetail: getDetail, getEpisodes: getEpisodes,
     getVideoSources: getVideoSources, getStreams: getStreams, getLinks: getLinks
