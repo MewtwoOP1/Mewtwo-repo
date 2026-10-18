@@ -28,13 +28,18 @@ global.fetch = async function (url, opts) {
       { serverName: "HD-2", dataType: "sub", dataLink: "https://flixcloud.cc/e/token123" }
     ]
   }) };
-  if (url === "https://flixcloud.cc/d/token123/__data.json") return { status: 200, body: JSON.stringify({
-    fileId: "12345678-1234-1234-1234-123456789abc",
-    token: "eyJheader.payload.signature",
-    base: "https://fetch1.flixcloud.cc", resolution: "1080p"
-  }) };
-  if (url.includes("https://fetch1.flixcloud.cc/download/12345678-1234-1234-1234-123456789abc/progress?")) {
-    return { status: 200, body: 'data: {"status":"ready"}\n\n' };
+  if (url === "https://flixcloud.cc/e/token123") return { status: 200, body:
+    '<script>const data = { type: "data", data: { video: "encoded", subtitles: [], intro_chapter: null, outro_chapter: null }, uses: [] };</script>' };
+  if (url === "https://enc-dec.app/api/dec-flixcloud?type=token" && opts && opts.method === "POST") {
+    return { status: 200, body: JSON.stringify({ status: 200, result: { token: "tok123", context: { ctx: "token-context" } } }) };
+  }
+  if (url === "https://flixcloud.cc/api/m3u8/tok123") {
+    return { status: 200, body: JSON.stringify({ encrypted: "manifest" }) };
+  }
+  if (url === "https://enc-dec.app/api/dec-flixcloud?type=stream" && opts && opts.method === "POST") {
+    return { status: 200, body: JSON.stringify({ status: 200, result: {
+      stream: "https://cdn.example/master.m3u8?token=abc", context: { w_payload: "payload value" }
+    } }) };
   }
   return { status: 404, body: "{}" };
 };
@@ -55,8 +60,8 @@ async function main() {
   assert.equal(streams[0].container, "hls");
   const resolved = await provider.getVideoSources("solo-leveling-abc|1|episode-one|123", {});
   assert.equal(resolved.length, 1);
-  assert.equal(resolved[0].url, "https://fetch1.flixcloud.cc/download/12345678-1234-1234-1234-123456789abc?token=eyJheader.payload.signature");
-  assert.equal(resolved[0].container, "mkv");
+  assert.equal(resolved[0].url, "https://enc-dec.app/api/parse-flixcloud?url=https%3A%2F%2Fcdn.example%2Fmaster.m3u8%3Ftoken%3Dabc&w_payload=payload%20value");
+  assert.equal(resolved[0].container, "hls");
   console.log("Re:Anime upstream API and direct/download URL tests passed.");
 }
 main().catch(e => { console.error(e); process.exitCode = 1; });
