@@ -6,7 +6,7 @@ var SITE = 'https://justanime.to';
 var API = 'https://core.justanime.to/api';
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID)
   ? String(__SOURCE_ID) : 'justanime';
-var VERSION = '1.9.4';
+var VERSION = '1.9.5';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
   '(KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36';
 
@@ -285,6 +285,32 @@ var _detailCache = {};
 var _detailInflight = {};
 var _DETAIL_TTL = 30000;
 
+// If a title has already been found by search/home, never turn an unexpected
+// detail-parser failure into a null result. Z Mode treats null from a matched
+// provider as a hard detail failure; this fallback preserves source identity
+// and known metadata while leaving episodes empty so the catalogue can supply
+// its own ordered episode list. We deliberately do not infer any ID namespace:
+// only IDs explicitly supplied by the source card are carried through.
+function _cachedCardDetail(id) {
+  var card = _cardCache[String(id)];
+  if (!card) return null;
+  var detail = {
+    id: String(id),
+    title: card.title,
+    url: String(id),
+    type: 'anime',
+    sourceId: SOURCE_ID,
+    episodes: [],
+    subCount: 0,
+    dubCount: 0
+  };
+  if (card.englishTitle) detail.englishTitle = card.englishTitle;
+  if (card.cover) detail.cover = card.cover;
+  if (card.malId) detail.malId = card.malId;
+  if (card.anilistId) detail.anilistId = card.anilistId;
+  return detail;
+}
+
 function getDetail(url, opts) {
   var id = _extractId(url);
   if (!/^\d+$/.test(id)) return Promise.resolve(null);
@@ -295,6 +321,10 @@ function getDetail(url, opts) {
   if (_detailInflight[key]) return _detailInflight[key];
   var pending = _fetchDetail(url, opts).then(function (detail) {
     delete _detailInflight[key];
+    // A source item may have been matched from search even when detail parsing
+    // fails unexpectedly. Returning null here makes the JS bridge throw and
+    // can surface as the misleading AniList failure banner in Z Mode.
+    if (!detail) detail = _cachedCardDetail(key);
     // Never cache an empty/failed response; a temporary upstream miss must
     // not pin a broken episode list in the app.
     if (detail && Array.isArray(detail.episodes) && detail.episodes.length) {
@@ -303,6 +333,8 @@ function getDetail(url, opts) {
     return detail;
   }, function (error) {
     delete _detailInflight[key];
+    var fallback = _cachedCardDetail(key);
+    if (fallback) return fallback;
     throw error;
   });
   _detailInflight[key] = pending;
