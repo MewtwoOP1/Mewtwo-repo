@@ -110,7 +110,7 @@
     {
       "id": "anipm",
       "name": "Ani.pm",
-      "version": "1.3.8",
+      "version": "1.3.9",
       "type": "anime",
       "lang": "en",
       "file": "providers/anipm.js",

@@ -5,7 +5,7 @@ var SITE = 'https://ani.pm';
 var API = SITE + '/api';
 var EMBED = 'https://embed.settlar.io';
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID) ? String(__SOURCE_ID) : 'anipm';
-var VERSION = '1.3.8';
+var VERSION = '1.3.9';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36';
 var _seriesCache = {};
 var _detailCache = {};
@@ -379,7 +379,16 @@ function _fetchDetail(url, opts) {
         malId:_firstNum([root.malId, root.mal_id, root.mal, root.idMal, lookup.malId, lookup.mal_id, lookup.mal, lookup.idMal]),
         anilistId:_firstNum([_anilistId(root), _anilistId(lookup),
           ref.anilistIdIsExplicit ? ref.anilistId : null]),
-        episodes:rows.map(function(item,index){var n=_episodeNumber(item)||index+1;return {id:ref.id+'||'+n,number:n,title:item.title||('Episode '+n),url:ref.id+'||'+n,sourceId:SOURCE_ID};}),
+        episodes:rows.map(function(item,index){
+          var n=_episodeNumber(item)||index+1;
+          // Keep the explicit AniList URL in episode references. The app can
+          // call getVideoSources with detail.episodes directly instead of
+          // getEpisodes(); a bare numeric ref loses the tracker ID and makes
+          // the playback-bootstrap fallback impossible.
+          var episodeRef = ref.anilistIdIsExplicit && ref.anilistId !== null && String(ref.id) === String(ref.anilistId)
+            ? SITE + '/ani/' + encodeURIComponent(ref.anilistId) : String(ref.id);
+          return {id:episodeRef+'||'+n,number:n,title:item.title||('Episode '+n),url:episodeRef+'||'+n,sourceId:SOURCE_ID};
+        }),
         subCount:rows.length,dubCount:rows.length};
       if (!detail.englishTitle) delete detail.englishTitle;
       if (!detail.cover) delete detail.cover;

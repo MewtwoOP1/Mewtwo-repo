@@ -90,7 +90,7 @@ global.fetch = async (url, options) => {
 const provider = require('../providers/anipm.js');
 
 async function main() {
-  assert.equal(provider.version, '1.3.8');
+  assert.equal(provider.version, '1.3.9');
   assert.equal(provider.getInfo().name, 'Ani.pm');
   assert.equal(provider.getInfo().type, 'anime');
   assert.equal(provider.getSettings()[0].default, 'sub');
@@ -136,8 +136,19 @@ async function main() {
   assert.equal(backupStreams[0].url, 'https://megaplay.buzz/stream/s-2/16498/sub');
   assert.equal(backupStreams[0].container, 'embed',
     'use Ani.pm bootstrap MegaPlay backup when legacy Settlar resolution returns no source');
+
+  // Zangetsu may use detail.episodes directly without calling getEpisodes().
+  // Those URLs must retain the AniList ID so playback fallback can resolve.
+  const backupDetail = await provider.getDetail(backupResults[0].url, {});
+  assert.equal(backupDetail.episodes.length, 1);
+  assert.equal(backupDetail.episodes[0].url, 'https://ani.pm/ani/16498||1',
+    'detail-generated episodes must preserve the canonical AniList route');
+  const detailBackupStreams = await provider.getVideoSources(backupDetail.episodes[0].url, {});
+  assert.equal(detailBackupStreams.length, 1);
+  assert.equal(detailBackupStreams[0].url, 'https://megaplay.buzz/stream/s-2/16498/sub',
+    'detail-generated episode URLs must reach the Ani.pm backup stream fallback');
   assert.ok(calls.some((c) => c.url.indexOf('https://ani.pm/api/anime/playback-bootstrap/anilist/16498?') === 0),
-    'legacy partner results must try modern bootstrap backup when Settlar legacy route fails');
+    'legacy partner results must try modern bootstrap backup when legacy Settlar resolution fails');
 
   const brokenResults = await provider.search('Broken Anime', 1, {});
   assert.equal(brokenResults.length, 1);
