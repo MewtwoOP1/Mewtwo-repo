@@ -138,16 +138,10 @@ function _card(item) {
     url: id, cover: _cover(item) || null,
     type: 'anime', sourceId: SOURCE_ID,
     malId: _firstNumericId([item.idMal, item.malId, item.mal_id]),
-    // JustAnime's catalogue IS AniList's catalogue: the API's `id` is the
-    // AniList ID (the detail payload is the AniList Media schema and carries
-    // the MAL ID separately as `idMal` — e.g. Frieren id 154587 / idMal
-    // 52991). Search/home payloads send no `anilistId` field at all, so
-    // reading only that field shipped `anilistId: null` on every card. With
-    // no ID on the card the app cannot ID-match the title and re-resolves it
-    // through AniList title search on every tap/open — the anonymous search
-    // AniList now refuses/rate-limits, which surfaces in the app as the
-    // repeated "AniList is having a moment" failure. An explicit field, if
-    // the API ever sends one, still wins over the catalogue ID.
+    // Prefer the provider's explicit AniList ID fields. The final `item.id`
+    // fallback preserves this adapter's existing behavior for payloads that
+    // expose only `id`; it is not evidence that the live upstream ID namespace
+    // has been verified. No offsets or other transformations are applied.
     anilistId: _firstNumericId([item.anilistId, item.anilist_id, item.id])
   };
   // Keep the last good search/home card available to detail resolution. The
@@ -398,8 +392,9 @@ function _fetchDetail(url, opts) {
       status: anime.status || 'unknown', genres: genres, studios: [],
       type: 'anime', sourceId: SOURCE_ID, year: anime.seasonYear || anime.year || null,
       malId: _firstNumericId([anime.idMal, anime.malId, anime.mal_id, cachedCard && cachedCard.malId]),
-      // Preserve valid explicit IDs, but skip empty/zero/invalid aliases so
-      // the cached card or the catalogue's numeric id can still identify it.
+      // Keep valid explicit IDs ahead of the cached card; the source payload's
+      // `id` remains the final fallback under this adapter's current contract.
+      // This normalizes values only and does not convert between ID namespaces.
       anilistId: _firstNumericId([anime.anilistId, anime.anilist_id, cachedCard && cachedCard.anilistId, anime.id]),
       episodes: episodes, subCount: count || episodes.length, dubCount: count || episodes.length
     };
