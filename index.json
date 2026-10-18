@@ -110,7 +110,7 @@
     {
       "id": "reanime",
       "name": "Re:Anime",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "type": "anime",
       "lang": "en",
       "file": "providers/reanime.js",
