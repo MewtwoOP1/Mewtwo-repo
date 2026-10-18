@@ -219,7 +219,11 @@ function _episodeCount(anime) {
   return isFinite(n) && n > 0 ? Math.min(n, 1000) : 0;
 }
 function _stripHtml(value) {
-  return String(value || '').replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ')
+  var text = String(value || '');
+  // Use the host-provided HTML text helper when present, matching other
+  // providers; keep the self-contained fallback for runtimes without it.
+  if (typeof htmlText === 'function') return htmlText(text);
+  return text.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ')
     .replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
     .replace(/\s+/g, ' ').replace(/^\s+|\s+$/g, '');
 }
