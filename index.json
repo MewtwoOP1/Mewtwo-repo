@@ -116,6 +116,424 @@
       "file": "providers/reanime.js",
       "logo": "https://www.google.com/s2/favicons?sz=256&domain=reanime.to",
       "nsfw": false
+    },
+    {
+      "id": "serenity-animekai",
+      "name": "AnimeKai (Unoriginal)",
+      "version": "0.2.9",
+      "type": "anime",
+      "lang": "en",
+      "file": "providers/serenity-animekai.js",
+      "logo": "https://animekaitv.to/favicon.ico",
+      "nsfw": false,
+      "settings": [
+        {
+          "key": "audioLanguage",
+          "label": "Audio language override",
+          "description": "Audio language override.",
+          "type": "enum",
+          "default": "auto",
+          "options": [
+            {
+              "value": "auto",
+              "label": "Detect automatically"
+            },
+            {
+              "value": "en",
+              "label": "English"
+            },
+            {
+              "value": "ja",
+              "label": "Japanese"
+            },
+            {
+              "value": "zh",
+              "label": "Chinese"
+            },
+            {
+              "value": "ko",
+              "label": "Korean"
+            },
+            {
+              "value": "hi",
+              "label": "Hindi"
+            },
+            {
+              "value": "es",
+              "label": "Spanish"
+            },
+            {
+              "value": "fr",
+              "label": "French"
+            },
+            {
+              "value": "de",
+              "label": "German"
+            },
+            {
+              "value": "pt",
+              "label": "Portuguese"
+            },
+            {
+              "value": "ru",
+              "label": "Russian"
+            },
+            {
+              "value": "ar",
+              "label": "Arabic"
+            }
+          ]
+        },
+        {
+          "key": "timeout",
+          "label": "Request timeout",
+          "description": "Request timeout.",
+          "type": "enum",
+          "default": "12000",
+          "options": [
+            {
+              "value": "8000",
+              "label": "8 seconds"
+            },
+            {
+              "value": "12000",
+              "label": "12 seconds"
+            }
+          ]
+        },
+        {
+          "key": "audio",
+          "label": "Episode audio",
+          "description": "Episode audio.",
+          "type": "enum",
+          "default": "both",
+          "options": [
+            {
+              "value": "both",
+              "label": "Sub and dub"
+            },
+            {
+              "value": "sub",
+              "label": "Sub only"
+            },
+            {
+              "value": "dub",
+              "label": "Dub only"
+            }
+          ]
+        },
+        {
+          "key": "subtitles",
+          "label": "Include subtitle tracks",
+          "description": "Whether to return subtitle tracks when available.",
+          "type": "bool",
+          "default": true
+        },
+        {
+          "key": "homeOrder",
+          "label": "Home section order",
+          "description": "Home section order.",
+          "type": "enum",
+          "default": "popular",
+          "options": [
+            {
+              "value": "popular",
+              "label": "Popular"
+            },
+            {
+              "value": "latest",
+              "label": "Latest updates"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "serenity-aniwave",
+      "name": "AniWave (Unoriginal)",
+      "version": "0.2.9",
+      "type": "anime",
+      "lang": "en",
+      "file": "providers/serenity-aniwave.js",
+      "logo": "https://animewave.to/favicon.ico",
+      "nsfw": false,
+      "settings": [
+        {
+          "key": "audioLanguage",
+          "label": "Audio language override",
+          "description": "Audio language override.",
+          "type": "enum",
+          "default": "auto",
+          "options": [
+            {
+              "value": "auto",
+              "label": "Detect automatically"
+            },
+            {
+              "value": "en",
+              "label": "English"
+            },
+            {
+              "value": "ja",
+              "label": "Japanese"
+            },
+            {
+              "value": "zh",
+              "label": "Chinese"
+            },
+            {
+              "value": "ko",
+              "label": "Korean"
+            },
+            {
+              "value": "hi",
+              "label": "Hindi"
+            },
+            {
+              "value": "es",
+              "label": "Spanish"
+            },
+            {
+              "value": "fr",
+              "label": "French"
+            },
+            {
+              "value": "de",
+              "label": "German"
+            },
+            {
+              "value": "pt",
+              "label": "Portuguese"
+            },
+            {
+              "value": "ru",
+              "label": "Russian"
+            },
+            {
+              "value": "ar",
+              "label": "Arabic"
+            }
+          ]
+        },
+        {
+          "key": "timeout",
+          "label": "Request timeout",
+          "description": "Request timeout.",
+          "type": "enum",
+          "default": "12000",
+          "options": [
+            {
+              "value": "8000",
+              "label": "8 seconds"
+            },
+            {
+              "value": "12000",
+              "label": "12 seconds"
+            }
+          ]
+        },
+        {
+          "key": "audio",
+          "label": "Episode audio",
+          "description": "Episode audio.",
+          "type": "enum",
+          "default": "both",
+          "options": [
+            {
+              "value": "both",
+              "label": "Sub and dub"
+            },
+            {
+              "value": "sub",
+              "label": "Sub only"
+            },
+            {
+              "value": "dub",
+              "label": "Dub only"
+            }
+          ]
+        },
+        {
+          "key": "subtitles",
+          "label": "Include subtitle tracks",
+          "description": "Whether to return subtitle tracks when available.",
+          "type": "bool",
+          "default": true
+        },
+        {
+          "key": "homeOrder",
+          "label": "Home section order",
+          "description": "Home section order.",
+          "type": "enum",
+          "default": "popular",
+          "options": [
+            {
+              "value": "popular",
+              "label": "Popular"
+            },
+            {
+              "value": "latest",
+              "label": "Latest updates"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "serenity-cinestream",
+      "name": "CineStream",
+      "version": "0.2.9",
+      "type": "movie",
+      "lang": "en",
+      "file": "providers/serenity-cinestream.js",
+      "logo": "https://v3-cinemeta.strem.io/favicon.ico",
+      "nsfw": false,
+      "settings": [
+        {
+          "key": "audioLanguage",
+          "label": "Audio language override",
+          "description": "Audio language override.",
+          "type": "enum",
+          "default": "auto",
+          "options": [
+            {
+              "value": "auto",
+              "label": "Detect automatically"
+            },
+            {
+              "value": "en",
+              "label": "English"
+            },
+            {
+              "value": "ja",
+              "label": "Japanese"
+            },
+            {
+              "value": "zh",
+              "label": "Chinese"
+            },
+            {
+              "value": "ko",
+              "label": "Korean"
+            },
+            {
+              "value": "hi",
+              "label": "Hindi"
+            },
+            {
+              "value": "es",
+              "label": "Spanish"
+            },
+            {
+              "value": "fr",
+              "label": "French"
+            },
+            {
+              "value": "de",
+              "label": "German"
+            },
+            {
+              "value": "pt",
+              "label": "Portuguese"
+            },
+            {
+              "value": "ru",
+              "label": "Russian"
+            },
+            {
+              "value": "ar",
+              "label": "Arabic"
+            }
+          ]
+        },
+        {
+          "key": "timeout",
+          "label": "Request timeout",
+          "description": "Request timeout.",
+          "type": "enum",
+          "default": "12000",
+          "options": [
+            {
+              "value": "8000",
+              "label": "8 seconds"
+            },
+            {
+              "value": "12000",
+              "label": "12 seconds"
+            }
+          ]
+        },
+        {
+          "key": "streamServer",
+          "label": "Stream servers",
+          "description": "Stream servers.",
+          "type": "enum",
+          "default": "all",
+          "options": [
+            {
+              "value": "all",
+              "label": "All available"
+            },
+            {
+              "value": "1",
+              "label": "Server 1"
+            },
+            {
+              "value": "2",
+              "label": "Server 2"
+            },
+            {
+              "value": "3",
+              "label": "Server 3"
+            }
+          ]
+        },
+        {
+          "key": "sameTitle",
+          "label": "Same-title preference",
+          "description": "Same-title preference.",
+          "type": "enum",
+          "default": "series",
+          "options": [
+            {
+              "value": "series",
+              "label": "Prefer series"
+            },
+            {
+              "value": "movie",
+              "label": "Prefer movie"
+            }
+          ]
+        },
+        {
+          "key": "catalog",
+          "label": "Browse and search",
+          "description": "Browse and search.",
+          "type": "enum",
+          "default": "both",
+          "options": [
+            {
+              "value": "both",
+              "label": "Movies and series"
+            },
+            {
+              "value": "movie",
+              "label": "Movies"
+            },
+            {
+              "value": "series",
+              "label": "Series"
+            }
+          ]
+        },
+        {
+          "key": "subtitles",
+          "label": "Include subtitle tracks",
+          "description": "Whether to return subtitle tracks when available.",
+          "type": "bool",
+          "default": true
+        }
+      ]
     }
   ]
 }
