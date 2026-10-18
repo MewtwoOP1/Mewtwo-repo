@@ -27,12 +27,82 @@ function _headers(referer, accept) {
     'Referer': referer || SITE + '/home'
   };
 }
+// Yuzono's maintained Re:Anime extension supports these domains. Rotate only
+// when a host is down, rate-limited, blocked, or serving a Cloudflare interstitial.
+var SITE_DOMAINS = ['https://reanime.to', 'https://reanime.cz', 'https://reanime.wtf'];
+function _isMomentPage(response) {
+  var body = String(response && response.body || '').toLowerCase();
+  var headers = response && response.headers || {};
+  var cfMitigated = String(headers['cf-mitigated'] || headers['CF-Mitigated'] || '').toLowerCase();
+  return cfMitigated.indexOf('challenge') >= 0 ||
+    body.indexOf('just a moment') >= 0 ||
+    body.indexOf('cf-chl-') >= 0 ||
+    body.indexOf('challenge-platform') >= 0 ||
+    body.indexOf('checking your browser') >= 0 ||
+    body.indexOf('checking if the site connection is secure') >= 0 ||
+    body.indexOf('attention required') >= 0 ||
+    body.indexOf('enable javascript and cookies') >= 0;
+}
+function _fetchOnce(url, referer, timeoutMs, accept, browser) {
+  return fetch(url, {
+    headers: _headers(referer, accept),
+    timeoutMs: timeoutMs || 12000,
+    browser: browser === true
+  }).then(function (r) {
+    var response = {
+      body: String(r && r.body || ''),
+      headers: r && r.headers || {},
+      status: r && r.status || 200
+    };
+    if (!r || (response.status >= 400 && !_isMomentPage(response))) {
+      var err = new Error('HTTP ' + response.status);
+      err.response = response;
+      throw err;
+    }
+    return response;
+  });
+}
 function _fetch(url, referer, timeoutMs, accept) {
-  return fetch(url, { headers: _headers(referer, accept), timeoutMs: timeoutMs || 12000 })
-    .then(function (r) {
-      if (!r || (r.status && r.status >= 400)) throw new Error('HTTP ' + (r && r.status));
-      return { body: String(r.body || ''), headers: r.headers || {}, status: r.status || 200 };
-    });
+  var sourceDomain = SITE_DOMAINS.filter(function (domain) {
+    return String(url).indexOf(domain) === 0;
+  })[0];
+  var domains = sourceDomain ? SITE_DOMAINS : [''];
+  var lastError = null;
+  function tryDomain(i) {
+    if (i >= domains.length) {
+      return Promise.reject(lastError || new Error('Re:Anime: all supported domains failed'));
+    }
+    var domain = domains[i];
+    var targetUrl = sourceDomain ? domain + String(url).slice(sourceDomain.length) : url;
+    var targetReferer = sourceDomain && referer && String(referer).indexOf(sourceDomain) === 0
+      ? domain + String(referer).slice(sourceDomain.length)
+      : (referer || (domain || SITE) + '/home');
+    return _fetchOnce(targetUrl, targetReferer, Math.min(timeoutMs || 12000, 7000), accept, false)
+      .then(function (response) {
+        if (!_isMomentPage(response)) return response;
+        // Ask Zangetsu's native browser/Cloudflare lane to retry the challenge.
+        return _fetchOnce(targetUrl, targetReferer, Math.min(timeoutMs || 12000, 7000), accept, true)
+          .then(function (cleared) {
+            if (_isMomentPage(cleared)) {
+              var err = new Error('Re:Anime Cloudflare challenge remained after browser retry');
+              err.response = cleared;
+              throw err;
+            }
+            return cleared;
+          });
+      })
+      .catch(function (err) {
+        lastError = err;
+        var response = err && err.response;
+        if (response && !_isMomentPage(response) &&
+            response.status < 500 && response.status !== 403 && response.status !== 429) {
+          // A real client error (e.g. unknown anime slug) is not a domain outage.
+          throw err;
+        }
+        return tryDomain(i + 1);
+      });
+  }
+  return tryDomain(0);
 }
 function _json(url, referer) {
   return _fetch(url, referer).then(function (r) {
@@ -48,6 +118,15 @@ function _first(o, keys) {
   }
   return null;
 }
+ 
+// Preserve the upstream AniList ID verbatim. Never offset, increment, decrement,
+// or coerce it through numeric arithmetic before calling /api/flix.
+function _anilistId(o) {
+  var raw = _first(o, ['anilist_id', 'anilistId', 'anilist']);
+  var id = raw == null ? '' : String(raw).trim();
+  return /^\d+$/.test(id) && id !== '0' ? id : '';
+}
+
 function _arr(o) {
   if (Array.isArray(o)) return o;
   if (!o || typeof o !== 'object') return [];
@@ -147,7 +226,7 @@ function getDetail(url) {
   ]).then(function (res) {
     var d = res[0] && (res[0].data || res[0].anime || res[0]);
     var episodes = _arr(res[1]);
-    var anilistId = Number(_first(d, ['anilist_id', 'anilistId', 'anilist']) || 0);
+    var anilistId = _anilistId(d);
     var item = _item(d) || { id: slug, url: slug, title: slug, type: 'anime', sourceId: SOURCE_ID };
     item.id = slug; item.url = slug;
     item.description = String(d.description || '');
@@ -272,11 +351,11 @@ function getVideoSources(episodeUrl, opts) {
   var getAid = aid > 0 ? Promise.resolve(aid) :
     _detailData(slug).then(function (d) {
       var data = d && (d.data || d.anime || d);
-      return Number(_first(data, ['anilist_id', 'anilistId', 'anilist']) || 0);
+      return _anilistId(data);
     });
   return getAid.then(function (anilistId) {
-    if (!(anilistId > 0)) return [];
-    return _json(FLIX_API + '/' + anilistId + '/' + epNum, SITE + '/watch/' + slug + '?ep=' + epNum)
+    if (!/^\d+$/.test(String(anilistId || '')) || String(anilistId) === '0') return [];
+    return _json(FLIX_API + '/' + String(anilistId) + '/' + epNum, SITE + '/watch/' + slug + '?ep=' + epNum)
       .then(function (data) {
         var servers = _arr(data);
         var tasks = [];
