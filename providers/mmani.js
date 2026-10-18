@@ -2,7 +2,7 @@
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID) ? String(__SOURCE_ID) : 'mmani';
 var SITE='https://mmani.com', API='https://eng.animeapps.top/api', EP_API='https://epeng.animeapps.top';
 var UA='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
-function getInfo(){return {name:'MMani',lang:'en',baseUrl:SITE,logo:'https://www.google.com/s2/favicons?sz=256&domain=mmani.com',type:'anime',version:'1.0.3'};}
+function getInfo(){return {name:'MMani',lang:'en',baseUrl:SITE,logo:'https://www.google.com/s2/favicons?sz=256&domain=mmani.com',type:'anime',version:'1.0.4'};}
 function getSettings(){return [];}
 function _fetch(url,referer){return fetch(url,{headers:{'User-Agent':UA,'Accept':'application/json, text/html, */*','Referer':referer||SITE+'/'},timeoutMs:15000}).then(function(r){if(!r||(r.status&&r.status>=400))return '';if(typeof r.body==='string')return r.body;if(typeof r.text==='function')return r.text();return '';}).catch(function(){return '';});}
 function _json(url,referer){return _fetch(url,referer).then(function(s){try{return JSON.parse(s||'null');}catch(e){return null;}});}
@@ -14,7 +14,7 @@ function _postId(x){var v=x&&(x.postid||x.post_id||x.postId);return v==null?'':S
 function _cover(x){return x&&(x.ani_cover_large||x.image||x.poster||x.cover||x.thumbnail||x.thumbnail_url||x.img)||null;}
 function _card(x){var title=_title(x),aid=_anilist(x),post=_postId(x),id=aid||post;if(!id||!title)return null;var item={id:id,title:title,englishTitle:title,url:'mmani://'+encodeURIComponent(id)+'/'+encodeURIComponent(title)+'/'+encodeURIComponent(post),type:'anime',sourceId:SOURCE_ID};var cover=_cover(x);if(typeof cover==='string'&&cover)item.cover=/^https?:\/\//i.test(cover)?cover:(SITE+(cover.charAt(0)==='/'?'':'/')+cover);if(aid)item.anilistId=aid;if(post)item.postId=post;return item;}
 function search(query,page,opts){var q=String(query||'').trim();if(!q)return Promise.resolve([]);var pg=parseInt(page,10);if(!isFinite(pg)||pg<1)pg=1;return _json(API+'/search3.php?keyword='+encodeURIComponent(q)+'&limit=30&page='+pg,SITE+'/').then(function(j){var seen={},out=[];_rows(j).forEach(function(x){var c=_card(x);if(c&&!seen[c.url]){seen[c.url]=1;out.push(c);}});return out;}).catch(function(){return [];});}
-function getHome(){return Promise.resolve([]);}
+function getHome(){return _json(API+'/apihistory.php?limit=30&page=1',SITE+'/').then(function(j){var seen={},out=[];_rows(j).forEach(function(x){var c=_card(x);if(c&&!seen[c.url]){seen[c.url]=1;out.push(c);}});return out;}).catch(function(){return [];});}
 function _parseUrl(url){var raw=String(url||'').replace(/^mmani:\/\//i,'').split('/');function dec(s){try{return decodeURIComponent(s||'');}catch(e){return s||'';}}return {id:dec(raw[0]),title:dec(raw[1]),postId:dec(raw[2])};}
 function _resolveId(p){if(/^\d+$/.test(p.id)&&p.postId&&p.id===p.postId)return _json(API+'/single.php?postid='+encodeURIComponent(p.postId),SITE+'/').then(function(j){var aid=_anilist(j&&j.data);return aid||p.id;}).catch(function(){return p.id;});return Promise.resolve(p.id);}
 function _servers(id){if(!/^\d+$/.test(String(id||'')))return Promise.resolve([]);return _json(EP_API+'/api2.php?epid='+encodeURIComponent(id),SITE+'/').then(function(j){if(Array.isArray(j))return j;if(j&&Array.isArray(j.data))return j.data;if(j&&Array.isArray(j.servers))return j.servers;return [];}).catch(function(){return [];});}
