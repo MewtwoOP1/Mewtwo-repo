@@ -3,6 +3,25 @@
   "description": "𝑴𝒆𝒘𝒕𝒘𝒐♡ community sources for Zangetsu. Third-party provider integrations; this repository does not host video files.",
   "sources": [
     {
+      "id": "vidflix",
+      "name": "VidFlix",
+      "version": "1.0.0",
+      "type": "movie",
+      "lang": "en",
+      "file": "providers/vidflix.js",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=vidflix.site",
+      "nsfw": false,
+      "settings": [
+        {
+          "key": "resolverUrl",
+          "label": "VidCore resolver URL",
+          "description": "Resolver API base URL. The default is the public VidCore resolver; for a private deployment, enter its base URL (not /api/resolve).",
+          "type": "text",
+          "default": "https://advmtaxi-vidcore.hf.space"
+        }
+      ]
+    },
+    {
       "id": "tmdb-stremio",
       "name": "TMDB + Stremio",
       "version": "3.0.0",
