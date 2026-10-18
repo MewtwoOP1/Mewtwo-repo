@@ -1,0 +1,40 @@
+const assert = require('node:assert/strict');
+const calls = [];
+global.fetch = async function (url, options) {
+  url = String(url); calls.push({url, options: options || {}});
+  if (url.indexOf('api.themoviedb.org/3/search/multi?') >= 0) return {status:200,body:JSON.stringify({results:[{id:853,title:'Hope',release_date:'2025-01-01',poster_path:'/hope.jpg',media_type:'movie'}]})};
+  if (url.indexOf('api.themoviedb.org/3/trending/movie/week') >= 0 || url.indexOf('api.themoviedb.org/3/movie/popular') >= 0) return {status:200,body:JSON.stringify({results:[{id:853,title:'Hope',release_date:'2025-01-01',media_type:'movie'}]})};
+  if (url.indexOf('api.themoviedb.org/3/trending/tv/week') >= 0 || url.indexOf('api.themoviedb.org/3/tv/popular') >= 0) return {status:200,body:JSON.stringify({results:[]})};
+  if (url.indexOf('api.themoviedb.org/3/movie/853?') >= 0) return {status:200,body:JSON.stringify({id:853,title:'Hope',overview:'Test synopsis',release_date:'2025-01-01',poster_path:'/hope.jpg'})};
+  if (url.indexOf('api.themoviedb.org/3/tv/42?') >= 0) return {status:200,body:JSON.stringify({id:42,name:'Test Series',seasons:[{season_number:1}]})};
+  if (url.indexOf('api.themoviedb.org/3/tv/42/season/1?') >= 0) return {status:200,body:JSON.stringify({episodes:[{episode_number:1,name:'Pilot'}]})};
+  if (url.indexOf('vidspark.to/api/vidora/v1/movie/853') >= 0) return {status:200,body:JSON.stringify({result:true,sources:[{url:'https://media.example/hope/master.m3u8',tracks:[{file:'/subs/en.vtt',label:'English'}]}]})};
+  if (url.indexOf('cdn.vidspark.to/api/vidora/v1/movie/853') >= 0) return {status:200,body:JSON.stringify({result:false,sources:[]})};
+  if (url.indexOf('cdn.vidspark.to/api/vidora/v1/tv/42/1/1') >= 0) return {status:200,body:JSON.stringify({result:false,sources:[]})};
+  return {status:404,body:'{}'};
+};
+const p = require('../providers/pressplayx.js');
+async function main() {
+  assert.equal(p.version,'1.0.1');
+  assert.equal(p.getInfo().name,'PressPlayX');
+  assert.equal(p.getInfo().type,'movie');
+  assert.deepEqual(p.getSettings(),[]);
+  const results = await p.search('Hope',1,{});
+  assert.equal(results.length,1);
+  assert.equal(results[0].title,'Hope (2025)');
+  const detail = await p.getDetail(results[0].url,{});
+  assert.equal(detail.description,'Test synopsis');
+  const movieEpisodes = await p.getEpisodes(results[0].url,{});
+  assert.equal(movieEpisodes.length,1);
+  const streams = await p.getVideoSources(movieEpisodes[0].url,{});
+  assert.equal(streams.length,1);
+  assert.equal(streams[0].url,'https://media.example/hope/master.m3u8');
+  assert.equal(streams[0].container,'hls');
+  assert.equal(streams[0].subtitles[0].url,'https://vidspark.to/subs/en.vtt');
+  const tvEpisodes = await p.getEpisodes('pressplay://tv/42',{});
+  assert.equal(tvEpisodes.length,1);
+  assert.match(tvEpisodes[0].url,/pressplay-play:\/\/tv\/42\/1\/1/);
+  assert.ok(calls.some(c => c.url.indexOf('x-player-key') < 0 && c.url.indexOf('vidspark.to/api/vidora') >= 0));
+  console.log('PressPlayX mocked search, details, movie/series episodes and HLS playback tests passed.');
+}
+main().catch(e => {console.error(e);process.exitCode=1;});

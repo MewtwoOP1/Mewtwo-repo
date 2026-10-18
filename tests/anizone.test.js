@@ -12,7 +12,7 @@ global.fetch = async (url, opts) => {
   return {status:404,body:"not found"};
 };
 async function main(){
-  assert.equal(provider.version,"1.0.0");
+  assert.equal(provider.version,"1.0.2");
   assert.equal(provider.getInfo().name,"AniZone");
   assert.deepEqual(await provider.search("",1,{}),[]);
   const found=await provider.search("Sample Anime",1,{});
