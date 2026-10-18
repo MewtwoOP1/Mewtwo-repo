@@ -6,7 +6,7 @@ global.fetch = async function(url, options) {
   url = String(url); calls.push({url, options:options || {}});
   if (url === 'https://senshi.to/search?keyword=Frieren') return {status:200,body:'<div class="flw-item"><div class="film-name"><a href="/anime/frieren-999">Frieren</a></div><img src="/poster.jpg" alt="Frieren"></div>'};
   if (url === 'https://senshi.to/') return {status:200,body:'<div class="flw-item"><div class="film-name"><a href="/anime/frieren-999">Frieren</a></div><img src="/poster.jpg" alt="Frieren"></div>'};
-  if (url === 'https://senshi.to/frieren-999' || url === 'https://senshi.to/anime%2Ffrieren-999') return {status:200,body:'<html><head><meta name="description" content="An elf mage."><meta property="og:image" content="https://img.example/poster.jpg"></head><body><h1>Frieren</h1></body></html>'};
+  if (url === 'https://senshi.to/anime/frieren-999') return {status:200,body:'<html><head><meta name="description" content="An elf mage."><meta property="og:image" content="https://img.example/poster.jpg"></head><body><h1>Frieren</h1></body></html>'};
   if (url === 'https://senshi.to/episodes/frieren-999') return {status:200,body:JSON.stringify([{ep_id:1,ep_title:'The End'},{ep_id:2,ep_title:'The Journey'}])};
   if (url === 'https://senshi.to/episode-embeds/frieren-999/1') return {status:200,body:JSON.stringify([{status:'Sub',url:'https://cdn.example/episode.m3u8'}])};
   if (url === 'https://senshi.to/episode-embeds/frieren-999/2') return {status:200,body:JSON.stringify([{status:'Sub',url:'https://embed.example/watch/2'}])};
