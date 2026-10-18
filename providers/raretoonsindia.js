@@ -15,7 +15,7 @@ var CATS = [
 ];
 
 function getInfo() {
-  return { name: 'Rare Toons India', lang: 'hi', baseUrl: SITE, logo: SITE + '/favicon.ico', type: 'anime', version: VERSION };
+  return { name: 'Rare Toons India', lang: 'hi', baseUrl: SITE, logo: 'https://www.google.com/s2/favicons?sz=256&domain=rareanimes.mov', type: 'anime', version: VERSION };
 }
 function getSettings() { return []; }
 function _get(url, ref) {
