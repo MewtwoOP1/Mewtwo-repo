@@ -29,7 +29,7 @@ async function main() {
   const results=await provider.search('Attack on Titan',1,{});
   assert.equal(results.length,1); assert.equal(results[0].id,'16498');
   const detail=await provider.getDetail('16498',{});
-  assert.equal(detail.id,'16498'); assert.equal(detail.episodes.length,3);
+  assert.equal(detail.id,'16498'); assert.equal(detail.episodes.length,4);
   assert.ok(detail.episodes.some(e=>e.url==='mewaniem://16498/reanime/sub/1'));
   assert.ok(detail.episodes.some(e=>e.url==='mewaniem://16498/anikoto/sub/1'));
   const streams=await provider.getVideoSources('mewaniem://16498/reanime/sub/1',{});
