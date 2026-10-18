@@ -26,7 +26,7 @@ function _catalogItems(html) {
     return {slug:String(x.slug),title:_pickTitle(x.title_list)||x.main_title||'',cover:x.cover||null,year:Number(x.start_year)||null};
   }).filter(function(x){return !!x.title;});
 }
-function _slug(url){return String(url||'').replace(/^.*\\/anime\\//,'').replace(/\\/$/,'');}
+function _slug(url){return String(url||'').replace(/^.*\/anime\//,'').replace(/\/$/,'');}
 function _pageUrl(slug){return SITE+'/anime/'+encodeURIComponent(_slug(slug));}
 function _result(x){return {id:x.slug,title:x.title,url:x.slug,cover:x.cover,type:'anime',sourceId:SOURCE_ID,year:x.year};}
 function search(query,page,opts) {
@@ -36,7 +36,7 @@ function search(query,page,opts) {
 function popular(opts){return _get(SITE+'/anime').then(function(h){return _catalogItems(h).map(_result);});}
 function _episodeNumber(x) {
   var n=Number(x&&x.slug); if(n>0&&isFinite(n))return n;
-  var m=String(x&&x.url||'').match(/\\/(\\d+)\\/?$/); return m?Number(m[1]):0;
+  var m=String(x&&x.url||'').match(/\/(\d+)\/?$/); return m?Number(m[1]):0;
 }
 function _episodes(html,slug) {
   var a=_jsonArgument(html,'items'); if(!Array.isArray(a))return [];
@@ -56,18 +56,18 @@ function getDetail(url,opts) {
 }
 function getEpisodes(url,opts){return getDetail(url,opts).then(function(d){return d.episodes||[];});}
 function getVideoSources(episodeUrl,opts) {
-  var m=String(episodeUrl||'').match(/^anizone:\\/\\/([^/]+)\\/(\\d+)$/);
+  var m=String(episodeUrl||'').match(/^anizone:\/\/([^/]+)\/(\d+)$/);
   if(!m)return Promise.reject(new Error('AniZone: invalid episode URL'));
   var slug;try{slug=decodeURIComponent(m[1]);}catch(e){slug=m[1];}
   var n=Number(m[2]), page=_pageUrl(slug)+'/'+n;
   return _get(page,_pageUrl(slug)).then(function(h){
-    var p=h.match(/vidstackPlayer\\s*\\(\\s*JSON\\.parse\\('(.*?)'\\)\\s*\\)/is);
+    var p=h.match(/vidstackPlayer\s*\(\s*JSON\.parse\('(.*?)'\)\s*\)/is);
     if(!p)throw new Error('AniZone: player payload not found');
     var data;try{data=JSON.parse(_decode(p[1]));}catch(e){throw new Error('AniZone: invalid player payload');}
-    var src=String(data.src||'').replace(/\\\\\\//g,'/');
-    if(!/^https?:\\/\\//i.test(src)||!/\\.m3u8(?:[?#]|$)/i.test(src))throw new Error('AniZone: no direct HLS stream in player payload');
-    var subs=(Array.isArray(data.subtitles)?data.subtitles:[]).filter(function(s){return s&&s.file&&/^https?:\\/\\//i.test(s.file);}).map(function(s){
-      return {url:String(s.file).replace(/\\\\\\//g,'/'),label:s.title||s.language||'Subtitle',lang:s.language||'',format:s.format||'vtt','default':!!s.default};
+    var src=String(data.src||'').replace(/\\\//g,'/');
+    if(!/^https?:\/\//i.test(src)||!/\.m3u8(?:[?#]|$)/i.test(src))throw new Error('AniZone: no direct HLS stream in player payload');
+    var subs=(Array.isArray(data.subtitles)?data.subtitles:[]).filter(function(s){return s&&s.file&&/^https?:\/\//i.test(s.file);}).map(function(s){
+      return {url:String(s.file).replace(/\\\//g,'/'),label:s.title||s.language||'Subtitle',lang:s.language||'',format:s.format||'vtt','default':!!s.default};
     });
     return [{url:src,quality:'Auto',label:'Auto [AniZone]',container:'hls',headers:{'User-Agent':UA,'Referer':page,'Origin':SITE},kind:'sub',audioLang:'ja',subtitles:subs}];
   });
