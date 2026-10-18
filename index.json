@@ -563,6 +563,16 @@
       "file": "providers/yuzono-animeworldindia-hi.js",
       "logo": "https://www.google.com/s2/favicons?sz=256&domain=anime-world.co",
       "nsfw": false
+    },
+    {
+      "id": "senshi-to",
+      "name": "Senshi",
+      "version": "1.0.0",
+      "type": "anime",
+      "lang": "en",
+      "file": "providers/senshi-to.js",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=senshi.to",
+      "nsfw": false
     }
   ]
 }
