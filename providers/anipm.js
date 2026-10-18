@@ -5,7 +5,7 @@ var SITE = 'https://ani.pm';
 var API = SITE + '/api';
 var EMBED = 'https://embed.settlar.io';
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID) ? String(__SOURCE_ID) : 'anipm';
-var VERSION = '1.3.3';
+var VERSION = '1.3.4';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36';
 var _seriesCache = {};
 var _detailCache = {};
@@ -88,6 +88,35 @@ function _firstNum(values) {
   }
   return null;
 }
+function _objectId(value) {
+  if (value && typeof value === 'object') {
+    return _firstNum([value.id, value.value, value.anilistId, value.anilist_id, value.mediaId, value.media_id]);
+  }
+  return _num(value);
+}
+// Ani.pm's tracker identity can be flat, nested under an ID map, or embedded
+// in its /ani/<id> URL. Keep that AniList namespace separate from source IDs.
+function _anilistId(item) {
+  if (!item || typeof item !== 'object') return null;
+  var groups = [item.ids, item.externalIds, item.external_ids, item.trackerIds,
+    item.tracker_ids, item.mappings, item.identifiers];
+  var nested = [];
+  groups.forEach(function(group) {
+    if (!group || typeof group !== 'object') return;
+    nested.push(group.anilist, group.aniList, group.anilistId, group.anilist_id);
+  });
+  var direct = _firstNum([
+    item.anilistId, item.anilist_id, item.anilistID, item.aniListId,
+    item.idAnilist, item.id_anilist, item.anilistMediaId,
+    _objectId(item.anilist), _objectId(item.aniList)
+  ]);
+  if (direct !== null) return direct;
+  for (var i=0; i<nested.length; i++) {
+    var n = _objectId(nested[i]);
+    if (n !== null) return n;
+  }
+  return null;
+}
 function _newRef(item) {
   var id = item && (item.id != null ? item.id : item.slug);
   var source = item && (item.source || item.provider);
@@ -107,8 +136,7 @@ function _card(item, legacy) {
   var urlAniListMatch = itemUrl.match(/\/ani\/(\d+)(?:[/?#]|$)/i) ||
     itemUrl.match(/[?&]anilist=(\d+)(?:[&#]|$)/i);
   var explicitAniListId = _firstNum([
-    item.anilistId, item.anilist_id, item.anilist, item.idAnilist,
-    urlAniListMatch && urlAniListMatch[1]
+    _anilistId(item), urlAniListMatch && urlAniListMatch[1]
   ]);
   // Source-native IDs route detail and playback; tracker IDs are separate.
   var sourceId = item.id != null ? item.id : (item.slug != null ? item.slug :
@@ -128,8 +156,7 @@ function _card(item, legacy) {
     title:title, englishTitle:alt || null, url:url, cover:_cover(item) || null,
     type:'anime', sourceId:SOURCE_ID,
     malId:_firstNum([item.malId, item.mal_id, item.mal, item.idMal]),
-    anilistId:legacy ? explicitAniListId :
-      _firstNum([item.anilistId, item.anilist_id, item.anilist, item.idAnilist])
+    anilistId:explicitAniListId
   };
   _seriesCache[url] = { ref:ref, item:item, card:card };
   return card;
@@ -317,8 +344,7 @@ function _fetchDetail(url, opts) {
         description:root.description || root.synopsis || '',status:root.status || 'unknown',genres:root.genres || [],studios:[],
         type:'anime',sourceId:SOURCE_ID,
         malId:_firstNum([root.malId, root.mal_id, root.mal, root.idMal, lookup.malId, lookup.mal_id, lookup.mal, lookup.idMal]),
-        anilistId:_firstNum([root.anilistId, root.anilist_id, root.anilist, root.idAnilist,
-          lookup.anilistId, lookup.anilist_id, lookup.anilist, lookup.idAnilist,
+        anilistId:_firstNum([_anilistId(root), _anilistId(lookup),
           ref.anilistIdIsExplicit ? ref.anilistId : null]),
         episodes:rows.map(function(item,index){var n=_episodeNumber(item)||index+1;return {id:ref.id+'||'+n,number:n,title:item.title||('Episode '+n),url:ref.id+'||'+n,sourceId:SOURCE_ID};}),
         subCount:rows.length,dubCount:rows.length};
@@ -354,7 +380,7 @@ function _fetchDetail(url, opts) {
       description:core.description || core.synopsis || '',status:core.status || 'unknown',genres:core.genres || [],studios:[],
       type:'anime',sourceId:SOURCE_ID,
       malId:_firstNum([core.malId, core.mal_id, core.mal, core.idMal, cachedItem.malId]),
-      anilistId:_firstNum([core.anilistId, core.anilist_id, core.anilist, core.idAnilist, cachedItem.anilistId]),
+      anilistId:_firstNum([_anilistId(core), _anilistId(cachedItem)]),
       year:core.year || core.seasonYear || null,
       episodes:eps,subCount:subCount || eps.length,dubCount:dubCount || eps.length};
     // Missing fields are not facts. Omit them so a partial source response
