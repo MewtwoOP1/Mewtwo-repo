@@ -38,6 +38,10 @@ global.fetch = async function (url, opts) {
       { episode_number: 2, title: "If I Had One More Chance", episodeId: "episode-two" }
     ]
   }) };
+  if (url === "https://reanime.to/api/watch/solo-leveling-abc/2") return { status: 200, body: JSON.stringify({
+    anime: { anilist_id: 123 },
+    episode_links: [{ serverName: "Watch API direct", dataType: "sub", dataLink: "https://cdn.example/episode.m3u8" }]
+  }) };
   if (url === "https://reanime.to/api/flix/123/2") return { status: 200, body: JSON.stringify({
     success: true, servers: [
       { serverName: "Direct", dataType: "sub", dataLink: "https://cdn.example/episode.m3u8" }
@@ -54,8 +58,8 @@ global.fetch = async function (url, opts) {
     base: "https://fetch1.flixcloud.cc",
     resolution: "1080p"
   }) };
-  if (url === "https://fetch1.flixcloud.cc/download/12345678-1234-1234-1234-123456789abc?token=eyJhbGciOiJub25lIn0.eyJleHAiOjF9.signature" && opts && opts.method === "HEAD") {
-    return { status: 200, body: "" };
+  if (url === "https://fetch1.flixcloud.cc/download/12345678-1234-1234-1234-123456789abc/progress?token=eyJhbGciOiJub25lIn0.eyJleHAiOjF9.signature") {
+    return { status: 200, body: 'data: {"status":"ready"}\n\n' };
   }
   if (url === "https://flixcloud.cc/e/token123") return { status: 200, body:
     '<script>const data = { type: "data", data: { video: "encoded", subtitles: [], intro_chapter: null, outro_chapter: null }, uses: [] };</script>' };
@@ -76,8 +80,8 @@ const provider = require("../providers/reanime.js");
 async function main() {
   assert.equal(provider.getInfo().name, "Re:Anime");
   assert.equal(provider.getInfo().type, "anime");
-  assert.equal(provider.getInfo().version, "1.2.5");
-  assert.equal(provider.version, "1.2.5");
+  assert.equal(provider.getInfo().version, "1.2.6");
+  assert.equal(provider.version, "1.2.6");
   const results = await provider.search("Solo Leveling", 1, {});
   assert.equal(results.length, 1);
   assert.equal(results[0].id, "solo-leveling-abc");
@@ -102,13 +106,13 @@ async function main() {
   assert.equal(detail.episodes[0].url, "solo-leveling-abc|1|episode-one|123",
     "AniList ID must be carried verbatim with no +/- offset");
   const streams = await provider.getVideoSources("solo-leveling-abc|2|episode-two|123", {});
-  assert.equal(streams.length, 1);
+  assert.equal(streams.length, 1, "Watch API and /api/flix duplicate direct links must be deduplicated");
   assert.equal(streams[0].url, "https://cdn.example/episode.m3u8");
   assert.equal(streams[0].container, "hls");
   const resolved = await provider.getVideoSources("solo-leveling-abc|1|episode-one|123", {});
   assert.equal(resolved.length, 1);
   assert.equal(resolved[0].url, "https://fetch1.flixcloud.cc/download/12345678-1234-1234-1234-123456789abc?token=eyJhbGciOiJub25lIn0.eyJleHAiOjF9.signature");
-  assert.equal(resolved[0].container, "mp4");
+  assert.equal(resolved[0].container, "mkv", "FlixCloud download is an MKV, not an MP4");
   assert.match(resolved[0].label, /Download/);
   assert.ok(!resolved[0].url.includes("parse-flixcloud"),
     "Manifest rewriting endpoint must not be mislabelled as a playable media URL");
