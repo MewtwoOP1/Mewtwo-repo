@@ -15,7 +15,7 @@
         {
           "key": "tmdbApiKey",
           "label": "TMDB API Key (optional; blank uses app default)",
-          "description": "Your personal TMDB v3 API key. Leave blank to use Zangetsu\u2019s built-in key. Sent only to TMDB.",
+          "description": "Your personal TMDB v3 API key. Leave blank to use Zangetsu’s built-in key. Sent only to TMDB.",
           "type": "text",
           "default": ""
         },
@@ -108,14 +108,58 @@
       "nsfw": false
     },
     {
-      "id": "reanime",
-      "name": "Re:Anime",
-      "version": "1.2.6",
+      "id": "justanime",
+      "name": "JustAnime",
+      "version": "1.9.3",
       "type": "anime",
       "lang": "en",
-      "file": "providers/reanime.js",
-      "logo": "https://www.google.com/s2/favicons?sz=256&domain=reanime.to",
-      "nsfw": false
+      "file": "providers/justanime.js",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=justanime.to",
+      "nsfw": false,
+      "settings": [
+        {
+          "key": "servers",
+          "label": "Streaming servers",
+          "description": "Which public JustAnime API server endpoints to check. Unsupported or unavailable streams are skipped.",
+          "type": "enum",
+          "default": "all",
+          "options": [
+            {
+              "value": "all",
+              "label": "All servers (recommended)"
+            },
+            {
+              "value": "animegg",
+              "label": "AnimeGG"
+            },
+            {
+              "value": "anineko",
+              "label": "AniNeko"
+            },
+            {
+              "value": "megaplay",
+              "label": "MegaPlay"
+            }
+          ]
+        },
+        {
+          "key": "language",
+          "label": "Preferred audio",
+          "description": "Return the preferred audio language first, then fall back to the other language.",
+          "type": "enum",
+          "default": "sub",
+          "options": [
+            {
+              "value": "sub",
+              "label": "Sub first"
+            },
+            {
+              "value": "dub",
+              "label": "Dub first"
+            }
+          ]
+        }
+      ]
     },
     {
       "id": "serenity-animekai",
