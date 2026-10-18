@@ -54,6 +54,8 @@ async function main() {
   assert.equal(streams[0].kind, "raw");
   assert.match(streams[0].label, /VidFlix · VidCore · Orbit/);
   assert.equal(await provider.getStreams(detail.episodes[0].url).then((r) => r.length), 1);
+  global.fetch = async (url) => String(url).includes("/api/resolve?") ? ({ status: 200, body: "<html>resolver sleeping</html>" }) : ({ status: 200, body: "{}" });
+  assert.deepEqual(await provider.getVideoSources(detail.episodes[0].url), []);
   assert.ok(calls.some((u) => u.includes("/api/resolve?type=tv&id=95350&season=1&episode=1")));
   console.log("VidFlix mocked integration tests passed.");
 }
