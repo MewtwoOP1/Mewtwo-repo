@@ -5,7 +5,7 @@ var SITE = 'https://ani.pm';
 var API = SITE + '/api';
 var EMBED = 'https://embed.settlar.io';
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID) ? String(__SOURCE_ID) : 'anipm';
-var VERSION = '1.3.6';
+var VERSION = '1.3.7';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36';
 var _seriesCache = {};
 var _detailCache = {};
@@ -202,18 +202,22 @@ function _currentSearch(query, page) {
   return _json(API + '/anime/search?q=' + encodeURIComponent(q) + '&page=' + Math.max(1, Number(page) || 1))
     .then(function(data) {
       var items = Array.isArray(data) ? data : (data.items || data.results || data.data || []);
-      var cards = _cards(items, false);
-      if (cards.length) return cards;
-      return _legacySearch(q);
-    }).catch(function(){ return _legacySearch(q); });
+      return _cards(items, false);
+    }).catch(function(){ return []; });
 }
+// Prefer Ani.pm's documented partner API. The newer catalogue API remains a
+// compatibility fallback for titles not exposed by the partner endpoint.
 function _legacySearch(query) {
   var q = _trim(query);
   if (q.length < 2) return Promise.resolve([]);
   return _json(API + '/partner/v1/titles?q=' + encodeURIComponent(q))
     .then(function(data){ return _cards(data, true); }).catch(function(){ return []; });
 }
-function search(query, page, opts) { return _currentSearch(query, page); }
+function search(query, page, opts) {
+  return _legacySearch(query).then(function(cards) {
+    return cards.length ? cards : _currentSearch(query, page);
+  });
+}
 function popular(opts) {
   return _currentSearch('one piece', 1).then(function(items){ return items; });
 }
