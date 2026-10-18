@@ -311,15 +311,19 @@ function _episodeRows(data, ref) {
   out.sort(function(a,b){return a.number-b.number;});
   return out;
 }
-function _legacyEpisodes(id) {
+function _legacyEpisodes(id, anilistId) {
   return _json(API + '/partner/v1/series/' + encodeURIComponent(id))
     .then(function(data) {
       var root = data && (data.data || data);
       var rows = root && (root.episodeList || root.episodes);
       if (!Array.isArray(rows)) return [];
+      // Preserve the explicit AniList route in episode URLs when it is also
+      // the series ID, so playback can use the modern bootstrap fallback.
+      var episodeRef = anilistId != null && String(anilistId) === String(id)
+        ? SITE + '/ani/' + encodeURIComponent(anilistId) : String(id);
       var episodes = rows.map(function(item,index) {
         var n = _episodeNumber(item) || index + 1;
-        return {id:id + '||' + n,number:n,title:item.title || ('Episode ' + n),url:id + '||' + n,sourceId:SOURCE_ID};
+        return {id:episodeRef + '||' + n,number:n,title:item.title || ('Episode ' + n),url:episodeRef + '||' + n,sourceId:SOURCE_ID};
       });
       episodes.sort(function(a,b){return a.number-b.number;});
       return episodes;
@@ -428,7 +432,7 @@ function _fetchDetail(url, opts) {
 function getEpisodes(url, opts) {
   var ref = _parseRef(url);
   if (!ref) return Promise.resolve([]);
-  if (ref.legacy) return _legacyEpisodes(ref.id);
+  if (ref.legacy) return _legacyEpisodes(ref.id, ref.anilistIdIsExplicit ? ref.anilistId : null);
   // Reuse the same successful detail/episode payload instead of issuing two
   // more bootstrap calls immediately after getDetail has already fetched it.
   return getDetail(url, opts).then(function(detail) {
