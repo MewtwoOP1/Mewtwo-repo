@@ -1,5 +1,15 @@
 const assert = require("node:assert/strict");
 
+// Exercise the provider's final detail-normalization error path. Normal
+// descriptions are stripped as the host runtime's htmlText helper would do;
+// one sentinel deliberately throws to emulate an unexpected malformed payload.
+global.htmlText = function (value) {
+  const text = String(value || "");
+  if (text === "__FORCE_DETAIL_PARSE_ERROR__") throw new Error("synthetic detail normalization failure");
+  return text.replace(/<[^>]*>/g, " ").replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/\\s+/g, " ").trim();
+};
+
 const calls = [];
 const transientFailures = new Map();
 const deadUrls = new Set([
@@ -38,6 +48,16 @@ global.fetch = async (url, options) => {
     // Invalid-but-present alias fields must not suppress the valid catalogue id.
     body = { results: [{ id: 987654, anilistId: "", anilist_id: "0", idMal: "", malId: "52991",
       title: { english: "Malformed IDs", romaji: "Malformed IDs" }, cover: "https://img.example/malformed.jpg" }] };
+  } else if (u === "https://core.justanime.to/api/search?query=Parse%20Error&page=1") {
+    body = { results: [{ id: 26, anilistId: 777, idMal: 888,
+      title: { english: "Parse Error Anime", romaji: "Parse Error Anime Romaji" },
+      cover: "https://img.example/parse-error.jpg" }] };
+  } else if (u === "https://core.justanime.to/api/anime/26") {
+    body = { data: { id: 26, idMal: 888, title: { english: "Parse Error Anime" },
+      coverImage: { extraLarge: "https://img.example/parse-error.jpg" },
+      description: "__FORCE_DETAIL_PARSE_ERROR__", episodes: 1, status: "RELEASING" } };
+  } else if (u === "https://core.justanime.to/api/anime/26/episodes?page=1") {
+    body = { data: { episodes: [{ number: 1, title: "Parse Error Episode 1" }] } };
   } else if (u === "https://core.justanime.to/api/anime/154587") {
     // Regression fixture: the AniList ID is deliberately a distinct, large value.
     // It must be passed to JustAnime endpoints verbatim; no +/- offsets are valid.
@@ -102,8 +122,8 @@ global.fetch = async (url, options) => {
 const provider = require("../providers/justanime.js");
 
 async function main() {
-  assert.equal(provider.version, "1.9.4");
-  assert.equal(provider.getInfo().version, "1.9.4");
+  assert.equal(provider.version, "1.9.5");
+  assert.equal(provider.getInfo().version, "1.9.5");
 
   // A temporary server error should be retried instead of immediately
   // collapsing into an empty detail/episode response.
@@ -189,6 +209,20 @@ async function main() {
   assert.ok(calls.some((c) => c.url === "https://core.justanime.to/api/watch/154587/episode/2/anineko/sub/hd1"));
   assert.ok(!calls.some((c) => /\/watch\/(?:154586|154588)\//.test(c.url)),
     "no -1/+1 ID mutation may appear in the stream request");
+
+  // The search result already established this show's identity. If detail
+  // normalization unexpectedly throws, keep the known title and IDs instead
+  // of returning null (which makes the app treat the whole detail as failed).
+  const parseErrorSearch = await provider.search("Parse Error", 1, {});
+  assert.equal(parseErrorSearch[0].id, "26");
+  const parseErrorDetail = await provider.getDetail("26", {});
+  assert.ok(parseErrorDetail, "a parser exception must not erase a previously matched title");
+  assert.equal(parseErrorDetail.title, "Parse Error Anime");
+  assert.equal(parseErrorDetail.cover, "https://img.example/parse-error.jpg");
+  assert.equal(parseErrorDetail.malId, 888);
+  assert.equal(parseErrorDetail.anilistId, 777);
+  assert.deepEqual(parseErrorDetail.episodes, [],
+    "when source detail parsing fails, omit source episodes rather than guessing numbering");
 
   const stringIdDetail = await provider.getDetail("987655", {});
   assert.equal(stringIdDetail.anilistId, 987655,
