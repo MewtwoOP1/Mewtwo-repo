@@ -48,7 +48,7 @@ function _fetchOnce(url, referer, timeoutMs, accept, browser) {
       headers: r && r.headers || {},
       status: r && r.status || 200
     };
-    if (!r || response.status >= 400) {
+    if (!r || (response.status >= 400 && !_isMomentPage(response))) {
       var err = new Error('HTTP ' + response.status);
       err.response = response;
       throw err;
