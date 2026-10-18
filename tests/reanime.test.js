@@ -1,26 +1,41 @@
 const assert = require("node:assert/strict");
-global.fetch = async function (url) {
+global.fetch = async function (url, opts) {
   url = String(url);
-  if (url.includes("/api/search?")) return { status: 200, body: JSON.stringify({ data: [
-    { slug: "solo-leveling-abc", title: "Solo Leveling", cover_image: { large: "https://img.example/solo.jpg" } }
-  ] }) };
-  if (url === "https://reanime.to/api/watch/solo-leveling-abc/1") return { status: 200, body: JSON.stringify({
-    anime: { slug: "solo-leveling-abc", title: "Solo Leveling", description: "Hunters fight monsters.", anilist: 123 },
-    episode_links: [{ serverName: "HD-2", dataType: "sub", dataLink: "https://flixcloud.cc/e/token?v=2" }]
+  if (url.includes("/api/v1/search?")) return { status: 200, body: JSON.stringify({
+    limit: 36, offset: 0, total: 1, results: [
+      { anime_id: "solo-leveling-abc", title: { romaji: "Solo Leveling" },
+        cover_image: { large: "https://img.example/solo.jpg" }, anilist_id: 123 }
+    ]
   }) };
-  if (url === "https://reanime.to/api/episodes/solo-leveling-abc") return { status: 200, body: JSON.stringify([
-    { number: 1, title: "I'm Used to It", id: "1" }, { number: 2, title: "If I Had One More Chance", id: "2" }
-  ]) };
-  if (url === "https://reanime.to/api/watch/solo-leveling-abc/2") return { status: 200, body: JSON.stringify({
-    anime: { slug: "solo-leveling-abc", title: "Solo Leveling", anilist: 123 },
-    episode_links: [
-      { serverName: "HD-2", dataType: "sub", dataLink: "https://flixcloud.cc/e/token?v=2" },
+  if (url === "https://reanime.to/api/v1/anime/solo-leveling-abc") return { status: 200, body: JSON.stringify({
+    anime_id: "solo-leveling-abc", title: { romaji: "Solo Leveling", english: "Solo Leveling" },
+    description: "Hunters fight monsters.", anilist_id: 123, mal_id: 999,
+    cover_image: { large: "https://img.example/solo.jpg" }, subbed: 2, dubbed: 0
+  }) };
+  if (url === "https://reanime.to/api/v1/anime/solo-leveling-abc/episodes?limit=2000") return { status: 200, body: JSON.stringify({
+    data: [
+      { episode_number: 1, title: "I'm Used to It", episodeId: "episode-one" },
+      { episode_number: 2, title: "If I Had One More Chance", episodeId: "episode-two" }
+    ]
+  }) };
+  if (url === "https://reanime.to/api/flix/123/2") return { status: 200, body: JSON.stringify({
+    success: true, servers: [
       { serverName: "Direct", dataType: "sub", dataLink: "https://cdn.example/episode.m3u8" }
     ]
   }) };
-  if (url === "https://lvrcdn2.rewcrew.lv/watch/reanime/123/sub/reanime-1") return { status: 200, body: JSON.stringify({
-    streams: [{ url: "https://cdn.example/resolved.m3u8", type: "hls", server: "HD-2", referer: "https://flixcloud.cc/" }]
+  if (url === "https://reanime.to/api/flix/123/1") return { status: 200, body: JSON.stringify({
+    success: true, servers: [
+      { serverName: "HD-2", dataType: "sub", dataLink: "https://flixcloud.cc/e/token123" }
+    ]
   }) };
+  if (url === "https://flixcloud.cc/d/token123/__data.json") return { status: 200, body: JSON.stringify({
+    fileId: "12345678-1234-1234-1234-123456789abc",
+    token: "eyJheader.payload.signature",
+    base: "https://fetch1.flixcloud.cc", resolution: "1080p"
+  }) };
+  if (url.includes("https://fetch1.flixcloud.cc/download/12345678-1234-1234-1234-123456789abc/progress?")) {
+    return { status: 200, body: 'data: {"status":"ready"}\n\n' };
+  }
   return { status: 404, body: "{}" };
 };
 const provider = require("../providers/reanime.js");
@@ -34,14 +49,14 @@ async function main() {
   const detail = await provider.getDetail("solo-leveling-abc", {});
   assert.equal(detail.episodes.length, 2);
   assert.equal(detail.episodes[0].number, 1);
-  const streams = await provider.getVideoSources("solo-leveling-abc|2", {});
+  const streams = await provider.getVideoSources("solo-leveling-abc|2|episode-two|123", {});
   assert.equal(streams.length, 1);
   assert.equal(streams[0].url, "https://cdn.example/episode.m3u8");
   assert.equal(streams[0].container, "hls");
-  const fallback = await provider.getVideoSources("solo-leveling-abc|1", {});
-  assert.equal(fallback[0].url, "https://cdn.example/resolved.m3u8");
-  assert.equal(fallback[0].container, "hls");
-  assert.ok(fallback[0].headers.Referer);
-  console.log("Re:Anime catalogue/episode/direct-stream tests passed.");
+  const resolved = await provider.getVideoSources("solo-leveling-abc|1|episode-one|123", {});
+  assert.equal(resolved.length, 1);
+  assert.equal(resolved[0].url, "https://fetch1.flixcloud.cc/download/12345678-1234-1234-1234-123456789abc?token=eyJheader.payload.signature");
+  assert.equal(resolved[0].container, "mkv");
+  console.log("Re:Anime upstream API and direct/download URL tests passed.");
 }
 main().catch(e => { console.error(e); process.exitCode = 1; });
