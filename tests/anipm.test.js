@@ -22,6 +22,13 @@ global.fetch = async (url, options) => {
     }] };
   } else if (u === 'https://ani.pm/api/partner/v1/titles?q=Partner%20API') {
     body = { items: [{ id: 'partner-1', title: { english: 'Partner API Anime' }, malId: 777 }] };
+  } else if (u === 'https://ani.pm/api/partner/v1/titles?q=Partner%20Backup') {
+    body = { data: [{ id: 'internal-99', anilistId: 16498, title: 'Partner Backup Anime',
+      url: 'https://ani.pm/ani/16498', episodes: { sub: 12 } }] };
+  } else if (u === 'https://ani.pm/api/partner/v1/series/16498') {
+    body = { data: { episodeList: [{ number: 1, title: 'Episode 1' }] } };
+  } else if (u.indexOf('https://ani.pm/api/anime/playback-bootstrap/anilist/16498?') === 0) {
+    body = { backupEmbed: { available: true, url: 'https://megaplay.buzz/stream/s-2/16498/sub' } };
   } else if (u.indexOf('https://ani.pm/api/anime/playback-bootstrap/anime/123?') === 0) {
     const lang = new URL(u).searchParams.get('lang');
     const count = (bootstrapCounts.get(lang) || 0) + 1;
@@ -83,7 +90,7 @@ global.fetch = async (url, options) => {
 const provider = require('../providers/anipm.js');
 
 async function main() {
-  assert.equal(provider.version, '1.3.7');
+  assert.equal(provider.version, '1.3.8');
   assert.equal(provider.getInfo().name, 'Ani.pm');
   assert.equal(provider.getInfo().type, 'anime');
   assert.equal(provider.getSettings()[0].default, 'sub');
@@ -115,6 +122,22 @@ async function main() {
     'search should use Ani.pm partner v1 first');
   assert.ok(!calls.slice(partnerCallsBefore).some((c) => c.url === 'https://ani.pm/api/anime/search?q=Partner%20API&page=1'),
     'newer catalogue endpoint should only be used as fallback when partner search has no results');
+
+  const backupResults = await provider.search('Partner Backup', 1, {});
+  assert.equal(backupResults.length, 1);
+  assert.equal(backupResults[0].url, 'https://ani.pm/ani/16498',
+    'canonical AniList URL must outrank a partner API internal row ID');
+  const backupEpisodes = await provider.getEpisodes(backupResults[0].url, {});
+  assert.equal(backupEpisodes.length, 1);
+  assert.equal(backupEpisodes[0].url, 'https://ani.pm/ani/16498||1',
+    'legacy episode URLs must preserve the explicit AniList playback route');
+  const backupStreams = await provider.getVideoSources(backupEpisodes[0].url, {});
+  assert.equal(backupStreams.length, 1);
+  assert.equal(backupStreams[0].url, 'https://megaplay.buzz/stream/s-2/16498/sub');
+  assert.equal(backupStreams[0].container, 'embed',
+    'use Ani.pm bootstrap MegaPlay backup when legacy Settlar resolution returns no source');
+  assert.ok(calls.some((c) => c.url.indexOf('https://ani.pm/api/anime/playback-bootstrap/anilist/16498?') === 0),
+    'legacy partner results must try modern bootstrap backup when Settlar legacy route fails');
 
   const brokenResults = await provider.search('Broken Anime', 1, {});
   assert.equal(brokenResults.length, 1);
