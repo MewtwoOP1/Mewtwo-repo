@@ -287,7 +287,7 @@ function _flixDownloadHeaders() {
 // parse-flixcloud URL only rewrites a manifest and is not itself a hosted stream.
 // Use the upstream Aniyomi extension's direct-download metadata path instead.
 function _resolveFlixDownload(dataLink, label, kind) {
-  var match = String(dataLink || '').match(/\\/e\\/([a-z0-9]+)/i);
+  var match = String(dataLink || '').match(/\/e\/([a-z0-9]+)/i);
   if (!match) return Promise.resolve([]);
   var embedId = match[1];
   var metadataUrl = FLIX + '/d/' + encodeURIComponent(embedId) + '/__data.json';
@@ -300,36 +300,45 @@ function _resolveFlixDownload(dataLink, label, kind) {
     }
     var body = String(r.body || '');
     var fileId = (body.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i) || [])[0];
-    var token = (body.match(/eyJ[\\w-]+\\.[\\w-]+\\.[\\w-]+/) || [])[0];
-    var base = (body.match(/https:\\/\\/fetch\\d*\\.flixcloud\\.cc/i) || [])[0] || FLIX;
-    var resolution = (body.match(/(\\d{3,4}p)/i) || [])[1] || 'Auto';
+    var token = (body.match(/eyJ[\w-]+\.[\w-]+\.[\w-]+/) || [])[0];
+    var base = (body.match(/https:\/\/fetch\d*\.flixcloud\.cc/i) || [])[0] || FLIX;
+    var resolution = (body.match(/(\d{3,4}p)/i) || [])[1] || 'Auto';
     if (!fileId || !token) throw new Error('FlixCloud download metadata missing file ID/token');
     return {
       url: base + '/download/' + fileId + '?token=' + encodeURIComponent(token),
       resolution: resolution
     };
   }).then(function (meta) {
-    // Probe availability without downloading the full video into the JS runtime.
-    return fetch(meta.url, {
-      method: 'HEAD',
-      headers: _flixDownloadHeaders(),
-      timeoutMs: 8000
-    }).then(function (probe) {
-      var status = Number(probe && probe.status || 0);
-      if (!((status >= 200 && status < 300) || status === 405 || status === 501)) {
-        throw new Error('FlixCloud download not ready (HTTP ' + status + ')');
-      }
-      return [{
-        url: meta.url,
-        quality: meta.resolution,
-        label: (label || 'Re:Anime') + ' Download',
-        container: 'mp4',
+    // Yuzono polls FlixCloud's progress endpoint before exposing this URL. A
+    // short HEAD retry loop approximates readiness in the JS-only provider API.
+    function probe(attempt) {
+      return fetch(meta.url, {
+        method: 'HEAD',
         headers: _flixDownloadHeaders(),
-        kind: kind || 'sub',
-        audioLang: kind === 'dub' ? 'en' : 'ja',
-        subtitles: []
-      }];
-    });
+        timeoutMs: 8000
+      }).then(function (response) {
+        var status = Number(response && response.status || 0);
+        if ((status >= 200 && status < 300) || status === 405 || status === 501) {
+          return [{
+            url: meta.url,
+            quality: meta.resolution,
+            label: (label || 'Re:Anime') + ' Download',
+            container: 'mp4',
+            headers: _flixDownloadHeaders(),
+            kind: kind || 'sub',
+            audioLang: kind === 'dub' ? 'en' : 'ja',
+            subtitles: []
+          }];
+        }
+        if (attempt < 4 && (status === 404 || status === 425 || status === 429 || status >= 500)) {
+          return new Promise(function (resolve) {
+            setTimeout(resolve, 1200);
+          }).then(function () { return probe(attempt + 1); });
+        }
+        throw new Error('FlixCloud download not ready (HTTP ' + status + ')');
+      });
+    }
+    return probe(0);
   }).catch(function () {
     return [];
   });
