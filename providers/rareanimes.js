@@ -1,10 +1,10 @@
 // RareAnimes — provider for the Rare Toons India / RareAnimes WordPress site.
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID) ? String(__SOURCE_ID) : 'rareanimes';
-var VERSION = '1.0.0';
+var VERSION = '1.0.1';
 var SITE = 'https://www.rareanimes.mov';
 var CODEDEW = 'https://codedew.com';
 var STREAM_BETA = CODEDEW + '/streambeta/';
-var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
+var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36';
 
 function getInfo() {
   return { name: 'RareAnimes', lang: 'hi', baseUrl: SITE,
@@ -34,7 +34,17 @@ function _attr(tag, name) {
 function _abs(url, base) {
   var u = _decode(String(url || '').trim());
   if (!u || /^(?:javascript:|mailto:|data:|#)/i.test(u)) return '';
-  if (/^https?:\/\//i.test(u)) return u;
+  if (/^https?:\/\//i.test(u)) {
+    try {
+      var absolute = new URL(u);
+      if (absolute.hostname === 'rareanimes.mov' || absolute.hostname === 'www.rareanimes.mov') {
+        absolute.protocol = 'https:';
+        absolute.hostname = 'www.rareanimes.mov';
+        return absolute.href;
+      }
+    } catch (_) {}
+    return u;
+  }
   if (u.indexOf('//') === 0) return 'https:' + u;
   try { return new URL(u, base || SITE + '/').href; }
   catch (_) {
@@ -48,12 +58,15 @@ function _siteUrl(url) {
     return u.protocol === 'https:' && (u.hostname === 'rareanimes.mov' || u.hostname === 'www.rareanimes.mov');
   } catch (_) { return false; }
 }
-function _get(url, referer) {
-  return fetch(url, { headers: {
+function _get(url, referer, extraHeaders) {
+  var headers = {
     'User-Agent': UA,
     'Accept': 'text/html,application/xhtml+xml,application/json,*/*;q=0.8',
+    'Accept-Language': 'en-US,en;q=0.9',
     'Referer': referer || SITE + '/'
-  }, timeoutMs: 20000 }).then(function(r) {
+  };
+  Object.keys(extraHeaders || {}).forEach(function(k) { headers[k] = extraHeaders[k]; });
+  return fetch(url, { headers: headers, timeoutMs: 20000 }).then(function(r) {
     r = r || {};
     return { status: Number(r.status || r.statusCode || 0), body: String(r.body || ''),
       url: String(r.finalUrl || r.url || url), headers: r.headers || {} };
@@ -76,63 +89,106 @@ function _cards(html) {
     title = _text(title);
     if (!href || !_siteUrl(href) || !title || title.length < 2 || seen[href] || _isIndexTitle(title)) return;
     var path = new URL(href).pathname;
-    if (/\/(?:category|tag|author|page|wp-json|wp-content)\//i.test(path) || /[?&]s=/i.test(href)) return;
-    if (/^(?:home|search|next|previous|older posts|newer posts)$/i.test(title)) return;
+    if (/\/(?:category|tag|author|page|wp-json|wp-content|home)\//i.test(path) ||
+        path === '/' || /[?&]s=/i.test(href)) return;
+    if (/^(?:home|search|next|previous|older posts|newer posts|episodes|movies)$/i.test(title)) return;
     seen[href] = true;
     var clean = title.replace(/\s*[|–-]\s*(?:Rare Toons India|RareAnimes)\s*$/i, '').trim();
-    out.push(_card(clean, href, poster ? _abs(poster, href) : null, '',
-      /\bmovie\b/i.test(classes || '') ? 'movie' : 'anime'));
+    var img = poster ? _abs(poster, href) : null;
+    out.push({ id:href, url:href, title:clean, cover:img || null,
+      posterUrl:img || null, description:clean, type:/\bmovie\b/i.test(classes || '') ? 'movie' : 'anime',
+      sourceId:SOURCE_ID });
   }
+  // WordPress category/search pages use article > .entry-title, but class and
+  // attribute order varies across themes, so inspect heading anchors generically.
   var articles = html.match(/<article\b[^>]*>[\s\S]*?<\/article>/gi) || [];
   articles.forEach(function(article) {
-    var heading = (article.match(/<(?:h1|h2|h3)[^>]*class=["'][^"']*entry-title[^"']*["'][^>]*>[\s\S]*?<\/(?:h1|h2|h3)>/i) || [])[0] || '';
-    var link = (heading.match(/<a\b([^>]*)>([\s\S]*?)<\/a>/i) || []);
-    if (!link[1]) {
-      var alternate = (article.match(/<a\b([^>]*)>([\s\S]*?)<\/a>/i) || []);
-      if (alternate[1] && /(?:entry-title|post-title)/i.test(_attr(alternate[1], 'class'))) link = alternate;
+    var title = '', href = '', poster = '', headingMatch, hm;
+    var headings = article.match(/<h[1-6]\b[^>]*>[\s\S]*?<\/h[1-6]>/gi) || [];
+    for (var i=0; i<headings.length && !href; i++) {
+      hm = headings[i].match(/<a\b([^>]*)>([\s\S]*?)<\/a>/i);
+      if (!hm) continue;
+      var attrs = hm[1];
+      href = _attr(attrs, 'href');
+      title = _text(hm[2]) || _attr(attrs, 'title');
     }
-    var title = link[2] || (article.match(/<h[1-3]\b[^>]*>([\s\S]*?)<\/h[1-3]>/i) || [])[1] ||
-      (article.match(/<img\b[^>]*alt=["']([^"']+)["']/i) || [])[1];
-    var href = _attr(link[1], 'href');
-    if (!href && link[1]) href = _attr(link[1], 'href');
-    // Covers WP cards where the title attribute appears on the first image anchor.
     if (!href) {
       var aTag = (article.match(/<a\b[^>]*>/i) || [])[0] || '';
       href = _attr(aTag, 'href');
-      if (!title) title = _attr(aTag, 'title') || (article.match(/<img\b[^>]*alt=["']([^"']+)["']/i) || [])[1];
+      title = _attr(aTag, 'title') || (article.match(/<img\b[^>]*alt=["']([^"']+)["']/i) || [])[1] || '';
     }
     var imgTag = (article.match(/<img\b[^>]*>/i) || [])[0] || '';
-    var poster = _attr(imgTag, 'data-src') || _attr(imgTag, 'data-lazy-src') || _attr(imgTag, 'src');
-    if (href && title) add(title, href, poster, _attr(article, 'class'));
+    poster = _attr(imgTag,'data-src') || _attr(imgTag,'data-lazy-src') ||
+      _attr(imgTag,'data-original') || _attr(imgTag,'src');
+    add(title, href, poster, _attr(article,'class'));
   });
-  if (out.length) return out.slice(0, 80);
-  // Some homepage layouts have linked cards without an <article> wrapper.
-  // Only inspect headings, not the global nav tree.
-  var re = /<(?:h2|h3)\b[^>]*>([\s\S]*?)<\/(?:h2|h3)>/gi, m;
-  while ((m = re.exec(html)) !== null && out.length < 80) {
-    var a = (m[1].match(/<a\b([^>]*)>([\s\S]*?)<\/a>/i) || []);
-    if (!a[1]) continue;
-    var href2 = _attr(a[1], 'href'), title2 = _text(a[2]) || _attr(a[1], 'title');
-    var segment = html.slice(m.index, Math.min(html.length, m.index + 1400));
+  if (out.length) return out.slice(0, 100);
+
+  // /home/ also contains a very large table-of-contents tree before the actual
+  // post cards. Parse the content headings after its "CarToons & Animes" marker.
+  var marker = html.search(/CarToons\s*&amp;?\s*Animes/i);
+  var content = marker >= 0 ? html.slice(marker) : html;
+  var re = /<h[1-3]\b[^>]*>([\s\S]*?)<\/h[1-3]>/gi, m;
+  while ((m = re.exec(content)) !== null && out.length < 100) {
+    var a = m[1].match(/<a\b([^>]*)>([\s\S]*?)<\/a>/i);
+    if (!a) continue;
+    var attrs2 = a[1], href2 = _attr(attrs2,'href');
+    var title2 = _text(a[2]) || _attr(attrs2,'title');
+    var segment = content.slice(m.index, Math.min(content.length,m.index+1800));
     var im = (segment.match(/<img\b[^>]*>/i) || [])[0] || '';
-    add(title2, href2, _attr(im, 'data-src') || _attr(im, 'src'), '');
+    add(title2, href2, _attr(im,'data-src') || _attr(im,'data-lazy-src') || _attr(im,'src'), '');
   }
   return out;
 }
 function getHome(opts) {
-  return _get(SITE + '/home/', SITE + '/').then(function(r) {
-    var items = _cards(r.body);
-    if (!items.length) return _get(SITE + '/', SITE + '/').then(function(root) { return _cards(root.body); });
-    return items;
-  }).then(function(items) { return items.length ? [{ title: 'RareAnimes', items: items }] : []; })
-    .catch(function() { return []; });
+  var routes = [
+    { title:'Hindi Dub', path:SITE + '/hindi/category/hindi-dub/' },
+    { title:'Latest Updates', path:SITE + '/home/' },
+    { title:'Browse Catalog', path:SITE + '/' }
+  ];
+  return Promise.all(routes.map(function(row) {
+    return _get(row.path, SITE + '/').then(function(r) {
+      var items = _cards(r.body);
+      return { title:row.title, items:items, status:r.status, url:r.url };
+    }).catch(function() { return { title:row.title, items:[], status:0, url:row.path }; });
+  })).then(function(rows) {
+    var result = [], seen = {};
+    rows.forEach(function(row) {
+      var items = (row.items || []).filter(function(it) {
+        if (seen[it.url]) return false;
+        seen[it.url] = true;
+        return true;
+      });
+      if (items.length) result.push({ title:row.title, items:items });
+    });
+    return result;
+  }).catch(function() { return []; });
 }
 function search(query, page, opts) {
   var q = String(query || '').trim();
   if (!q) return Promise.resolve([]);
   var p = Math.max(1, Number(page) || 1);
   var url = SITE + (p > 1 ? '/page/' + p + '/' : '/') + '?s=' + encodeURIComponent(q).replace(/%20/g, '+');
-  return _get(url, SITE + '/').then(function(r) { return _cards(r.body); }).catch(function() { return []; });
+  return _get(url, SITE + '/').then(function(r) {
+    var direct = _cards(r.body);
+    if (direct.length) return direct;
+    // The WordPress search route sometimes serves no article cards; search the
+    // known live Hindi-Dub category and cached homepage titles as a fallback.
+    var routes = [SITE + '/hindi/category/hindi-dub/', SITE + '/home/'];
+    return Promise.all(routes.map(function(u) {
+      return _get(u, SITE + '/').then(function(resp) { return _cards(resp.body); }).catch(function() { return []; });
+    })).then(function(groups) {
+      var words = q.toLowerCase().replace(/[^a-z0-9\s]/g,' ').split(/\s+/).filter(Boolean);
+      var found = [], seen = {};
+      groups.forEach(function(items) { items.forEach(function(item) {
+        var title = String(item.title || '').toLowerCase();
+        if (!seen[item.url] && words.every(function(w) { return title.indexOf(w) >= 0; })) {
+          seen[item.url] = true; found.push(item);
+        }
+      }); });
+      return found;
+    });
+  }).catch(function() { return []; });
 }
 function _content(html) {
   var m = String(html || '').match(/<div\b[^>]*class=["'][^"']*\bentry-content\b[^"']*["'][^>]*>([\s\S]*?)(?:<\/article>|<div\b[^>]*class=["'][^"']*\b(?:comments|related-posts)\b[^"']*["']|$)/i);
@@ -147,13 +203,18 @@ function _language(text) {
   return 'Hindi';
 }
 function _linkKind(label, href) {
+  var u = String(href || '').toLowerCase();
   var s = String(label || '').toLowerCase().replace(/[^a-z]/g, '');
-  if (/^https?:\/\//i.test(String(href || '')) && /\.(?:m3u8|mp4|mkv)(?:$|[?#])/i.test(href)) return 'direct';
+  if (/\.(?:m3u8|mp4|mkv)(?:$|[?#])/i.test(u)) return 'direct';
+  if (/codedew\.com\/(?:zipper|zipcloud|multiquality|ziptron\.php)\//i.test(u)) return 'zipper';
+  if (/codedew\.com\/streambeta\//i.test(u)) return 'streambeta';
+  if (/hubcloud\.[a-z0-9.-]+\/drive\//i.test(u)) return 'hub';
   if (s === 'watchnow' || s === 'watch' || s === 'watchbeta') return 'watch';
+  if (s.indexOf('watchmultiquality') >= 0 || s.indexOf('watchmultquality') >= 0 ||
+      s === 'quickmulti' || s === 'multiquality') return 'zipper';
   if (s === 'hubcloud') return 'hub';
   if (s === 'streambeta') return 'streambeta';
-  if (s.indexOf('watchmultiquality') >= 0 || s.indexOf('watchmultquality') >= 0 || s === 'quickmulti' || s === 'multiquality') return 'multi';
-  if (/\.(?:m3u8|mp4|mkv)(?:$|[?#])/i.test(String(href || ''))) return 'direct';
+  if (/\.(?:m3u8|mp4|mkv)(?:$|[?#])/i.test(u)) return 'direct';
   return '';
 }
 function _parsePost(content, pageUrl) {
@@ -315,15 +376,142 @@ function _hubToStreamBeta(zipperUrl, pageUrl) {
     return '';
   }).catch(function() { return ''; });
 }
+function _decodeBase64Binary(input) {
+  var alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  var clean = String(input || '').replace(/[^A-Za-z0-9+/=]/g,'');
+  var out = '', buffer = 0, bits = 0;
+  for (var i=0; i<clean.length; i++) {
+    var c = clean.charAt(i);
+    if (c === '=') break;
+    var value = alphabet.indexOf(c);
+    if (value < 0) continue;
+    buffer = (buffer << 6) | value;
+    bits += 6;
+    if (bits >= 8) {
+      bits -= 8;
+      out += String.fromCharCode((buffer >> bits) & 255);
+      buffer &= bits ? ((1 << bits) - 1) : 0;
+    }
+  }
+  return out;
+}
+function _decodeJuicyPayload(payload) {
+  try {
+    if (!payload || payload.length < 8) return '';
+    var salt = payload.slice(-3), offset = '';
+    for (var i=0;i<salt.length;i++) offset += String(salt.charCodeAt(i)-100);
+    var shift = parseInt(offset,10);
+    if (!isFinite(shift)) return '';
+    var body = payload.slice(0,-3).replace(/_/g,'+').replace(/-/g,'/');
+    body += new Array((4-body.length%4)%4+1).join('=');
+    var decoded = _decodeBase64Binary(body);
+    var symbols = ['\u0060','%','-','+','*','$','!','_','^','='], digits = '';
+    for (var j=0;j<decoded.length;j++) {
+      var index = symbols.indexOf(decoded.charAt(j));
+      if (index < 0) return '';
+      digits += String(index);
+    }
+    var result = '';
+    for (var k=0;k+4<=digits.length;k+=4) {
+      var quad = parseInt(digits.slice(k,k+4),10);
+      var code = (quad%1000)-shift;
+      if (code < 9 || code > 126) return '';
+      result += String.fromCharCode(code);
+    }
+    return result;
+  } catch (_) { return ''; }
+}
+function _juicyConfig(html) {
+  var start = String(html || '').indexOf('_juicycodes(');
+  if (start < 0) return '';
+  var end = String(html).indexOf(');',start);
+  if (end < 0) return '';
+  var call = String(html).slice(start+12,end), payload = '', quoted = false;
+  for (var i=0;i<call.length;i++) {
+    var c = call.charAt(i);
+    if (c === '"') quoted = !quoted;
+    else if (quoted) payload += c;
+  }
+  return _decodeJuicyPayload(payload);
+}
+function _resolveArgon(code, referer) {
+  if (!code) return Promise.resolve([]);
+  var embed = 'https://argon.razorshell.space/embed/' + encodeURIComponent(code);
+  var headers = {
+    'Accept-Language':'en-US,en;q=0.9',
+    'Origin':'https://argon.razorshell.space',
+    'Accept':'text/html,*/*;q=0.8'
+  };
+  return _get(embed, referer || 'https://codedew.com/', headers).then(function(r) {
+    var config = _juicyConfig(r.body);
+    if (!config) {
+      var direct = _mediaUrls(r.body);
+      return direct.map(function(x) { return _normaliseDirect(x.url,'RareAnimes • MultiQuality','Auto',embed); });
+    }
+    var file = (config.match(/["']file["']\s*:\s*["']([^"']+\.m3u8(?:\?[^"']*)?)["']/i) || [])[1] ||
+      (config.match(/\bfile\s*:\s*["']([^"']+\.m3u8(?:\?[^"']*)?)["']/i) || [])[1] || '';
+    file = _decode(file).replace(/\\\//g,'/').replace(/\\u0026/gi,'&');
+    return file && /^https?:\/\//i.test(file)
+      ? [_normaliseDirect(file,'RareAnimes • MultiQuality','Auto',embed)]
+      : [];
+  }).catch(function() { return []; });
+}
+function _resolveCodedew(url, pageUrl, depth) {
+  depth = depth || 0;
+  if (depth > 7) return Promise.resolve([]);
+  var parsedUrl;
+  try { parsedUrl = new URL(url); } catch (_) { return Promise.resolve([]); }
+  var host = parsedUrl.hostname.toLowerCase(), path = parsedUrl.pathname;
+  if (host === 'argon.razorshell.space' && /\/embed\//i.test(path)) {
+    return _resolveArgon(path.split('/embed/')[1].split('/')[0], pageUrl);
+  }
+  if (host === 'codedew.com' && /\/(?:multiquality|ziptron\.php)\//i.test(path)) {
+    var code = parsedUrl.searchParams.get('url') || parsedUrl.searchParams.get('id') || '';
+    if (!code && /ziptron\.php/i.test(path)) code = path.split('/').pop();
+    return code ? _resolveArgon(code, pageUrl) : Promise.resolve([]);
+  }
+  if (host === 'codedew.com' && /\/streambeta\//i.test(path)) {
+    return _get(url, pageUrl).then(function(r) {
+      var streams = _streamBetaStreams(r.body, r.url || url, 'Hindi');
+      return streams.length ? streams : _mediaUrls(r.body).map(function(x) { return _normaliseDirect(x.url,'RareAnimes','Auto',r.url || url); });
+    }).catch(function() { return []; });
+  }
+  if (/hubcloud\.[a-z0-9.-]+$/i.test(host) && /\/drive\//i.test(path)) {
+    return _get(url, pageUrl).then(function(r) {
+      var streams = _streamBetaStreams(r.body, r.url || url, 'Hindi');
+      if (streams.length) return streams;
+      return _hubToStreamBeta(url,pageUrl).then(function(sb) {
+        return sb ? _get(sb,url).then(function(x) { return _streamBetaStreams(x.body,sb,'Hindi'); }) : [];
+      });
+    }).catch(function() { return []; });
+  }
+  return _get(url, pageUrl, {
+    'Accept-Language':'en-US,en;q=0.9',
+    'Origin':'https://codedew.com'
+  }).then(function(r) {
+    var finalUrl = String(r.url || url);
+    var direct = _mediaUrls(r.body).map(function(x) { return _normaliseDirect(x.url,'RareAnimes','Auto',finalUrl); });
+    if (direct.length) return direct;
+    // Some codedew links are exposed in data-href, meta refresh, or JS location.
+    var next = (r.body.match(/\bdata-href\s*=\s*["']([^"']+)["']/i) || [])[1] ||
+      (r.body.match(/http-equiv=["']refresh["'][^>]*content=["'][^;]+;\s*url=([^"']+)/i) || [])[1] ||
+      (r.body.match(/(?:window\.)?location(?:\.href)?\s*=\s*["']([^"']+)["']/i) || [])[1] || '';
+    next = _abs(next, finalUrl);
+    if (next && next !== url) return _resolveCodedew(next,finalUrl,depth+1);
+    if (finalUrl !== url && finalUrl.indexOf('codedew.com') < 0) return _resolveCodedew(finalUrl,url,depth+1);
+    return [];
+  }).catch(function() { return []; });
+}
 function _resolveOne(link, pageUrl, language) {
   if (!link || !link.url) return Promise.resolve([]);
   var url = _abs(link.url, pageUrl), kind = link.kind || _linkKind(link.label, url);
   if (kind === 'direct' || /\.(?:m3u8|mp4|mkv)(?:$|[?#])/i.test(url)) {
     return Promise.resolve([_normaliseDirect(url, language || link.language || 'RareAnimes', 'Auto', pageUrl)]);
   }
+  if (kind === 'zipper') return _resolveCodedew(url,pageUrl,0);
   if (kind === 'multi') {
     if (typeof extractVideo !== 'function') return Promise.resolve([]);
-    return Promise.resolve(extractVideo(url, { headers:{ 'User-Agent':UA, 'Referer':pageUrl } }))
+    return Promise.resolve(extractVideo(url, { headers: { 'User-Agent': UA, 'Referer': pageUrl } }))
       .then(function(data) {
         var items = Array.isArray(data) ? data : (data ? [data] : []);
         return items.map(function(x) {
@@ -332,39 +520,19 @@ function _resolveOne(link, pageUrl, language) {
         }).filter(Boolean);
       }).catch(function() { return []; });
   }
-  var request = kind === 'hub'
-    ? _hubToStreamBeta(url, pageUrl).then(function(sb) {
-        return sb ? _get(sb, url).then(function(r) { return { response:r, requested:sb }; }) : { response:null, requested:'' };
-      })
-    : _get(url, pageUrl).then(function(r) { return { response:r, requested:url }; });
-  return request.then(function(result) {
-    var r = result.response;
+  if (kind === 'hub') return _hubToStreamBeta(url,pageUrl).then(function(sb) {
+    return sb ? _get(sb,url).then(function(r) { return _streamBetaStreams(r.body,sb,language || link.language); }) : [];
+  }).catch(function() { return []; });
+  var pagePromise = _get(url, pageUrl).then(function(r) { return { response:r, requested:url }; });
+  return pagePromise.then(function(res) {
+    var r = res.response;
     if (!r) return [];
-    var finalUrl = String(r.url || result.requested || url);
-    var parsed = _streamBetaStreams(r.body, finalUrl, language || link.language);
-    if (parsed.length) return parsed;
-    if (/\/streambeta\//i.test(finalUrl) && finalUrl !== result.requested) {
-      return _get(finalUrl, url).then(function(r2) {
-        var list = _streamBetaStreams(r2.body, finalUrl, language || link.language);
-        return list.length ? list : _mediaUrls(r2.body).map(function(x) { return _normaliseDirect(x.url, language || 'RareAnimes', 'Auto', finalUrl); });
-      });
-    }
-    var direct = _mediaUrls(r.body).map(function(x) { return _normaliseDirect(x.url, finalUrl, 'Auto', finalUrl); });
+    var target = String(r.url || res.requested || url);
+    var streams = _streamBetaStreams(r.body,target,language || link.language);
+    if (streams.length) return streams;
+    var direct = _mediaUrls(r.body).map(function(x) { return _normaliseDirect(x.url,target,'Auto',target); });
     if (direct.length) return direct;
-    if (/\.(?:m3u8|mp4|mkv)(?:$|[?#])/i.test(finalUrl)) return [_normaliseDirect(finalUrl, language || 'RareAnimes', 'Auto', url)];
-    // WatchNow can redirect to a StreamBeta target; resolve its final URL explicitly.
-    if (kind === 'watch' || kind === 'streambeta') {
-      var betaUrl = '';
-      if (/\/streambeta\//i.test(finalUrl)) betaUrl = finalUrl;
-      else {
-        var queryMatch = finalUrl.match(/(?:\?|&)url=([A-Za-z0-9_-]+)/);
-        if (queryMatch && /codedew\.com/i.test(finalUrl)) betaUrl = STREAM_BETA + '?url=' + encodeURIComponent(queryMatch[1]);
-      }
-      if (betaUrl) return _get(betaUrl, finalUrl).then(function(r2) {
-        var list = _streamBetaStreams(r2.body, betaUrl, language || link.language);
-        return list.length ? list : _mediaUrls(r2.body).map(function(x) { return _normaliseDirect(x.url, language || 'RareAnimes', 'Auto', betaUrl); });
-      });
-    }
+    if (/\.(?:m3u8|mp4|mkv)(?:$|[?#])/i.test(target)) return [_normaliseDirect(target,language || 'RareAnimes','Auto',url)];
     return [];
   }).catch(function() { return []; });
 }
@@ -374,9 +542,14 @@ function getVideoSources(episodeUrl, opts) {
   var payload;
   try { payload = JSON.parse(decodeURIComponent(raw.slice('rareanimes://'.length))); } catch (_) { return Promise.resolve([]); }
   var links = Array.isArray(payload.links) ? payload.links.slice() : [];
-  var rank = { watch:0, streambeta:0, hub:1, direct:2, multi:9 };
+  var rank = { zipper:0, watch:0, streambeta:0, hub:1, direct:2, multi:9 };
   links.sort(function(a,b) {
-    return (rank[a.kind] == null ? 5 : rank[a.kind]) - (rank[b.kind] == null ? 5 : rank[b.kind]);
+    function score(x) {
+      if (x.kind === 'zipper' && /watchmultiquality|multiquality|quickmulti/i.test(String(x.label || ''))) return -1;
+      if (x.kind === 'zipper' && /mediafire/i.test(String(x.label || ''))) return 2;
+      return rank[x.kind] == null ? 5 : rank[x.kind];
+    }
+    return score(a) - score(b);
   });
   var out = [], seen = {};
   function tryAt(i) {
