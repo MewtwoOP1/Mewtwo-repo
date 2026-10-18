@@ -39,9 +39,11 @@ function _get(url, referer) {
     });
 }
 function _attr(tag, name) {
-  var re = new RegExp("(?:^|\\\\s)" + name + "\\\\s*=\\\\s*(?:\"([^\"]*)\"|'([^']*)'|([^\\\\s>]+))", 'i');
-  var m = String(tag || '').match(re);
-  return m ? (m[1] != null ? m[1] : m[2] != null ? m[2] : m[3] || '') : '';
+  var re = /(?:^|\s)([a-zA-Z_:][-a-zA-Z0-9_:.]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/g, m;
+  while ((m = re.exec(String(tag || ''))) !== null) {
+    if (m[1].toLowerCase() === String(name || '').toLowerCase()) return m[2] != null ? m[2] : m[3] != null ? m[3] : m[4] || '';
+  }
+  return '';
 }
 function _blocks(html, selector) {
   var out = [], re = /<a\b[^>]*>[\s\S]*?<\/a>/gi, m;
