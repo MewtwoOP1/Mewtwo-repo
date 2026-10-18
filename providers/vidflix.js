@@ -4,7 +4,7 @@
 // Referer/CORS handling; never return the VidFlix watch page as a playable URL.
 
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID) ? String(__SOURCE_ID) : 'vidflix';
-var VERSION = '1.1.0';
+var VERSION = '1.1.1';
 var TMDB_API = 'https://api.themoviedb.org/3';
 var POSTER = 'https://image.tmdb.org/t/p/w500';
 var BACKDROP = 'https://image.tmdb.org/t/p/w780';
@@ -550,7 +550,7 @@ function _vidCoreStreams(parsed) {
         return _requestText(apiBase+'/'+VIDCORE_STREAM_ACTION+'/'+server.data,common,page.jar).then(function(result) {
           var config=_decryptResolvePayload(result);
           var url=config && (config.url || config.file || config.source);
-          if(typeof url!=='string' || !/^https?:\\/\\//i.test(url)) return null;
+          if(typeof url!=='string' || !/^https?:\/\//i.test(url)) return null;
           return {url:url,name:server.name||'VidCore',headers:{
             'Referer':page.pageUrl,'Origin':VIDCORE_BASE,'User-Agent':UA
           }};
