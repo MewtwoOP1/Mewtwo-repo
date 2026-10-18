@@ -173,7 +173,14 @@ function _toAbsolute(url) {
   if (/^https?:\/\//i.test(s)) return s;
   var base = _resolverBase();
   if (!base) return '';
-  return base + (s.charAt(0) === '/' ? '' : '/') + s;
+  if (!/^https?:\/\//i.test(s)) return base + (s.charAt(0) === '/' ? '' : '/') + s;
+  try {
+    var parsed = new URL(s);
+    if (/^(localhost|127\.0\.0\.1|0\.0\.0\.0)$/i.test(parsed.hostname) || /^10\./.test(parsed.hostname) || /^192\.168\./.test(parsed.hostname)) {
+      return base + parsed.pathname + parsed.search + parsed.hash;
+    }
+  } catch (e) {}
+  return s;
 }
 function _streamContainer(url, hint) {
   var u = String(url || '');
@@ -211,7 +218,7 @@ function getVideoSources(raw) {
         var server = row.server;
         // Prefer the resolver's HLS relay: it adds the upstream Referer and rewrites
         // segment URLs. Direct CDN links remain a fallback for native players.
-        var viaRelay = server.play && /^https?:\/\//i.test(server.play) ? server.play : '';
+        var viaRelay = server.play ? _toAbsolute(server.play) : '';
         var url = viaRelay || (server.url && /^https?:\/\//i.test(server.url) ? server.url : '');
         if (!url || seen[url]) return;
         seen[url] = true;
