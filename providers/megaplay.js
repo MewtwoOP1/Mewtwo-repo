@@ -213,7 +213,7 @@ function _ajax(path) {
   }).catch(function() { return null; });
 }
 function _parseServers(html) {
-  var out = [], re = /data-type=["'](\\w+)["']([\\s\\S]*?)(?=data-type=["']|$)/g, m;
+  var out = [], re = /data-type=["'](\w+)["']([\s\S]*?)(?=data-type=["']|$)/g, m;
   while ((m = re.exec(String(html || ''))) !== null) {
     var type = m[1], block = m[2], lr = /data-link-id=["']([^"']+)["'][^>]*>([^<]*)</g, lm;
     while ((lm = lr.exec(block)) !== null) out.push({ type: type, linkId: lm[1], name: String(lm[2] || '').trim() });
@@ -225,7 +225,7 @@ function _tryServerList(list, i, lang) {
   return _ajax('/ajax/server?get=' + encodeURIComponent(list[i].linkId)).then(function(j) {
     var result = j && j.result;
     var embed = result && typeof result === 'object' ? result.url : '';
-    if (typeof embed === 'string' && /https?:\\/\\/(?:[^/]+\\.)?(?:megaplay\\.[a-z]+|megaplays\\.se|vidtube\\.[a-z]+)/i.test(embed)) {
+    if (typeof embed === 'string' && /https?:\/\/(?:[^/]+\.)?(?:megaplay\.[a-z]+|megaplays\.se|vidtube\.[a-z]+)/i.test(embed)) {
       return _megaExtract(embed, lang).catch(function() { return _tryServerList(list, i + 1, lang); });
     }
     return _tryServerList(list, i + 1, lang);
@@ -234,7 +234,7 @@ function _tryServerList(list, i, lang) {
 function getVideoSources(episodeUrl) {
   var raw = String(episodeUrl || '').replace(/^megaplay:\/\//i, '').split('/');
   var id = decodeURIComponent(raw[0] || '');
-  if (!/^\\d+$/.test(id)) return Promise.resolve([]);
+  if (!/^\d+$/.test(id)) return Promise.resolve([]);
   var lang = raw[1] === 'dub' ? 'dub' : 'sub';
   var serverIds = '';
   try { serverIds = decodeURIComponent(raw[3] || ''); } catch (_) {}
@@ -254,7 +254,7 @@ function getVideoSources(episodeUrl) {
     });
     if (!wanted.length) wanted = servers;
     wanted.sort(function(a,b) {
-      function rank(s) { var n = String(s.name || '').toLowerCase(); return /megaplay|vidstream|\\bhd\\b/.test(n) ? 0 : /vidplay|vidtube/.test(n) ? 1 : 5; }
+      function rank(s) { var n = String(s.name || '').toLowerCase(); return /megaplay|vidstream|\bhd\b/.test(n) ? 0 : /vidplay|vidtube/.test(n) ? 1 : 5; }
       return rank(a) - rank(b);
     });
     return _tryServerList(wanted, 0, lang);
