@@ -45,4 +45,4 @@ The provider manifest and JavaScript interface follow the self-contained source 
 
 The code in this repository is licensed under the MIT License. See [LICENSE](LICENSE). Third-party names, logos, APIs, metadata, and content remain the property of their respective owners and are subject to their own terms.
 
-The mocked regression suite includes: JustAnime and Ani.pm ID-field normalization, cached-detail fallback after unexpected parser errors, AniList/MAL field separation, ordered episodes, retry behaviour and stream URL handling; title extraction and API normalization for AniKoto; HiAnime catalogue-to-player resolution; and HDHub4u movie detail/direct-media handling.
+The mocked regression suite includes: namespace-safe JustAnime and Ani.pm tracker IDs, unchanged source/playback IDs (no ID offsets), cached-detail fallback, AniList/MAL field separation, ordered episodes, retry behaviour and stream URL handling; AnV's separate catalogue/playback and MAL IDs; title extraction and API normalization for AniKoto; HiAnime catalogue-to-player resolution; and HDHub4u movie detail/direct-media handling.

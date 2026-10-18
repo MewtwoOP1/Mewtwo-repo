@@ -161,15 +161,26 @@ function _cover(m) {
   return c.extraLarge || c.large || null;
 }
 
+function _positiveNumericId(value) {
+  var s = String(value == null ? '' : value);
+  if (!/^\d+$/.test(s)) return null;
+  var n = Number(s);
+  return isFinite(n) && n > 0 ? n : null;
+}
+
 function _item(m) {
   if (!m || !m.slug) return null;
-  return {
+  var item = {
     id: 'anv-' + m.id,
     title: _title(m),
     cover: _cover(m),
     url: 'anv://anime/' + m.slug,
     type: m.format === 'MOVIE' ? 'movie' : 'anime'
   };
+  var malId = _positiveNumericId(m.idMal);
+  if (malId !== null) item.malId = malId;
+  // m.id is AnV's private catalogue/playback identifier, not an AniList ID.
+  return item;
 }
 
 function _items(list) {
@@ -231,7 +242,7 @@ function getSettings() { return []; }
 function getInfo() {
   return {
     name: 'AnV', id: 'anv', baseUrl: _ANV, lang: 'en',
-    logo: 'https://www.google.com/s2/favicons?sz=256&domain=anv.to', type: 'anime', version: '1.0.3'
+    logo: 'https://www.google.com/s2/favicons?sz=256&domain=anv.to', type: 'anime', version: '1.0.4'
   };
 }
 
@@ -327,6 +338,9 @@ function getDetail(url) {
       url: 'anv://anime/' + m.slug,
       episodes: _episodeList(m)
     };
+    var malId = _positiveNumericId(m.idMal);
+    if (malId !== null) detail.malId = malId;
+    // Keep m.id out of detail.anilistId: it is only valid for AnV playback.
     if (m.bannerImage) detail.banner = String(m.bannerImage);
     if (m.description) detail.description = _decodeEntities(_stripTags(m.description));
     if (m.seasonYear) detail.year = String(m.seasonYear);
@@ -461,5 +475,5 @@ function getStreams(url, opts) { return getVideoSources(url, opts); }
 function getLinks(url, opts) { return getVideoSources(url, opts); }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { version: '1.0.3', getInfo: getInfo, getSettings: getSettings, getHome: getHome, search: search, getDetail: getDetail, getEpisodes: getEpisodes, getVideoSources: getVideoSources, getStreams: getStreams, getLinks: getLinks };
+  module.exports = { version: '1.0.4', getInfo: getInfo, getSettings: getSettings, getHome: getHome, search: search, getDetail: getDetail, getEpisodes: getEpisodes, getVideoSources: getVideoSources, getStreams: getStreams, getLinks: getLinks };
 }
