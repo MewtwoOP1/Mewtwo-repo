@@ -15,7 +15,7 @@ function _decode(raw) {
     .replace(/\\\\/g,'\\').replace(/\\'/g,"'");
 }
 function _jsonArgument(html,name) {
-  var re = /items\\s*:\\s*JSON\\.parse\\('((?:[^'\\\\]|\\\\.)*)'\\)/i;
+  var re = /items\s*:\s*JSON\.parse\('((?:[^'\\]|\\.)*)'\)/i;
   var m=String(html||'').match(re); if(!m) return null;
   try{return JSON.parse(_decode(m[1]));}catch(e){return null;}
 }
