@@ -1,12 +1,13 @@
 // PressPlayX native movie/series provider for Zangetsu.
 // Catalogue metadata comes from TMDB; playback is resolved through PressPlay's VidSpark APIs.
 // Upstream reference inspected: MXFia19/module-sora (PressPlay module).
-var VERSION = '1.0.1';
+var VERSION = '1.0.2';
 var NAME = 'PressPlayX';
 var SITE = 'https://pressplayx.to';
 var VS = 'https://vidspark.to';
 var CS = 'https://cdn.vidspark.to';
 var TMDB = 'https://api.themoviedb.org/3';
+var TMDB_DEFAULT_KEY = 'f5b2cdde0b678e87f5c68b61b43c688c';
 var POSTER = 'https://image.tmdb.org/t/p/w500';
 var BACKDROP = 'https://image.tmdb.org/t/p/w780';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
@@ -15,12 +16,12 @@ var CS_KEY = 'f3b72e73c80c9a996574379798703796a1936efa3516a7105cb0e43048b46b5a';
 var RELAYS = [{key:'scrapify',label:'Alpha'},{key:'vaplayer',label:'Beta'},{key:'oreon',label:'Oreon'}];
 
 function getInfo(){return {name:NAME,lang:'en',baseUrl:SITE,logo:'https://www.google.com/s2/favicons?sz=256&domain=pressplayx.to',type:'movie',version:VERSION};}
-function getSettings(){return [];}
+function getSettings(){return [{key:'tmdbApiKey',label:'TMDB API Key (optional)',description:'Optional personal TMDB v3 key. Leave blank to use Zangetsu’s built-in key.',type:'text',default:''}];}
 function _body(r){if(!r)return '';if(typeof r.body==='string')return r.body;if(typeof r.data==='string')return r.data;return '';}
 async function _fetch(url,headers){var h=Object.assign({'User-Agent':UA,'Accept':'application/json, text/plain, */*'},headers||{});var r=await fetch(url,{headers:h,timeoutMs:15000});if(!r||r.status<200||r.status>=300)throw new Error('PressPlayX HTTP '+(r&&r.status||'network error'));return _body(r);}
 async function _json(url,headers){var t=await _fetch(url,headers);try{return JSON.parse(t);}catch(e){throw new Error('PressPlayX returned invalid JSON');}}
-function _tmdbKey(){try{var s=typeof __settings!=='undefined'&&__settings&&__settings['tmdb-stremio'];if(s&&s.tmdbApiKey)return String(s.tmdbApiKey).trim();}catch(e){}return '';}
-async function _tmdb(path){var key=_tmdbKey();var url=TMDB+path+(path.indexOf('?')>=0?'&':'?')+'api_key='+encodeURIComponent(key);return _json(url,{Accept:'application/json'});}
+function _tmdbKey(){try{var s=typeof __settings!=='undefined'&&__settings&&(__settings['pressplayx']||__settings['tmdb-stremio']);if(s&&s.tmdbApiKey)return String(s.tmdbApiKey).trim();}catch(e){}return '';}
+async function _tmdb(path){var key=_tmdbKey();var url;if(key){url='https://api.themoviedb.org./3'+path+(path.indexOf('?')>=0?'&':'?')+'api_key='+encodeURIComponent(key);}else{url=TMDB+path;}var headers={Accept:'application/json'};if(key)headers.Host='api.themoviedb.org';return _json(url,headers);}
 function _type(x,forced){return forced||((x&&x.media_type==='tv')||(x&&x.first_air_date!=null)?'tv':'movie');}
 function _item(x,forced){if(!x||x.id==null)return null;var type=_type(x,forced);if(!['movie','tv'].includes(type))return null;var title=String(x.title||x.name||x.original_title||x.original_name||'').trim();if(!title)return null;var date=x.release_date||x.first_air_date||'';return {id:'pressplay://'+type+'/'+x.id,title:title+(date?' ('+date.slice(0,4)+')':''),url:'pressplay://'+type+'/'+x.id,cover:x.poster_path?POSTER+x.poster_path:null,banner:x.backdrop_path?BACKDROP+x.backdrop_path:null,type:'movie',sourceId:'pressplayx',tmdbId:Number(x.id),tmdbIsTv:type==='tv'};}
 function _items(json,forced){return (json&&Array.isArray(json.results)?json.results:[]).map(function(x){return _item(x,forced);}).filter(Boolean);}
