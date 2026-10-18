@@ -15,7 +15,7 @@
         {
           "key": "resolverUrl",
           "label": "VidCore resolver URL",
-          "description": "Resolver API base URL. The default is the public VidCore resolver; for a private deployment, enter its base URL (not /api/resolve).",
+          "description": "Base URL of the VidCore resolver service (API-compatible with /api/resolve and /api/hls). The default is the resolver deployment URL; change it if you host the resolver elsewhere.",
           "type": "text",
           "default": "https://advmtaxi-vidcore.hf.space"
         }
