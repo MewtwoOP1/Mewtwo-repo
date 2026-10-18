@@ -15,7 +15,7 @@ var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, l
 function getInfo() {
   return { name: 'Re:Anime', lang: 'en', baseUrl: SITE,
     logo: 'https://www.google.com/s2/favicons?sz=256&domain=reanime.to',
-    type: 'anime', version: '1.2.2' };
+    type: 'anime', version: '1.2.5' };
 }
 function getSettings() { return []; }
 
@@ -173,12 +173,26 @@ function _dedupeItems(list) {
   });
   return out;
 }
+// Catalogue cards sometimes contain anilist_id=0 although the detail endpoint
+// has the real ID. Fill a bounded batch so Zangetsu never needs to re-resolve
+// those titles through AniList, which triggers the "having a moment" banner.
+function _fillAnilistIds(items) {
+  var missing = items.filter(function (it) { return !it.anilistId; }).slice(0, 8);
+  if (!missing.length) return Promise.resolve(items);
+  return Promise.all(missing.map(function (it) {
+    return _detailData(it.id).then(function (d) {
+      var data = d && (d.data || d.anime || d);
+      var aid = Number(_anilistId(data));
+      if (aid > 0) it.anilistId = aid;
+    }).catch(function () { return null; });
+  })).then(function () { return items; });
+}
 function search(query, page) {
   var q = String(query || '').trim();
   if (!q) return Promise.resolve([]);
   var p = Math.max(1, parseInt(page, 10) || 1);
   var url = API + '/search?limit=36&offset=' + ((p - 1) * 36) + '&q=' + encodeURIComponent(q);
-  return _json(url, SITE + '/search').then(_dedupeItems).catch(function () { return []; });
+  return _json(url, SITE + '/search').then(_dedupeItems).then(_fillAnilistIds).catch(function () { return []; });
 }
 function getHome() {
   var latestUrl = API + '/home/latest-aired?limit=12';
@@ -187,17 +201,20 @@ function getHome() {
     _json(latestUrl, SITE + '/home').catch(function () { return null; }),
     _json(popularUrl, SITE + '/search').catch(function () { return null; })
   ]).then(function (data) {
-    var latest = _dedupeItems(data[0]);
-    var popular = _dedupeItems(data[1]);
-    var rows = [];
-    if (latest.length) rows.push({ title: 'Latest Aired', items: latest });
-    if (popular.length) rows.push({ title: 'Popular Anime', items: popular });
-    return rows;
+    return Promise.all([
+      _fillAnilistIds(_dedupeItems(data[0])),
+      _fillAnilistIds(_dedupeItems(data[1]))
+    ]).then(function (filled) {
+      var rows = [];
+      if (filled[0].length) rows.push({ title: 'Latest Aired', items: filled[0] });
+      if (filled[1].length) rows.push({ title: 'Popular Anime', items: filled[1] });
+      return rows;
+    });
   });
 }
 function popular() {
   return _json(API + '/search?sort=popularity_desc&limit=36&offset=0', SITE + '/search')
-    .then(_dedupeItems).catch(function () { return []; });
+    .then(_dedupeItems).then(_fillAnilistIds).catch(function () { return []; });
 }
 function _episode(ep, index, slug, anilistId) {
   var num = Number(_first(ep, ['episode_number', 'episodeNumber', 'number', 'episode']) || index + 1);
@@ -233,7 +250,8 @@ function getDetail(url) {
     item.description = String(d.description || '');
     item.status = String(d.status || 'unknown').toLowerCase();
     item.genres = Array.isArray(d.genres) ? d.genres : [];
-    item.year = d.season_year || (d.start_date && d.start_date.year) || null;
+    var _yr = d.season_year || (d.start_date && d.start_date.year) || null;
+    item.year = _yr ? String(_yr) : null; // MediaDetail parser expects year as a String.
     item.malId = Number(d.mal_id || 0) || undefined;
     item.anilistId = Number(anilistId) || item.anilistId;
     item.episodes = episodes.map(function (ep, i) { return _episode(ep, i, slug, anilistId); });
@@ -256,92 +274,74 @@ function _directMedia(url, label, kind) {
     audioLang: kind === 'dub' ? 'en' : 'ja', subtitles: []
   };
 }
-function _parseJson5(raw) {
-  var s = String(raw || '');
-  // ReAnime's Svelte payload is JSON5-like: quote bare keys, drop trailing commas,
-  // and normalize undefined values without evaluating page JavaScript.
-  s = s.replace(/([{,]\s*)([A-Za-z_$][\w$]*)(\s*:)/g, '$1"$2"$3');
-  s = s.replace(/,\s*([}\]])/g, '$1');
-  s = s.replace(/:\s*undefined\b/g, ': null');
-  return JSON.parse(s);
-}
-function _flixApiHeaders(referer, accept) {
+function _flixDownloadHeaders() {
   return {
     'User-Agent': UA,
-    'Accept': accept || 'application/json, text/plain, */*',
+    'Accept': '*/*',
     'Accept-Language': 'en-US,en;q=0.9',
-    'Origin': FLIX,
-    'Referer': referer || FLIX + '/'
+    'Referer': FLIX + '/'
   };
 }
-function _postJson(url, payload, referer) {
-  return fetch(url, {
-    method: 'POST',
-    headers: Object.assign({}, _flixApiHeaders(referer), {
-      'Content-Type': 'application/json'
-    }),
-    body: JSON.stringify(payload),
-    timeoutMs: 15000
+
+// Re:Anime's FlixCloud HLS needs a local proxy to decrypt segments. The old
+// parse-flixcloud URL only rewrites a manifest and is not itself a hosted stream.
+// Use the upstream Aniyomi extension's direct-download metadata path instead.
+function _resolveFlixDownload(dataLink, label, kind) {
+  var match = String(dataLink || '').match(/\/e\/([a-z0-9]+)/i);
+  if (!match) return Promise.resolve([]);
+  var embedId = match[1];
+  var metadataUrl = FLIX + '/d/' + encodeURIComponent(embedId) + '/__data.json';
+  return fetch(metadataUrl, {
+    headers: _flixDownloadHeaders(),
+    timeoutMs: 12000
   }).then(function (r) {
-    if (!r || (r.status && r.status >= 400)) throw new Error('HTTP ' + (r && r.status));
-    var j = JSON.parse(String(r.body || 'null'));
-    if (!j) throw new Error('Empty FlixCloud response');
-    return j;
+    if (!r || (r.status && r.status >= 400)) {
+      throw new Error('FlixCloud download metadata HTTP ' + (r && r.status));
+    }
+    var body = String(r.body || '');
+    var fileId = (body.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i) || [])[0];
+    var token = (body.match(/eyJ[\w-]+\.[\w-]+\.[\w-]+/) || [])[0];
+    var base = (body.match(/https:\/\/fetch\d*\.flixcloud\.cc/i) || [])[0] || FLIX;
+    var resolution = (body.match(/(\d{3,4}p)/i) || [])[1] || 'Auto';
+    if (!fileId || !token) throw new Error('FlixCloud download metadata missing file ID/token');
+    return {
+      url: base + '/download/' + fileId + '?token=' + encodeURIComponent(token),
+      resolution: resolution
+    };
+  }).then(function (meta) {
+    // Yuzono polls FlixCloud's progress endpoint before exposing this URL. A
+    // short HEAD retry loop approximates readiness in the JS-only provider API.
+    function probe(attempt) {
+      return fetch(meta.url, {
+        method: 'HEAD',
+        headers: _flixDownloadHeaders(),
+        timeoutMs: 8000
+      }).then(function (response) {
+        var status = Number(response && response.status || 0);
+        if ((status >= 200 && status < 300) || status === 405 || status === 501) {
+          return [{
+            url: meta.url,
+            quality: meta.resolution,
+            label: (label || 'Re:Anime') + ' Download',
+            container: 'mp4',
+            headers: _flixDownloadHeaders(),
+            kind: kind || 'sub',
+            audioLang: kind === 'dub' ? 'en' : 'ja',
+            subtitles: []
+          }];
+        }
+        if (attempt < 4 && (status === 404 || status === 425 || status === 429 || status >= 500)) {
+          return new Promise(function (resolve) {
+            setTimeout(resolve, 1200);
+          }).then(function () { return probe(attempt + 1); });
+        }
+        throw new Error('FlixCloud download not ready (HTTP ' + status + ')');
+      });
+    }
+    return probe(0);
+  }).catch(function () {
+    return [];
   });
-}
-function _resolveFlixStream(dataLink, label, kind) {
-  if (!/\/e\/[a-z0-9]+/i.test(String(dataLink || ''))) return Promise.resolve([]);
-  var embedHeaders = _flixApiHeaders(FLIX + '/');
-  return fetch(dataLink, { headers: embedHeaders, timeoutMs: 15000 })
-    .then(function (r) {
-      if (!r || (r.status && r.status >= 400)) throw new Error('FlixCloud embed HTTP ' + (r && r.status));
-      return String(r.body || '');
-    })
-    .then(function (html) {
-      var dataMatch = html.match(/type:\s*["']data["']\s*,\s*data:\s*(\{[\s\S]*?\})\s*,\s*uses:/);
-      if (!dataMatch) throw new Error('FlixCloud embed data not found');
-      var embedData = _parseJson5(dataMatch[1]);
-      // The current decoder does not need subtitle/chapter metadata in its payload.
-      delete embedData.subtitles;
-      delete embedData.intro_chapter;
-      delete embedData.outro_chapter;
-      return embedData;
-    })
-    .then(function (embedData) {
-      return _postJson('https://enc-dec.app/api/dec-flixcloud?type=token', { data: embedData }, FLIX + '/')
-        .then(function (tokenDto) {
-          if (Number(tokenDto.status) !== 200 || !tokenDto.result || !tokenDto.result.token) {
-            throw new Error('FlixCloud token decode failed');
-          }
-          return _fetch(FLIX + '/api/m3u8/' + encodeURIComponent(tokenDto.result.token), FLIX + '/', 15000, '*/*')
-            .then(function (r) {
-              var streamResponse = JSON.parse(r.body || 'null');
-              if (!streamResponse || typeof streamResponse !== 'object') throw new Error('FlixCloud stream response was not JSON');
-              return _postJson('https://enc-dec.app/api/dec-flixcloud?type=stream', {
-                data: { context: tokenDto.result.context, stream_response: streamResponse }
-              }, FLIX + '/');
-            });
-        });
-    })
-    .then(function (streamDto) {
-      if (Number(streamDto.status) !== 200 || !streamDto.result || !streamDto.result.stream) {
-        throw new Error('FlixCloud stream decode failed');
-      }
-      var streamUrl = String(streamDto.result.stream);
-      var wPayload = streamDto.result.context && streamDto.result.context.w_payload;
-      if (wPayload == null) throw new Error('FlixCloud stream payload missing');
-      // Use the upstream decoder's HTTP endpoint. Unlike the Aniyomi port, this
-      // runtime cannot host the local loopback proxy that rewrites/decrypts HLS
-      // segments, so the remote parser endpoint is the compatible bridge.
-      var playable = 'https://enc-dec.app/api/parse-flixcloud?url=' +
-        encodeURIComponent(streamUrl) + '&w_payload=' + encodeURIComponent(String(wPayload));
-      return [{
-        url: playable, quality: 'Auto', label: label || 'Re:Anime',
-        container: 'hls', headers: _flixApiHeaders(FLIX + '/'),
-        kind: kind || 'sub', audioLang: kind === 'dub' ? 'en' : 'ja', subtitles: []
-      }];
-    })
-    .catch(function () { return []; });
 }
 function getVideoSources(episodeUrl, opts) {
   var parts = String(episodeUrl || '').split('|');
@@ -368,7 +368,7 @@ function getVideoSources(episodeUrl, opts) {
           var link = String(server.dataLink || server.url || '');
           var direct = _directMedia(link, label, audio);
           if (direct) tasks.push(Promise.resolve([direct]));
-          else if (/flixcloud/i.test(link) && /\/e\//i.test(link)) tasks.push(_resolveFlixStream(link, label, audio));
+          else if (/flixcloud/i.test(link) && /\/e\//i.test(link)) tasks.push(_resolveFlixDownload(link, label, audio));
         });
         return Promise.all(tasks).then(function (groups) {
           var out = [], seen = {};
@@ -393,7 +393,7 @@ function getLinks(id, opts) { return getVideoSources(id, opts); }
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    version: '1.2.2', getInfo: getInfo, getSettings: getSettings,
+    version: '1.2.5', getInfo: getInfo, getSettings: getSettings,
     getHome: getHome, popular: popular, search: search,
     getDetail: getDetail, getEpisodes: getEpisodes,
     getVideoSources: getVideoSources, getStreams: getStreams, getLinks: getLinks
