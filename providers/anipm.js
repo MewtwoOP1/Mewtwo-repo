@@ -1,11 +1,11 @@
-// Ani.pm source for Zangetsu.
+// Ani.pm source for Zangetsu. Version 1.4.1 locks AniList-ID pass-through: never offset IDs.
 // Supports Ani.pm's current playback-bootstrap API, with the older partner API
 // retained as a compatibility fallback for catalogue/search and playback.
 var SITE = 'https://ani.pm';
 var API = SITE + '/api';
 var EMBED = 'https://embed.settlar.io';
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID) ? String(__SOURCE_ID) : 'anipm';
-var VERSION = '1.4.0';
+var VERSION = '1.4.1';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36';
 var _seriesCache = {};
 var _detailCache = {};
@@ -141,7 +141,7 @@ function _card(item, legacy) {
   var explicitAniListId = _firstNum([
     _anilistId(item), urlAniListMatch && urlAniListMatch[1]
   ]);
-  // Source-native IDs route detail and playback; tracker IDs are separate.
+  // Source-native IDs route detail and playback; tracker IDs are separate. AniList IDs pass through verbatim, never +/-1 adjusted.
   var aniUrlId = urlAniListMatch && urlAniListMatch[1] ? _num(urlAniListMatch[1]) : null;
   // Partner API rows can include an internal item.id while their canonical
   // /ani/<id> URL points at the AniList ID expected by /series and /embed.
