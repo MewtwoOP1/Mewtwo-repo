@@ -9,7 +9,7 @@ var EP_API = 'https://epeng.animeapps.top';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
 function getInfo() {
-  return {name:'MMani',lang:'en',baseUrl:SITE,logo:'https://www.google.com/s2/favicons?sz=256&domain=mmani.com',type:'anime',version:'1.0.0'};
+  return {name:'MMani',lang:'en',baseUrl:SITE,logo:'https://www.google.com/s2/favicons?sz=256&domain=mmani.com',type:'anime',version:'1.0.1'};
 }
 function getSettings(){return [];}
 function _fetch(url, referer) {
@@ -109,7 +109,7 @@ function _resolvePlayerLink(link,serverName,epNo){
   return _json(EP_API+'/apilink.php?data='+encodeURIComponent(link),SITE+'/').then(function(players){
     if(!Array.isArray(players))return [];
     var tasks=players.filter(function(p){return p&&typeof p.link==='string';}).map(function(p){
-      var playerUrl=p.link.replace(/\\\\\\//g,'/');
+      var playerUrl=String(p.link);
       return _fetch(playerUrl,SITE+'/').then(function(html){
         var vm=html.match(/["']?videoUrl["']?\\s*:\\s*["']([^"']+)["']/);
         if(!vm||!vm[1])return null;
@@ -153,4 +153,4 @@ function getVideoSources(url,opts){
   }).catch(function(){return [];});
 }
 function getStreams(url,opts){return getVideoSources(url,opts);}
-if(typeof module!=='undefined'&&module.exports)module.exports={version:'1.0.0',getInfo:getInfo,getSettings:getSettings,getHome:getHome,search:search,getDetail:getDetail,getEpisodes:getEpisodes,getVideoSources:getVideoSources,getStreams:getStreams};
+if(typeof module!=='undefined'&&module.exports)module.exports={version:'1.0.1',getInfo:getInfo,getSettings:getSettings,getHome:getHome,search:search,getDetail:getDetail,getEpisodes:getEpisodes,getVideoSources:getVideoSources,getStreams:getStreams};
