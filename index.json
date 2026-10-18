@@ -573,6 +573,25 @@
       "file": "providers/senshi-to.js",
       "logo": "https://www.google.com/s2/favicons?sz=256&domain=senshi.to",
       "nsfw": false
+    },
+    {
+      "id": "moviebox-api",
+      "name": "MovieBox API",
+      "version": "1.0.0",
+      "type": "movie",
+      "lang": "en",
+      "file": "providers/moviebox-api.js",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=moviebox.ph",
+      "nsfw": false,
+      "settings": [
+        {
+          "key": "apiBase",
+          "label": "MovieBox API base URL",
+          "description": "Your self-hosted MovieBox API deployment. Do not include a trailing slash.",
+          "type": "text",
+          "default": "https://moviebox-api-lovat-nu.vercel.app"
+        }
+      ]
     }
   ]
 }
