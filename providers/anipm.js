@@ -482,7 +482,7 @@ function _legacyStreams(id, ep, language, anilistId) {
   function resolve(lang) {
     var embedUrl = SITE + '/embed/ani/' + encodeURIComponent(id) + '/' + encodeURIComponent(ep) + '/' + lang;
     return _text(embedUrl,SITE + '/').then(function(html) {
-      var match = html.match(/id="anipm-embed-config">([^<]+)<\\/script>/);
+      var match = html.match(/id="anipm-embed-config">([^<]+)<\/script>/);
       if (!match) throw new Error('Ani.pm embed config missing');
       var config = JSON.parse(match[1]), nonce = config && config.nonce;
       if (!nonce) throw new Error('Ani.pm embed nonce missing');
@@ -492,7 +492,7 @@ function _legacyStreams(id, ep, language, anilistId) {
         if (!session.token) throw new Error('Ani.pm session token missing');
         return _json(EMBED + '/api/embed/session?t=' + encodeURIComponent(session.token),EMBED + '/').then(function(stream) {
           if (!stream.source) throw new Error('Settlar stream missing');
-          return [{url:stream.source,quality:'Auto',container:(stream.kind === 'hls' || /\\.m3u8(?:[?#]|$)/i.test(stream.source))?'hls':'mp4',
+          return [{url:stream.source,quality:'Auto',container:(stream.kind === 'hls' || /\.m3u8(?:[?#]|$)/i.test(stream.source))?'hls':'mp4',
             headers:{'User-Agent':UA,'Referer':EMBED+'/'},kind:'raw',label:'Ani.pm '+lang.toUpperCase(),
             subtitles:(stream.subtitles || []).filter(function(x){return x && x.url;}).map(function(x){var lbl=x.label||x.srclang||'Unknown';return {url:x.url,file:x.url,lang:lbl,label:lbl};})}];
         });
