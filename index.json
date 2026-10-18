@@ -15,7 +15,7 @@
         {
           "key": "tmdbApiKey",
           "label": "TMDB API Key (optional; blank uses app default)",
-          "description": "Your personal TMDB v3 API key. Leave blank to use Zangetsu\u2019s built-in key. Sent only to TMDB.",
+          "description": "Your personal TMDB v3 API key. Leave blank to use Zangetsu’s built-in key. Sent only to TMDB.",
           "type": "text",
           "default": ""
         },
@@ -572,6 +572,16 @@
       "lang": "en",
       "file": "providers/megaplay.js",
       "logo": "https://megaplays.se/favicon.ico",
+      "nsfw": false
+    },
+    {
+      "id": "mew-aniem",
+      "name": "Mew-Aniem",
+      "version": "1.0.0",
+      "type": "anime",
+      "lang": "en",
+      "file": "providers/mew-aniem.js",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=anivexa-api9.onrender.com",
       "nsfw": false
     }
   ]
