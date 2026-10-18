@@ -345,10 +345,10 @@ function getVideoSources(episodeUrl, opts) {
   var parts = String(episodeUrl || '').split('|');
   var slug = parts[0] || '';
   var epNum = Number(parts[1] || 0);
-  var aid = Number(parts[3] || 0);
+  var aid = String(parts[3] || '').trim();
   if (!slug || !(epNum > 0)) return Promise.resolve([]);
   var audio = opts && String(opts.category || '').toLowerCase() === 'dub' ? 'dub' : 'sub';
-  var getAid = aid > 0 ? Promise.resolve(aid) :
+  var getAid = /^\d+$/.test(aid) && aid !== '0' ? Promise.resolve(aid) :
     _detailData(slug).then(function (d) {
       var data = d && (d.data || d.anime || d);
       return _anilistId(data);
