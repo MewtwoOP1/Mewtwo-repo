@@ -583,6 +583,16 @@
       "file": "providers/rareanimes.js",
       "logo": "https://www.google.com/s2/favicons?sz=256&domain=rareanimes.mov",
       "nsfw": false
+    },
+    {
+      "id": "animeheaven",
+      "name": "AnimeHeaven",
+      "version": "1.0.0",
+      "type": "anime",
+      "lang": "en",
+      "file": "providers/animeheaven.js",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=animeheaven.me",
+      "nsfw": false
     }
   ]
 }
