@@ -20,7 +20,7 @@ async function main() {
   assert.equal(provider.getInfo().baseUrl, 'https://senshi.to');
   const results = await provider.search('Frieren', 1, {});
   assert.equal(results.length, 1);
-  assert.equal(results[0].id, 'frieren-999');
+  assert.equal(results[0].id, 'frieren-999');\n  assert.equal(results[0].url, 'https://senshi.to/anime/frieren-999');
   assert.equal(results[0].title, 'Frieren');
   const detail = await provider.getDetail(results[0].url, {});
   assert.equal(detail.title, 'Frieren');
