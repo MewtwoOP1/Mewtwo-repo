@@ -162,6 +162,16 @@
       ]
     },
     {
+      "id": "reanime",
+      "name": "Re:Anime",
+      "version": "1.2.2",
+      "type": "anime",
+      "lang": "en",
+      "file": "providers/reanime.js",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=reanime.to",
+      "nsfw": false
+    },
+    {
       "id": "serenity-animekai",
       "name": "AnimeKai (Unoriginal)",
       "version": "0.2.9",
