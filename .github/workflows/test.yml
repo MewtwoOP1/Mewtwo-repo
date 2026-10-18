@@ -21,6 +21,3 @@ jobs:
           node-version: 22
       - name: Validate providers and run tests
         run: node scripts/check-and-run.mjs
-      - name: Temporary live Senshi source probe
-        if: github.event_name == 'pull_request'
-        run: node scripts/senshi-live-probe.mjs
