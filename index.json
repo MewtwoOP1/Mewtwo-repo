@@ -534,6 +534,42 @@
           "default": true
         }
       ]
+    },
+    {
+      "id": "fourkhdhub",
+      "name": "4K HDHub",
+      "version": "1.0.6",
+      "type": "movie",
+      "lang": "en",
+      "file": "providers/fourkhdhub.js",
+      "nsfw": false
+    },
+    {
+      "id": "uhdmovies",
+      "name": "UHD Movies",
+      "version": "1.0.3",
+      "type": "movie",
+      "lang": "en",
+      "file": "providers/uhdmovies.js",
+      "nsfw": false
+    },
+    {
+      "id": "vegamovies",
+      "name": "VegaMovies",
+      "version": "1.0.4",
+      "type": "movie",
+      "lang": "hi",
+      "file": "providers/vegamovies.js",
+      "nsfw": false
+    },
+    {
+      "id": "multimovies",
+      "name": "MultiMovies",
+      "version": "1.0.3",
+      "type": "movie",
+      "lang": "hi",
+      "file": "providers/multimovies.js",
+      "nsfw": false
     }
   ]
 }
