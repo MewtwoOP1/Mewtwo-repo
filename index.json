@@ -110,7 +110,7 @@
     {
       "id": "justanime",
       "name": "JustAnime",
-      "version": "1.9.4",
+      "version": "1.9.5",
       "type": "anime",
       "lang": "en",
       "file": "providers/justanime.js",

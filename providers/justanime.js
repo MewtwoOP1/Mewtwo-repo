@@ -6,7 +6,7 @@ var SITE = 'https://justanime.to';
 var API = 'https://core.justanime.to/api';
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID)
   ? String(__SOURCE_ID) : 'justanime';
-var VERSION = '1.9.4';
+var VERSION = '1.9.5';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
   '(KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36';
 
@@ -138,16 +138,10 @@ function _card(item) {
     url: id, cover: _cover(item) || null,
     type: 'anime', sourceId: SOURCE_ID,
     malId: _firstNumericId([item.idMal, item.malId, item.mal_id]),
-    // JustAnime's catalogue IS AniList's catalogue: the API's `id` is the
-    // AniList ID (the detail payload is the AniList Media schema and carries
-    // the MAL ID separately as `idMal` — e.g. Frieren id 154587 / idMal
-    // 52991). Search/home payloads send no `anilistId` field at all, so
-    // reading only that field shipped `anilistId: null` on every card. With
-    // no ID on the card the app cannot ID-match the title and re-resolves it
-    // through AniList title search on every tap/open — the anonymous search
-    // AniList now refuses/rate-limits, which surfaces in the app as the
-    // repeated "AniList is having a moment" failure. An explicit field, if
-    // the API ever sends one, still wins over the catalogue ID.
+    // Prefer the provider's explicit AniList ID fields. The final `item.id`
+    // fallback preserves this adapter's existing behavior for payloads that
+    // expose only `id`; it is not evidence that the live upstream ID namespace
+    // has been verified. No offsets or other transformations are applied.
     anilistId: _firstNumericId([item.anilistId, item.anilist_id, item.id])
   };
   // Keep the last good search/home card available to detail resolution. The
@@ -219,7 +213,11 @@ function _episodeCount(anime) {
   return isFinite(n) && n > 0 ? Math.min(n, 1000) : 0;
 }
 function _stripHtml(value) {
-  return String(value || '').replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ')
+  var text = String(value || '');
+  // Use the host-provided HTML text helper when present, matching other
+  // providers; keep the self-contained fallback for runtimes without it.
+  if (typeof htmlText === 'function') return htmlText(text);
+  return text.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ')
     .replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
     .replace(/\s+/g, ' ').replace(/^\s+|\s+$/g, '');
 }
@@ -285,6 +283,32 @@ var _detailCache = {};
 var _detailInflight = {};
 var _DETAIL_TTL = 30000;
 
+// If a title has already been found by search/home, never turn an unexpected
+// detail-parser failure into a null result. Z Mode treats null from a matched
+// provider as a hard detail failure; this fallback preserves source identity
+// and known metadata while leaving episodes empty so the catalogue can supply
+// its own ordered episode list. We deliberately do not infer any ID namespace:
+// only IDs explicitly supplied by the source card are carried through.
+function _cachedCardDetail(id) {
+  var card = _cardCache[String(id)];
+  if (!card) return null;
+  var detail = {
+    id: String(id),
+    title: card.title,
+    url: String(id),
+    type: 'anime',
+    sourceId: SOURCE_ID,
+    episodes: [],
+    subCount: 0,
+    dubCount: 0
+  };
+  if (card.englishTitle) detail.englishTitle = card.englishTitle;
+  if (card.cover) detail.cover = card.cover;
+  if (card.malId) detail.malId = card.malId;
+  if (card.anilistId) detail.anilistId = card.anilistId;
+  return detail;
+}
+
 function getDetail(url, opts) {
   var id = _extractId(url);
   if (!/^\d+$/.test(id)) return Promise.resolve(null);
@@ -295,6 +319,10 @@ function getDetail(url, opts) {
   if (_detailInflight[key]) return _detailInflight[key];
   var pending = _fetchDetail(url, opts).then(function (detail) {
     delete _detailInflight[key];
+    // A source item may have been matched from search even when detail parsing
+    // fails unexpectedly. Returning null here makes the JS bridge throw and
+    // can surface as the misleading AniList failure banner in Z Mode.
+    if (!detail) detail = _cachedCardDetail(key);
     // Never cache an empty/failed response; a temporary upstream miss must
     // not pin a broken episode list in the app.
     if (detail && Array.isArray(detail.episodes) && detail.episodes.length) {
@@ -303,6 +331,8 @@ function getDetail(url, opts) {
     return detail;
   }, function (error) {
     delete _detailInflight[key];
+    var fallback = _cachedCardDetail(key);
+    if (fallback) return fallback;
     throw error;
   });
   _detailInflight[key] = pending;
@@ -362,8 +392,9 @@ function _fetchDetail(url, opts) {
       status: anime.status || 'unknown', genres: genres, studios: [],
       type: 'anime', sourceId: SOURCE_ID, year: anime.seasonYear || anime.year || null,
       malId: _firstNumericId([anime.idMal, anime.malId, anime.mal_id, cachedCard && cachedCard.malId]),
-      // Preserve valid explicit IDs, but skip empty/zero/invalid aliases so
-      // the cached card or the catalogue's numeric id can still identify it.
+      // Keep valid explicit IDs ahead of the cached card; the source payload's
+      // `id` remains the final fallback under this adapter's current contract.
+      // This normalizes values only and does not convert between ID namespaces.
       anilistId: _firstNumericId([anime.anilistId, anime.anilist_id, cachedCard && cachedCard.anilistId, anime.id]),
       episodes: episodes, subCount: count || episodes.length, dubCount: count || episodes.length
     };
