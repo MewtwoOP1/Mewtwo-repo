@@ -7,7 +7,7 @@ global.htmlText = function (value) {
   const text = String(value || "");
   if (text === "__FORCE_DETAIL_PARSE_ERROR__") throw new Error("synthetic detail normalization failure");
   return text.replace(/<[^>]*>/g, " ").replace(/&amp;/g, "&")
-    .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/\\s+/g, " ").trim();
+    .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/\s+/g, " ").trim();
 };
 
 const calls = [];
