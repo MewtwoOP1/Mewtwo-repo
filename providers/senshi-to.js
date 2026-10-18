@@ -116,11 +116,23 @@ function _episodeList(id) {
       }).filter(Boolean).sort(function(a,b){ return a.number-b.number; });
     }).catch(function() { return []; });
 }
+function _detailId(url) {
+  var raw = String(url || '').replace(/^senshi:\/\//, '');
+  if (/^https?:\/\//i.test(raw) || raw.indexOf('/') >= 0) raw = _slugFromUrl(raw);
+  raw = raw.split(/[?#]/)[0];
+  try { raw = decodeURIComponent(raw); } catch (_) {}
+  return raw;
+}
 function getDetail(url, opts) {
-  var id = String(url || '').replace(/^senshi:\/\//, '').split('/')[0] || _slugFromUrl(url);
-  try { id = decodeURIComponent(id); } catch (_) {}
+  var rawUrl = String(url || '');
+  var id = _detailId(rawUrl);
+  var detailUrl;
+  if (/^https?:\/\//i.test(rawUrl)) detailUrl = rawUrl;
+  else if (rawUrl.charAt(0) === '/') detailUrl = _url(rawUrl);
+  else if (/^senshi:\/\//i.test(rawUrl)) detailUrl = SITE + '/anime/' + encodeURIComponent(id);
+  else detailUrl = SITE + '/anime/' + encodeURIComponent(id);
   return Promise.all([
-    _get(SITE + '/' + encodeURIComponent(id), SITE + '/'),
+    _get(detailUrl, SITE + '/'),
     _episodeList(id)
   ]).then(function(values) {
     var html = values[0], eps = values[1];
@@ -131,17 +143,15 @@ function getDetail(url, opts) {
     var cover = (html.match(/<meta\b[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["']/i) || [])[1]
       || (html.match(/<meta\b[^>]*content=["']([^"']+)["'][^>]*property=["']og:image["']/i) || [])[1];
     var year = (html.match(/(?:release|year|aired)[^<]{0,100}?(20\d{2}|19\d{2})/i) || [])[1] || null;
-    return { id:id, title:title, englishTitle:title, url:id, cover:cover ? _url(cover) : null,
+    return { id:id, title:title, englishTitle:title, url:rawUrl || id, cover:cover ? _url(cover) : null,
       description:_text(description), year:year, type:'anime', sourceId:SOURCE_ID,
       episodes:eps, subCount:eps.length, dubCount:0 };
   }).catch(function() {
-    return { id:id, title:id, url:id, type:'anime', sourceId:SOURCE_ID, episodes:[], subCount:0, dubCount:0 };
+    return { id:id, title:id, url:rawUrl || id, type:'anime', sourceId:SOURCE_ID, episodes:[], subCount:0, dubCount:0 };
   });
 }
 function getEpisodes(url, opts) {
-  var id = String(url || '').replace(/^senshi:\/\//, '').split('/')[0] || _slugFromUrl(url);
-  try { id = decodeURIComponent(id); } catch (_) {}
-  return _episodeList(id);
+  return _episodeList(_detailId(url));
 }
 function _kind(url, hint) {
   var s = String(url || '').toLowerCase();
