@@ -115,7 +115,8 @@ function _cards(html) {
     if (!anchors.length) continue;
     var a = anchors[0];
     for (var ai = 0; ai < anchors.length; ai++) {
-      if (/\bfilm-name\b/i.test(anchors[ai].tag)) { a = anchors[ai]; break; }
+      var openTag = anchors[ai].tag.substring(0, anchors[ai].tag.indexOf('>') + 1);
+      if (_attr(openTag, 'title') || _text(anchors[ai].inner)) { a = anchors[ai]; break; }
     }
     var title = _attr(a.tag.substring(0, a.tag.indexOf('>') + 1), 'title') || _text(a.inner);
     if (!title) title = a.slug.replace(/-\d+$/, '').replace(/-/g, ' ');
