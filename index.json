@@ -542,7 +542,8 @@
       "type": "movie",
       "lang": "en",
       "file": "providers/fourkhdhub.js",
-      "nsfw": false
+      "nsfw": false,
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=4khdhub.link"
     },
     {
       "id": "uhdmovies",
@@ -551,7 +552,8 @@
       "type": "movie",
       "lang": "en",
       "file": "providers/uhdmovies.js",
-      "nsfw": false
+      "nsfw": false,
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=uhdmovies.autos"
     },
     {
       "id": "vegamovies",
@@ -560,7 +562,8 @@
       "type": "movie",
       "lang": "hi",
       "file": "providers/vegamovies.js",
-      "nsfw": false
+      "nsfw": false,
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=vegamovies.mq"
     },
     {
       "id": "multimovies",
@@ -569,7 +572,8 @@
       "type": "movie",
       "lang": "hi",
       "file": "providers/multimovies.js",
-      "nsfw": false
+      "nsfw": false,
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=multimovies.beer"
     }
   ]
 }
