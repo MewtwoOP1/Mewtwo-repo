@@ -90,7 +90,7 @@ global.fetch = async (url, options) => {
 const provider = require('../providers/anipm.js');
 
 async function main() {
-  assert.equal(provider.version, '1.4.0');
+  assert.equal(provider.version, '1.4.1');
   assert.equal(provider.getInfo().name, 'Ani.pm');
   assert.equal(provider.getInfo().type, 'anime');
   assert.equal(provider.getSettings()[0].default, 'sub');
@@ -127,6 +127,7 @@ async function main() {
   assert.equal(backupResults.length, 1);
   assert.equal(backupResults[0].url, 'https://ani.pm/ani/16498',
     'canonical AniList URL must outrank a partner API internal row ID');
+  assert.ok(calls.some((c) => c.url === 'https://ani.pm/api/partner/v1/lookup?anilist=123456'), 'AniList IDs must be sent verbatim, without +/-1 offsets');
   const backupEpisodes = await provider.getEpisodes(backupResults[0].url, {});
   assert.equal(backupEpisodes.length, 1);
   assert.equal(backupEpisodes[0].url, 'https://ani.pm/ani/16498||1',
