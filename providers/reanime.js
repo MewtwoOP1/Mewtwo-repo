@@ -7,9 +7,6 @@
 
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID) ? String(__SOURCE_ID) : 'reanime';
 var SITE = 'https://reanime.to';
-// Domain rotation follows the maintained Yuzono Aniyomi extension. Try each
-// supported domain when one returns the Cloudflare "Just a moment" interstitial.
-var SITE_DOMAINS = ['https://reanime.to', 'https://reanime.cz', 'https://reanime.wtf'];
 var API = SITE + '/api/v1';
 var FLIX_API = SITE + '/api/flix';
 var FLIX = 'https://flixcloud.cc';
@@ -18,7 +15,7 @@ var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, l
 function getInfo() {
   return { name: 'Re:Anime', lang: 'en', baseUrl: SITE,
     logo: 'https://www.google.com/s2/favicons?sz=256&domain=reanime.to',
-    type: 'anime', version: '1.2.0' };
+    type: 'anime', version: '1.2.1' };
 }
 function getSettings() { return []; }
 
@@ -30,18 +27,27 @@ function _headers(referer, accept) {
     'Referer': referer || SITE + '/home'
   };
 }
+// Yuzono's maintained Re:Anime extension supports these domains. Rotate only
+// when a host is down, rate-limited, blocked, or serving a Cloudflare interstitial.
+var SITE_DOMAINS = ['https://reanime.to', 'https://reanime.cz', 'https://reanime.wtf'];
 function _isMomentPage(response) {
   var body = String(response && response.body || '').toLowerCase();
-  return body.indexOf('just a moment') >= 0 ||
+  var headers = response && response.headers || {};
+  var cfMitigated = String(headers['cf-mitigated'] || headers['CF-Mitigated'] || '').toLowerCase();
+  return cfMitigated.indexOf('challenge') >= 0 ||
+    body.indexOf('just a moment') >= 0 ||
     body.indexOf('cf-chl-') >= 0 ||
     body.indexOf('challenge-platform') >= 0 ||
-    body.indexOf('checking your browser') >= 0;
+    body.indexOf('checking your browser') >= 0 ||
+    body.indexOf('checking if the site connection is secure') >= 0 ||
+    body.indexOf('attention required') >= 0 ||
+    body.indexOf('enable javascript and cookies') >= 0;
 }
 function _fetchOnce(url, referer, timeoutMs, accept, browser) {
   return fetch(url, {
     headers: _headers(referer, accept),
-    timeoutMs: timeoutMs,
-    browser: !!browser
+    timeoutMs: timeoutMs || 12000,
+    browser: browser === true
   }).then(function (r) {
     var response = {
       body: String(r && r.body || ''),
@@ -57,36 +63,40 @@ function _fetchOnce(url, referer, timeoutMs, accept, browser) {
   });
 }
 function _fetch(url, referer, timeoutMs, accept) {
-  var budget = timeoutMs || 12000;
-  // Re:Anime upstream supports all three domains. Use the original first, then
-  // rotate only when the domain is blocked/down; do not blindly repeat healthy calls.
   var sourceDomain = SITE_DOMAINS.filter(function (domain) {
     return String(url).indexOf(domain) === 0;
   })[0];
   var domains = sourceDomain ? SITE_DOMAINS : [''];
   var lastError = null;
   function tryDomain(i) {
-    if (i >= domains.length) return Promise.reject(lastError || new Error('Re:Anime: all supported domains failed'));
+    if (i >= domains.length) {
+      return Promise.reject(lastError || new Error('Re:Anime: all supported domains failed'));
+    }
     var domain = domains[i];
     var targetUrl = sourceDomain ? domain + String(url).slice(sourceDomain.length) : url;
-    var targetReferer = sourceDomain && referer
+    var targetReferer = sourceDomain && referer && String(referer).indexOf(sourceDomain) === 0
       ? domain + String(referer).slice(sourceDomain.length)
       : (referer || (domain || SITE) + '/home');
-    return _fetchOnce(targetUrl, targetReferer, Math.min(budget, 5000), accept, false)
+    return _fetchOnce(targetUrl, targetReferer, Math.min(timeoutMs || 12000, 7000), accept, false)
       .then(function (response) {
         if (!_isMomentPage(response)) return response;
-        // Use Zangetsu's native Cloudflare browser lane for a real interstitial.
-        return _fetchOnce(targetUrl, targetReferer, Math.min(budget, 7000), accept, true)
+        // Ask Zangetsu's native browser/Cloudflare lane to retry the challenge.
+        return _fetchOnce(targetUrl, targetReferer, Math.min(timeoutMs || 12000, 7000), accept, true)
           .then(function (cleared) {
-            if (_isMomentPage(cleared)) throw new Error('Cloudflare challenge remained after browser retry');
+            if (_isMomentPage(cleared)) {
+              var err = new Error('Re:Anime Cloudflare challenge remained after browser retry');
+              err.response = cleared;
+              throw err;
+            }
             return cleared;
           });
       })
       .catch(function (err) {
         lastError = err;
         var response = err && err.response;
-        if (response && !_isMomentPage(response) && response.status < 500 && response.status !== 403 && response.status !== 429) {
-          // A valid client error (e.g. a missing slug) is not a domain outage.
+        if (response && !_isMomentPage(response) &&
+            response.status < 500 && response.status !== 403 && response.status !== 429) {
+          // A real client error (e.g. unknown anime slug) is not a domain outage.
           throw err;
         }
         return tryDomain(i + 1);
@@ -108,14 +118,15 @@ function _first(o, keys) {
   }
   return null;
 }
-
-// Preserve the source's AniList ID verbatim as a decimal string. The API contract
-// is /api/flix/{anilist_id}/{episode}; ID arithmetic silently breaks lookup.
+ 
+// Preserve the upstream AniList ID verbatim. Never offset, increment, decrement,
+// or coerce it through numeric arithmetic before calling /api/flix.
 function _anilistId(o) {
   var raw = _first(o, ['anilist_id', 'anilistId', 'anilist']);
   var id = raw == null ? '' : String(raw).trim();
   return /^\d+$/.test(id) && id !== '0' ? id : '';
 }
+
 function _arr(o) {
   if (Array.isArray(o)) return o;
   if (!o || typeof o !== 'object') return [];
@@ -243,76 +254,136 @@ function _directMedia(url, label, kind) {
     audioLang: kind === 'dub' ? 'en' : 'ja', subtitles: []
   };
 }
-function _resolveFlixDownload(dataLink, label, kind) {
-  var match = String(dataLink || '').match(/\/e\/([a-z0-9]+)/i);
-  if (!match) return Promise.resolve([]);
-  var aid = match[1];
-  return _fetch(FLIX + '/d/' + encodeURIComponent(aid) + '/__data.json', FLIX + '/', 12000, '*/*')
+function _parseJson5(raw) {
+  var s = String(raw || '');
+  // ReAnime's Svelte payload is JSON5-like: quote bare keys, drop trailing commas,
+  // and normalize undefined values without evaluating page JavaScript.
+  s = s.replace(/([{,]\s*)([A-Za-z_$][\w$]*)(\s*:)/g, '$1"$2"$3');
+  s = s.replace(/,\s*([}\]])/g, '$1');
+  s = s.replace(/:\s*undefined\b/g, ': null');
+  return JSON.parse(s);
+}
+function _flixApiHeaders(referer, accept) {
+  return {
+    'User-Agent': UA,
+    'Accept': accept || 'application/json, text/plain, */*',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Origin': FLIX,
+    'Referer': referer || FLIX + '/'
+  };
+}
+function _postJson(url, payload, referer) {
+  return fetch(url, {
+    method: 'POST',
+    headers: Object.assign({}, _flixApiHeaders(referer), {
+      'Content-Type': 'application/json'
+    }),
+    body: JSON.stringify(payload),
+    timeoutMs: 15000
+  }).then(function (r) {
+    if (!r || (r.status && r.status >= 400)) throw new Error('HTTP ' + (r && r.status));
+    var j = JSON.parse(String(r.body || 'null'));
+    if (!j) throw new Error('Empty FlixCloud response');
+    return j;
+  });
+}
+function _resolveFlixStream(dataLink, label, kind) {
+  if (!/\/e\/[a-z0-9]+/i.test(String(dataLink || ''))) return Promise.resolve([]);
+  var embedHeaders = _flixApiHeaders(FLIX + '/');
+  return fetch(dataLink, { headers: embedHeaders, timeoutMs: 15000 })
     .then(function (r) {
-      var body = r.body;
-      var fileId = (body.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i) || [])[0];
-      var token = (body.match(/eyJ[\w-]+\.[\w-]+\.[\w-]+/) || [])[0];
-      var base = (body.match(/https:\/\/fetch\d*\.flixcloud\.cc/i) || [FLIX])[0];
-      var resolution = (body.match(/(\d{3,4}p)/i) || [])[1] || 'Auto';
-      if (!fileId || !token) return [];
-      var progressUrl = base + '/download/' + fileId + '/progress?token=' + encodeURIComponent(token);
-      // Upstream waits for the SSE progress endpoint to report ready. Keep this
-      // bounded; never label the embed HTML itself as a playable stream.
-      return _fetch(progressUrl, FLIX + '/', 6500, 'text/event-stream, */*')
-        .then(function (p) {
-          if (!/"status"\s*:\s*"ready"/i.test(p.body)) return [];
-          return [{
-            url: base + '/download/' + fileId + '?token=' + encodeURIComponent(token),
-            quality: resolution, label: (label || 'Re:Anime') + ' Download',
-            container: 'mkv', headers: _headers(FLIX + '/'),
-            kind: kind || 'sub', audioLang: kind === 'dub' ? 'en' : 'ja', subtitles: []
-          }];
-        }).catch(function () { return []; });
-    }).catch(function () { return []; });
+      if (!r || (r.status && r.status >= 400)) throw new Error('FlixCloud embed HTTP ' + (r && r.status));
+      return String(r.body || '');
+    })
+    .then(function (html) {
+      var dataMatch = html.match(/type:\s*["']data["']\s*,\s*data:\s*(\{[\s\S]*?\})\s*,\s*uses:/);
+      if (!dataMatch) throw new Error('FlixCloud embed data not found');
+      var embedData = _parseJson5(dataMatch[1]);
+      // The current decoder does not need subtitle/chapter metadata in its payload.
+      delete embedData.subtitles;
+      delete embedData.intro_chapter;
+      delete embedData.outro_chapter;
+      return embedData;
+    })
+    .then(function (embedData) {
+      return _postJson('https://enc-dec.app/api/dec-flixcloud?type=token', { data: embedData }, FLIX + '/')
+        .then(function (tokenDto) {
+          if (Number(tokenDto.status) !== 200 || !tokenDto.result || !tokenDto.result.token) {
+            throw new Error('FlixCloud token decode failed');
+          }
+          return _fetch(FLIX + '/api/m3u8/' + encodeURIComponent(tokenDto.result.token), FLIX + '/', 15000, '*/*')
+            .then(function (r) {
+              var streamResponse = JSON.parse(r.body || 'null');
+              if (!streamResponse || typeof streamResponse !== 'object') throw new Error('FlixCloud stream response was not JSON');
+              return _postJson('https://enc-dec.app/api/dec-flixcloud?type=stream', {
+                data: { context: tokenDto.result.context, stream_response: streamResponse }
+              }, FLIX + '/');
+            });
+        });
+    })
+    .then(function (streamDto) {
+      if (Number(streamDto.status) !== 200 || !streamDto.result || !streamDto.result.stream) {
+        throw new Error('FlixCloud stream decode failed');
+      }
+      var streamUrl = String(streamDto.result.stream);
+      var wPayload = streamDto.result.context && streamDto.result.context.w_payload;
+      if (wPayload == null) throw new Error('FlixCloud stream payload missing');
+      // Use the upstream decoder's HTTP endpoint. Unlike the Aniyomi port, this
+      // runtime cannot host the local loopback proxy that rewrites/decrypts HLS
+      // segments, so the remote parser endpoint is the compatible bridge.
+      var playable = 'https://enc-dec.app/api/parse-flixcloud?url=' +
+        encodeURIComponent(streamUrl) + '&w_payload=' + encodeURIComponent(String(wPayload));
+      return [{
+        url: playable, quality: 'Auto', label: label || 'Re:Anime',
+        container: 'hls', headers: _flixApiHeaders(FLIX + '/'),
+        kind: kind || 'sub', audioLang: kind === 'dub' ? 'en' : 'ja', subtitles: []
+      }];
+    })
+    .catch(function () { return []; });
 }
 function getVideoSources(episodeUrl, opts) {
   var parts = String(episodeUrl || '').split('|');
   var slug = parts[0] || '';
   var epNum = Number(parts[1] || 0);
   var aid = String(parts[3] || '').trim();
-  if (!slug || !(epNum > 0)) return Promise.reject(new Error('Re:Anime: invalid episode reference'));
+  if (!slug || !(epNum > 0)) return Promise.resolve([]);
   var audio = opts && String(opts.category || '').toLowerCase() === 'dub' ? 'dub' : 'sub';
-  var aidIsValid = /^\d+$/.test(aid) && aid !== '0';
-  var getAid = aidIsValid ? Promise.resolve(aid) :
+  var getAid = /^\d+$/.test(aid) && aid !== '0' ? Promise.resolve(aid) :
     _detailData(slug).then(function (d) {
       var data = d && (d.data || d.anime || d);
       return _anilistId(data);
     });
   return getAid.then(function (anilistId) {
-    // Re:Anime's flix API expects its exact anilist_id. Never increment,
-    // decrement, remap, or pass it through ID arithmetic.
-    if (!/^\d+$/.test(String(anilistId || '')) || String(anilistId) === '0') {
-      throw new Error('Re:Anime API detail did not return a valid anilist_id');
-    }
-    return _json(FLIX_API + '/' + String(anilistId) + '/' + epNum, SITE + '/watch/' + slug + '?ep=' + epNum);
-  }).then(function (data) {
-    var servers = _arr(data);
-    var tasks = [];
-    servers.forEach(function (server) {
-      var serverType = String(server.dataType || '').toLowerCase();
-      if (serverType && serverType !== audio) return;
-      var label = '[' + (serverType || audio).toUpperCase() + '] ' + String(server.serverName || 'Re:Anime');
-      var link = String(server.dataLink || server.url || '');
-      var direct = _directMedia(link, label, audio);
-      if (direct) tasks.push(Promise.resolve([direct]));
-      else if (/flixcloud/i.test(link)) tasks.push(_resolveFlixDownload(link, label, audio));
-    });
-    return Promise.all(tasks).then(function (groups) {
-      var out = [], seen = {};
-      groups.forEach(function (group) {
-        (group || []).forEach(function (s) {
-          if (!s || !s.url || seen[s.url]) return;
-          seen[s.url] = 1; out.push(s);
+    if (!/^\d+$/.test(String(anilistId || '')) || String(anilistId) === '0') return [];
+    return _json(FLIX_API + '/' + String(anilistId) + '/' + epNum, SITE + '/watch/' + slug + '?ep=' + epNum)
+      .then(function (data) {
+        var servers = _arr(data);
+        var tasks = [];
+        servers.forEach(function (server) {
+          var serverType = String(server.dataType || '').toLowerCase();
+          if (serverType && serverType !== audio) return;
+          var label = '[' + (serverType || audio).toUpperCase() + '] ' + String(server.serverName || 'Re:Anime');
+          var link = String(server.dataLink || server.url || '');
+          var direct = _directMedia(link, label, audio);
+          if (direct) tasks.push(Promise.resolve([direct]));
+          else if (/flixcloud/i.test(link) && /\/e\//i.test(link)) tasks.push(_resolveFlixStream(link, label, audio));
+        });
+        return Promise.all(tasks).then(function (groups) {
+          var out = [], seen = {};
+          groups.forEach(function (group) {
+            (group || []).forEach(function (s) {
+              if (!s || !s.url || seen[s.url]) return;
+              seen[s.url] = 1;
+              out.push(s);
+            });
+          });
+          return out;
         });
       });
-      if (!out.length) throw new Error('Re:Anime returned server embeds, but no direct playable URL was resolved. FlixCloud HLS requires a local decrypting proxy unsupported by this provider runtime.');
-      return out;
-    });
+  }).catch(function () {
+    // A provider/network failure must not bubble into Zangetsu's generic
+    // "source is having a moment" state. Report no streams and let other sources run.
+    return [];
   });
 }
 function getStreams(id, opts) { return getVideoSources(id, opts); }
@@ -320,7 +391,7 @@ function getLinks(id, opts) { return getVideoSources(id, opts); }
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    version: '1.2.0', getInfo: getInfo, getSettings: getSettings,
+    version: '1.2.1', getInfo: getInfo, getSettings: getSettings,
     getHome: getHome, popular: popular, search: search,
     getDetail: getDetail, getEpisodes: getEpisodes,
     getVideoSources: getVideoSources, getStreams: getStreams, getLinks: getLinks
