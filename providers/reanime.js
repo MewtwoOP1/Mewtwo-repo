@@ -15,7 +15,7 @@ var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, l
 function getInfo() {
   return { name: 'Re:Anime', lang: 'en', baseUrl: SITE,
     logo: 'https://www.google.com/s2/favicons?sz=256&domain=reanime.to',
-    type: 'anime', version: '1.1.0' };
+    type: 'anime', version: '1.2.0' };
 }
 function getSettings() { return []; }
 
@@ -175,39 +175,108 @@ function _directMedia(url, label, kind) {
     audioLang: kind === 'dub' ? 'en' : 'ja', subtitles: []
   };
 }
-function _resolveFlixDownload(dataLink, label, kind) {
-  var match = String(dataLink || '').match(/\/e\/([a-z0-9]+)/i);
-  if (!match) return Promise.resolve([]);
-  var aid = match[1];
-  return _fetch(FLIX + '/d/' + encodeURIComponent(aid) + '/__data.json', FLIX + '/', 12000, '*/*')
+function _parseJson5(raw) {
+  var s = String(raw || '');
+  // ReAnime's Svelte payload is JSON5-like: quote bare keys, drop trailing commas,
+  // and normalize undefined values without evaluating page JavaScript.
+  s = s.replace(/([{,]\s*)([A-Za-z_$][\w$]*)(\s*:)/g, '$1"$2"$3');
+  s = s.replace(/,\s*([}\]])/g, '$1');
+  s = s.replace(/:\s*undefined\b/g, ': null');
+  return JSON.parse(s);
+}
+function _flixApiHeaders(referer, accept) {
+  return {
+    'User-Agent': UA,
+    'Accept': accept || 'application/json, text/plain, */*',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Origin': FLIX,
+    'Referer': referer || FLIX + '/'
+  };
+}
+function _postJson(url, payload, referer) {
+  return fetch(url, {
+    method: 'POST',
+    headers: Object.assign({}, _flixApiHeaders(referer), {
+      'Content-Type': 'application/json'
+    }),
+    body: JSON.stringify(payload),
+    timeoutMs: 15000
+  }).then(function (r) {
+    if (!r || (r.status && r.status >= 400)) throw new Error('HTTP ' + (r && r.status));
+    var j = JSON.parse(String(r.body || 'null'));
+    if (!j) throw new Error('Empty FlixCloud response');
+    return j;
+  });
+}
+function _resolveFlixStream(dataLink, label, kind) {
+  if (!/\/e\/[a-z0-9]+/i.test(String(dataLink || ''))) return Promise.resolve([]);
+  var embedHeaders = _flixApiHeaders(FLIX + '/');
+  return fetch(dataLink, { headers: embedHeaders, timeoutMs: 15000 })
     .then(function (r) {
-      var body = r.body;
-      var fileId = (body.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i) || [])[0];
-      var token = (body.match(/eyJ[\w-]+\.[\w-]+\.[\w-]+/) || [])[0];
-      var base = (body.match(/https:\/\/fetch\d*\.flixcloud\.cc/i) || [FLIX])[0];
-      var resolution = (body.match(/(\d{3,4}p)/i) || [])[1] || 'Auto';
-      if (!fileId || !token) return [];
-      var progressUrl = base + '/download/' + fileId + '/progress?token=' + encodeURIComponent(token);
-      // Upstream waits for the SSE progress endpoint to report ready. Keep this
-      // bounded; never label the embed HTML itself as a playable stream.
-      return _fetch(progressUrl, FLIX + '/', 6500, 'text/event-stream, */*')
-        .then(function (p) {
-          if (!/"status"\s*:\s*"ready"/i.test(p.body)) return [];
-          return [{
-            url: base + '/download/' + fileId + '?token=' + encodeURIComponent(token),
-            quality: resolution, label: (label || 'Re:Anime') + ' Download',
-            container: 'mkv', headers: _headers(FLIX + '/'),
-            kind: kind || 'sub', audioLang: kind === 'dub' ? 'en' : 'ja', subtitles: []
-          }];
-        }).catch(function () { return []; });
-    }).catch(function () { return []; });
+      if (!r || (r.status && r.status >= 400)) throw new Error('FlixCloud embed HTTP ' + (r && r.status));
+      return String(r.body || '');
+    })
+    .then(function (html) {
+      var scriptPath = (html.match(/href=["']([^"']*hls\.js[^"']*)["']/i) || [])[1] || '';
+      var maskPromise = scriptPath ? _fetch(
+        /^https?:\/\//i.test(scriptPath) ? scriptPath : FLIX + (scriptPath.charAt(0) === '/' ? '' : '/') + scriptPath,
+        FLIX + '/', 10000, '*/*'
+      ).then(function (r) {
+        var m = r.body.match(/for\s*\(\s*var\s+f\s*=\s*\[(\d{1,3}(?:\s*,\s*\d{1,3}){15})\]/);
+        return m ? m[1].split(',').map(function (n) { return Number(n.trim()); }) : null;
+      }).catch(function () { return null; }) : Promise.resolve(null);
+      var dataMatch = html.match(/type:\s*["']data["']\s*,\s*data:\s*(\{[\s\S]*?\})\s*,\s*uses:/);
+      if (!dataMatch) throw new Error('FlixCloud embed data not found');
+      var embedData = _parseJson5(dataMatch[1]);
+      // The current decoder does not need subtitle/chapter metadata in its payload.
+      delete embedData.subtitles;
+      delete embedData.intro_chapter;
+      delete embedData.outro_chapter;
+      return Promise.all([maskPromise, Promise.resolve(embedData)]);
+    })
+    .then(function (pair) {
+      var embedData = pair[1];
+      return _postJson('https://enc-dec.app/api/dec-flixcloud?type=token', { data: embedData }, FLIX + '/')
+        .then(function (tokenDto) {
+          if (Number(tokenDto.status) !== 200 || !tokenDto.result || !tokenDto.result.token) {
+            throw new Error('FlixCloud token decode failed');
+          }
+          return _fetch(FLIX + '/api/m3u8/' + encodeURIComponent(tokenDto.result.token), FLIX + '/', 15000, '*/*')
+            .then(function (r) {
+              var streamResponse = JSON.parse(r.body || 'null');
+              if (!streamResponse || typeof streamResponse !== 'object') throw new Error('FlixCloud stream response was not JSON');
+              return _postJson('https://enc-dec.app/api/dec-flixcloud?type=stream', {
+                data: { context: tokenDto.result.context, stream_response: streamResponse }
+              }, FLIX + '/');
+            });
+        });
+    })
+    .then(function (streamDto) {
+      if (Number(streamDto.status) !== 200 || !streamDto.result || !streamDto.result.stream) {
+        throw new Error('FlixCloud stream decode failed');
+      }
+      var streamUrl = String(streamDto.result.stream);
+      var wPayload = streamDto.result.context && streamDto.result.context.w_payload;
+      if (wPayload == null) throw new Error('FlixCloud stream payload missing');
+      // Use the upstream decoder's HTTP endpoint. Unlike the Aniyomi port, this
+      // runtime cannot host the local loopback proxy that rewrites/decrypts HLS
+      // segments, so the remote parser endpoint is the compatible bridge.
+      var playable = 'https://enc-dec.app/api/parse-flixcloud?url=' +
+        encodeURIComponent(streamUrl) + '&w_payload=' + encodeURIComponent(String(wPayload));
+      return [{
+        url: playable, quality: 'Auto', label: label || 'Re:Anime',
+        container: 'hls', headers: _flixApiHeaders(FLIX + '/'),
+        kind: kind || 'sub', audioLang: kind === 'dub' ? 'en' : 'ja', subtitles: []
+      }];
+    })
+    .catch(function () { return []; });
 }
 function getVideoSources(episodeUrl, opts) {
   var parts = String(episodeUrl || '').split('|');
   var slug = parts[0] || '';
   var epNum = Number(parts[1] || 0);
   var aid = Number(parts[3] || 0);
-  if (!slug || !(epNum > 0)) return Promise.reject(new Error('Re:Anime: invalid episode reference'));
+  if (!slug || !(epNum > 0)) return Promise.resolve([]);
   var audio = opts && String(opts.category || '').toLowerCase() === 'dub' ? 'dub' : 'sub';
   var getAid = aid > 0 ? Promise.resolve(aid) :
     _detailData(slug).then(function (d) {
@@ -215,31 +284,36 @@ function getVideoSources(episodeUrl, opts) {
       return Number(_first(data, ['anilist_id', 'anilistId', 'anilist']) || 0);
     });
   return getAid.then(function (anilistId) {
-    if (!(anilistId > 0)) throw new Error('Re:Anime API detail did not return anilist_id');
-    return _json(FLIX_API + '/' + anilistId + '/' + epNum, SITE + '/watch/' + slug + '?ep=' + epNum);
-  }).then(function (data) {
-    var servers = _arr(data);
-    var tasks = [];
-    servers.forEach(function (server) {
-      var serverType = String(server.dataType || '').toLowerCase();
-      if (serverType && serverType !== audio) return;
-      var label = '[' + (serverType || audio).toUpperCase() + '] ' + String(server.serverName || 'Re:Anime');
-      var link = String(server.dataLink || server.url || '');
-      var direct = _directMedia(link, label, audio);
-      if (direct) tasks.push(Promise.resolve([direct]));
-      else if (/flixcloud/i.test(link)) tasks.push(_resolveFlixDownload(link, label, audio));
-    });
-    return Promise.all(tasks).then(function (groups) {
-      var out = [], seen = {};
-      groups.forEach(function (group) {
-        (group || []).forEach(function (s) {
-          if (!s || !s.url || seen[s.url]) return;
-          seen[s.url] = 1; out.push(s);
+    if (!(anilistId > 0)) return [];
+    return _json(FLIX_API + '/' + anilistId + '/' + epNum, SITE + '/watch/' + slug + '?ep=' + epNum)
+      .then(function (data) {
+        var servers = _arr(data);
+        var tasks = [];
+        servers.forEach(function (server) {
+          var serverType = String(server.dataType || '').toLowerCase();
+          if (serverType && serverType !== audio) return;
+          var label = '[' + (serverType || audio).toUpperCase() + '] ' + String(server.serverName || 'Re:Anime');
+          var link = String(server.dataLink || server.url || '');
+          var direct = _directMedia(link, label, audio);
+          if (direct) tasks.push(Promise.resolve([direct]));
+          else if (/flixcloud/i.test(link) && /\/e\//i.test(link)) tasks.push(_resolveFlixStream(link, label, audio));
+        });
+        return Promise.all(tasks).then(function (groups) {
+          var out = [], seen = {};
+          groups.forEach(function (group) {
+            (group || []).forEach(function (s) {
+              if (!s || !s.url || seen[s.url]) return;
+              seen[s.url] = 1;
+              out.push(s);
+            });
+          });
+          return out;
         });
       });
-      if (!out.length) throw new Error('Re:Anime returned server embeds, but no direct playable URL was resolved. FlixCloud HLS requires a local decrypting proxy unsupported by this provider runtime.');
-      return out;
-    });
+  }).catch(function () {
+    // A provider/network failure must not bubble into Zangetsu's generic
+    // "source is having a moment" state. Report no streams and let other sources run.
+    return [];
   });
 }
 function getStreams(id, opts) { return getVideoSources(id, opts); }
@@ -247,7 +321,7 @@ function getLinks(id, opts) { return getVideoSources(id, opts); }
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    version: '1.1.0', getInfo: getInfo, getSettings: getSettings,
+    version: '1.2.0', getInfo: getInfo, getSettings: getSettings,
     getHome: getHome, popular: popular, search: search,
     getDetail: getDetail, getEpisodes: getEpisodes,
     getVideoSources: getVideoSources, getStreams: getStreams, getLinks: getLinks
