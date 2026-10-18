@@ -1,0 +1,43 @@
+'use strict';
+const assert = require('node:assert/strict');
+global.htmlText = function(s) { return String(s || '').replace(/<[^>]*>/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim(); };
+const calls = [];
+global.fetch = async function(url, options) {
+  url = String(url); calls.push({url, options:options || {}});
+  if (url === 'https://senshi.to/search?keyword=Frieren') return {status:200,body:'<div class="flw-item"><div class="film-name"><a href="/anime/frieren-999">Frieren</a></div><img src="/poster.jpg" alt="Frieren"></div>'};
+  if (url === 'https://senshi.to/') return {status:200,body:'<div class="flw-item"><div class="film-name"><a href="/anime/frieren-999">Frieren</a></div><img src="/poster.jpg" alt="Frieren"></div>'};
+  if (url === 'https://senshi.to/anime/frieren-999') return {status:200,body:'<html><head><meta name="description" content="An elf mage."><meta property="og:image" content="https://img.example/poster.jpg"></head><body><h1>Frieren</h1></body></html>'};
+  if (url === 'https://senshi.to/episodes/frieren-999') return {status:200,body:JSON.stringify([{ep_id:1,ep_title:'The End'},{ep_id:2,ep_title:'The Journey'}])};
+  if (url === 'https://senshi.to/episode-embeds/frieren-999/1') return {status:200,body:JSON.stringify([{status:'Sub',url:'https://cdn.example/episode.m3u8'}])};
+  if (url === 'https://senshi.to/episode-embeds/frieren-999/2') return {status:200,body:JSON.stringify([{status:'Sub',url:'https://embed.example/watch/2'}])};
+  if (url === 'https://embed.example/watch/2') return {status:200,body:'<video><source src="https://cdn.example/episode2.mp4"></video>'};
+  return {status:404,body:'{}'};
+};
+const provider = require('../providers/senshi-to.js');
+async function main() {
+  assert.equal(provider.version, '1.0.0');
+  assert.equal(provider.getInfo().name, 'Senshi');
+  assert.equal(provider.getInfo().baseUrl, 'https://senshi.to');
+  const results = await provider.search('Frieren', 1, {});
+  assert.equal(results.length, 1);
+  assert.equal(results[0].id, 'frieren-999');
+  assert.equal(results[0].url, 'https://senshi.to/anime/frieren-999');
+  assert.equal(results[0].title, 'Frieren');
+  const detail = await provider.getDetail(results[0].url, {});
+  assert.equal(detail.title, 'Frieren');
+  assert.equal(detail.description, 'An elf mage.');
+  assert.deepEqual(detail.episodes.map(ep => ep.number), [1,2]);
+  const episodes = await provider.getEpisodes('frieren-999', {});
+  assert.equal(episodes[0].url, 'senshi://frieren-999/1');
+  const streams = await provider.getVideoSources(episodes[0].url, {});
+  assert.equal(streams.length, 1);
+  assert.equal(streams[0].url, 'https://cdn.example/episode.m3u8');
+  assert.equal(streams[0].container, 'hls');
+  const streams2 = await provider.getVideoSources(episodes[1].url, {});
+  assert.equal(streams2.length, 1);
+  assert.equal(streams2[0].url, 'https://cdn.example/episode2.mp4');
+  assert.equal(streams2[0].container, 'mp4');
+  assert.ok(calls.every(c => c.options.headers && c.options.headers.Referer), 'requests should carry referer headers for the app resolver and upstream');
+  console.log('Senshi mocked integration tests passed.');
+}
+main().catch(error => { console.error(error); process.exitCode = 1; });
