@@ -536,16 +536,6 @@
       "nsfw": false
     },
     {
-      "id": "zanix",
-      "name": "Zanix",
-      "version": "1.0.0",
-      "type": "anime",
-      "lang": "en",
-      "file": "providers/zanix.js",
-      "logo": "https://www.google.com/s2/favicons?sz=256&domain=zanix.tr",
-      "nsfw": false
-    },
-    {
       "id": "mmani",
       "name": "MMani",
       "version": "1.0.1",
