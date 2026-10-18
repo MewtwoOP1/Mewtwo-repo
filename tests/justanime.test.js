@@ -194,7 +194,7 @@ async function main() {
   // they do not establish the live upstream ID namespace.
   const exactDetail = await provider.getDetail("https://justanime.to/anime/154587/real-shape-anime", {});
   assert.equal(exactDetail.id, "154587");
-  assert.equal(exactDetail.anilistId, null, "exact source ID is not relabeled as an AniList ID");
+  assert.equal(exactDetail.anilistId, undefined, "exact source ID is not relabeled as an AniList ID");
   assert.equal(exactDetail.malId, 52991);
   assert.equal(exactDetail.episodes[1].url, "154587||2");
   const exactStreams = await provider.getVideoSources(exactDetail.episodes[1].url, {});
@@ -222,14 +222,14 @@ async function main() {
     "when source detail parsing fails, omit source episodes rather than guessing numbering");
 
   const stringIdDetail = await provider.getDetail("987655", {});
-  assert.equal(stringIdDetail.anilistId, null,
+  assert.equal(stringIdDetail.anilistId, undefined,
     "invalid explicit aliases must not be replaced with an unverified source id");
   assert.equal(stringIdDetail.malId, 52991,
     "numeric-string MAL ids must be normalized to numbers for the app model");
 
   const detailOnly = await provider.getDetail("https://justanime.to/anime/198966/detail-only-anime", {});
   assert.equal(detailOnly.title, "Detail Only Anime");
-  assert.equal(detailOnly.anilistId, null, "detail source id is not inferred to be an AniList id");
+  assert.equal(detailOnly.anilistId, undefined, "detail source id is not inferred to be an AniList id");
   assert.equal(detailOnly.malId, 62516);
   assert.equal(detailOnly.episodes.length, 2);
 
@@ -244,7 +244,7 @@ async function main() {
   const cardOnly = await provider.getDetail("24", {});
   assert.ok(cardOnly, "detail should fall back to the cached card when both endpoints fail");
   assert.equal(cardOnly.title, "Card Only Anime");
-  assert.equal(cardOnly.anilistId, null);
+  assert.equal(cardOnly.anilistId, undefined);
   assert.deepEqual(cardOnly.episodes, []);
 
   // Both endpoints down and nothing known about the title: null stays the
