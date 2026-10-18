@@ -348,7 +348,8 @@ function getVideoSources(episodeUrl, opts) {
   var aid = String(parts[3] || '').trim();
   if (!slug || !(epNum > 0)) return Promise.resolve([]);
   var audio = opts && String(opts.category || '').toLowerCase() === 'dub' ? 'dub' : 'sub';
-  // Re:Anime expects the canonical AniList ID unchanged. Do not apply +/- offsets.\n  var getAid = (/^\d+$/.test(aid) && aid !== '0') ? Promise.resolve(aid) :
+  // Re:Anime expects the canonical AniList ID unchanged. Do not apply +/- offsets.
+  var getAid = (/^\d+$/.test(aid) && aid !== '0') ? Promise.resolve(aid) :
     _detailData(slug).then(function (d) {
       var data = d && (d.data || d.anime || d);
       return _anilistId(data);
