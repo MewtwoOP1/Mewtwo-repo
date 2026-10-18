@@ -7,6 +7,9 @@
 
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID) ? String(__SOURCE_ID) : 'reanime';
 var SITE = 'https://reanime.to';
+// Domain rotation follows the maintained Yuzono Aniyomi extension. Try each
+// supported domain when one returns the Cloudflare "Just a moment" interstitial.
+var SITE_DOMAINS = ['https://reanime.to', 'https://reanime.cz', 'https://reanime.wtf'];
 var API = SITE + '/api/v1';
 var FLIX_API = SITE + '/api/flix';
 var FLIX = 'https://flixcloud.cc';
@@ -15,7 +18,7 @@ var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, l
 function getInfo() {
   return { name: 'Re:Anime', lang: 'en', baseUrl: SITE,
     logo: 'https://www.google.com/s2/favicons?sz=256&domain=reanime.to',
-    type: 'anime', version: '1.1.0' };
+    type: 'anime', version: '1.2.0' };
 }
 function getSettings() { return []; }
 
@@ -27,12 +30,69 @@ function _headers(referer, accept) {
     'Referer': referer || SITE + '/home'
   };
 }
+function _isMomentPage(response) {
+  var body = String(response && response.body || '').toLowerCase();
+  return body.indexOf('just a moment') >= 0 ||
+    body.indexOf('cf-chl-') >= 0 ||
+    body.indexOf('challenge-platform') >= 0 ||
+    body.indexOf('checking your browser') >= 0;
+}
+function _fetchOnce(url, referer, timeoutMs, accept, browser) {
+  return fetch(url, {
+    headers: _headers(referer, accept),
+    timeoutMs: timeoutMs,
+    browser: !!browser
+  }).then(function (r) {
+    var response = {
+      body: String(r && r.body || ''),
+      headers: r && r.headers || {},
+      status: r && r.status || 200
+    };
+    if (!r || response.status >= 400) {
+      var err = new Error('HTTP ' + response.status);
+      err.response = response;
+      throw err;
+    }
+    return response;
+  });
+}
 function _fetch(url, referer, timeoutMs, accept) {
-  return fetch(url, { headers: _headers(referer, accept), timeoutMs: timeoutMs || 12000 })
-    .then(function (r) {
-      if (!r || (r.status && r.status >= 400)) throw new Error('HTTP ' + (r && r.status));
-      return { body: String(r.body || ''), headers: r.headers || {}, status: r.status || 200 };
-    });
+  var budget = timeoutMs || 12000;
+  // Re:Anime upstream supports all three domains. Use the original first, then
+  // rotate only when the domain is blocked/down; do not blindly repeat healthy calls.
+  var sourceDomain = SITE_DOMAINS.filter(function (domain) {
+    return String(url).indexOf(domain) === 0;
+  })[0];
+  var domains = sourceDomain ? SITE_DOMAINS : [''];
+  var lastError = null;
+  function tryDomain(i) {
+    if (i >= domains.length) return Promise.reject(lastError || new Error('Re:Anime: all supported domains failed'));
+    var domain = domains[i];
+    var targetUrl = sourceDomain ? domain + String(url).slice(sourceDomain.length) : url;
+    var targetReferer = sourceDomain && referer
+      ? domain + String(referer).slice(sourceDomain.length)
+      : (referer || (domain || SITE) + '/home');
+    return _fetchOnce(targetUrl, targetReferer, Math.min(budget, 5000), accept, false)
+      .then(function (response) {
+        if (!_isMomentPage(response)) return response;
+        // Use Zangetsu's native Cloudflare browser lane for a real interstitial.
+        return _fetchOnce(targetUrl, targetReferer, Math.min(budget, 7000), accept, true)
+          .then(function (cleared) {
+            if (_isMomentPage(cleared)) throw new Error('Cloudflare challenge remained after browser retry');
+            return cleared;
+          });
+      })
+      .catch(function (err) {
+        lastError = err;
+        var response = err && err.response;
+        if (response && !_isMomentPage(response) && response.status < 500 && response.status !== 403 && response.status !== 429) {
+          // A valid client error (e.g. a missing slug) is not a domain outage.
+          throw err;
+        }
+        return tryDomain(i + 1);
+      });
+  }
+  return tryDomain(0);
 }
 function _json(url, referer) {
   return _fetch(url, referer).then(function (r) {
