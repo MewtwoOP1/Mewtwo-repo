@@ -538,7 +538,7 @@
     {
       "id": "megaplay",
       "name": "MegaPlay",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "type": "anime",
       "lang": "en",
       "file": "providers/megaplay.js",
@@ -553,6 +553,16 @@
       "lang": "en",
       "file": "providers/mew-aniem.js",
       "logo": "https://www.google.com/s2/favicons?sz=256&domain=anivexa-api9.onrender.com",
+      "nsfw": false
+    },
+    {
+      "id": "raretoonsindia",
+      "name": "Rare Toons India",
+      "version": "1.0.0",
+      "type": "anime",
+      "lang": "hi",
+      "file": "providers/raretoonsindia.js",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=rareanimes.mov",
       "nsfw": false
     }
   ]
