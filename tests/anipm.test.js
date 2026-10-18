@@ -135,7 +135,8 @@ async function main() {
     'preserve the URL-derived AniList ID in cached/fallback detail');
   assert.ok(calls.some((c) => c.url.indexOf('/playback-bootstrap/anime/source-key-42?') >= 0),
     'detail lookup must use the unmodified source-native ID, not the AniList ID');
-  assert.ok(!calls.some((c) => /playback-bootstrap\\/anime\\/(?:4320|4322)\\?/.test(c.url)),
+  assert.ok(!calls.some((c) => c.url.indexOf('/playback-bootstrap/anime/4320?') >= 0 ||
+    c.url.indexOf('/playback-bootstrap/anime/4322?') >= 0),
     'do not offset any IDs when passing them to Ani.pm');
 
   const nestedIdResults = await provider.search('Nested AniList ID', 1, {});
