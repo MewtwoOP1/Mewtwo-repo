@@ -121,8 +121,8 @@ global.fetch = async (url, options) => {
 const provider = require("../providers/justanime.js");
 
 async function main() {
-  assert.equal(provider.version, "1.9.6");
-  assert.equal(provider.getInfo().version, "1.9.6");
+  assert.equal(provider.version, "1.9.7");
+  assert.equal(provider.getInfo().version, "1.9.7");
 
   // A temporary server error should be retried instead of immediately
   // collapsing into an empty detail/episode response.
@@ -141,26 +141,26 @@ async function main() {
   assert.equal(home.length, 2);
   assert.equal(home[0].items[0].title, "Mock Anime");
   assert.equal(home[0].items[0].cover, "https://img.example/mock.jpg");
-  // Generic source IDs are not tracker IDs unless explicitly identified.
-  assert.equal(home[0].items[0].anilistId, null);
+  // JustAnime's API is AniList-shaped: id is the AniList ID, idMal is separate.
+  assert.equal(home[0].items[0].anilistId, 21);
   assert.equal(home[0].items[0].malId, null);
 
   const search = await provider.search("Mock Anime", 1, {});
   assert.equal(search[0].id, "21");
   assert.equal(search[0].type, "anime");
   assert.equal(search[0].malId, 999);
-  assert.equal(search[0].anilistId, 777, "an explicit anilistId field still wins over the catalogue id");
+  assert.equal(search[0].anilistId, 777, "an explicit anilistId field wins over the AniList-shaped id field");
   assert.equal(search[0].englishTitle, "Mock Anime Romaji");
 
   const realShape = await provider.search("Real Shape", 1, {});
   assert.equal(realShape[0].id, "154587");
-  assert.equal(realShape[0].anilistId, null, "a generic source id must not be inferred to be an AniList id");
+  assert.equal(realShape[0].anilistId, 154587, "the AniList-shaped catalogue id must be carried unchanged");
   assert.equal(realShape[0].malId, null);
 
   const malformedIds = await provider.search("Malformed Ids", 1, {});
   assert.equal(malformedIds[0].id, "987654");
-  assert.equal(malformedIds[0].anilistId, null,
-    "invalid explicit AniList aliases must not fall back to the generic source id");
+  assert.equal(malformedIds[0].anilistId, 987654,
+    "invalid aliases must fall back to JustAnime's canonical AniList-shaped id");
   assert.equal(malformedIds[0].malId, 52991,
     "an invalid idMal field must not hide a valid alternate MAL id");
 
@@ -189,12 +189,12 @@ async function main() {
   assert.deepEqual(countFallback.episodes.map((ep) => ep.number), [1, 2, 3], "count-only fallback must be ascending");
   assert.deepEqual(countFallback.episodes.map((ep) => ep.url), ["23||1", "23||2", "23||3"]);
 
-  // A detail opened without a preceding search card. These fixtures exercise
-  // unchanged numeric-ID passthrough through detail, episode and stream URLs;
-  // they do not establish the live upstream ID namespace.
+  // A detail opened without a preceding search card. JustAnime's detail payload
+  // follows AniList's Media schema, so its canonical id must also populate anilistId.
+  // The source route and playback ID must be passed through without +/- offsets.
   const exactDetail = await provider.getDetail("https://justanime.to/anime/154587/real-shape-anime", {});
   assert.equal(exactDetail.id, "154587");
-  assert.equal(exactDetail.anilistId, undefined, "exact source ID is not relabeled as an AniList ID");
+  assert.equal(exactDetail.anilistId, 154587, "detail.id is the canonical AniList ID for this API");
   assert.equal(exactDetail.malId, 52991);
   assert.equal(exactDetail.episodes[1].url, "154587||2");
   const exactStreams = await provider.getVideoSources(exactDetail.episodes[1].url, {});
@@ -222,14 +222,14 @@ async function main() {
     "when source detail parsing fails, omit source episodes rather than guessing numbering");
 
   const stringIdDetail = await provider.getDetail("987655", {});
-  assert.equal(stringIdDetail.anilistId, undefined,
-    "invalid explicit aliases must not be replaced with an unverified source id");
+  assert.equal(stringIdDetail.anilistId, 987655,
+    "invalid aliases must fall back to the detail payload canonical AniList id");
   assert.equal(stringIdDetail.malId, 52991,
     "numeric-string MAL ids must be normalized to numbers for the app model");
 
   const detailOnly = await provider.getDetail("https://justanime.to/anime/198966/detail-only-anime", {});
   assert.equal(detailOnly.title, "Detail Only Anime");
-  assert.equal(detailOnly.anilistId, undefined, "detail source id is not inferred to be an AniList id");
+  assert.equal(detailOnly.anilistId, 198966, "detail payload canonical AniList ID must be preserved");
   assert.equal(detailOnly.malId, 62516);
   assert.equal(detailOnly.episodes.length, 2);
 
@@ -244,7 +244,7 @@ async function main() {
   const cardOnly = await provider.getDetail("24", {});
   assert.ok(cardOnly, "detail should fall back to the cached card when both endpoints fail");
   assert.equal(cardOnly.title, "Card Only Anime");
-  assert.equal(cardOnly.anilistId, undefined);
+  assert.equal(cardOnly.anilistId, 24, "cached card retains its canonical AniList ID");
   assert.deepEqual(cardOnly.episodes, []);
 
   // Both endpoints down and nothing known about the title: null stays the

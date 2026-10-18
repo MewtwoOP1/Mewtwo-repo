@@ -6,7 +6,7 @@ var SITE = 'https://justanime.to';
 var API = 'https://core.justanime.to/api';
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID)
   ? String(__SOURCE_ID) : 'justanime';
-var VERSION = '1.9.6';
+var VERSION = '1.9.7';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
   '(KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36';
 
@@ -138,9 +138,11 @@ function _card(item) {
     url: id, cover: _cover(item) || null,
     type: 'anime', sourceId: SOURCE_ID,
     malId: _firstNumericId([item.idMal, item.malId, item.mal_id]),
-    // The provider's id routes its own detail, episode and playback requests.
-    // Do not relabel that source-local ID as an AniList tracker ID.
-    anilistId: _firstNumericId([item.anilistId, item.anilist_id, item.idAnilist])
+    // JustAnime's catalogue uses the AniList Media schema: item.id is the
+    // canonical AniList ID, while item.idMal is the separate MAL ID.
+    // Keep explicit AniList aliases first, then use that documented canonical ID.
+    // The same numeric value is also the source endpoint ID for this provider.
+    anilistId: _firstNumericId([item.anilistId, item.anilist_id, item.idAnilist, item.id])
   };
   // Keep the last good search/home card available to detail resolution. The
   // episode API can succeed while the detail API temporarily fails; don't
@@ -390,9 +392,10 @@ function _fetchDetail(url, opts) {
       status: anime.status || 'unknown', genres: genres, studios: [],
       type: 'anime', sourceId: SOURCE_ID, year: anime.seasonYear || anime.year || null,
       malId: _firstNumericId([anime.idMal, anime.malId, anime.mal_id, cachedCard && cachedCard.malId]),
-      // Only explicit AniList aliases or a previously explicit cached tracker
-      // ID may populate anilistId. Keep anime.id for source endpoint URLs.
-      anilistId: _firstNumericId([anime.anilistId, anime.anilist_id, anime.idAnilist, cachedCard && cachedCard.anilistId]),
+      // The detail endpoint follows the same AniList Media schema as search:
+      // anime.id is the canonical AniList ID (and also this source's route ID).
+      // Prefer explicit aliases and the already-mapped card value when available.
+      anilistId: _firstNumericId([anime.anilistId, anime.anilist_id, anime.idAnilist, cachedCard && cachedCard.anilistId, anime.id]),
       episodes: episodes, subCount: count || episodes.length, dubCount: count || episodes.length
     };
     // Optional metadata must be absent, not an empty placeholder: consumers
