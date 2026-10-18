@@ -164,7 +164,7 @@
     {
       "id": "reanime",
       "name": "Re:Anime",
-      "version": "1.2.2",
+      "version": "1.2.3",
       "type": "anime",
       "lang": "en",
       "file": "providers/reanime.js",

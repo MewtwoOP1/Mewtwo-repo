@@ -15,7 +15,7 @@ var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, l
 function getInfo() {
   return { name: 'Re:Anime', lang: 'en', baseUrl: SITE,
     logo: 'https://www.google.com/s2/favicons?sz=256&domain=reanime.to',
-    type: 'anime', version: '1.2.2' };
+    type: 'anime', version: '1.2.3' };
 }
 function getSettings() { return []; }
 
@@ -348,7 +348,8 @@ function getVideoSources(episodeUrl, opts) {
   var aid = String(parts[3] || '').trim();
   if (!slug || !(epNum > 0)) return Promise.resolve([]);
   var audio = opts && String(opts.category || '').toLowerCase() === 'dub' ? 'dub' : 'sub';
-  var getAid = (/^\\d+$/.test(aid) && aid !== '0') ? Promise.resolve(aid) :
+  // Re:Anime expects the canonical AniList ID unchanged. Do not apply +/- offsets.
+  var getAid = (/^\d+$/.test(aid) && aid !== '0') ? Promise.resolve(aid) :
     _detailData(slug).then(function (d) {
       var data = d && (d.data || d.anime || d);
       return _anilistId(data);
@@ -391,7 +392,7 @@ function getLinks(id, opts) { return getVideoSources(id, opts); }
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    version: '1.2.2', getInfo: getInfo, getSettings: getSettings,
+    version: '1.2.3', getInfo: getInfo, getSettings: getSettings,
     getHome: getHome, popular: popular, search: search,
     getDetail: getDetail, getEpisodes: getEpisodes,
     getVideoSources: getVideoSources, getStreams: getStreams, getLinks: getLinks
