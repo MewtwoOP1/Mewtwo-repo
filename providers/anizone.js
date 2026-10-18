@@ -2,7 +2,7 @@
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID) ? String(__SOURCE_ID) : 'anizone';
 var SITE = 'https://anizone.to';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36';
-function getInfo() { return { name:'AniZone', lang:'en', baseUrl:SITE, logo:'https://www.google.com/s2/favicons?sz=256&domain=anizone.to', type:'anime', version:'1.0.2' }; }
+function getInfo() { return { name:'AniZone', lang:'en', baseUrl:SITE, logo:'https://www.google.com/s2/favicons?sz=256&domain=anizone.to', type:'anime', version:'1.0.3' }; }
 function getSettings() { return []; }
 function _get(url, referer) {
   return fetch(url, {headers:{'User-Agent':UA,'Accept-Language':'en-US,en;q=0.9','Accept':'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8','Referer':referer||SITE+'/'}}).then(function(r) {
@@ -62,7 +62,7 @@ function getVideoSources(episodeUrl,opts) {
   var slug;try{slug=decodeURIComponent(m[1]);}catch(e){slug=m[1];}
   var n=Number(m[2]), page=_pageUrl(slug)+'/'+n;
   return _get(page,_pageUrl(slug)).then(function(h){
-    var p=h.match(/vidstackPlayer\s*\(\s*JSON\.parse\('(.*?)'\)\s*\)/is);
+    var p=h.match(/vidstackPlayer\s*\(\s*JSON\.parse\('(.*?)'\)\s*\)/i);
     if(!p)throw new Error('AniZone: player payload not found');
     var data;try{data=JSON.parse(_decode(p[1]));}catch(e){throw new Error('AniZone: invalid player payload');}
     var src=String(data.src||'').replace(/\\\//g,'/');
@@ -75,4 +75,4 @@ function getVideoSources(episodeUrl,opts) {
 }
 function getStreams(id,opts){return getVideoSources(id,opts);}
 function getLinks(id,opts){return getVideoSources(id,opts);}
-if(typeof module!=='undefined'&&module.exports)module.exports={version:'1.0.2',getInfo:getInfo,getSettings:getSettings,getHome:getHome,popular:popular,search:search,getDetail:getDetail,getEpisodes:getEpisodes,getVideoSources:getVideoSources,getStreams:getStreams,getLinks:getLinks};
+if(typeof module!=='undefined'&&module.exports)module.exports={version:'1.0.3',getInfo:getInfo,getSettings:getSettings,getHome:getHome,popular:popular,search:search,getDetail:getDetail,getEpisodes:getEpisodes,getVideoSources:getVideoSources,getStreams:getStreams,getLinks:getLinks};
