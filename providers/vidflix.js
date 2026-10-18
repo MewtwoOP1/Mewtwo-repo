@@ -20,7 +20,7 @@ function getSettings() {
   return [{
     key: 'resolverUrl',
     label: 'VidCore resolver URL',
-    description: 'Resolver API base URL. The default is the public VidCore resolver; for a private deployment, enter its base URL (not /api/resolve).',
+    description: 'Resolver API base URL. The default points to a candidate deployment; change it to any reachable compatible VidCore resolver (base URL, not /api/resolve).',
     type: 'text',
     default: DEFAULT_RESOLVER
   }];
