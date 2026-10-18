@@ -22,7 +22,7 @@ function _fetch(url, referer) {
     }).catch(function(){return '';});
 }
 function _json(url,referer){return _fetch(url,referer).then(function(s){try{return JSON.parse(s||'null');}catch(e){return null;}});}
-function _text(v){return String(v==null?'':v).replace(/<[^>]*>/g,' ').replace(/&amp;/g,'&').replace(/&quot;/g,'"').replace(/&#39;|&apos;/g,"'").replace(/&nbsp;/g,' ').replace(/\\s+/g,' ').trim();}
+function _text(v){return String(v==null?'':v).replace(/<[^>]*>/g,' ').replace(/&amp;/g,'&').replace(/&quot;/g,'"').replace(/&#39;|&apos;/g,"'").replace(/&nbsp;/g,' ').replace(/\s+/g,' ').trim();}
 function _rows(j){
   if(Array.isArray(j)) return j;
   if(j && Array.isArray(j.data)) return j.data;
@@ -31,7 +31,7 @@ function _rows(j){
   return [];
 }
 function _title(x){return _text(x&&(x.title||x.name||x.anime_title||x.english_title||x.romaji)||'');}
-function _anilist(x){var v=x&&(x.anilist||x.anilist_id||x.anilistId||x.anilistID);return v!=null&&/^\\d+$/.test(String(v))?String(v):'';}
+function _anilist(x){var v=x&&(x.anilist||x.anilist_id||x.anilistId||x.anilistID);return v!=null&&/^\d+$/.test(String(v))?String(v):'';}
 function _postId(x){var v=x&&(x.postid||x.post_id||x.id);return v==null?'':String(v);}
 function _cover(x){return x&&(x.image||x.poster||x.cover||x.thumbnail||x.thumbnail_url||x.img)||null;}
 function _card(x){
@@ -39,7 +39,7 @@ function _card(x){
   var id=aid||post;
   if(!id||!title)return null;
   var item={id:id,title:title,englishTitle:title,url:'mmani://'+encodeURIComponent(id)+'/'+encodeURIComponent(title)+'/'+encodeURIComponent(post),type:'anime',sourceId:SOURCE_ID};
-  var cover=_cover(x); if(typeof cover==='string'&&cover)item.cover=/^https?:\\/\\//i.test(cover)?cover:(SITE+(cover.charAt(0)==='/'?'':'/')+cover);
+  var cover=_cover(x); if(typeof cover==='string'&&cover)item.cover=/^https?:\/\//i.test(cover)?cover:(SITE+(cover.charAt(0)==='/'?'':'/')+cover);
   if(aid)item.anilistId=aid;
   if(post)item.postId=post;
   return item;
@@ -59,7 +59,7 @@ function _parseUrl(url){
   return {id:dec(raw[0]),title:dec(raw[1]),postId:dec(raw[2])};
 }
 function _servers(id){
-  if(!/^\\d+$/.test(String(id||'')))return Promise.resolve([]);
+  if(!/^\d+$/.test(String(id||'')))return Promise.resolve([]);
   return _json(EP_API+'/api2.php?epid='+encodeURIComponent(id),SITE+'/').then(function(j){
     if(Array.isArray(j))return j;
     if(j&&Array.isArray(j.data))return j.data;
@@ -69,7 +69,7 @@ function _servers(id){
 }
 function _episodeNumber(ep){
   var a=ep&&(ep.slug!=null?ep.slug:ep.name!=null?ep.name:ep.episode);
-  var m=String(a==null?'':a).match(/\\d+(?:\\.\\d+)?/);
+  var m=String(a==null?'':a).match(/\d+(?:\.\d+)?/);
   return m?Number(m[0]):NaN;
 }
 function _episodes(servers,id,mode){
@@ -91,7 +91,7 @@ function _episodes(servers,id,mode){
 }
 function getDetail(url,opts){
   var parsed=_parseUrl(url),id=parsed.id,title=parsed.title||id;
-  if(!/^\\d+$/.test(id))return Promise.resolve(null);
+  if(!/^\d+$/.test(id))return Promise.resolve(null);
   var mode=opts&&String(opts.category||'').toLowerCase()==='dub'?'dub':'sub';
   return _servers(id).then(function(servers){
     var episodes=_episodes(servers,id,mode);
@@ -111,22 +111,22 @@ function _resolvePlayerLink(link,serverName,epNo){
     var tasks=players.filter(function(p){return p&&typeof p.link==='string';}).map(function(p){
       var playerUrl=String(p.link);
       return _fetch(playerUrl,SITE+'/').then(function(html){
-        var vm=html.match(/["']?videoUrl["']?\\s*:\\s*["']([^"']+)["']/);
+        var vm=html.match(/["']?videoUrl["']?\s*:\s*["']([^"']+)["']/);
         if(!vm||!vm[1])return null;
         var video=vm[1];
         try{video=new URL(video,playerUrl).toString();}catch(e){}
-        if(!/^https?:\\/\\//i.test(video))return null;
-        var tracks=[],tm=html.match(/["']?tracks["']?\\s*:\\s*(\\[[\\s\\S]*?\\])/);
+        if(!/^https?:\/\//i.test(video))return null;
+        var tracks=[],tm=html.match(/["']?tracks["']?\s*:\s*(\[[\s\\S]*?\])/);
         if(tm)try{
           var parsed=JSON.parse(tm[1]);
           if(Array.isArray(parsed))parsed.forEach(function(t){
             if(!t||!t.file)return;
             var u=t.file;try{u=new URL(u,playerUrl).toString();}catch(e){}
-            if(/\\.vtt(?:$|\\?)/i.test(u))tracks.push({url:u,lang:String(t.label||'English').slice(0,2).toLowerCase(),label:t.label||'English',format:'vtt'});
+            if(/\.vtt(?:$|\\?)/i.test(u))tracks.push({url:u,lang:String(t.label||'English').slice(0,2).toLowerCase(),label:t.label||'English',format:'vtt'});
           });
         }catch(e){}
-        var hls=/\\.m3u8(?:$|\\?)/i.test(video);
-        return {url:video,name:'MMani '+(p.server||serverName||'Server'),provider:'MMani',quality:'Auto',container:hls?'m3u8':(/\\.mp4(?:$|\\?)/i.test(video)?'mp4':'auto'),hls:hls,headers:{'Referer':playerUrl,'User-Agent':UA},subtitles:tracks,isActive:true};
+        var hls=/\.m3u8(?:$|\\?)/i.test(video);
+        return {url:video,name:'MMani '+(p.server||serverName||'Server'),provider:'MMani',quality:'Auto',container:hls?'m3u8':(/\.mp4(?:$|\\?)/i.test(video)?'mp4':'auto'),hls:hls,headers:{'Referer':playerUrl,'User-Agent':UA},subtitles:tracks,isActive:true};
       }).catch(function(){return null;});
     });
     return Promise.all(tasks).then(function(a){return a.filter(Boolean);});
@@ -136,7 +136,7 @@ function getVideoSources(url,opts){
   var raw=String(url||'').replace(/^mmani:\/\//i,'').split('/');
   var id='',epNo='',mode='sub';
   try{id=decodeURIComponent(raw[0]||'');epNo=decodeURIComponent(raw[1]||'');mode=decodeURIComponent(raw[2]||'sub');}catch(e){}
-  if(!/^\\d+$/.test(id)||!isFinite(Number(epNo)))return Promise.resolve([]);
+  if(!/^\d+$/.test(id)||!isFinite(Number(epNo)))return Promise.resolve([]);
   return _servers(id).then(function(servers){
     var links=[];
     servers.forEach(function(s){
