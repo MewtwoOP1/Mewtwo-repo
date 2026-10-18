@@ -41,8 +41,8 @@ global.fetch = async (url, options) => {
   } else if (u === "https://core.justanime.to/api/search?query=Card%20Only&page=1") {
     body = { results: [{ id: 24, title: { english: "Card Only Anime", romaji: "Card Only Anime" }, cover: "https://img.example/card-only.jpg" }] };
   } else if (u === "https://core.justanime.to/api/search?query=Real%20Shape&page=1") {
-    // The live search/home payload shape: only `id` (the AniList ID) — no
-    // `anilistId` and no `idMal` field is ever sent for list items.
+    // Fixture with only `id`; this exercises the adapter's current fallback.
+    // It does not establish which namespace the live API uses for that field.
     body = { results: [{ id: 154587, title: { english: "Real Shape Anime", romaji: "Real Shape Romaji" }, cover: "https://img.example/real.jpg" }] };
   } else if (u === "https://core.justanime.to/api/search?query=Malformed%20Ids&page=1") {
     // Invalid-but-present alias fields must not suppress the valid catalogue id.
@@ -68,8 +68,8 @@ global.fetch = async (url, options) => {
       { number: 2, title: "Real Shape Episode 2" }
     ] } };
   } else if (u === "https://core.justanime.to/api/anime/198966") {
-    // The live detail payload shape: AniList schema — `id` plus a separate
-    // `idMal`, and no `anilistId` field.
+    // Fixture with numeric `id` and separate `idMal`; it tests the
+    // adapter's field mapping, not the live API's ID namespace.
     body = { data: { id: 198966, idMal: 62516, title: { english: "Detail Only Anime", romaji: "Detail Only Anime" }, coverImage: { extraLarge: "https://img.example/detail-only.jpg" }, description: "<p>Detail only</p>", genres: ["Action"], episodes: 2, seasonYear: 2026, status: "RELEASING" } };
   } else if (u === "https://core.justanime.to/api/anime/198966/episodes?page=1") {
     body = { data: { episodes: [
@@ -142,8 +142,8 @@ async function main() {
   assert.equal(home.length, 2);
   assert.equal(home[0].items[0].title, "Mock Anime");
   assert.equal(home[0].items[0].cover, "https://img.example/mock.jpg");
-  // Home items carry only the AniList catalogue ID: it must surface as
-  // anilistId (malId genuinely absent from list payloads stays null).
+  // This fixture omits explicit AniList/MAL aliases. It checks the adapter's
+  // fallback behavior; it does not verify the live ID namespace.
   assert.equal(home[0].items[0].anilistId, 21);
   assert.equal(home[0].items[0].malId, null);
 
@@ -156,13 +156,13 @@ async function main() {
 
   const realShape = await provider.search("Real Shape", 1, {});
   assert.equal(realShape[0].id, "154587");
-  assert.equal(realShape[0].anilistId, 154587, "list payloads send only `id`, which is the AniList ID");
+  assert.equal(realShape[0].anilistId, 154587, "with this fixture, `id` is the adapter's final anilistId fallback");
   assert.equal(realShape[0].malId, null);
 
   const malformedIds = await provider.search("Malformed Ids", 1, {});
   assert.equal(malformedIds[0].id, "987654");
   assert.equal(malformedIds[0].anilistId, 987654,
-    "empty or zero AniList aliases must fall back to the valid catalogue id");
+    "empty or zero AniList aliases must fall back to this fixture's numeric id");
   assert.equal(malformedIds[0].malId, 52991,
     "an invalid idMal field must not hide a valid alternate MAL id");
 
@@ -191,10 +191,9 @@ async function main() {
   assert.deepEqual(countFallback.episodes.map((ep) => ep.number), [1, 2, 3], "count-only fallback must be ascending");
   assert.deepEqual(countFallback.episodes.map((ep) => ep.url), ["23||1", "23||2", "23||3"]);
 
-  // A detail opened without any preceding search/home card: the payload's
-  // own `id` is the AniList ID and `idMal` the MAL ID — both must ship.
-  // Exact AniList-ID passthrough regression: do not add/subtract one or
-  // otherwise transform the API ID between catalogue, detail, episodes and streams.
+  // A detail opened without a preceding search card. These fixtures exercise
+  // unchanged numeric-ID passthrough through detail, episode and stream URLs;
+  // they do not establish the live upstream ID namespace.
   const exactDetail = await provider.getDetail("https://justanime.to/anime/154587/real-shape-anime", {});
   assert.equal(exactDetail.id, "154587");
   assert.equal(exactDetail.anilistId, 154587);
@@ -232,7 +231,7 @@ async function main() {
 
   const detailOnly = await provider.getDetail("https://justanime.to/anime/198966/detail-only-anime", {});
   assert.equal(detailOnly.title, "Detail Only Anime");
-  assert.equal(detailOnly.anilistId, 198966, "detail should derive AniList ID from the payload id when no card/detail field supplies it");
+  assert.equal(detailOnly.anilistId, 198966, "the fixture's numeric id is the final anilistId fallback");
   assert.equal(detailOnly.malId, 62516);
   assert.equal(detailOnly.episodes.length, 2);
 
