@@ -558,12 +558,13 @@
     {
       "id": "pressplayx",
       "name": "PressPlayX",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "type": "movie",
       "lang": "en",
       "file": "providers/pressplayx.js",
       "logo": "https://www.google.com/s2/favicons?sz=256&domain=pressplayx.to",
-      "nsfw": false
+      "nsfw": false,
+      "settings": [{ "key": "tmdbApiKey", "label": "TMDB API Key (optional)", "description": "Optional personal TMDB v3 key. Leave blank to use Zangetsu’s built-in key.", "type": "text", "default": "" }]
     }
   ]
 }
