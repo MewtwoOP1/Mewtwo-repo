@@ -2,7 +2,7 @@
 // API base can be changed in provider settings if the deployment URL changes.
 var API_BASE = 'https://moviebox-api-lovat-nu.vercel.app';
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID) ? String(__SOURCE_ID) : 'moviebox-api';
-var VERSION = '1.0.0';
+var VERSION = '1.0.1';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 
 function getInfo() {
@@ -52,18 +52,21 @@ function _detailPath(v) {
   try { return decodeURIComponent(String(v)); } catch (_) { return String(v); }
 }
 function _item(item) {
-  var id = String(item && (item.subject_id || item.subjectId || item.id) || '');
-  if (!id || id === 'None' || id === 'null') return null;
-  var title = _text(item.title || item.name || id);
-  var kind = String(item.type || '').toLowerCase();
+  var subjectId = String(item && (item.subject_id || item.subjectId || item.id) || '');
+  if (!subjectId || subjectId === 'None' || subjectId === 'null') return null;
+  var title = _text(item.title || item.name || '');
+  if (!title) return null;
+  var url = 'moviebox://' + encodeURIComponent(subjectId) + '/0/0';
+  var year = item.release_date ? String(item.release_date).slice(0, 4) : null;
+  var rating = Number(item.imdb_rating != null ? item.imdb_rating : item.imdbRating);
+  var genres = item.genre == null ? [] : (Array.isArray(item.genre) ? item.genre : String(item.genre).split(/[,|]/));
   return {
-    id: id, title: title, englishTitle: title,
-    url: 'moviebox://' + encodeURIComponent(id) + '/0/0',
-    cover: item.cover || item.poster || item.image || null,
-    year: item.release_date ? String(item.release_date).slice(0, 4) : null,
-    type: /series|tv|show/.test(kind) || Number(item.subject_type || item.subjectType) === 2 ? 'series' : 'movie',
-    sourceId: SOURCE_ID, description: '', episodes: [], subCount: 0, dubCount: 0,
-    _detailPath: item.detail_path || item.detailPath || ''
+    id: url, title: year ? title + ' (' + year + ')' : title, englishTitle: title,
+    url: url, cover: item.cover || item.poster || item.image || null, year: year,
+    type: 'movie', sourceId: SOURCE_ID, description: '',
+    genres: genres.map(function(g) { return _text(g); }).filter(Boolean),
+    score: isFinite(rating) && rating > 0 ? Math.round(rating * 10) : undefined,
+    episodes: [], subCount: 0, dubCount: 0
   };
 }
 function search(query, page, opts) {
@@ -117,26 +120,38 @@ function _makeEpisodes(id, seasons, detailPath) {
   return out;
 }
 function getDetail(url, opts) {
-  var parsed = _parseEpisodeUrl(url), id = parsed.id || _id(url);
-  if (!id) return Promise.resolve(null);
+  var parsed = _parseEpisodeUrl(url), subjectId = parsed.id || _id(url);
+  if (!subjectId) return Promise.resolve(null);
+  var canonicalUrl = 'moviebox://' + encodeURIComponent(subjectId) + '/0/0';
   return Promise.all([
-    _request('/detail/' + encodeURIComponent(id), opts),
-    _request('/episodes/' + encodeURIComponent(id), opts).catch(function() { return { seasons: [] }; })
+    _request('/detail/' + encodeURIComponent(subjectId), opts),
+    _request('/episodes/' + encodeURIComponent(subjectId), opts).catch(function() { return { seasons: [] }; })
   ]).then(function(values) {
     var d = values[0] && (values[0].data || values[0]) || {};
     var seasonData = values[1] && (values[1].seasons || (values[1].data && values[1].data.seasons)) || [];
     var detailPath = d.detail_path || d.detailPath || '';
+    var title = _text(d.title || d.name || '');
+    if (!title) throw new Error('MovieBox detail returned no title for ' + subjectId);
+    var genres = d.genre == null ? [] : (Array.isArray(d.genre) ? d.genre : String(d.genre).split(/[,|]/));
+    var rating = Number(d.imdb_rating != null ? d.imdb_rating : d.imdbRating);
     var isSeries = String(d.type || '').toLowerCase() === 'series' || Number(d.subject_type || d.subjectType) === 2;
-    var eps = isSeries ? _makeEpisodes(id, seasonData, detailPath) : [];
-    var title = _text(d.title || d.name || id);
-    return { id: id, title: title, englishTitle: title, url: 'moviebox://' + encodeURIComponent(id) + '/0/0',
+    var eps = isSeries ? _makeEpisodes(subjectId, seasonData, detailPath) : [];
+    var dubs = Array.isArray(d.dubs) ? d.dubs.map(function(x) {
+      return _text(x && (x.lang_name || x.language) || '');
+    }).filter(Boolean) : [];
+    return {
+      id: canonicalUrl, title: title, englishTitle: title, url: canonicalUrl,
       cover: d.cover || d.poster || null, description: _text(d.description || d.plot || ''),
       year: d.release_date ? String(d.release_date).slice(0, 4) : null,
-      type: isSeries ? 'series' : 'movie', sourceId: SOURCE_ID,
-      episodes: eps, subCount: eps.length, dubCount: 0, detailPath: detailPath };
-  }).catch(function() {
-    return { id: id, title: id, url: 'moviebox://' + encodeURIComponent(id) + '/0/0',
-      type: 'movie', sourceId: SOURCE_ID, episodes: [], subCount: 0, dubCount: 0 };
+      status: 'unknown', genres: genres.map(function(g) { return _text(g); }).filter(Boolean),
+      studios: [], country: _text(d.country || ''), language: _text(d.language || ''),
+      duration: d.duration || null, score: isFinite(rating) && rating > 0 ? Math.round(rating * 10) : undefined,
+      type: 'movie', sourceId: SOURCE_ID, episodes: eps, subCount: eps.length, dubCount: dubs.length,
+      audioLanguages: dubs, detailPath: detailPath
+    };
+  }).catch(function(error) {
+    console.warn('MovieBox metadata failed for ' + subjectId + ': ' + String(error));
+    return null;
   });
 }
 function getEpisodes(url, opts) {
