@@ -15,10 +15,10 @@ global.fetch = async function (url, options) {
 };
 const p = require('../providers/pressplayx.js');
 async function main() {
-  assert.equal(p.version,'1.0.1');
+  assert.equal(p.version,'1.0.2');
   assert.equal(p.getInfo().name,'PressPlayX');
   assert.equal(p.getInfo().type,'movie');
-  assert.deepEqual(p.getSettings(),[]);
+  assert.equal(p.getSettings()[0].key,'tmdbApiKey');
   const results = await p.search('Hope',1,{});
   assert.equal(results.length,1);
   assert.equal(results[0].title,'Hope (2025)');
