@@ -565,33 +565,14 @@
       "nsfw": false
     },
     {
-      "id": "senshi-to",
-      "name": "Senshi",
+      "id": "megaplay",
+      "name": "MegaPlay",
       "version": "1.0.0",
       "type": "anime",
       "lang": "en",
-      "file": "providers/senshi-to.js",
-      "logo": "https://www.google.com/s2/favicons?sz=256&domain=senshi.to",
+      "file": "providers/megaplay.js",
+      "logo": "https://megaplays.se/favicon.ico",
       "nsfw": false
-    },
-    {
-      "id": "moviebox-api",
-      "name": "MovieBox API",
-      "version": "1.0.1",
-      "type": "movie",
-      "lang": "en",
-      "file": "providers/moviebox-api.js",
-      "logo": "https://www.google.com/s2/favicons?sz=256&domain=moviebox.ph",
-      "nsfw": false,
-      "settings": [
-        {
-          "key": "apiBase",
-          "label": "MovieBox API base URL",
-          "description": "Your self-hosted MovieBox API deployment. Do not include a trailing slash.",
-          "type": "text",
-          "default": "https://moviebox-api-lovat-nu.vercel.app"
-        }
-      ]
     }
   ]
 }
