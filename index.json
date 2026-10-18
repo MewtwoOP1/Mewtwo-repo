@@ -1,6 +1,6 @@
 {
-  "name": "\ud835\udc74\ud835\udc86\ud835\udc98\ud835\udc95\ud835\udc98\ud835\udc90\u2661 Repo",
-  "description": "\ud835\udc74\ud835\udc86\ud835\udc98\ud835\udc95\ud835\udc98\ud835\udc90\u2661 community sources for Zangetsu. Third-party provider integrations; this repository does not host video files.",
+  "name": "𝑴𝒆𝒘𝒕𝒘𝒐♡ Repo",
+  "description": "𝑴𝒆𝒘𝒕𝒘𝒐♡ community sources for Zangetsu. Third-party provider integrations; this repository does not host video files.",
   "sources": [
     {
       "id": "tmdb-stremio",
@@ -15,7 +15,7 @@
         {
           "key": "tmdbApiKey",
           "label": "TMDB API Key (optional; blank uses app default)",
-          "description": "Your personal TMDB v3 API key. Leave blank to use Zangetsu\u2019s built-in key. Sent only to TMDB.",
+          "description": "Your personal TMDB v3 API key. Leave blank to use Zangetsu’s built-in key. Sent only to TMDB.",
           "type": "text",
           "default": ""
         },
@@ -553,6 +553,16 @@
       "lang": "en",
       "file": "providers/anizone.js",
       "logo": "https://www.google.com/s2/favicons?sz=256&domain=anizone.to",
+      "nsfw": false
+    },
+    {
+      "id": "pressplayx",
+      "name": "PressPlayX",
+      "version": "1.0.0",
+      "type": "movie",
+      "lang": "en",
+      "file": "providers/pressplayx.js",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=pressplayx.to",
       "nsfw": false
     }
   ]
