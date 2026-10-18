@@ -1,4 +1,4 @@
-# Zangetsu Community Sources
+# 𝑴𝒆𝒘𝒕𝒘𝒐♡ Repo
 
 Community-maintained JavaScript providers for the [Zangetsu](https://github.com/Spyou/Zangetsu) app. The catalogue includes TMDB + Stremio for movie/TV metadata and configured add-on streams, plus anime sources and standalone movie providers maintained for Zangetsu.
 
