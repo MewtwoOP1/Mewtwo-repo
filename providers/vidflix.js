@@ -4,7 +4,7 @@
 // Referer/CORS handling; never return the VidFlix watch page as a playable URL.
 
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID) ? String(__SOURCE_ID) : 'vidflix';
-var VERSION = '1.0.0';
+var VERSION = '1.0.1';
 var TMDB_API = 'https://api.themoviedb.org/3';
 var POSTER = 'https://image.tmdb.org/t/p/w500';
 var BACKDROP = 'https://image.tmdb.org/t/p/w780';
@@ -40,7 +40,7 @@ function _json(path) {
       if (r && r.status && r.status >= 400) throw new Error('TMDB HTTP ' + r.status);
       var b = r && r.body != null ? r.body : '';
       return typeof b === 'string' ? JSON.parse(b || 'null') : b;
-    }).catch(function () { return null; });
+    }).catch(function (error) { console.warn('VidFlix TMDB request failed:', String(error)); return null; });
 }
 function _year(o) { return String(o && (o.release_date || o.first_air_date) || '').slice(0, 4) || null; }
 function _kind(o, forced) { return forced || (o && (o.media_type === 'tv' || o.first_air_date) ? 'tv' : 'movie'); }
@@ -202,18 +202,21 @@ function getVideoSources(raw) {
   var type = parsed.type === 'tv' ? 'tv' : 'movie';
   if (type === 'tv' && (season < 1 || episode < 1)) return Promise.resolve([]);
   var apiUrl = _resolveUrl({ type: type, id: parsed.id, season: season, episode: episode });
-  if (!apiUrl) return Promise.resolve([]);
-  return fetch(apiUrl, { headers: { Accept: 'application/x-ndjson, application/json' }, timeoutMs: 25000 })
+  if (!apiUrl) { console.warn('VidFlix: configure a valid VidCore resolver URL in provider settings.'); return Promise.resolve([]); }
+  return fetch(apiUrl, { headers: { Accept: 'application/x-ndjson, application/json' }, timeoutMs: 45000 })
     .then(function (response) {
       if (response && response.status && response.status >= 400) throw new Error('VidFlix resolver HTTP ' + response.status);
       var body = response && response.body != null ? response.body : '';
       if (typeof body !== 'string') body = JSON.stringify(body || '');
-      var lines = body.split(/\r?\n/), out = [], seen = {};
+      if (!body.trim()) throw new Error('Resolver returned an empty response. Check that the service is awake and /api/resolve is supported.');
+      if (body.trim().charAt(0) === '<') throw new Error('Resolver returned HTML instead of NDJSON. The configured resolver URL may be invalid or sleeping.');
+      var lines = body.split(/\r?\n/), out = [], seen = {}, errors = [];
       lines.forEach(function (line) {
         if (!line) return;
         var row;
         try { row = JSON.parse(line); } catch (e) { return; }
-        if (row.event !== 'server' || !row.server || row.server.ok === false) return;
+        if (row.event === 'error') { errors.push(row.error || row.message || row.stage || 'resolver error'); return; }
+        if (row.event !== 'server' || !row.server || row.server.ok === false || row.server.status === 'fail' || row.server.status === 'error') return;
         var server = row.server;
         // Prefer the resolver's HLS relay: it adds the upstream Referer and rewrites
         // segment URLs. Direct CDN links remain a fallback for native players.
@@ -234,6 +237,10 @@ function getVideoSources(raw) {
           headers: direct ? { 'Referer': 'https://vidcore.net/', 'Origin': 'https://vidcore.net/', 'User-Agent': UA } : {}
         });
       });
+      if (!out.length) {
+        var detail = errors.length ? errors.join('; ') : 'No successful server events were returned.';
+        console.warn('VidFlix resolver returned no playable streams:', detail);
+      }
       return out;
     }).catch(function (error) {
       console.warn('VidFlix resolver failed:', String(error));
