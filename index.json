@@ -538,7 +538,7 @@
     {
       "id": "mmani",
       "name": "MMani",
-      "version": "1.0.2",
+      "version": "1.0.3",
       "type": "anime",
       "lang": "en",
       "file": "providers/mmani.js",
