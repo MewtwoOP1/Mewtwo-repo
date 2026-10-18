@@ -46,9 +46,23 @@ function _attr(tag, name) {
   return '';
 }
 function _blocks(html, selector) {
-  var out = [], re = /<a\b[^>]*>[\s\S]*?<\/a>/gi, m;
-  while ((m = re.exec(String(html || ''))) !== null) {
-    if (new RegExp('(?:^|\\s)' + selector + '(?:\\s|$)', 'i').test(_attr(m[0].match(/^<a\b[^>]*>/i)[0], 'class'))) out.push(m[0]);
+  var src = String(html || ''), out = [], re = /<([a-z][a-z0-9:-]*)\b[^>]*>/gi, m;
+  while ((m = re.exec(src)) !== null) {
+    var open = m[0], tag = m[1].toLowerCase(), cls = _attr(open, 'class');
+    if (!new RegExp('(?:^|\\s)' + selector + '(?:\\s|$)', 'i').test(cls)) continue;
+    if (/\/\s*>$/.test(open) || /^(img|input|br|hr|meta|link|source|area|base|embed|param|track|wbr)$/.test(tag)) continue;
+    var depth = 1, endRe = new RegExp('<\\/?' + tag + '\\b[^>]*>', 'ig');
+    endRe.lastIndex = re.lastIndex;
+    var e;
+    while ((e = endRe.exec(src)) !== null) {
+      if (/^<\//.test(e[0])) depth--;
+      else if (!/\/\s*>$/.test(e[0])) depth++;
+      if (depth === 0) {
+        out.push(src.substring(m.index, endRe.lastIndex));
+        re.lastIndex = endRe.lastIndex;
+        break;
+      }
+    }
   }
   return out;
 }
