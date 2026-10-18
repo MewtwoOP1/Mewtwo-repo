@@ -57,8 +57,8 @@ const provider = require("../providers/reanime.js");
 async function main() {
   assert.equal(provider.getInfo().name, "Re:Anime");
   assert.equal(provider.getInfo().type, "anime");
-  assert.equal(provider.getInfo().version, "1.2.2");
-  assert.equal(provider.version, "1.2.2");
+  assert.equal(provider.getInfo().version, "1.2.3");
+  assert.equal(provider.version, "1.2.3");
   const results = await provider.search("Solo Leveling", 1, {});
   assert.equal(results.length, 1);
   assert.equal(results[0].id, "solo-leveling-abc");
