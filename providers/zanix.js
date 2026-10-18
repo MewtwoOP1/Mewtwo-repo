@@ -42,7 +42,7 @@ function _text(s) {
   catch (e) { return s.replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").replace(/\s+/g, ' ').trim(); }
 }
 function _attr(tag, name) {
-  var re = new RegExp('(?:^|\\s)' + name + '\\s*=\\s*(["\\'])([\\s\\S]*?)\\1', 'i');
+  var re = new RegExp("(?:^|\\s)" + name + "\\s*=\\s*(['\\x22])([\\s\\S]*?)\\1", "i");
   var m = String(tag || '').match(re);
   return m ? m[2] : '';
 }
@@ -145,7 +145,12 @@ function search(query, page, opts) {
 }
 function _labelValue(html, label) {
   var s = String(html || '');
-  var re = new RegExp('<(?:span|div)\\b[^>]*class=["\\'][^"\\']*item-head[^"\\']*["\\'][^>]*>\\s*' + label + '\\s*:?\\s*<\\/[^>]+>([\\s\\S]{0,1000}?)(?=<(?:span|div)\\b[^>]*class=["\\'][^"\\']*item-head|<\\/div>\\s*<\\/div>)', 'i');
+  var quote = "['\\x22]";
+  var notQuote = "[^'\\x22]*";
+  var re = new RegExp("<(?:span|div)\\b[^>]*class=" + quote + notQuote
+    + "item-head" + notQuote + quote + "[^>]*>\\s*" + label
+    + "\\s*:?\\s*</[^>]+>([\\s\\S]{0,1000}?)(?=<(?:span|div)\\b[^>]*class="
+    + quote + notQuote + "item-head|</div>\\s*</div>)", "i");
   var m = s.match(re);
   return m ? _text(m[1]) : '';
 }
