@@ -536,44 +536,14 @@
       ]
     },
     {
-      "id": "fourkhdhub",
-      "name": "4K HDHub",
-      "version": "1.0.6",
-      "type": "movie",
+      "id": "yuzono-animegg",
+      "name": "AnimeGG (Yuzono)",
+      "version": "1.0.0",
+      "type": "anime",
       "lang": "en",
-      "file": "providers/fourkhdhub.js",
-      "nsfw": false,
-      "logo": "https://4khdhub.link/favicon.ico"
-    },
-    {
-      "id": "uhdmovies",
-      "name": "UHD Movies",
-      "version": "1.0.3",
-      "type": "movie",
-      "lang": "en",
-      "file": "providers/uhdmovies.js",
-      "nsfw": false,
-      "logo": "https://uhdmovies.autos/favicon.ico"
-    },
-    {
-      "id": "vegamovies",
-      "name": "VegaMovies",
-      "version": "1.0.4",
-      "type": "movie",
-      "lang": "hi",
-      "file": "providers/vegamovies.js",
-      "nsfw": false,
-      "logo": "https://vegamovies.mq/favicon.ico"
-    },
-    {
-      "id": "multimovies",
-      "name": "MultiMovies",
-      "version": "1.0.3",
-      "type": "movie",
-      "lang": "hi",
-      "file": "providers/multimovies.js",
-      "nsfw": false,
-      "logo": "https://multimovies.beer/wp-content/uploads/2024/01/cropped-CompressJPEG.online_512x512_image-192x192.png"
+      "file": "providers/yuzono-animegg.js",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=animegg.org",
+      "nsfw": false
     }
   ]
 }
