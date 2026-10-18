@@ -34,6 +34,10 @@ global.fetch = async (url, options) => {
     // The live search/home payload shape: only `id` (the AniList ID) — no
     // `anilistId` and no `idMal` field is ever sent for list items.
     body = { results: [{ id: 154587, title: { english: "Real Shape Anime", romaji: "Real Shape Romaji" }, cover: "https://img.example/real.jpg" }] };
+  } else if (u === "https://core.justanime.to/api/search?query=Malformed%20Ids&page=1") {
+    // Invalid-but-present alias fields must not suppress the valid catalogue id.
+    body = { results: [{ id: 987654, anilistId: "", anilist_id: "0", idMal: "", malId: "52991",
+      title: { english: "Malformed IDs", romaji: "Malformed IDs" }, cover: "https://img.example/malformed.jpg" }] };
   } else if (u === "https://core.justanime.to/api/anime/154587") {
     // Regression fixture: the AniList ID is deliberately a distinct, large value.
     // It must be passed to JustAnime endpoints verbatim; no +/- offsets are valid.
@@ -52,6 +56,13 @@ global.fetch = async (url, options) => {
       { number: 1, title: "Detail Only Ep 1" },
       { number: 2, title: "Detail Only Ep 2" }
     ] } };
+  } else if (u === "https://core.justanime.to/api/anime/987655") {
+    // Detail APIs may serialize identifier fields as strings or invalid aliases.
+    body = { data: { id: 987655, anilistId: "", anilist_id: "not-an-id", idMal: "52991",
+      title: { english: "String ID Anime", romaji: "String ID Anime" },
+      description: "ID normalization fixture", episodes: 1, status: "FINISHED" } };
+  } else if (u === "https://core.justanime.to/api/anime/987655/episodes?page=1") {
+    body = { data: { episodes: [{ number: 1, title: "Episode One" }] } };
   } else if (u === "https://core.justanime.to/api/anime/21") {
     body = { data: { id: 21, idMal: 999, title: { english: "Mock Anime", romaji: "Mock Anime" }, coverImage: { extraLarge: "https://img.example/mock.jpg" }, description: "<p>A test anime</p>", genres: ["Action"], episodes: 2, seasonYear: 2024, status: "FINISHED" } };
   } else if (u === "https://core.justanime.to/api/anime/21/episodes?page=1") {
@@ -91,8 +102,8 @@ global.fetch = async (url, options) => {
 const provider = require("../providers/justanime.js");
 
 async function main() {
-  assert.equal(provider.version, "1.9.3");
-  assert.equal(provider.getInfo().version, "1.9.3");
+  assert.equal(provider.version, "1.9.4");
+  assert.equal(provider.getInfo().version, "1.9.4");
 
   // A temporary server error should be retried instead of immediately
   // collapsing into an empty detail/episode response.
@@ -127,6 +138,13 @@ async function main() {
   assert.equal(realShape[0].id, "154587");
   assert.equal(realShape[0].anilistId, 154587, "list payloads send only `id`, which is the AniList ID");
   assert.equal(realShape[0].malId, null);
+
+  const malformedIds = await provider.search("Malformed Ids", 1, {});
+  assert.equal(malformedIds[0].id, "987654");
+  assert.equal(malformedIds[0].anilistId, 987654,
+    "empty or zero AniList aliases must fall back to the valid catalogue id");
+  assert.equal(malformedIds[0].malId, 52991,
+    "an invalid idMal field must not hide a valid alternate MAL id");
 
   const detail = await provider.getDetail("https://justanime.to/anime/21/mock-anime", {});
   assert.equal(detail.title, "Mock Anime");
@@ -171,6 +189,12 @@ async function main() {
   assert.ok(calls.some((c) => c.url === "https://core.justanime.to/api/watch/154587/episode/2/anineko/sub/hd1"));
   assert.ok(!calls.some((c) => /\/watch\/(?:154586|154588)\//.test(c.url)),
     "no -1/+1 ID mutation may appear in the stream request");
+
+  const stringIdDetail = await provider.getDetail("987655", {});
+  assert.equal(stringIdDetail.anilistId, 987655,
+    "detail must fall back to the valid catalogue id when alias fields are invalid");
+  assert.equal(stringIdDetail.malId, 52991,
+    "numeric-string MAL ids must be normalized to numbers for the app model");
 
   const detailOnly = await provider.getDetail("https://justanime.to/anime/198966/detail-only-anime", {});
   assert.equal(detailOnly.title, "Detail Only Anime");
