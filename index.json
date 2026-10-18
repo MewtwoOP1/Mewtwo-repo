@@ -1,6 +1,6 @@
 {
-  "name": "Zangetsu Community Sources",
-  "description": "Community-maintained Zangetsu providers. These sources do not host video files.",
+  "name": "𝑴𝒆𝒘𝒕𝒘𝒐♡ Repo",
+  "description": "𝑴𝒆𝒘𝒕𝒘𝒐♡ community sources for Zangetsu. Third-party provider integrations; this repository does not host video files.",
   "sources": [
     {
       "id": "tmdb-stremio",
