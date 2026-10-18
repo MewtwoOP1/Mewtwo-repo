@@ -21,14 +21,19 @@ global.fetch = async function(url, options) {
 };
 const provider = require('../providers/moviebox-api.js');
 async function main() {
-  assert.equal(provider.version, '1.0.0');
+  assert.equal(provider.version, '1.0.1');
   assert.equal(provider.getInfo().name, 'MovieBox API');
   const results = await provider.search('Avatar', 1, {});
   assert.equal(results.length, 1);
-  assert.equal(results[0].id, '12345');
+  assert.equal(results[0].id, 'moviebox://12345/0/0');
+  assert.equal(results[0].url, results[0].id);
+  assert.equal(results[0].title, 'Avatar (2009)');
   assert.equal(results[0].type, 'movie');
   const detail = await provider.getDetail(results[0].url, {});
   assert.equal(detail.title, 'Avatar');
+  assert.equal(detail.id, detail.url);
+  assert.equal(detail.type, 'movie');
+  assert.equal(detail.description, 'On Pandora');
   const streams = await provider.getVideoSources(results[0].url, {});
   assert.equal(streams.length, 1);
   assert.equal(streams[0].url, 'https://cdn.example/avatar.mp4');
