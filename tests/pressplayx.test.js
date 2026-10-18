@@ -15,7 +15,7 @@ global.fetch = async function (url, options) {
 };
 const p = require('../providers/pressplayx.js');
 async function main() {
-  assert.equal(p.version,'1.0.2');
+  assert.equal(p.version,'1.0.3');
   assert.equal(p.getInfo().name,'PressPlayX');
   assert.equal(p.getInfo().type,'movie');
   assert.equal(p.getSettings()[0].key,'tmdbApiKey');
