@@ -29,7 +29,7 @@ function _abs(href, base) {
   return String(base || SITE).replace(/\/$/, '') + (href.charAt(0) === '/' ? '' : '/') + href;
 }
 function _attr(tag, name) {
-  var re = new RegExp('(?:^|\\s)' + name + '\\s*=\\s*(?:"([^"]*)"|\\'([^\\']*)\\'|([^\\s>]+))', 'i');
+  var re = new RegExp("(?:^|\\\\s)" + name + "\\\\s*=\\\\s*(?:\"([^\"]*)\"|'([^']*)'|([^\\\\s>]+))", 'i');
   var m = String(tag || '').match(re);
   return m ? (m[1] != null ? m[1] : m[2] != null ? m[2] : m[3] || '') : '';
 }
