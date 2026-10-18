@@ -575,23 +575,13 @@
       "nsfw": false
     },
     {
-      "id": "rareanimes",
-      "name": "RareAnimes",
-      "version": "1.0.1",
-      "type": "anime",
-      "lang": "hi",
-      "file": "providers/rareanimes.js",
-      "logo": "https://www.google.com/s2/favicons?sz=256&domain=rareanimes.mov",
-      "nsfw": false
-    },
-    {
-      "id": "animeheaven",
-      "name": "AnimeHeaven",
-      "version": "1.0.0",
+      "id": "mew-aniem",
+      "name": "Mew-Aniem",
+      "version": "1.1.0",
       "type": "anime",
       "lang": "en",
-      "file": "providers/animeheaven.js",
-      "logo": "https://www.google.com/s2/favicons?sz=256&domain=animeheaven.me",
+      "file": "providers/mew-aniem.js",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=anime-api-xza2.onrender.com",
       "nsfw": false
     }
   ]
