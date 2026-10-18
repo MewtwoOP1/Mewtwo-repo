@@ -4,5 +4,6 @@ The following providers are adaptations of source implementations from the Apach
 
 - `providers/yuzono-animegg.js` — adapted from `src/en/animegg`
 - `providers/yuzono-animeworldindia-hi.js` — adapted from `src/all/animeworldindia`
+- `providers/reanime.js` — adapted from `src/en/reanime` (catalogue, episode and FlixCloud server flow)
 
 Copyright and license notices for the upstream project are retained in the source headers. The ports are adapted to Zangetsu's JavaScript provider interface and have not been represented as verified live playback unless stated in testing notes.
