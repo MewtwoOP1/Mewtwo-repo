@@ -543,7 +543,7 @@
       "lang": "en",
       "file": "providers/fourkhdhub.js",
       "nsfw": false,
-      "logo": "https://www.google.com/s2/favicons?sz=256&domain=4khdhub.link"
+      "logo": "https://4khdhub.link/favicon.ico"
     },
     {
       "id": "uhdmovies",
@@ -553,7 +553,7 @@
       "lang": "en",
       "file": "providers/uhdmovies.js",
       "nsfw": false,
-      "logo": "https://www.google.com/s2/favicons?sz=256&domain=uhdmovies.autos"
+      "logo": "https://uhdmovies.autos/favicon.ico"
     },
     {
       "id": "vegamovies",
@@ -563,7 +563,7 @@
       "lang": "hi",
       "file": "providers/vegamovies.js",
       "nsfw": false,
-      "logo": "https://www.google.com/s2/favicons?sz=256&domain=vegamovies.mq"
+      "logo": "https://vegamovies.mq/favicon.ico"
     },
     {
       "id": "multimovies",
@@ -573,7 +573,7 @@
       "lang": "hi",
       "file": "providers/multimovies.js",
       "nsfw": false,
-      "logo": "https://www.google.com/s2/favicons?sz=256&domain=multimovies.beer"
+      "logo": "https://multimovies.beer/wp-content/uploads/2024/01/cropped-CompressJPEG.online_512x512_image-192x192.png"
     }
   ]
 }
