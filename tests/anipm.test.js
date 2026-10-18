@@ -41,6 +41,16 @@ global.fetch = async (url, options) => {
       anilistId: '0', anilist_id: '4567', malId: '', mal_id: '1234' }] };
   } else if (u.indexOf('https://ani.pm/api/anime/playback-bootstrap/anime/external-42?') === 0) {
     body = {};
+  } else if (u === 'https://ani.pm/api/anime/search?q=URL%20AniList%20ID&page=1') {
+    body = { items: [{ id: 'source-key-42', source: 'anime', title: { english: 'URL AniList ID' },
+      url: 'https://ani.pm/ani/4321' }] };
+  } else if (u.indexOf('https://ani.pm/api/anime/playback-bootstrap/anime/source-key-42?') === 0) {
+    body = {};
+  } else if (u === 'https://ani.pm/api/anime/search?q=Nested%20AniList%20ID&page=1') {
+    body = { items: [{ id: 'nested-key-42', source: 'anime', title: { english: 'Nested AniList ID' },
+      ids: { anilist: { id: '87654' } } }] };
+  } else if (u.indexOf('https://ani.pm/api/anime/playback-bootstrap/anime/nested-key-42?') === 0) {
+    body = {};
   } else if (u === 'https://ani.pm/api/anime/search?q=Legacy%20Generic&page=1') {
     body = { items: [] };
   } else if (u === 'https://ani.pm/api/partner/v1/titles?q=Legacy%20Generic') {
@@ -71,7 +81,7 @@ global.fetch = async (url, options) => {
 const provider = require('../providers/anipm.js');
 
 async function main() {
-  assert.equal(provider.version, '1.3.3');
+  assert.equal(provider.version, '1.3.4');
   assert.equal(provider.getInfo().name, 'Ani.pm');
   assert.equal(provider.getInfo().type, 'anime');
   assert.equal(provider.getSettings()[0].default, 'sub');
@@ -114,6 +124,27 @@ async function main() {
   assert.equal(aliasDetail.malId, 1234);
   assert.ok(calls.some((c) => c.url.indexOf('/playback-bootstrap/anime/external-42?') >= 0),
     'source identifier must be passed through unchanged');
+
+  const urlIdResults = await provider.search('URL AniList ID', 1, {});
+  assert.equal(urlIdResults.length, 1);
+  assert.equal(urlIdResults[0].url, 'anipm://anime/source-key-42');
+  assert.equal(urlIdResults[0].anilistId, 4321,
+    'extract the AniList ID from an /ani/<id> URL on current API results');
+  const urlIdDetail = await provider.getDetail(urlIdResults[0].url, {});
+  assert.equal(urlIdDetail.anilistId, 4321,
+    'preserve the URL-derived AniList ID in cached/fallback detail');
+  assert.ok(calls.some((c) => c.url.indexOf('/playback-bootstrap/anime/source-key-42?') >= 0),
+    'detail lookup must use the unmodified source-native ID, not the AniList ID');
+  assert.ok(!calls.some((c) => /playback-bootstrap\\/anime\\/(?:4320|4322)\\?/.test(c.url)),
+    'do not offset any IDs when passing them to Ani.pm');
+
+  const nestedIdResults = await provider.search('Nested AniList ID', 1, {});
+  assert.equal(nestedIdResults.length, 1);
+  assert.equal(nestedIdResults[0].anilistId, 87654,
+    'read the AniList ID from nested identifiers');
+  const nestedIdDetail = await provider.getDetail(nestedIdResults[0].url, {});
+  assert.equal(nestedIdDetail.anilistId, 87654,
+    'preserve nested AniList IDs in detail');
 
   const legacyGeneric = await provider.search('Legacy Generic', 1, {});
   assert.equal(legacyGeneric.length, 1);

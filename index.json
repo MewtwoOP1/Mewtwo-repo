@@ -108,63 +108,9 @@
       "nsfw": false
     },
     {
-      "id": "justanime",
-      "name": "JustAnime",
-      "version": "1.9.7",
-      "type": "anime",
-      "lang": "en",
-      "file": "providers/justanime.js",
-      "logo": "https://www.google.com/s2/favicons?sz=256&domain=justanime.to",
-      "nsfw": false,
-      "settings": [
-        {
-          "key": "servers",
-          "label": "Streaming servers",
-          "description": "Which public JustAnime API server endpoints to check. Unsupported or unavailable streams are skipped.",
-          "type": "enum",
-          "default": "all",
-          "options": [
-            {
-              "value": "all",
-              "label": "All servers (recommended)"
-            },
-            {
-              "value": "animegg",
-              "label": "AnimeGG"
-            },
-            {
-              "value": "anineko",
-              "label": "AniNeko"
-            },
-            {
-              "value": "megaplay",
-              "label": "MegaPlay"
-            }
-          ]
-        },
-        {
-          "key": "language",
-          "label": "Preferred audio",
-          "description": "Return the preferred audio language first, then fall back to the other language.",
-          "type": "enum",
-          "default": "sub",
-          "options": [
-            {
-              "value": "sub",
-              "label": "Sub first"
-            },
-            {
-              "value": "dub",
-              "label": "Dub first"
-            }
-          ]
-        }
-      ]
-    },
-    {
       "id": "anipm",
       "name": "Ani.pm",
-      "version": "1.3.3",
+      "version": "1.3.4",
       "type": "anime",
       "lang": "en",
       "file": "providers/anipm.js",
@@ -609,16 +555,6 @@
       ]
     },
     {
-      "id": "yuzono-animegg",
-      "name": "AnimeGG (Yuzono)",
-      "version": "1.0.0",
-      "type": "anime",
-      "lang": "en",
-      "file": "providers/yuzono-animegg.js",
-      "logo": "https://www.google.com/s2/favicons?sz=256&domain=animegg.org",
-      "nsfw": false
-    },
-    {
       "id": "yuzono-animeworldindia-hi",
       "name": "AnimeWorld India (Hindi, Yuzono)",
       "version": "1.0.0",
@@ -626,16 +562,6 @@
       "lang": "hi",
       "file": "providers/yuzono-animeworldindia-hi.js",
       "logo": "https://www.google.com/s2/favicons?sz=256&domain=anime-world.co",
-      "nsfw": false
-    },
-    {
-      "id": "yuzono-animeonsen",
-      "name": "AnimeOnsen (Yuzono)",
-      "version": "1.0.0",
-      "type": "anime",
-      "lang": "all",
-      "file": "providers/yuzono-animeonsen.js",
-      "logo": "https://www.google.com/s2/favicons?sz=256&domain=animeonsen.xyz",
       "nsfw": false
     }
   ]
