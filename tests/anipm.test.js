@@ -127,7 +127,6 @@ async function main() {
   assert.equal(backupResults.length, 1);
   assert.equal(backupResults[0].url, 'https://ani.pm/ani/16498',
     'canonical AniList URL must outrank a partner API internal row ID');
-  assert.ok(calls.some((c) => c.url === 'https://ani.pm/api/partner/v1/lookup?anilist=123456'), 'AniList IDs must be sent verbatim, without +/-1 offsets');
   const backupEpisodes = await provider.getEpisodes(backupResults[0].url, {});
   assert.equal(backupEpisodes.length, 1);
   assert.equal(backupEpisodes[0].url, 'https://ani.pm/ani/16498||1',
@@ -141,6 +140,7 @@ async function main() {
   // Zangetsu may use detail.episodes directly without calling getEpisodes().
   // Those URLs must retain the AniList ID so playback fallback can resolve.
   const backupDetail = await provider.getDetail(backupResults[0].url, {});
+  assert.ok(calls.some((c) => c.url === 'https://ani.pm/api/partner/v1/lookup?anilist=123456'), 'AniList IDs must be sent verbatim, without +/-1 offsets');
   assert.equal(backupDetail.episodes.length, 1);
   assert.equal(backupDetail.episodes[0].url, 'https://ani.pm/ani/16498||1',
     'detail-generated episodes must preserve the canonical AniList route');
