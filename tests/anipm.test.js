@@ -20,6 +20,8 @@ global.fetch = async (url, options) => {
       id: '123', source: 'anime', title: { english: 'Mock Anime', romaji: 'Mock Anime Romaji' },
       anilistId: 123, malId: 999, cover: 'https://img.example/anipm.jpg'
     }] };
+  } else if (u === 'https://ani.pm/api/partner/v1/titles?q=Partner%20API') {
+    body = { items: [{ id: 'partner-1', title: { english: 'Partner API Anime' }, malId: 777 }] };
   } else if (u.indexOf('https://ani.pm/api/anime/playback-bootstrap/anime/123?') === 0) {
     const lang = new URL(u).searchParams.get('lang');
     const count = (bootstrapCounts.get(lang) || 0) + 1;
@@ -81,7 +83,7 @@ global.fetch = async (url, options) => {
 const provider = require('../providers/anipm.js');
 
 async function main() {
-  assert.equal(provider.version, '1.3.6');
+  assert.equal(provider.version, '1.3.7');
   assert.equal(provider.getInfo().name, 'Ani.pm');
   assert.equal(provider.getInfo().type, 'anime');
   assert.equal(provider.getSettings()[0].default, 'sub');
@@ -103,6 +105,16 @@ async function main() {
   assert.deepEqual(detail.episodes.map((ep) => ep.number), [1, 2], 'episodes must be ascending for Z Mode canonical mapping');
   assert.equal(detail.episodes[0].title, 'The Beginning');
   assert.equal(detail.episodes[1].title, 'The Journey');
+
+  const partnerCallsBefore = calls.length;
+  const partnerResults = await provider.search('Partner API', 1, {});
+  assert.equal(partnerResults.length, 1);
+  assert.equal(partnerResults[0].title, 'Partner API Anime');
+  assert.equal(partnerResults[0].id, 'partner-1');
+  assert.ok(calls.slice(partnerCallsBefore).some((c) => c.url === 'https://ani.pm/api/partner/v1/titles?q=Partner%20API'),
+    'search should use Ani.pm partner v1 first');
+  assert.ok(!calls.slice(partnerCallsBefore).some((c) => c.url === 'https://ani.pm/api/anime/search?q=Partner%20API&page=1'),
+    'newer catalogue endpoint should only be used as fallback when partner search has no results');
 
   const brokenResults = await provider.search('Broken Anime', 1, {});
   assert.equal(brokenResults.length, 1);
