@@ -544,6 +544,16 @@
       "file": "providers/yuzono-animegg.js",
       "logo": "https://www.google.com/s2/favicons?sz=256&domain=animegg.org",
       "nsfw": false
+    },
+    {
+      "id": "yuzono-animeworldindia-hi",
+      "name": "AnimeWorld India (Hindi, Yuzono)",
+      "version": "1.0.0",
+      "type": "anime",
+      "lang": "hi",
+      "file": "providers/yuzono-animeworldindia-hi.js",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=anime-world.co",
+      "nsfw": false
     }
   ]
 }
