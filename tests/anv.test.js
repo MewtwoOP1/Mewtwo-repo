@@ -54,15 +54,18 @@ global.fetch = async function (url, options) {
 };
 async function main() {
   assert.equal(provider.getInfo().name, "AnV");
+  assert.equal(provider.getInfo().version, "1.0.4");
   assert.deepEqual(provider.getSettings(), []);
   const results = await provider.search("Frieren", 1, {});
   assert.equal(results.length, 1);
   assert.equal(results[0].title, "Frieren: Beyond Journey's End");
+  assert.equal(results[0].malId, 456, "explicit idMal is normalized to the host's malId field");
   assert.equal(results[0].url, "anv://anime/frieren");
   const detail = await provider.getDetail(results[0].url, {});
   assert.equal(detail.episodes.length, 2);
   assert.equal(detail.episodes[0].url, "anv://ep/frieren/1000000123/456/1");
-  assert.equal(detail.ids, undefined, "AnV catalogue IDs must not be mislabeled as AniList IDs");
+  assert.equal(detail.malId, 456, "MAL ID should remain available for exact source matching");
+  assert.equal(detail.anilistId, undefined, "AnV catalogue IDs must not be mislabeled as AniList IDs");
   const streams = await provider.getVideoSources(detail.episodes[0].url, {});
   assert.ok(streams.some(s => s.url === "https://anv.to/stream/pear/1080.m3u8"));
   assert.ok(streams.some(s => s.url === "https://anv.to/stream/pear/index.m3u8?k=pear"));

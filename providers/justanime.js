@@ -6,7 +6,7 @@ var SITE = 'https://justanime.to';
 var API = 'https://core.justanime.to/api';
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID)
   ? String(__SOURCE_ID) : 'justanime';
-var VERSION = '1.9.5';
+var VERSION = '1.9.6';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
   '(KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36';
 
@@ -138,11 +138,9 @@ function _card(item) {
     url: id, cover: _cover(item) || null,
     type: 'anime', sourceId: SOURCE_ID,
     malId: _firstNumericId([item.idMal, item.malId, item.mal_id]),
-    // Prefer the provider's explicit AniList ID fields. The final `item.id`
-    // fallback preserves this adapter's existing behavior for payloads that
-    // expose only `id`; it is not evidence that the live upstream ID namespace
-    // has been verified. No offsets or other transformations are applied.
-    anilistId: _firstNumericId([item.anilistId, item.anilist_id, item.id])
+    // The provider's id routes its own detail, episode and playback requests.
+    // Do not relabel that source-local ID as an AniList tracker ID.
+    anilistId: _firstNumericId([item.anilistId, item.anilist_id, item.idAnilist])
   };
   // Keep the last good search/home card available to detail resolution. The
   // episode API can succeed while the detail API temporarily fails; don't
@@ -392,10 +390,9 @@ function _fetchDetail(url, opts) {
       status: anime.status || 'unknown', genres: genres, studios: [],
       type: 'anime', sourceId: SOURCE_ID, year: anime.seasonYear || anime.year || null,
       malId: _firstNumericId([anime.idMal, anime.malId, anime.mal_id, cachedCard && cachedCard.malId]),
-      // Keep valid explicit IDs ahead of the cached card; the source payload's
-      // `id` remains the final fallback under this adapter's current contract.
-      // This normalizes values only and does not convert between ID namespaces.
-      anilistId: _firstNumericId([anime.anilistId, anime.anilist_id, cachedCard && cachedCard.anilistId, anime.id]),
+      // Only explicit AniList aliases or a previously explicit cached tracker
+      // ID may populate anilistId. Keep anime.id for source endpoint URLs.
+      anilistId: _firstNumericId([anime.anilistId, anime.anilist_id, anime.idAnilist, cachedCard && cachedCard.anilistId]),
       episodes: episodes, subCount: count || episodes.length, dubCount: count || episodes.length
     };
     // Optional metadata must be absent, not an empty placeholder: consumers

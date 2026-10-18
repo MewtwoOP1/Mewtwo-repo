@@ -36,8 +36,27 @@ global.fetch = async (url, options) => {
     };
   } else if (u === 'https://ani.pm/api/anime/search?q=Broken%20Anime&page=1') {
     body = { items: [{ id: '456', source: 'anime', title: { english: 'Broken Anime' }, anilistId: 456, malId: 654 }] };
-  } else if (u.indexOf('https://ani.pm/api/anime/playback-bootstrap/anime/456?') === 0) {
+  } else if (u === 'https://ani.pm/api/anime/search?q=ID%20Aliases&page=1') {
+    body = { items: [{ id: 'external-42', source: 'anime', title: { english: 'ID Aliases' },
+      anilistId: '0', anilist_id: '4567', malId: '', mal_id: '1234' }] };
+  } else if (u.indexOf('https://ani.pm/api/anime/playback-bootstrap/anime/external-42?') === 0) {
     body = {};
+  } else if (u === 'https://ani.pm/api/anime/search?q=Legacy%20Generic&page=1') {
+    body = { items: [] };
+  } else if (u === 'https://ani.pm/api/partner/v1/titles?q=Legacy%20Generic') {
+    body = { items: [{ id: '789', title: { english: 'Legacy Generic ID Anime' }, malId: 654,
+      url: 'https://ani.pm/series/789' }] };
+  } else if (u === 'https://ani.pm/api/partner/v1/series/789') {
+    body = { title: { english: 'Legacy Generic ID Anime' }, malId: 654, episodes: [] };
+  } else if (u === 'https://ani.pm/api/anime/search?q=Legacy%20Explicit&page=1') {
+    body = { items: [] };
+  } else if (u === 'https://ani.pm/api/partner/v1/titles?q=Legacy%20Explicit') {
+    body = { items: [{ id: '777', title: { english: 'Legacy Explicit ID Anime' },
+      anilistId: '123456', malId: '654', url: 'https://ani.pm/series/777' }] };
+  } else if (u === 'https://ani.pm/api/partner/v1/series/777') {
+    body = { title: { english: 'Legacy Explicit ID Anime' }, malId: 654, episodes: [] };
+  } else if (u === 'https://ani.pm/api/partner/v1/lookup?anilist=123456') {
+    body = { items: [{ englishTitle: 'Legacy Explicit ID Anime', anilistId: 123456, malId: 654 }] };
   } else if (u.indexOf('https://ani.pm/api/anime/settlar/session?') === 0) {
     body = { embedUrl: 'https://embed.settlar.io/embed?t=session-token' };
   } else if (u === 'https://embed.settlar.io/api/embed/session?t=session-token') {
@@ -52,7 +71,7 @@ global.fetch = async (url, options) => {
 const provider = require('../providers/anipm.js');
 
 async function main() {
-  assert.equal(provider.version, '1.3.2');
+  assert.equal(provider.version, '1.3.3');
   assert.equal(provider.getInfo().name, 'Ani.pm');
   assert.equal(provider.getInfo().type, 'anime');
   assert.equal(provider.getSettings()[0].default, 'sub');
@@ -84,6 +103,39 @@ async function main() {
   assert.equal(brokenDetail.malId, 654);
   assert.deepEqual(brokenDetail.episodes, [],
     "the fallback must not invent episodes when bootstrap has no usable episode metadata");
+
+  const aliasResults = await provider.search('ID Aliases', 1, {});
+  assert.equal(aliasResults[0].id, 'anime:external-42');
+  assert.equal(aliasResults[0].url, 'anipm://anime/external-42');
+  assert.equal(aliasResults[0].anilistId, 4567, 'first valid explicit AniList alias wins');
+  assert.equal(aliasResults[0].malId, 1234, 'first valid explicit MAL alias wins');
+  const aliasDetail = await provider.getDetail(aliasResults[0].url, {});
+  assert.equal(aliasDetail.anilistId, 4567);
+  assert.equal(aliasDetail.malId, 1234);
+  assert.ok(calls.some((c) => c.url.indexOf('/playback-bootstrap/anime/external-42?') >= 0),
+    'source identifier must be passed through unchanged');
+
+  const legacyGeneric = await provider.search('Legacy Generic', 1, {});
+  assert.equal(legacyGeneric.length, 1);
+  assert.equal(legacyGeneric[0].id, '789', 'legacy source ID must outrank a separate MAL ID');
+  assert.equal(legacyGeneric[0].malId, 654);
+  assert.equal(legacyGeneric[0].anilistId, null, 'generic legacy source ID is not an AniList ID');
+  const genericDetail = await provider.getDetail(legacyGeneric[0].url, {});
+  assert.equal(genericDetail.id, '789');
+  assert.equal(genericDetail.malId, 654);
+  assert.equal(genericDetail.anilistId, undefined);
+  assert.ok(calls.some((c) => c.url === 'https://ani.pm/api/partner/v1/series/789'));
+  assert.ok(!calls.some((c) => c.url.indexOf('/partner/v1/lookup?anilist=789') >= 0),
+    'do not query AniList lookup with a generic source ID');
+
+  const legacyExplicit = await provider.search('Legacy Explicit', 1, {});
+  assert.equal(legacyExplicit[0].id, '777');
+  assert.equal(legacyExplicit[0].anilistId, 123456);
+  const explicitDetail = await provider.getDetail(legacyExplicit[0].url, {});
+  assert.equal(explicitDetail.anilistId, 123456, 'preserve a separately identified tracker ID verbatim');
+  assert.ok(calls.some((c) => c.url === 'https://ani.pm/api/partner/v1/lookup?anilist=123456'));
+  assert.ok(!calls.some((c) => c.url.indexOf('/partner/v1/lookup?anilist=123455') >= 0 ||
+    c.url.indexOf('/partner/v1/lookup?anilist=123457') >= 0), 'no +/- ID mutation is permitted');
 
   const bootstrapCallsBeforeEpisodes = calls.filter((c) => c.url.indexOf('https://ani.pm/api/anime/playback-bootstrap/anime/123?') === 0).length;
   const episodes = await provider.getEpisodes(results[0].url, {});

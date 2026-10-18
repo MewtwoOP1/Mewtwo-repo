@@ -5,7 +5,7 @@ var SITE = 'https://ani.pm';
 var API = SITE + '/api';
 var EMBED = 'https://embed.settlar.io';
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID) ? String(__SOURCE_ID) : 'anipm';
-var VERSION = '1.3.2';
+var VERSION = '1.3.3';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36';
 var _seriesCache = {};
 var _detailCache = {};
@@ -75,30 +75,61 @@ function _cover(item) {
   if (c && typeof c === 'object') return c.extraLarge || c.large || c.medium || c.url || '';
   return '';
 }
-function _num(v) { var n = Number(v); return isFinite(n) && n > 0 ? n : null; }
+function _num(v) {
+  var s = String(v == null ? '' : v);
+  if (!/^\d+$/.test(s)) return null;
+  var n = Number(s);
+  return isFinite(n) && n > 0 ? n : null;
+}
+function _firstNum(values) {
+  for (var i=0; i<values.length; i++) {
+    var n = _num(values[i]);
+    if (n !== null) return n;
+  }
+  return null;
+}
 function _newRef(item) {
   var id = item && (item.id != null ? item.id : item.slug);
   var source = item && (item.source || item.provider);
   if (id == null || !source) return null;
   return { id:String(id), source:String(source), legacy:false };
 }
-function _legacyRef(id) { return { id:String(id), source:'legacy', legacy:true }; }
+function _legacyRef(id, anilistId) {
+  if (id == null || String(id) === '') return null;
+  var trackerId = _num(anilistId);
+  return { id:String(id), source:'legacy', legacy:true,
+    anilistIdIsExplicit:trackerId !== null, anilistId:trackerId };
+}
 function _card(item, legacy) {
   if (!item || typeof item !== 'object') return null;
   var title = _title(item);
-  var ref = legacy ? _legacyRef(item.anilistId || item.anilist || item.malId || item.id) : _newRef(item);
+  var itemUrl = String(item.url || '');
+  var urlAniListMatch = itemUrl.match(/\/ani\/(\d+)(?:[/?#]|$)/i) ||
+    itemUrl.match(/[?&]anilist=(\d+)(?:[&#]|$)/i);
+  var explicitAniListId = _firstNum([
+    item.anilistId, item.anilist_id, item.anilist, item.idAnilist,
+    urlAniListMatch && urlAniListMatch[1]
+  ]);
+  // Source-native IDs route detail and playback; tracker IDs are separate.
+  var sourceId = item.id != null ? item.id : (item.slug != null ? item.slug :
+    (explicitAniListId !== null ? explicitAniListId :
+      _firstNum([item.malId, item.mal_id, item.mal, item.idMal])));
+  var ref = legacy ? _legacyRef(sourceId, explicitAniListId) : _newRef(item);
   if (!title || !ref || !ref.id || ref.id === 'undefined') return null;
   var alt = item.englishTitle || item.english || item.romaji || item.nativeTitle;
   var titleData = item.title && typeof item.title === 'object' ? item.title : {};
   if (!alt) alt = titleData.english !== title ? titleData.english : (titleData.romaji !== title ? titleData.romaji : titleData.native);
   if (alt === title) alt = null;
-  var url = ref.legacy ? (item.url || (SITE + '/ani/' + ref.id)) : ('anipm://' + encodeURIComponent(ref.source) + '/' + encodeURIComponent(ref.id));
+  var useAniListRoute = ref.legacy && ref.anilistIdIsExplicit && String(ref.id) === String(ref.anilistId);
+  var url = ref.legacy ? (item.url || (SITE + (useAniListRoute ? '/ani/' : '/series/') + ref.id)) :
+    ('anipm://' + encodeURIComponent(ref.source) + '/' + encodeURIComponent(ref.id));
   var card = {
     id:ref.legacy ? ref.id : (ref.source + ':' + ref.id),
     title:title, englishTitle:alt || null, url:url, cover:_cover(item) || null,
     type:'anime', sourceId:SOURCE_ID,
-    malId:_num(item.malId || item.mal || item.idMal),
-    anilistId:_num(item.anilistId || item.anilist || item.idAnilist)
+    malId:_firstNum([item.malId, item.mal_id, item.mal, item.idMal]),
+    anilistId:legacy ? explicitAniListId :
+      _firstNum([item.anilistId, item.anilist_id, item.anilist, item.idAnilist])
   };
   _seriesCache[url] = { ref:ref, item:item, card:card };
   return card;
@@ -170,8 +201,12 @@ function _parseRef(value) {
       try { return {source:decodeURIComponent(parts[0]),id:decodeURIComponent(parts.slice(1).join('/')),legacy:false}; } catch (_) {}
     }
   }
-  var m = s.match(/\/ani\/(\d+)(?:[/?#]|$)/i) || s.match(/(?:anilist=|\/series\/)(\d+)(?:[/?#]|$)/i) || s.match(/^(\d+)$/);
-  if (m) return _legacyRef(m[1]);
+  var m = s.match(/\/ani\/(\d+)(?:[/?#]|$)/i);
+  if (m) return _legacyRef(m[1], m[1]);
+  m = s.match(/[?&]anilist=(\d+)(?:[&#]|$)/i);
+  if (m) return _legacyRef(m[1], m[1]);
+  m = s.match(/\/series\/(\d+)(?:[/?#]|$)/i) || s.match(/^(\d+)$/);
+  if (m) return _legacyRef(m[1], null);
   var pair = s.split('::');
   if (pair.length === 2) return {source:pair[0],id:pair[1],legacy:false};
   return null;
@@ -267,19 +302,34 @@ function _fetchDetail(url, opts) {
   var cached = _seriesCache[String(url)];
   var fallback = cached && cached.card;
   if (ref.legacy) {
+    var lookupRequest = ref.anilistIdIsExplicit && ref.anilistId !== null
+      ? _json(API + '/partner/v1/lookup?anilist=' + encodeURIComponent(ref.anilistId)).catch(function(){return null;})
+      : Promise.resolve(null);
     return Promise.all([
       _json(API + '/partner/v1/series/' + encodeURIComponent(ref.id)).catch(function(){return null;}),
-      _json(API + '/partner/v1/lookup?anilist=' + encodeURIComponent(ref.id)).catch(function(){return null;})
+      lookupRequest
     ]).then(function(results) {
       var root = results[0] && (results[0].data || results[0]) || {};
       var lookup = _list(results[1])[0] || {};
       var rows = Array.isArray(root.episodeList) ? root.episodeList : (Array.isArray(root.episodes) ? root.episodes : []);
       var title = _title(root) || _title(lookup) || (fallback && fallback.title) || ('Anime ' + ref.id);
-      return {id:ref.id,title:title,englishTitle:lookup.englishTitle || null,url:String(url),cover:_cover(root) || _cover(lookup) || (fallback && fallback.cover) || null,
+      var detail = {id:ref.id,title:title,englishTitle:lookup.englishTitle || null,url:String(url),cover:_cover(root) || _cover(lookup) || (fallback && fallback.cover) || null,
         description:root.description || root.synopsis || '',status:root.status || 'unknown',genres:root.genres || [],studios:[],
-        type:'anime',sourceId:SOURCE_ID,malId:_num(root.malId || lookup.malId),anilistId:_num(root.anilistId || ref.id),
+        type:'anime',sourceId:SOURCE_ID,
+        malId:_firstNum([root.malId, root.mal_id, root.mal, root.idMal, lookup.malId, lookup.mal_id, lookup.mal, lookup.idMal]),
+        anilistId:_firstNum([root.anilistId, root.anilist_id, root.anilist, root.idAnilist,
+          lookup.anilistId, lookup.anilist_id, lookup.anilist, lookup.idAnilist,
+          ref.anilistIdIsExplicit ? ref.anilistId : null]),
         episodes:rows.map(function(item,index){var n=_episodeNumber(item)||index+1;return {id:ref.id+'||'+n,number:n,title:item.title||('Episode '+n),url:ref.id+'||'+n,sourceId:SOURCE_ID};}),
         subCount:rows.length,dubCount:rows.length};
+      if (!detail.englishTitle) delete detail.englishTitle;
+      if (!detail.cover) delete detail.cover;
+      if (!detail.description) delete detail.description;
+      if (detail.status === 'unknown') delete detail.status;
+      if (!detail.genres.length) delete detail.genres;
+      if (!detail.malId) delete detail.malId;
+      if (!detail.anilistId) delete detail.anilistId;
+      return detail;
     }).catch(function(){return null;});
   }
   var cachedItem = cached && cached.item || {};
@@ -302,8 +352,10 @@ function _fetchDetail(url, opts) {
     var detail = {id:ref.source + ':' + ref.id,title:title,englishTitle:core.englishTitle || cachedItem.englishTitle || null,
       url:String(url),cover:_cover(core) || _cover(cachedItem) || (fallback && fallback.cover) || null,
       description:core.description || core.synopsis || '',status:core.status || 'unknown',genres:core.genres || [],studios:[],
-      type:'anime',sourceId:SOURCE_ID,malId:_num(core.malId || core.idMal || cachedItem.malId),
-      anilistId:_num(core.anilistId || core.idAnilist || cachedItem.anilistId),year:core.year || core.seasonYear || null,
+      type:'anime',sourceId:SOURCE_ID,
+      malId:_firstNum([core.malId, core.mal_id, core.mal, core.idMal, cachedItem.malId]),
+      anilistId:_firstNum([core.anilistId, core.anilist_id, core.anilist, core.idAnilist, cachedItem.anilistId]),
+      year:core.year || core.seasonYear || null,
       episodes:eps,subCount:subCount || eps.length,dubCount:dubCount || eps.length};
     // Missing fields are not facts. Omit them so a partial source response
     // cannot erase the metadata already supplied by the catalogue.
