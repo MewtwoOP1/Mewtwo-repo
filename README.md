@@ -30,6 +30,12 @@ The check validates the manifest, ensures every listed provider file exists and 
 
 Tests use mocked responses. Passing mock tests verify the tested code paths against fixtures; they do **not** guarantee that a third-party website or its live playback hosts currently work.
 
+## Additional resolver-backed source
+
+### VidFlix
+
+VidFlix is integrated through its VidCore playback engine. The provider resolves TMDB movies and series through a VidCore-compatible `/api/resolve` endpoint and prefers the endpoint's HLS relay (`/api/hls`) when it is provided. This backend is separate from the static provider catalogue; set **VidCore resolver URL** to a reachable compatible deployment if the default endpoint is unavailable. Mocked tests validate parsing and provider contracts, not live playback.
+
 ## Disclaimers
 
 - No movies, shows, anime, subtitles, torrents, video files, or streaming servers are hosted by this repository.
