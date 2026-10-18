@@ -16,7 +16,7 @@ global.fetch = async (url) => {
   else if (u.includes("/tv/95350/season/1")) body = { episodes: [{ episode_number: 1, name: "Pilot", air_date: "2026-08-16" }] };
   else if (u.includes("/api/resolve?")) body = [
     JSON.stringify({ event: "meta", title: "Lanterns", year: "2026" }),
-    JSON.stringify({ event: "server", server: { name: "Orbit", ok: true, ms: 21, url: "https://cdn.example/master.m3u8", play: "https://resolver.example/api/hls?url=https%3A%2F%2Fcdn.example%2Fmaster.m3u8&server=Orbit" } }),
+    JSON.stringify({ event: "server", server: { name: "Orbit", ok: true, ms: 21, url: "https://cdn.example/master.m3u8", play: "http://127.0.0.1:7860/api/hls?url=https%3A%2F%2Fcdn.example%2Fmaster.m3u8&server=Orbit" } }),
     JSON.stringify({ event: "server", server: { name: "Broken", ok: false } }),
     ""
   ].join("\n");
@@ -34,6 +34,8 @@ async function main() {
   assert.equal(provider.getInfo().logo, source.logo);
   assert.deepEqual(provider.getSettings().map((s) => s.key), ["resolverUrl"]);
   assert.equal(provider._resolveUrl({ type: "tv", id: 95350, season: 1, episode: 1 }), "https://resolver.example/api/resolve?type=tv&id=95350&season=1&episode=1");
+  assert.equal(provider._toAbsolute("/api/hls?url=x"), "https://resolver.example/api/hls?url=x");
+  assert.equal(provider._toAbsolute("http://127.0.0.1:7860/api/hls?url=x"), "https://resolver.example/api/hls?url=x");
 
   const home = await provider.getHome();
   assert.equal(home.length, 2);
