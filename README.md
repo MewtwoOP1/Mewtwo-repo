@@ -45,4 +45,6 @@ The provider manifest and JavaScript interface follow the self-contained source 
 
 The code in this repository is licensed under the MIT License. See [LICENSE](LICENSE). Third-party names, logos, APIs, metadata, and content remain the property of their respective owners and are subject to their own terms.
 
+The active anime providers include Ani.pm (current bootstrap/session + MegaPlay backup), Rare Toons India (Hindi-dubbed anime/cartoon pages), and MegaPlay (Anikoto episode-to-server chain + encrypted source extraction). These providers use mocked integration tests; third-party playback still requires a live reachable source.
+
 The mocked regression suite includes: AnV's separate custom catalogue/playback and MAL IDs; title extraction and API normalization for AniKoto; HiAnime catalogue-to-player resolution; and HDHub4u movie detail/direct-media handling. MegaPlay's mocked tests cover catalog parsing and generated embed URL shape; live playback still depends on MegaPlay's service. Mew-Aniem tests cover AniList search, all-provider episode aggregation, unchanged AniList IDs, HLS streams, and embed extraction; live API availability and playback still require live verification.
