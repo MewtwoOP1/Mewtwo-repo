@@ -217,14 +217,6 @@ function _resolveFlixStream(dataLink, label, kind) {
       return String(r.body || '');
     })
     .then(function (html) {
-      var scriptPath = (html.match(/href=["']([^"']*hls\.js[^"']*)["']/i) || [])[1] || '';
-      var maskPromise = scriptPath ? _fetch(
-        /^https?:\/\//i.test(scriptPath) ? scriptPath : FLIX + (scriptPath.charAt(0) === '/' ? '' : '/') + scriptPath,
-        FLIX + '/', 10000, '*/*'
-      ).then(function (r) {
-        var m = r.body.match(/for\s*\(\s*var\s+f\s*=\s*\[(\d{1,3}(?:\s*,\s*\d{1,3}){15})\]/);
-        return m ? m[1].split(',').map(function (n) { return Number(n.trim()); }) : null;
-      }).catch(function () { return null; }) : Promise.resolve(null);
       var dataMatch = html.match(/type:\s*["']data["']\s*,\s*data:\s*(\{[\s\S]*?\})\s*,\s*uses:/);
       if (!dataMatch) throw new Error('FlixCloud embed data not found');
       var embedData = _parseJson5(dataMatch[1]);
@@ -232,10 +224,9 @@ function _resolveFlixStream(dataLink, label, kind) {
       delete embedData.subtitles;
       delete embedData.intro_chapter;
       delete embedData.outro_chapter;
-      return Promise.all([maskPromise, Promise.resolve(embedData)]);
+      return embedData;
     })
-    .then(function (pair) {
-      var embedData = pair[1];
+    .then(function (embedData) {
       return _postJson('https://enc-dec.app/api/dec-flixcloud?type=token', { data: embedData }, FLIX + '/')
         .then(function (tokenDto) {
           if (Number(tokenDto.status) !== 200 || !tokenDto.result || !tokenDto.result.token) {
