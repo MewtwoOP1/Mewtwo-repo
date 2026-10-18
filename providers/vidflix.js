@@ -247,6 +247,6 @@ if (typeof module !== 'undefined' && module.exports) {
     version: VERSION, getInfo: getInfo, getSettings: getSettings, getHome: getHome,
     search: search, getDetail: getDetail, getEpisodes: getEpisodes,
     getVideoSources: getVideoSources, getStreams: getStreams,
-    _parseId: _parseId, _resolveUrl: _resolveUrl, _streamContainer: _streamContainer
+    _parseId: _parseId, _resolveUrl: _resolveUrl, _toAbsolute: _toAbsolute, _streamContainer: _streamContainer
   };
 }
