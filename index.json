@@ -564,16 +564,6 @@
       "file": "providers/yuzono-animeonsen.js",
       "logo": "https://www.google.com/s2/favicons?sz=256&domain=animeonsen.xyz",
       "nsfw": false
-    },
-    {
-      "id": "yuzono-animeonsen",
-      "name": "AnimeOnsen (Yuzono)",
-      "version": "1.0.0",
-      "type": "anime",
-      "lang": "all",
-      "file": "providers/yuzono-animeonsen.js",
-      "logo": "https://www.google.com/s2/favicons?sz=256&domain=animeonsen.xyz",
-      "nsfw": false
     }
   ]
 }
