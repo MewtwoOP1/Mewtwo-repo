@@ -272,6 +272,7 @@ function mapSubject(item) {
     url: id,
     title: String(rawTitle).split("[")[0].trim(),
     poster: item.cover && item.cover.url ? item.cover.url : null,
+    cover: item.cover && item.cover.url ? item.cover.url : null,
     type: typeOf(item.subjectType),
     rating: isNaN(rating) ? null : rating
   };
