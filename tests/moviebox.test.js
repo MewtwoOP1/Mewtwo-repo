@@ -94,7 +94,7 @@ global.fetch = async function (url, options) {
 const provider = require("../providers/moviebox.js");
 
 async function main() {
-  assert.equal(provider.version, "1.0.4");
+  assert.equal(provider.version, "1.0.5");
   assert.equal(provider.getInfo().name, "MovieBox");
   assert.equal(provider.getInfo().type, "movie");
   assert.equal(provider.getSettings().length, 0);
