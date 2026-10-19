@@ -59,3 +59,5 @@ AnimeSalt card parsing follows the live site's `/watch/{slug}/ep-1` links rather
 Live smoke diagnostics now capture the actual AnimeSalt watch-card markup for resolver debugging.
 
 The live diagnostic emits raw watch-link fragments without regex escaping.
+
+Search parser now resolves titles from nearby AnimeSalt watch-card metadata when poster links omit titles.
