@@ -1,7 +1,7 @@
 /*
  * RareAnimes — catalog, episode metadata and alternate-language playback.
  *
- * v1.0.4 — playback fixes (no links were coming back):
+ * v1.0.5 — multilingual playback fixes (no links were coming back):
  *  - Player-data extraction no longer truncates at the first ';' (broke any array whose
  *    strings contained ';') and now tries 5 methods in order (see _extractSources).
  *  - Every link for an episode variant is tried in turn, not only the "preferred" one.
@@ -13,7 +13,7 @@
  */
 var SITE = 'https://www.rareanimes.mov';
 var SB = 'https://codedew.com/streambeta/';
-var VERSION = '1.0.4';
+var VERSION = '1.0.5';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
 var FAMILY_RE = /(^|\.)(codedew\.com|hubcloud\.[a-z]+|dlbeta\.[a-z]+|streambeta\.[a-z]+)$/i;
 var REL_PATH_RE = /streambeta|zipper|multiquality|hubcloud|dlbeta|filepress/i;
@@ -415,6 +415,28 @@ function _parseStreamBeta(html) {
   return { title: title, lang: lang, fid: fid, variants: variants, sources: sources };
 }
 
+// Translate a StreamBeta language-button id using the same route semantics as
+// the standalone resolver: opaque sb_* ids use ?v=, ordinary ids use ?url=.
+// Keep the other query shape as a compatibility fallback in case the host
+// changes routing between endpoints.
+function _streamBetaFidCandidates(fid) {
+  var value = _decode(String(fid || '')).trim();
+  if (!value) return [];
+  if (/^https?:\/\//i.test(value)) return [value];
+  var native = value.match(/^streambeta:\/\/(v|url)\/(.+)$/i);
+  if (native) {
+    var nativeId = native[2];
+    var nativeUrl = SB + '?' + native[1].toLowerCase() + '=' + encodeURIComponent(nativeId);
+    return [nativeUrl];
+  }
+  var primary = /^sb_[A-Za-z0-9_-]+$/i.test(value) ? 'v' : 'url';
+  var secondary = primary === 'v' ? 'url' : 'v';
+  return [
+    SB + '?' + primary + '=' + encodeURIComponent(value),
+    SB + '?' + secondary + '=' + encodeURIComponent(value)
+  ];
+}
+
 // ---------------------------------------------------------------- resolver
 function _streamBetaUrl(url, base) {
   var u = _decode(String(url || '')).replace(/\\\//g, '/').trim();
@@ -484,12 +506,12 @@ function _resolveStreamBeta(url, depth, ctx, ref) {
   });
 }
 
-function _firstResolved(urls, errs) {
+function _firstResolved(urls, errs, ref) {
   var i = 0;
   function next() {
     if (i >= urls.length) return Promise.resolve(null);
     var u = urls[i++];
-    return _resolveStreamBeta(u, 0, _newCtx()).then(null, function (e) {
+    return _resolveStreamBeta(u, 0, _newCtx(), ref).then(null, function (e) {
       errs.push(_msg(e));
       return next();
     });
@@ -537,37 +559,80 @@ function getVideoSources(episodeUrl, opts) {
   if (!variants.length) return Promise.resolve([]);
   var errs = [];
 
+  // Resolve every episode-page language link first. Each result retains the
+  // player HTML metadata so we can collect language-button FIDs even when the
+  // detail page itself has more than one language variant.
   return Promise.all(variants.map(function (variant) {
-    var urls = [variant.url].concat(variant.alts || []).filter(function (u, i, a) { return u && a.indexOf(u) === i; });
+    var urls = [variant.url].concat(variant.alts || []).filter(function (u, i, a) {
+      return u && a.indexOf(u) === i;
+    });
     return _firstResolved(urls, errs).then(function (r) {
-      if (!r) return [];
-      var out = _toSources(r, variant.lang || r.parsed.lang || 'Auto');
-      // Experimental: the player page lists other languages by file id; try them when
-      // the episode page only offered one language. Failures here are non-fatal.
-      if (variants.length !== 1 || r.parsed.variants.length < 2) return out;
-      var extra = r.parsed.variants.filter(function (v) { return v.fid && v.fid !== r.parsed.fid; }).slice(0, 4);
-      return Promise.all(extra.map(function (v) {
-        return _resolveStreamBeta(SB + '?url=' + encodeURIComponent(v.fid), 0, _newCtx(), r.url).then(function (r2) {
-          return _toSources(r2, v.lang || 'Auto');
-        }, function (e) { errs.push('lang ' + v.lang + ': ' + _msg(e)); return []; });
-      })).then(function (groups) {
-        var have = {};
-        out.forEach(function (s) { have[s.url] = 1; });
-        groups.forEach(function (g) { g.forEach(function (s) { if (!have[s.url]) { have[s.url] = 1; out.push(s); } }); });
-        return out;
+      return {
+        resolved: r,
+        sources: r ? _toSources(r, variant.lang || r.parsed.lang || 'Auto') : []
+      };
+    });
+  })).then(function (resolved) {
+    var out = [], seenSources = {}, currentFids = {}, alternateFids = {}, alternateOrder = [];
+
+    function append(sources) {
+      (sources || []).forEach(function (s) {
+        var key = s.url + '|' + s.label;
+        if (!seenSources[key]) {
+          seenSources[key] = true;
+          out.push(s);
+        }
+      });
+    }
+
+    // First add streams directly corresponding to each episode-page variant
+    // and record each active FID before collecting alternatives.
+    resolved.forEach(function (item) {
+      append(item.sources);
+      if (item.resolved && item.resolved.parsed && item.resolved.parsed.fid) {
+        currentFids[String(item.resolved.parsed.fid)] = true;
+      }
+    });
+
+    // The StreamBeta player may contain language buttons even when the
+    // episode page only lists one language—or lists several broken links.
+    // Gather alternatives from ALL resolved player pages, not only when the
+    // episode page produced exactly one variant.
+    resolved.forEach(function (item) {
+      if (!item.resolved || !item.resolved.parsed) return;
+      var buttons = item.resolved.parsed.variants || [];
+      buttons.forEach(function (button) {
+        var fid = String(button.fid || '').trim();
+        if (!fid || currentFids[fid] || alternateFids[fid]) return;
+        alternateFids[fid] = {
+          lang: button.lang || 'Auto',
+          ref: item.resolved.url
+        };
+        alternateOrder.push(fid);
       });
     });
-  })).then(function (groups) {
-    var out = [], seen = {};
-    groups.forEach(function (group) { group.forEach(function (s) {
-      var key = s.url + '|' + s.label;
-      if (!seen[key]) { seen[key] = true; out.push(s); }
-    }); });
-    if (!out.length) throw new Error('RareAnimes: no usable direct sources. ' + (errs.length ? errs.slice(0, 6).join(' | ') : 'no player links found'));
-    return out;
+
+    // Some language FIDs are sb_* tokens that require ?v= rather than ?url=.
+    // Try the provider's canonical route first, then the alternate route as a
+    // compatibility fallback. Don't arbitrarily stop after the first 4 languages.
+    return Promise.all(alternateOrder.map(function (fid) {
+      var info = alternateFids[fid];
+      return _firstResolved(_streamBetaFidCandidates(fid), errs, info.ref).then(function (r) {
+        return r ? _toSources(r, info.lang || r.parsed.lang || 'Auto') : [];
+      }, function (e) {
+        errs.push('language ' + info.lang + ' (' + fid + '): ' + _msg(e));
+        return [];
+      });
+    })).then(function (groups) {
+      groups.forEach(append);
+      if (!out.length) {
+        throw new Error('RareAnimes: no usable direct sources. ' +
+          (errs.length ? errs.slice(0, 8).join(' | ') : 'no player links found'));
+      }
+      return out;
+    });
   });
 }
-
 function getStreams(url, opts) { return getVideoSources(url, opts); }
 function getLinks(url, opts) { return getVideoSources(url, opts); }
 
@@ -576,5 +641,5 @@ if (typeof module !== 'undefined' && module.exports) {
     getHome: getHome, popular: popular, search: search, getDetail: getDetail,
     getEpisodes: getEpisodes, getVideoSources: getVideoSources, getStreams: getStreams,
     getLinks: getLinks,
-    _test: { _extractSources: _extractSources, _parseEpisodes: _parseEpisodes, _postLines: _postLines } };
+    _test: { _extractSources: _extractSources, _parseEpisodes: _parseEpisodes, _postLines: _postLines, _parseStreamBeta: _parseStreamBeta, _streamBetaFidCandidates: _streamBetaFidCandidates } };
 }
