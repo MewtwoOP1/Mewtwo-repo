@@ -177,6 +177,18 @@ function _fileFromSources(j) {
 
 // ── Network ─────────────────────────────────────────────────────────────────
 // GET a page as text. `xhr` sets the ajax header the /ajax routes expect.
+function _htmlText(value) {
+  return String(value == null ? '' : value)
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;|&#160;/gi, ' ')
+    .replace(/&amp;/gi, '&').replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'").replace(/&lt;/gi, '<').replace(/&gt;/gi, '>')
+    .replace(/&#(\d+);/g, function (_, n) { return String.fromCharCode(Number(n)); })
+    .replace(/&#x([0-9a-f]+);/gi, function (_, n) { return String.fromCharCode(parseInt(n, 16)); })
+    .replace(/\s+/g, ' ').trim();
+}
 function _get(url, ref, xhr) {
   var h = { 'User-Agent': UA, 'Referer': ref || SITE + '/' };
   if (xhr) h['X-Requested-With'] = 'XMLHttpRequest';
@@ -210,7 +222,7 @@ function _cards(html) {
       || (near.match(/<h3[^>]*>\s*([^<]+)/i) || [])[1]
       || (near.match(/\balt="([^"]+)"/i) || [])[1];
     if (!title) continue;
-    title = htmlText(title).trim();
+    title = _htmlText(title).trim();
     if (!title || /^episode\s*\d+$/i.test(title) || /^(?:play|watch)$/i.test(title)) continue;
     var poster = (near.match(/<img[^>]+(?:data-src|data-lazy-src|src)="([^"]+)"/i) || [])[1] || '';
     if (!poster) {
@@ -246,7 +258,7 @@ function _spotlight(html) {
     if (!title) continue;
     var img = (a.match(/background-image:\s*url\(['"]?([^'")]+)['"]?\)/) || [])[1];
     seen[slug] = 1;
-    out.push({ id: slug, title: htmlText(title).trim(), url: slug,
+    out.push({ id: slug, title: _htmlText(title).trim(), url: slug,
       cover: img || null, type: 'anime', sourceId: SOURCE_ID });
   }
   return out;
@@ -284,7 +296,7 @@ function _metaList(html, label) {
   if (end > 0) seg = seg.substring(0, end);
   var re = /<a[^>]*>([^<]+)<\/a>/g, m;
   while ((m = re.exec(seg)) !== null && out.length < 10) {
-    var t = htmlText(m[1]).trim();
+    var t = _htmlText(m[1]).trim();
     if (t) out.push(t);
   }
   return out;
@@ -298,7 +310,7 @@ function _episodes(lhtml, cat) {
     if (!episodeId || seen[episodeId]) continue;
     seen[episodeId] = 1;
     if (!(num >= 1)) num = out.length + 1;
-    var title = htmlText((attrs.match(/title="([^"]*)"/i) || [])[1] || '').trim();
+    var title = _htmlText((attrs.match(/title="([^"]*)"/i) || [])[1] || '').trim();
     out.push({ id: 'episode:' + episodeId, number: num, title: title && title !== 'Full' ? title : 'Episode ' + num,
       url: 'animesalt://' + ((cat === 'dub') ? 'dub' : 'sub') + '/' + encodeURIComponent(episodeId) + '/' + num });
   }
@@ -310,7 +322,7 @@ function getDetail(url, opts) {
   if (!/\/watch\//i.test(watchPath)) watchPath = SITE + '/watch/' + encodeURIComponent(raw.replace(/^.*\//, '')) + '/ep-1';
   return _get(watchPath, SITE + '/').then(function (html) {
     var animeId = (html.match(/data-id="(\d+)"/) || [])[1];
-    var title = htmlText((html.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1] || '').replace(/^Watch Free!\s*/i, '').replace(/\s+Online in HD.*$/i, '').replace(/\s+-\s+AnimeSalt$/i, '').trim();
+    var title = _htmlText((html.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1] || '').replace(/^Watch Free!\s*/i, '').replace(/\s+Online in HD.*$/i, '').replace(/\s+-\s+AnimeSalt$/i, '').trim();
     var poster = (html.match(/property="og:image" content="([^"]+)"/i) || [])[1] || null;
     var base = { id: raw, title: title || raw, url: raw, cover: poster, description: '',
       status: 'unknown', genres: [], studios: [], type: 'anime', sourceId: SOURCE_ID, episodes: [], subCount: 0, dubCount: 0 };
@@ -334,7 +346,7 @@ function _parseServers(lhtml) {
     var type = (blocks[i].match(/^([^"]+)/) || [])[1] || '';
     var id = (blocks[i].match(/data-id="([^"]+)"/) || [])[1];
     var name = (blocks[i].match(/<a[^>]*class="[^"]*btn[^"]*"[^>]*>([^<]+)<\/a>/i) || [])[1] || '';
-    if (id) servers.push({ type: type, linkId: id, name: htmlText(name).trim() });
+    if (id) servers.push({ type: type, linkId: id, name: _htmlText(name).trim() });
   }
   return servers;
 }
