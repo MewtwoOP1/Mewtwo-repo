@@ -6,6 +6,7 @@ let currentToken = TOKEN_OLD;
 let bootstrapCount = 0;
 let bootstrapAttempts = 0;
 let rejectOldPlayback = false;
+const failedDetailIds = new Set();
 const calls = [];
 
 const movie = {
@@ -64,6 +65,9 @@ global.fetch = async function (url, options) {
   }
   if (url.indexOf("/subject-api/get?subjectId=") >= 0) {
     const id = decodeURIComponent(url.split("subjectId=")[1].split("&")[0]);
+    if (failedDetailIds.has(id)) {
+      return { status: 503, headers: {}, body: JSON.stringify({ message: "temporary upstream outage" }) };
+    }
     const data = id === "series-1" ? series
       : id === "series-dub-1" ? seriesDub
       : id === "dub-1" ? Object.assign({}, movie, { subjectId: "dub-1", dubs: [] })
@@ -90,7 +94,7 @@ global.fetch = async function (url, options) {
 const provider = require("../providers/moviebox.js");
 
 async function main() {
-  assert.equal(provider.version, "1.0.4");
+  assert.equal(provider.version, "1.0.5");
   assert.equal(provider.getInfo().name, "MovieBox");
   assert.equal(provider.getInfo().type, "movie");
   assert.equal(provider.getSettings().length, 0);
@@ -102,6 +106,19 @@ async function main() {
   const found = await provider.search("Mock Movie", 1, {});
   assert.equal(found.length, 1);
   assert.equal(found[0].id, "movie-1");
+
+  // The MovieBox listing has already matched the canonical catalogue title.
+  // A temporary detail API outage must use that cached result and return zero
+  // source episodes, allowing Z Mode to retain its AniList/TMDB catalogue page.
+  failedDetailIds.add("movie-1");
+  const cachedDetail = await provider.getDetail("movie-1", {});
+  failedDetailIds.delete("movie-1");
+  assert.equal(cachedDetail.id, "movie-1");
+  assert.equal(cachedDetail.title, "Mock Movie");
+  assert.equal(cachedDetail.cover, "https://img.example/movie.jpg");
+  assert.deepEqual(cachedDetail.episodes, []);
+  assert.equal(cachedDetail.subCount, 0);
+
   assert.equal(bootstrapCount, 1, "fallback bootstrap must obtain a token before protected API requests");
   assert.equal(bootstrapAttempts, 2, "tab-operating without x-user must fall back to ranking-list");
 
