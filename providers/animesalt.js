@@ -21,7 +21,7 @@ var SITE = 'https://animesalt.to';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
   + '(KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36';
 // Embed hosts that hand back a plain m3u8 (via getSources or getSourcesNew).
-var PLAYER_RE = /^https?:\/\/(?:[a-z0-9-]+\.)?(?:vidtube\.[a-z]+|megaplay\.[a-z]+|vidwish\.[a-z]+)/i;
+var PLAYER_RE = /^https?:\\/\\/(?:[a-z0-9-]+\\.)?(?:vidtube\\.[a-z]+|megaplay\\.[a-z]+|vidwish\\.[a-z]+|vidstream\\.[a-z]+|vidcloud\\.[a-z]+)/i;
 
 function getInfo() {
   return { name: 'AnimeSalt', lang: 'hi', baseUrl: SITE,
