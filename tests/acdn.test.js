@@ -1,6 +1,6 @@
 const assert = require("node:assert/strict");
-global.htmlText = function (html) { return String(html || "").replace(/<[^>]*>/g, " ").replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").replace(/\\s+/g, " ").trim(); };
-const playlist = '#EXTM3U\\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",NAME="Hindi",LANGUAGE="hi",URI="hi.m3u8"\\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",NAME="Japanese",LANGUAGE="ja",URI="ja.m3u8"\\n#EXT-X-STREAM-INF:BANDWIDTH=800000\\nvideo.m3u8';
+global.htmlText = function (html) { return String(html || "").replace(/<[^>]*>/g, " ").replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").replace(/\s+/g, " ").trim(); };
+const playlist = '#EXTM3U\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",NAME="Hindi",LANGUAGE="hi",URI="hi.m3u8"\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",NAME="Japanese",LANGUAGE="ja",URI="ja.m3u8"\n#EXT-X-STREAM-INF:BANDWIDTH=800000\nvideo.m3u8';
 global.fetch = async function (url, options = {}) {
   url = String(url);
   if (url.startsWith("https://animesalt.to/filter?keyword=Naruto")) return {status:200,body:'<div class="flw-item"><h3 class="film-name"><a href="/watch/road-of-naruto-season-2/ep-1" title="Road of Naruto Season 2">Road of Naruto Season 2</a></h3></div>'};
