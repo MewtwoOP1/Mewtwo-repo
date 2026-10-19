@@ -78,6 +78,16 @@
       "nsfw": false
     },
     {
+      "id": "animeparadise",
+      "name": "AnimeParadise",
+      "version": "1.0.0",
+      "type": "anime",
+      "lang": "en",
+      "file": "providers/animeparadise.js",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=animeparadise.moe",
+      "nsfw": false
+    },
+    {
       "id": "anv",
       "name": "AnV",
       "version": "1.0.4",
