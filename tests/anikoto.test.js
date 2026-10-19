@@ -17,13 +17,7 @@ global.fetch = async function (url, options) {
     return { status: 200, body: '<div class="item"><a href="/watch/jujutsu-kaisen" title="24 24 24 TV"><img data-src="https://img.example/jjk.jpg" alt="Jujutsu Kaisen Poster"><div class="name d-title">Jujutsu Kaisen</div><span>24 24 24 TV</span></a></div>' };
   }
   if (url === "https://anikototv.to/home") {
-    return { status: 200, body: "" };
-  }
-  if (url === "https://anikotoapi.site/recent-anime?page=1&per_page=24") {
-    return { status: 200, body: JSON.stringify({ ok: true, data: [
-      { slug: "frieren", title: "Frieren", poster: "https://img.example/f.jpg", is_sub: true },
-      { slug: "jujutsu-kaisen", title: "Jujutsu Kaisen", poster: "https://img.example/jjk.jpg", is_sub: true }
-    ] }) };
+    return { status: 200, body: '<section id="hotest"><div class="swiper-slide item"><a href="/watch/frieren"><h2 class="title d-title">Frieren</h2><div style="background-image: url(https://img.example/f.jpg)"></div></a></div><div class="swiper-slide item"><a href="/watch/jujutsu-kaisen"><h2 class="title d-title">Jujutsu Kaisen</h2><div style="background-image: url(https://img.example/jjk.jpg)"></div></a></div></section>' };
   }
   if (url === "https://anikototv.to/watch/frieren") {
     return { status: 200, body: '<h1 class="title d-title">Frieren: Beyond Journey\'s End</h1><div data-id="42"></div><meta property="og:image" content="https://img.example/f.jpg"><div class="synopsis">An elf mage travels on.</div>' };
@@ -70,7 +64,7 @@ const provider = {
 };
 
 async function main() {
-  assert.equal(provider.version, "1.2.0");
+  assert.equal(provider.version, "1.2.1");
   assert.equal(provider.getInfo().name, "AniKoto");
 
   const cardSearch = await provider.search("Jujutsu Kaisen", 1, {});
@@ -79,9 +73,9 @@ async function main() {
   assert.equal(cardSearch[0].cover, "https://img.example/jjk.jpg");
 
   const home = await provider.getHome({});
-  assert.equal(home[0].items.length, 2, "the recent API results should be normalized");
+  assert.equal(home[0].items.length, 2, "the site spotlight should be parsed without an external catalogue API");
   assert.equal(home[0].items[0].id, "frieren");
-  assert.ok(calls.some(c => c.url === "https://anikotoapi.site/recent-anime?page=1&per_page=24"));
+  assert.ok(!calls.some(c => c.url.includes("anikotoapi.site")), "AniKoto must not depend on the API");
 
   const detail = await provider.getDetail("frieren", { category: "sub" });
   assert.equal(detail.title, "Frieren: Beyond Journey's End");
