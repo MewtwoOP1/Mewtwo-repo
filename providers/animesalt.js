@@ -198,17 +198,19 @@ function _slugFromAnime(href) {
   return m ? m[1] : null;
 }
 function _cards(html) {
-  var out = [], seen = {}, source = String(html || ''), re = /<div\b[^>]*class="[^"]*\bflw-item\b[^"]*"[^>]*>[\s\S]*?(?=<div\b[^>]*class="[^"]*\bflw-item\b|$)/gi, m;
+  var out = [], seen = {}, source = String(html || ''), re = /<a\b([^>]*\bhref="([^"]*\/watch\/[^"]+)"[^>]*)>([\s\S]*?)<\/a>/gi, m;
   while ((m = re.exec(source)) !== null) {
-    var block = m[0];
-    var href = (block.match(/href="([^"]*\/watch\/[^"]+)"/i) || [])[1];
-    var slug = _slugFromAnime(href);
+    var attrs = m[1], href = m[2], inner = m[3], slug = _slugFromAnime(href);
     if (!slug || seen[slug]) continue;
-    var title = (block.match(/<h3[^>]*class="[^"]*film-name[^"]*"[^>]*>[\s\S]*?<a[^>]*title="([^"]+)"/i) || [])[1]
-      || (block.match(/<a[^>]+title="([^"]+)"[^>]+href="[^"]*\/watch\//i) || [])[1]
-      || (block.match(/<h3[^>]*>[\s\S]*?<a[^>]*>([^<]+)<\/a>/i) || [])[1];
-    if (!title) continue;
-    var poster = (block.match(/<img[^>]+(?:data-src|data-lazy-src|src)="([^"]+)"/i) || [])[1] || '';
+    var title = (attrs.match(/\btitle="([^"]+)"/i) || [])[1]
+      || (inner.match(/<img[^>]*\balt="([^"]+)"/i) || [])[1]
+      || htmlText(inner).trim();
+    if (!title || /^episode\s*\d+$/i.test(title)) continue;
+    var poster = (inner.match(/<img[^>]+(?:data-src|data-lazy-src|src)="([^"]+)"/i) || [])[1] || '';
+    if (!poster) {
+      var before = source.slice(Math.max(0, m.index - 1800), m.index);
+      poster = (before.match(/<img[^>]+(?:data-src|data-lazy-src|src)="([^"]+)"/i) || [])[1] || '';
+    }
     seen[slug] = 1;
     out.push({ id: slug, title: htmlText(title).trim(), url: 'watch/' + slug + '/ep-1',
       cover: poster || null, type: 'anime', sourceId: SOURCE_ID });
