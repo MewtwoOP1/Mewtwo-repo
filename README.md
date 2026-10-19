@@ -53,3 +53,5 @@ The active movie/series providers include PressPlayX, HDHub4u, and TMDB + Stremi
 AnimeSalt uses the site's AJAX episode/server flow and keeps its multi-audio HLS master intact.
 
 Resolver note: AnimeSalt now parses `/watch/` cards and the site's `data-number` / `data-id` AJAX payloads.
+
+AnimeSalt card parsing follows the live site's `/watch/{slug}/ep-1` links rather than AnimeSuge `/anime/` cards.
