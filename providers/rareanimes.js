@@ -1,12 +1,12 @@
 /*
  * RareAnimes — catalog, episode metadata and alternate-language playback.
  *
- * v1.0.1: group language variants under one episode and expose them as player
+ * v1.0.2: group language variants under one episode and expose them as player
  * audio choices rather than duplicate episode entries.
  */
 var SITE = 'https://www.rareanimes.mov';
 var SB = 'https://codedew.com/streambeta/';
-var VERSION = '1.0.1';
+var VERSION = '1.0.2';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
 var ROWS = [
   { title: 'Trending', path: '/home/' },
@@ -150,7 +150,7 @@ function _variant(text) {
   return '';
 }
 function _parseEpisodes(content) {
-  var lines = _postLines(content), eps = [], current = null, nextLoose = 1;
+  var lines = _postLines(content), eps = [], current = null, nextLoose = 1, pendingLang = '';
   function ensure(n, title) {
     var found = eps.filter(function (e) { return e.number === n; })[0];
     if (found) { if (title && !found.title) found.title = title; return found; }
@@ -158,10 +158,17 @@ function _parseEpisodes(content) {
   }
   lines.forEach(function (line) {
     var h = line.text.match(/^(?:episode|ep\.?)\s*0*(\d{1,4})\b\s*(?:[-–:]\s*(.*))?$/i);
-    if (h) current = ensure(+h[1], (h[2] || '').trim());
+    if (h) {
+      current = ensure(+h[1], (h[2] || '').trim());
+      pendingLang = '';
+    } else if (line.text) {
+      var detectedLang = _variant(line.text);
+      if (detectedLang) pendingLang = detectedLang;
+    }
     if (line.links.length) {
       if (!current) current = ensure(nextLoose++, 'Episode ' + nextLoose);
-      var lang = _variant(line.text) || current.title || 'Default';
+      var lang = _variant(line.text) || pendingLang ||
+        (/^episode\s+\d+$/i.test(current.title) ? 'Default' : current.title) || 'Default';
       var usable = line.links.filter(function (l) { return /watchnow|watch\b|hubcloud/i.test(l.label); });
       if (!usable.length) usable = line.links.filter(function (l) { return /streambeta/i.test(l.label); });
       if (!usable.length) return;
@@ -169,7 +176,8 @@ function _parseEpisodes(content) {
       var key = lang.toLowerCase();
       var v = current.variants.filter(function (x) { return x.lang.toLowerCase() === key; })[0];
       if (!v) { v = { lang: lang, url: preferred.url }; current.variants.push(v); }
-      else if (/watchnow|watch\b/i.test(preferred.label)) v.url = preferred.url;
+      else if (/watchnow|watch\\b/i.test(preferred.label)) v.url = preferred.url;
+      pendingLang = '';
     }
   });
   return eps.filter(function (e) { return e.variants.length; }).map(function (e) {
@@ -177,7 +185,7 @@ function _parseEpisodes(content) {
       title: e.title, number: e.number, variants: e.variants
     }));
     return { id: episodeUrl, title: e.title, number: e.number, url: episodeUrl,
-      type: 'anime', sourceId: 'rareanimes' };
+      type: 'anime', sourceId: 'rareanimes-streambeta' };
   });
 }
 function getDetail(url) {
@@ -321,13 +329,13 @@ function getVideoSources(episodeUrl, opts) {
       r.parsed.sources.forEach(function (s) {
         if (!s || /pixeldrain/i.test(String(s.type || ''))) return;
         var url = s.stream_url || s.streamUrl || s.file || s.url || '';
-        if (!url || !url.startsWith('http')) return;
+        if (!/^https?:\/\//i.test(url)) return;
         var name = String(s.name || s.type || 'Server');
         var lang = variant.lang || r.parsed.lang || 'Auto';
         out.push({ url: url,
           quality: /2160p/i.test(name) ? '2160p' : (/1080p/i.test(name) ? '1080p' : (/720p/i.test(name) ? '720p' : 'auto')),
           label: [lang, name].join(' • '),
-          container: /\\.m3u8(?:[?#]|$)/i.test(url) ? 'hls' : 'mp4',
+          container: /\.m3u8(?:[?#]|$)/i.test(url) ? 'hls' : 'mp4',
           kind: /^(?:Japanese|Original|Sub|Subbed)$/i.test(lang) ? 'sub' : 'dub',
           headers: { 'User-Agent': UA, 'Referer': r.url || SB } });
       });
