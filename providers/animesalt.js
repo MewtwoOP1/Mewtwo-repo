@@ -194,19 +194,19 @@ function _ajax(path) {
 }
 
 function _slugFromAnime(href) {
-  var m = String(href || '').match(/\\/watch\\/([^/"?#]+)/i);
+  var m = String(href || '').match(/\/watch\/([^/"?#]+)/i);
   return m ? m[1] : null;
 }
 function _cards(html) {
-  var out = [], seen = {}, source = String(html || ''), re = /<div\\b[^>]*class="[^"]*\\bflw-item\\b[^"]*"[^>]*>[\\s\\S]*?(?=<div\\b[^>]*class="[^"]*\\bflw-item\\b|$)/gi, m;
+  var out = [], seen = {}, source = String(html || ''), re = /<div\b[^>]*class="[^"]*\bflw-item\b[^"]*"[^>]*>[\s\S]*?(?=<div\b[^>]*class="[^"]*\bflw-item\b|$)/gi, m;
   while ((m = re.exec(source)) !== null) {
     var block = m[0];
-    var href = (block.match(/href="([^"]*\\/watch\\/[^"]+)"/i) || [])[1];
+    var href = (block.match(/href="([^"]*\/watch\/[^"]+)"/i) || [])[1];
     var slug = _slugFromAnime(href);
     if (!slug || seen[slug]) continue;
-    var title = (block.match(/<h3[^>]*class="[^"]*film-name[^"]*"[^>]*>[\\s\\S]*?<a[^>]*title="([^"]+)"/i) || [])[1]
-      || (block.match(/<a[^>]+title="([^"]+)"[^>]+href="[^"]*\\/watch\\//i) || [])[1]
-      || (block.match(/<h3[^>]*>[\\s\\S]*?<a[^>]*>([^<]+)<\\/a>/i) || [])[1];
+    var title = (block.match(/<h3[^>]*class="[^"]*film-name[^"]*"[^>]*>[\s\S]*?<a[^>]*title="([^"]+)"/i) || [])[1]
+      || (block.match(/<a[^>]+title="([^"]+)"[^>]+href="[^"]*\/watch\//i) || [])[1]
+      || (block.match(/<h3[^>]*>[\s\S]*?<a[^>]*>([^<]+)<\/a>/i) || [])[1];
     if (!title) continue;
     var poster = (block.match(/<img[^>]+(?:data-src|data-lazy-src|src)="([^"]+)"/i) || [])[1] || '';
     seen[slug] = 1;
@@ -284,7 +284,7 @@ function _metaList(html, label) {
 // data-num can be a label like "Full"; data-slug (or the anchor text) carries
 // the real episode number.
 function _episodes(lhtml, cat) {
-  var out = [], seen = {}, re = /<a\\b([^>]*\\bdata-number="([^"]+)"[^>]*\\bdata-id="([^"]+)"[^>]*)>([\\s\\S]*?)<\\/a>/gi, m;
+  var out = [], seen = {}, re = /<a\b([^>]*\bdata-number="([^"]+)"[^>]*\bdata-id="([^"]+)"[^>]*)>([\s\S]*?)<\/a>/gi, m;
   while ((m = re.exec(String(lhtml || ''))) !== null) {
     var attrs = m[1], num = parseInt(m[2], 10), episodeId = m[3];
     if (!episodeId || seen[episodeId]) continue;
@@ -298,11 +298,11 @@ function _episodes(lhtml, cat) {
 }
 function getDetail(url, opts) {
   var raw = String(url || '').trim();
-  var watchPath = /^https?:\\/\\//i.test(raw) ? raw : (SITE + '/' + raw.replace(/^\\/+/, ''));
-  if (!/\\/watch\\//i.test(watchPath)) watchPath = SITE + '/watch/' + encodeURIComponent(raw.replace(/^.*\\//, '')) + '/ep-1';
+  var watchPath = /^https?:\/\//i.test(raw) ? raw : (SITE + '/' + raw.replace(/^\/+/, ''));
+  if (!/\/watch\//i.test(watchPath)) watchPath = SITE + '/watch/' + encodeURIComponent(raw.replace(/^.*\//, '')) + '/ep-1';
   return _get(watchPath, SITE + '/').then(function (html) {
-    var animeId = (html.match(/data-id="(\\d+)"/) || [])[1];
-    var title = htmlText((html.match(/<title[^>]*>([\\s\\S]*?)<\\/title>/i) || [])[1] || '').replace(/^Watch Free!\\s*/i, '').replace(/\\s+Online in HD.*$/i, '').replace(/\\s+-\\s+AnimeSalt$/i, '').trim();
+    var animeId = (html.match(/data-id="(\d+)"/) || [])[1];
+    var title = htmlText((html.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1] || '').replace(/^Watch Free!\s*/i, '').replace(/\s+Online in HD.*$/i, '').replace(/\s+-\s+AnimeSalt$/i, '').trim();
     var poster = (html.match(/property="og:image" content="([^"]+)"/i) || [])[1] || null;
     var base = { id: raw, title: title || raw, url: raw, cover: poster, description: '',
       status: 'unknown', genres: [], studios: [], type: 'anime', sourceId: SOURCE_ID, episodes: [], subCount: 0, dubCount: 0 };
@@ -325,7 +325,7 @@ function _parseServers(lhtml) {
   for (var i = 1; i < blocks.length; i++) {
     var type = (blocks[i].match(/^([^"]+)/) || [])[1] || '';
     var id = (blocks[i].match(/data-id="([^"]+)"/) || [])[1];
-    var name = (blocks[i].match(/<a[^>]*class="[^"]*btn[^"]*"[^>]*>([^<]+)<\\/a>/i) || [])[1] || '';
+    var name = (blocks[i].match(/<a[^>]*class="[^"]*btn[^"]*"[^>]*>([^<]+)<\/a>/i) || [])[1] || '';
     if (id) servers.push({ type: type, linkId: id, name: htmlText(name).trim() });
   }
   return servers;
@@ -372,7 +372,7 @@ function _tryServers(list, i, cat) {
 function _resolveServer(srv, cat) {
   var tag = String((srv && srv.name) || 'server').trim() || 'server';
   var p = _ajax('/ajax/server?get=' + encodeURIComponent(srv.linkId)).then(function (j) {
-    var url = j && j.result && j.result.url;
+    var url = j && ((j.result && j.result.url) || (typeof j.result === 'string' ? j.result : '') || j.link || '');
     if (!url || !PLAYER_RE.test(url)) return [];
     return _extractPlayer(url, cat, tag);
   });
