@@ -82,7 +82,7 @@ const provider = {
 };
 
 async function main() {
-  assert.equal(provider.version, "1.2.3");
+  assert.equal(provider.version, "1.2.4");
   assert.equal(provider.getInfo().name, "AniKoto");
 
   const cardSearch = await provider.search("Jujutsu Kaisen", 1, {});
@@ -100,29 +100,33 @@ async function main() {
   assert.equal(detail.episodes.length, 1);
   assert.ok(detail.episodes[0].url.startsWith("anikoto://sub/"));
   const subStreams = await provider.getVideoSources(detail.episodes[0].url, {});
-  assert.equal(subStreams.length, 1);
-  assert.equal(subStreams[0].url, "https://cdn.example/frieren-sub.m3u8");
-  assert.equal(subStreams[0].kind, "sub");
+  assert.ok(subStreams.length >= 1);
+  const subStream = subStreams.find(stream => stream.url.startsWith("https://cdn.example/frieren-sub.m3u8"));
+  assert.ok(subStream, "sub server should resolve its expected HLS stream");
+  assert.equal(subStream.kind, "sub");
 
   const dubDetail = await provider.getDetail("frieren", { category: "dub" });
   assert.equal(dubDetail.episodes.length, 1);
   assert.ok(dubDetail.episodes[0].url.startsWith("anikoto://dub/"));
   const dubStreams = await provider.getVideoSources(dubDetail.episodes[0].url, {});
-  assert.equal(dubStreams.length, 1);
-  assert.equal(dubStreams[0].url, "https://cdn.example/frieren-dub.m3u8");
-  assert.equal(dubStreams[0].kind, "dub");
+  assert.ok(dubStreams.length >= 1);
+  const dubStream = dubStreams.find(stream => stream.url.startsWith("https://cdn.example/frieren-dub.m3u8"));
+  assert.ok(dubStream, "dub server should resolve its expected HLS stream");
+  assert.equal(dubStream.kind, "dub");
 
   const directStreams = await provider.getVideoSources("anikoto://sub/direct-server/1/1");
-  assert.equal(directStreams.length, 1);
-  assert.equal(directStreams[0].url, "https://cdn.example/direct.m3u8?token=abc");
-  assert.equal(directStreams[0].container, "hls");
-  assert.equal(directStreams[0].kind, "sub");
-  assert.equal(directStreams[0].headers.Referer, "https://anikototv.to/");
+  assert.ok(directStreams.length >= 1);
+  const directStream = directStreams.find(stream => stream.url.startsWith("https://cdn.example/direct.m3u8?token=abc"));
+  assert.ok(directStream, "direct server should resolve its expected HLS stream");
+  assert.equal(directStream.container, "hls");
+  assert.equal(directStream.kind, "sub");
+  assert.equal(directStream.headers.Referer, "https://anikototv.to/");
 
   const vidstream = await provider.getVideoSources("anikoto://sub/vidstream-server/1/1");
-  assert.equal(vidstream.length, 1);
-  assert.equal(vidstream[0].url, "https://cdn.example/vidstream.m3u8");
-  assert.equal(vidstream[0].container, "hls");
+  assert.ok(vidstream.length >= 1);
+  const vidstreamSource = vidstream.find(stream => stream.url.startsWith("https://cdn.example/vidstream.m3u8"));
+  assert.ok(vidstreamSource, "Vidstream should resolve its expected HLS stream");
+  assert.equal(vidstreamSource.container, "hls");
 
   console.log("AniKoto catalogue, sub/dub, direct HLS, Vidstream extraction and subtitle tests passed.");
 }

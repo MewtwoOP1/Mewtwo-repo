@@ -70,11 +70,21 @@
     {
       "id": "anikoto",
       "name": "AniKoto",
-      "version": "1.2.3",
+      "version": "1.2.4",
       "type": "anime",
       "lang": "en",
       "file": "providers/anikoto.js",
       "logo": "https://www.google.com/s2/favicons?sz=256&domain=anikototv.to",
+      "nsfw": false
+    },
+    {
+      "id": "animesalt",
+      "name": "AnimeSalt",
+      "version": "1.0.3",
+      "type": "anime",
+      "lang": "hi",
+      "file": "providers/animesalt.js",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=animesalt.to",
       "nsfw": false
     },
     {

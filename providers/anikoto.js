@@ -1,4 +1,5 @@
-// AniKoto — anime source for the Zangetsu provider repo (anikototv.to).
+// AniKoto (Svoer) — adapted from the official Zangetsu provider implementation.
+// Upstream: https://github.com/Spyou/zangetsu-providers; see THIRD_PARTY_NOTICES.md.
 //
 // anikototv.to is an aniwatch-style site. Streams are NOT keyed by the episode
 // id — each episode carries an encrypted `data-ids` (server_ids) blob, and the
@@ -20,23 +21,24 @@
 // those three through the episode url and ask the same API when the episode's
 // own servers all come up empty.
 //
-// Home, search, details, episodes and playback are resolved from the Anikoto site itself.
+// Home = /home spotlight (hero) + recent from the JSON API (anikotoapi.site);
 // slugs are shared with the site, so those cards resolve through getDetail.
 
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID)
   ? String(__SOURCE_ID) : 'anikoto';
 
 var SITE = 'https://anikototv.to';
+var API = 'https://anikotoapi.site';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
   + '(KHTML, like Gecko) Chrome/124.0 Safari/537.36';
 // Embed hosts that hand back a plain m3u8 (via getSources or getSourcesNew).
-var PLAYER_RE = /^https?:\/\/(?:[a-z0-9-]+\.)?(?:vidtube\.[a-z]+|vidstream(?:ing)?\.[a-z]+|megaplay\.[a-z]+|vidwish\.[a-z]+)/i;
+var PLAYER_RE = /^https?:\/\/(?:[a-z0-9-]+\.)?(?:vidtube\.[a-z]+|megaplay\.[a-z]+|vidwish\.[a-z]+)/i;
 // Extra servers the episode's own list doesn't offer, keyed <mal>/<ep>/<ts>.
 var MAPPER = 'https://mapper.nekostream.site/api/mal/';
 
 function getInfo() {
   return { name: 'AniKoto', lang: 'en', baseUrl: SITE,
-    logo: SITE + '/favicon.ico', type: 'anime', version: '1.2.3' };
+    logo: SITE + '/favicon.ico', type: 'anime', version: '1.2.4' };
 }
 
 // MegaPlay/VidWish: getSourcesNew is the endpoint their player hits; both routes
@@ -57,6 +59,30 @@ function _padBytes(s, n) {
   for (i = 0; i < n; i++) out[i] = 0;
   var b = String(s || '');
   for (i = 0; i < b.length && i < n; i++) out[i] = b.charCodeAt(i) & 0xff;
+  return out;
+}
+// Pure-JS base64 -> byte array. Self-contained: the app injects no base64
+// helper and the harness shim doesn't define one either. Same decoder as
+// animesuge's _b64decode (byte-verified against live megaplay `enc` blobs).
+var _B64B = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+function base64ToBytes(b64) {
+  var clean = String(b64 || '').replace(/-/g, '+').replace(/_/g, '/')
+    .replace(/[^A-Za-z0-9+/=]/g, '');
+  // base64url payloads (e.g. the player's `enc`) often strip the `=` padding.
+  while (clean.length % 4 !== 0) clean += '=';
+  var out = [], i, j;
+  for (i = 0; i + 3 < clean.length + 1; i += 4) {
+    var n = 0, pad = 0;
+    for (j = 0; j < 4; j++) {
+      var ch = clean.charAt(i + j);
+      var v = (ch === '=') ? 0 : _B64B.indexOf(ch);
+      if (ch === '=') pad++;
+      n = (n << 6) | (v < 0 ? 0 : v);
+    }
+    out.push((n >> 16) & 255);
+    if (pad < 2) out.push((n >> 8) & 255);
+    if (pad < 1) out.push(n & 255);
+  }
   return out;
 }
 function _b64urlBytes(s) {
@@ -136,11 +162,17 @@ function search(query, page, opts) {
   }).catch(function () { return []; });
 }
 
+// ── Home: /home spotlight (hero) + recent from the JSON API ──────────────────
+function _apiCard(a) {
+  if (!a || !a.slug) return null;
+  return { id: a.slug, title: a.title || a.alternative || a.slug, url: a.slug,
+    cover: a.poster || null, type: 'anime', sourceId: SOURCE_ID,
+    subCount: a.is_sub ? 1 : 0, dubCount: 0 };
+}
 // Slice the /home page into its section containers (#hotest / #top-anime /
 // #recent-update), each bounded by the next section so cards don't bleed across.
 function _sections(html) {
   var ids = ['hotest', 'top-anime', 'recent-update'], marks = [];
-  html = String(html || '');
   for (var i = 0; i < ids.length; i++) {
     var k = html.indexOf('id="' + ids[i] + '"');
     if (k >= 0) marks.push({ id: ids[i], at: k });
@@ -155,7 +187,7 @@ function _sections(html) {
 }
 // Spotlight (#hotest) cards carry the title in an <h2 …d-title> + a bg-image.
 function _spotlight(seg) {
-  var out = [], seen = {}, chunks = String(seg || '').split('swiper-slide item');
+  var out = [], seen = {}, chunks = seg.split('swiper-slide item');
   for (var i = 1; i < chunks.length; i++) {
     var c = chunks[i];
     var slug = _slugFromWatch((c.match(/href="([^"]*\/watch\/[^"]+)"/) || [])[1]);
@@ -190,19 +222,25 @@ function _gridCards(seg) {
   }
   return out;
 }
-
-// ── Home: site-scraped spotlight and catalogue sections ─────────────────────
 function getHome(opts) {
   return _get(SITE + '/home', SITE + '/').then(function (html) {
-    var sections = _sections(html), rows = [];
-    var spotlight = _spotlight(sections.hotest || html);
-    if (spotlight.length) rows.push({ title: 'Spotlight', items: spotlight });
-    var top = _gridCards(sections['top-anime']);
+    var s = _sections(html), rows = [];
+    var spot = _spotlight(s.hotest || html);
+    if (spot.length) rows.push({ title: 'Spotlight', items: spot });
+    var top = _gridCards(s['top-anime']);
     if (top.length) rows.push({ title: 'Top Anime', items: top });
-    var recent = _gridCards(sections['recent-update']);
+    var recent = _gridCards(s['recent-update']);
     if (recent.length) rows.push({ title: 'Recently Updated', items: recent });
     return rows;
-  }).catch(function () { return []; });
+  }).catch(function () { return []; }).then(function (rows) {
+    if (rows.length) return rows;
+    // Fallback: the JSON API's recent list if the /home scrape yielded nothing.
+    return _json(API + '/recent-anime?page=1&per_page=24').then(function (j) {
+      var data = (j && j.data) || [], items = [];
+      for (var k = 0; k < data.length; k++) { var cc = _apiCard(data[k]); if (cc) items.push(cc); }
+      return items.length ? [{ title: 'Recently Updated', items: items }] : [];
+    }).catch(function () { return []; });
+  });
 }
 
 // ── Detail + episodes ───────────────────────────────────────────────────────
@@ -295,11 +333,78 @@ function getEpisodes(url, opts) { return getDetail(url, opts).then(function (d) 
 
 // ── Streams: server_ids → server list → server?get → embed getSources(New) ───
 function _parseServers(html) {
-  var servers = [], re = /data-type="(\w+)"([\s\S]*?)(?=data-type="|$)/g, tm;
-  while ((tm = re.exec(html)) !== null) {
-    var type = tm[1], block = tm[2], lm, lre = /data-link-id="([^"]+)"[^>]*>([^<]*)</g;
-    while ((lm = lre.exec(block)) !== null) {
-      servers.push({ type: type, linkId: lm[1], name: (lm[2] || '').trim() });
+  // Match the upstream DOM strategy: server LI nodes inherit sub/dub type
+  // from the nearest ancestor group. Also accept data-link-id on nested links.
+  var source = String(html || ''), servers = [], seen = {};
+  var tagRe = /<\/?([a-z][a-z0-9:-]*)\b([^>]*)>/gi;
+  var stack = [], match;
+  function attr(attrs, name) {
+    var re = /([^\s=]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g, m;
+    while ((m = re.exec(attrs || '')) !== null) {
+      if (m[1].toLowerCase() === name.toLowerCase()) return m[2] !== undefined ? m[2] : m[3];
+    }
+    return '';
+  }
+  function visible(raw) {
+    return String(raw || '').replace(/<script\b[\s\S]*?<\/script\s*>/gi, '')
+      .replace(/<style\b[\s\S]*?<\/style\s*>/gi, '')
+      .replace(/<[^>]*>/g, ' ')
+      .replace(/&amp;/g, '&').replace(/&quot;/g, '"')
+      .replace(/&#39;|&apos;/g, "'").replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>').replace(/&nbsp;/g, ' ')
+      .replace(/\s+/g, ' ').trim();
+  }
+  while ((match = tagRe.exec(source)) !== null) {
+    var full = match[0], tag = match[1].toLowerCase(), attrs = match[2] || '';
+    if (full.charAt(1) === '/') {
+      for (var si = stack.length - 1; si >= 0; si--) {
+        if (stack[si].tag === tag) { stack.length = si; break; }
+      }
+      continue;
+    }
+    var node = { tag: tag, attrs: attrs, start: match.index };
+    if (tag === 'li') {
+      var closeRe = /<\/li\s*>/ig;
+      closeRe.lastIndex = tagRe.lastIndex;
+      var close = closeRe.exec(source);
+      var inner = close ? source.slice(tagRe.lastIndex, close.index) : '';
+      var id = attr(attrs, 'data-link-id');
+      if (!id) id = attr(inner, 'data-link-id');
+      if (id && !/download-icon/i.test(attrs + ' ' + inner)) {
+        var type = attr(attrs, 'data-type');
+        if (!type) {
+          for (var ai = stack.length - 1; ai >= 0; ai--) {
+            type = attr(stack[ai].attrs, 'data-type') || attr(stack[ai].attrs, 'type');
+            if (type) break;
+          }
+        }
+        if (!type) {
+          var before = source.slice(0, match.index), types = /(?:data-type|type)\s*=\s*["'](sub|hsub|dub)["']/gi, tm, last = '';
+          while ((tm = types.exec(before)) !== null) last = tm[1];
+          type = last || 'sub';
+        }
+        type = String(type).toLowerCase();
+        if (type !== 'sub' && type !== 'hsub' && type !== 'dub') type = /dub/i.test(type) ? 'dub' : 'sub';
+        var name = visible(inner);
+        var key = [type, id, name].join('\n');
+        if (!seen[key]) {
+          seen[key] = true;
+          servers.push({ type: type, linkId: id, name: name || ('Server ' + id) });
+        }
+      }
+    }
+    if (!/^(area|base|br|col|embed|hr|img|input|link|meta|param|source|track|wbr)$/.test(tag) && !/\/\s*>$/.test(full)) stack.push(node);
+  }
+  // Fallback for templates without LI wrappers.
+  if (!servers.length) {
+    var groups = /data-type\s*=\s*["'](sub|hsub|dub)["']([\s\S]*?)(?=data-type\s*=\s*["'](?:sub|hsub|dub)["']|$)/gi, group;
+    while ((group = groups.exec(source)) !== null) {
+      var links = /data-link-id\s*=\s*["']([^"']+)["'][^>]*>([\s\S]*?)<\/[^>]+>/gi, link;
+      while ((link = links.exec(group[2])) !== null) {
+        var label = visible(link[2]), id = link[1], type = group[1].toLowerCase();
+        var key = [type, id, label].join('\n');
+        if (!seen[key]) { seen[key] = true; servers.push({ type: type, linkId: id, name: label || ('Server ' + id) }); }
+      }
     }
   }
   return servers;
@@ -314,6 +419,20 @@ function _srvRank(name) {
   return 5;
 }
 
+// Keep distinct server entries even when mirrors redirect to the same URL.
+// URL-only deduplication hid servers such as Vidstream when their resolved
+// stream matched another server's URL. Only collapse identical source entries.
+function _dedupeVideoSources(sources) {
+  var seen = {};
+  return (sources || []).filter(function (s) {
+    if (!s || !s.url) return false;
+    var key = [s.url, s.label || '', s.kind || '', s.audioLang || ''].join('\\n');
+    if (seen[key]) return false;
+    seen[key] = true;
+    return true;
+  });
+}
+
 function getVideoSources(episodeUrl) {
   var raw = String(episodeUrl).replace('anikoto://', '');
   var parts = raw.split('/');
@@ -321,6 +440,8 @@ function getVideoSources(episodeUrl) {
   var serverIds = parts[1] ? decodeURIComponent(parts[1]) : '';
   // <mal>/<ep>/<timestamp>, already url-safe from _epUrl. Absent on urls saved
   // before the token existed, which just means no mapper fallback for them.
+  // _epUrl packs sub+dub into one segment, then appends num and the
+  // mapper token: anikoto://<cat>/<serverIds>/<subdub>/<num>/<mal>/<epSlug>/<timestamp>.
   var token = (parts[4] && parts[5] && parts[6])
     ? (parts[4] + '/' + parts[5] + '/' + parts[6]) : null;
   if (!serverIds) return Promise.reject(new Error('AniKoto: no server ids'));
@@ -328,19 +449,29 @@ function getVideoSources(episodeUrl) {
   return _ajax('/ajax/server/list?servers=' + encodeURIComponent(serverIds)).then(function (j) {
     var lhtml = (j && typeof j.result === 'string') ? j.result : '';
     var servers = _parseServers(lhtml);
-    var want = [];
-    for (var i = 0; i < servers.length; i++) {
-      var s = servers[i];
-      var ok = (cat === 'dub') ? (s.type === 'dub') : (s.type === 'sub' || s.type === 'hsub');
-      if (ok) want.push(s);
-    }
-    if (!want.length) want = servers;
-    want.sort(function (a, b) { return _srvRank(a.name) - _srvRank(b.name); });
-    return _tryServers(want, 0, cat);
+    // Keep all listed sub/dub server cuts available in the source picker.
+    var want = servers.slice();
+    want.sort(function (a, b) {
+      var rank = _srvRank(a.name) - _srvRank(b.name);
+      if (rank) return rank;
+      return (a.type || '').localeCompare(b.type || '');
+    });
+    // The episode's own servers and the mapper's extra servers resolve in
+    // PARALLEL. The old flow only asked the mapper after every own server
+    // had been walked serially, which was the other half of the timeout.
+    return Promise.all([
+      _tryServersAll(want, cat),
+      _mapperServersAll(token, cat)
+    ]).then(function (res) {
+      var all = _dedupeVideoSources(res[0].concat(res[1]));
+      if (all.length) return all;
+      throw new Error('AniKoto: no playable server');
+    });
   }).catch(function (err) {
-    // Only once the episode's own servers are exhausted — VidPlay is a direct
-    // m3u8 and one request cheaper, so it stays first.
-    return _mapperServers(token, cat, err);
+    return _mapperServersAll(token, cat).then(function (extra) {
+      if (extra.length) return extra;
+      throw err;
+    });
   });
 }
 
@@ -376,25 +507,77 @@ function _mapperServers(token, cat, err) {
 // Resolve servers in preference order; take the first that yields a known embed
 // host, then extract its m3u8. A host that no longer returns a plain file (see
 // PLAYER_RE) just throws and we fall through to the next server.
-function _directStream(url, cat) {
-  var isHls = /\.m3u8(?:[?#]|$)/i.test(url);
-  return Promise.resolve([{
-    url: url, quality: 'auto', container: isHls ? 'hls' : 'mp4',
-    headers: { 'User-Agent': UA, 'Referer': SITE + '/', 'Origin': SITE },
-    kind: cat, audioLang: cat === 'dub' ? 'en' : 'ja', subtitles: []
-  }]);
+// Resolve ONE server to its stream group; never rejects — one dead mirror
+// must not prevent the other servers from being attempted.
+function _resolveServer(server, cat) {
+  var serverCat = server.type === 'dub' ? 'dub' : (server.type === 'hsub' ? 'hsub' : 'sub');
+  return _ajax('/ajax/server?get=' + encodeURIComponent(server.linkId)).then(function (j) {
+    var url = j && j.result && (typeof j.result === 'object' ? j.result.url : null);
+    // Do not whitelist embed domains here. AniKoto can return rotating mirror
+    // hosts (including Vidstream aliases); let the extractor validate the
+    // player page and stream response instead of silently dropping the host.
+    if (!url || !/^https?:\/\//i.test(url)) return [];
+    // Some mirrors return a direct media URL instead of an embed page. Keep
+    // that supported path while other servers continue through extraction.
+    if (/\.(?:m3u8|mp4)(?:[?#]|$)/i.test(url)) {
+      var directBase = (url.match(/^(https?:\/\/[^/]+)/i) || [])[1] || SITE;
+      return [{
+        url: url + '#anikoto-' + String(server.name || 'server').toLowerCase().replace(/[^a-z0-9]+/g, '-') + '-' + serverCat,
+        label: (server.name || 'AniKoto') + ' · ' + serverCat,
+        quality: 'auto',
+        container: /\.m3u8(?:[?#]|$)/i.test(url) ? 'hls' : 'mp4',
+        headers: { 'User-Agent': UA, 'Referer': SITE + '/', 'Origin': directBase },
+        kind: serverCat,
+        audioLang: serverCat === 'dub' ? 'en' : 'ja',
+        subtitles: []
+      }];
+    }
+    return _extractPlayer(url, serverCat, server.name).then(function (group) {
+      return group || [];
+    });
+  }).catch(function () { return []; });
 }
 
-function _tryServers(list, i, cat) {
-  if (i >= list.length) return Promise.reject(new Error('AniKoto: no playable server'));
-  return _ajax('/ajax/server?get=' + encodeURIComponent(list[i].linkId)).then(function (j) {
-    var url = j && j.result && (typeof j.result === 'object' ? j.result.url : null);
-    if (url && /^https?:\/\//i.test(url) && /\.(?:m3u8|mp4)(?:[?#]|$)/i.test(url)) {
-      return _directStream(url, cat);
+// Resolve all servers CONCURRENTLY, concatenating the groups in list order.
+// This used to walk the servers strictly one-by-one; with an embed page +
+// getSources round-trip per server (plus a sibling-pack fetch on top), a
+// single episode routinely took ~10s and blew the app's ~8s per-source
+// resolve budget — the app dropped the result and showed no sources at all.
+function _tryServersAll(list, cat) {
+  list = list || [];
+  var jobs = [];
+  for (var i = 0; i < list.length; i++) jobs.push(_resolveServer(list[i], cat));
+  return Promise.all(jobs).then(function (groups) {
+    // Hosts sometimes throttle the parallel burst and drop a server that
+    // would have answered on its own — give the empty ones ONE serial
+    // retry before settling for a shorter list.
+    var retryIdx = [];
+    for (var k = 0; k < groups.length; k++) if (!groups[k].length) retryIdx.push(k);
+    var chain = Promise.resolve();
+    retryIdx.forEach(function (idx) {
+      chain = chain.then(function () {
+        return _resolveServer(list[idx], cat).then(function (g) { groups[idx] = g; });
+      });
+    });
+    return chain.then(function () {
+      var out = [];
+      for (var k2 = 0; k2 < groups.length; k2++) out = out.concat(groups[k2]);
+      return out;
+    });
+  });
+}
+function _mapperServersAll(token, cat) {
+  if (!token) return Promise.resolve([]);
+  return _json(MAPPER + token, SITE + '/').then(function (j) {
+    var extra = [];
+    for (var name in (j || {})) {
+      var e = j[name];
+      if (name === 'status' || !e || typeof e !== 'object') continue;
+      var bucket = e[cat];
+      if (bucket && bucket.url) extra.push({ type: cat, linkId: String(bucket.url), name: name });
     }
-    if (url && PLAYER_RE.test(url)) return _extractPlayer(url, cat);
-    return _tryServers(list, i + 1, cat);
-  }).catch(function () { return _tryServers(list, i + 1, cat); });
+    return _tryServersAll(extra, cat);
+  }).catch(function () { return []; });
 }
 
 // Embed page → data-id → getSources(New) (plain m3u8 + subtitle tracks).
@@ -441,7 +624,7 @@ function _packSkew(playing, sibling) {
   return { seconds: skew, afterSeconds: after == null ? 0 : after };
 }
 
-function _extractPlayer(embed, cat) {
+function _extractPlayer(embed, cat, serverName) {
   var base = (embed.match(/^(https?:\/\/[^/]+)/) || [])[1] || 'https://vidtube.site';
   // Sources are keyed by the embed's data-id, which is shared across the
   // sub/hsub/dub cuts — the audio comes from `type`, so carry over the one this
@@ -466,13 +649,19 @@ function _extractPlayer(embed, cat) {
           format: /\.srt(\?|$)/i.test(t.file) ? 'srt' : 'vtt', 'default': !!t['default'] });
       }
       var hdrs = { 'User-Agent': UA, 'Referer': base + '/', 'Origin': base };
-      var videoEnc = _cdnEncodeId(file);
-      var subEnc = subs.length ? _cdnEncodeId(subs[0].url) : null;
-      var needSibling = videoEnc && subEnc && videoEnc !== subEnc;
 
       function finish(skew) {
         var mk = function (u, q) {
-          var o = { url: u, quality: q, container: /\.m3u8(\?|$)/i.test(u) ? 'hls' : 'mp4',
+          // AniKoto's servers are mirrors of ONE file per cut, so every
+          // entry resolves to the same URL — and the app's source picker
+          // collapses entries that share a URL, leaving only one visible
+          // server per cut. Tag each server's URL with a fragment so all
+          // servers stay listed; the fragment is never sent to the CDN,
+          // so playback is unchanged.
+          var tagged = u + '#anikoto-'
+            + String(serverName || 'server').toLowerCase().replace(/[^a-z0-9]+/g, '-')
+            + '-' + cat;
+          var o = { url: tagged, label: (serverName || 'AniKoto') + ' · ' + cat, quality: q, container: /\.m3u8(\?|$)/i.test(u) ? 'hls' : 'mp4',
             headers: hdrs, kind: cat, audioLang: cat === 'dub' ? 'en' : 'ja', subtitles: subs };
           if (skew) {
             o.subtitleSkewSeconds = skew.seconds;
@@ -488,36 +677,12 @@ function _extractPlayer(embed, cat) {
         return [mk(file, 'auto')];
       }
 
-      if (!needSibling) return finish(null);
-      var sibEmbed = _siblingEmbed(embed);
-      if (!sibEmbed || sibEmbed === embed) return finish(null);
-      return _get(sibEmbed, SITE + '/').then(function (shtml) {
-        var sid = (shtml.match(/data-id="(\d+)"/) || [])[1];
-        if (!sid) return null;
-        // Same id as the playing cut on hosts that share it, so the cut has to
-        // be carried too or this reads back the pack we already have.
-        return fetch(_sourcesUrl(base, sid,
-            _cutOf(sibEmbed) || (type === 'dub' ? 'sub' : 'dub')), {
-          headers: { 'User-Agent': UA, 'Referer': sibEmbed, 'X-Requested-With': 'XMLHttpRequest' }
-        }).then(function (sr) {
-          var sj; try { sj = JSON.parse(sr.body || 'null'); } catch (e) { sj = null; }
-          return sj;
-        });
-      }).then(function (sj) {
-        // Prefer intro.end delta (post-OP body length matches across packs).
-        // Dart blends this with the VTT OP-gap delta on fetch (~11s here).
-        // intro/outro stay plaintext next to `enc`, so skew still works.
-        var skew = _packSkew(j, sj);
-        if (skew) {
-          try {
-            console.log('[zangetsu-sub-timing] anikoto pack skew '
-              + skew.seconds.toFixed(3) + 's after ' + skew.afterSeconds.toFixed(3)
-              + 's via intro-markers'
-              + ' (video=' + videoEnc + ' vtt=' + subEnc + ')');
-          } catch (e) {}
-        }
-        return finish(skew);
-      }).catch(function () { return finish(null); });
+      // The sibling-pack skew probe no longer runs during resolution: it
+      // cost another embed page + getSources round-trip for EVERY server
+      // and was a big part of why episodes blew the app's ~8s resolve
+      // budget and came back with no sources. The skew helpers above stay
+      // in the file but are not called on the resolve path anymore.
+      return finish(null);
     });
   });
 }
