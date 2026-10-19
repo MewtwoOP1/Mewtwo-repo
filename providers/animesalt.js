@@ -367,9 +367,10 @@ function getDetail(url, opts) {
   if (!/\/watch\//i.test(watchPath)) watchPath = SITE + '/watch/' + encodeURIComponent(raw.replace(/^.*\//, '')) + '/ep-1';
   return _get(watchPath, SITE + '/').then(function (html) {
     var animeId = (html.match(/data-id="(\d+)"/) || [])[1];
-    var title = _htmlText((html.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1] || '').replace(/^Watch Free!\s*/i, '').replace(/\s+Online in HD.*$/i, '').replace(/\s+-\s+AnimeSalt$/i, '').trim();
+    var title = _htmlText((html.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1] || '').replace(/^Watch Free!\s*/i, '').replace(/\s+Online in HD.*$/i, '').replace(/\s+-\s+AnimeSalt$/i, '').replace(/\s+(?:Episode|Ep\.?)\s*\d+(?:\.\d+)?\s*$/i, '').trim();
     var poster = (html.match(/property="og:image" content="([^"]+)"/i) || [])[1] || null;
-    var season = _seasonFromTitle(title, watchPath);\n    var base = { id: raw, title: title || raw, url: raw, cover: poster, season: season, description: '',
+    var season = _seasonFromTitle(title, watchPath);
+    var base = { id: raw, title: title || raw, url: raw, cover: poster, season: season, description: '',
       status: 'unknown', genres: [], studios: [], type: 'anime', sourceId: SOURCE_ID, episodes: [], subCount: 0, dubCount: 0 };
     if (!animeId) return base;
     return _ajax('/ajax/episode/list/' + animeId).then(function (j) {
