@@ -1,5 +1,6 @@
 // Manual/live smoke test for AnimeSalt. Uses the app-style fetch response shape.
 const nativeFetch = global.fetch;
+const liveCalls = [];
 global.fetch = async function (url, options) {
   const init = Object.assign({}, options || {});
   const timeoutMs = Number(init.timeoutMs) || 12000;
@@ -8,7 +9,9 @@ global.fetch = async function (url, options) {
     init.signal = AbortSignal.timeout(timeoutMs);
   }
   const response = await nativeFetch(url, init);
-  return { status: response.status, body: await response.text() };
+  const body = await response.text();
+  liveCalls.push({ url: String(url), status: response.status, length: body.length, snippet: body.slice(0, 500) });
+  return { status: response.status, body: body };
 };
 
 const provider = require('../providers/animesalt.js');
@@ -17,6 +20,7 @@ async function main() {
   console.log('[AnimeSalt live] Checking mirror selection and search...');
   const results = await provider.search('Naruto', 1, {});
   if (!Array.isArray(results) || results.length === 0) {
+    console.log('[AnimeSalt live] Request diagnostics:', JSON.stringify(liveCalls.map(({url,status,length,snippet}) => ({url,status,length,snippet}))));
     throw new Error('AnimeSalt live search returned no results');
   }
   const series = results.find((item) => /\/series\//i.test(item.url)) || results[0];
