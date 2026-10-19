@@ -47,6 +47,6 @@ The provider manifest and JavaScript interface follow the self-contained source 
 
 ## License
 
-The code in this repository is licensed under the MIT License. See [LICENSE](LICENSE). Third-party names, logos, APIs, metadata, and content remain the property of their respective owners and are subject to their own terms.
+Most code in this repository is licensed under the MIT License; see [LICENSE](LICENSE). The MovieBox IN port is separately licensed under GPL-3.0-only, with its required source notice preserved; see [LICENSES/GPL-3.0.txt](LICENSES/GPL-3.0.txt). Third-party names, logos, APIs, metadata, and content remain the property of their respective owners and are subject to their own terms.
 
-The active movie/series providers include PressPlayX, HDHub4u, and TMDB + Stremio. The active anime providers include AniKoto, AnimeSalt, DesiDub Anime, AnV, HiAnime, AnimeSuge, AniZone, MegaPlay, and RareAnimes • StreamBeta. StreamBeta is a playback resolver; RareAnimes • StreamBeta combines it with RareAnimes catalog and episode metadata.
+The active movie/series providers include MovieBox IN, PressPlayX, HDHub4u, and TMDB + Stremio. The active anime providers include AniKoto, AnimeSalt, DesiDub Anime, AnV, HiAnime, AnimeSuge, AniZone, MegaPlay, and RareAnimes • StreamBeta. StreamBeta is a playback resolver; RareAnimes • StreamBeta combines it with RareAnimes catalog and episode metadata.
