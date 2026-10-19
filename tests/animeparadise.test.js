@@ -45,9 +45,9 @@ global.fetch = async function (url, options) {
 const provider = require('../providers/animeparadise.js');
 
 async function main() {
-  assert.equal(provider.version, '1.0.0');
+  assert.equal(provider.version, '1.0.1');
   assert.equal(provider.getInfo().name, 'AnimeParadise');
-  assert.equal(provider.getInfo().version, '1.0.0');
+  assert.equal(provider.getInfo().version, '1.0.1');
   assert.deepEqual(provider.getSettings(), []);
 
   const found = await provider.search('Frieren', 1, {});
