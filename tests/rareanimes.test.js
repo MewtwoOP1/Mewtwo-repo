@@ -14,7 +14,8 @@ const languages = [
   { lang: "Bengali", fid: "sb_bn789", url: "https://worker.example/bengali.m3u8" },
   { lang: "Kannada", fid: "sb_kn789", url: "https://worker.example/kannada.m3u8" },
   // Non sb_* IDs use the legacy ?url= route rather than ?v=.
-  { lang: "English", fid: "generic_english_123", url: "https://worker.example/english.m3u8" }
+  { lang: "English", fid: "generic_english_123", url: "https://worker.example/english.m3u8" },
+  { lang: "Fallback", fid: "sb_fallback789", url: "https://worker.example/fallback.m3u8" }
 ];
 
 function player(lang, fid, url) {
@@ -42,6 +43,7 @@ global.fetch = async function (url, options) {
   const route = url.match(/^https:\/\/codedew\.com\/streambeta\/\?(v|url)=([^&]+)/);
   if (route) {
     const id = decodeURIComponent(route[2]);
+    if (id === "sb_fallback789" && route[1] === "v") return { status: 404, body: "use url route" };
     if (playersByFid[id]) return { status: 200, body: playersByFid[id] };
   }
   return { status: 404, body: "" };
@@ -77,7 +79,7 @@ async function main() {
     assert.ok(streams.some(s => s.label.indexOf(lang) >= 0),
       "expected playable stream for " + lang);
   });
-  assert.equal(streams.length, languages.length * 2, "each of seven language FIDs should return both working non-Pixeldrain mirrors");
+  assert.equal(streams.length, languages.length * 2, "each of eight language FIDs should return both working non-Pixeldrain mirrors");
   assert.ok(streams.every(s => /^https:\/\//.test(s.url)));
   assert.ok(streams.every(s => s.container === "hls" || s.container === "mp4"));
   assert.ok(streams.some(s => s.url === "https://worker.example/telugu.m3u8" && s.container === "hls"));
@@ -86,12 +88,15 @@ async function main() {
     "sb_* FIDs must use the ?v= route");
   assert.ok(calls.some(c => c.url === "https://codedew.com/streambeta/?url=generic_english_123"),
     "ordinary FIDs must use the ?url= route");
+  assert.ok(calls.some(c => c.url === "https://codedew.com/streambeta/?v=sb_fallback789") &&
+    calls.some(c => c.url === "https://codedew.com/streambeta/?url=sb_fallback789"),
+    "if the canonical sb_* route fails, the alternate query route should be attempted");
   assert.ok(calls.some(c => c.url === "https://codedew.com/streambeta/?url=encodedTamil"),
     "the resolver should follow nested CodeDew player pages");
   assert.equal(provider._test._streamBetaFidCandidates("sb_hi123")[0],
     "https://codedew.com/streambeta/?v=sb_hi123");
   assert.equal(provider._test._streamBetaFidCandidates("generic_english_123")[0],
     "https://codedew.com/streambeta/?url=generic_english_123");
-  console.log("RareAnimes mocked catalog, episode, seven-language FID routing, fallback, and stream tests passed.");
+  console.log("RareAnimes mocked catalog, episode, eight-language FID routing, fallback, and stream tests passed.");
 }
 main().catch(e => { console.error(e); process.exitCode = 1; });
