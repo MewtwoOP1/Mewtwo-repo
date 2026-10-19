@@ -52,7 +52,7 @@ function _pickMain() {
     if (i >= MIRRORS.length) { _main = MIRRORS[0]; return _main; }
     return fetch(MIRRORS[i] + '/', { headers: { 'User-Agent': UA }, timeoutMs: 8000 })
       .then(function (r) {
-        if (r && r.status && r.status < 500 && (r.body || '').length > 800 && /\\/(?:series|movies)\\//i.test(r.body || '')) { _main = MIRRORS[i]; return _main; }
+        if (r && r.status && r.status < 500 && (r.body || '').length > 800 && /\/(?:series|movies)\//i.test(r.body || '')) { _main = MIRRORS[i]; return _main; }
         return tryAt(i + 1);
       }).catch(function () { return tryAt(i + 1); });
   }
