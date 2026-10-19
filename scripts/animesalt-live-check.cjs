@@ -35,6 +35,18 @@ async function main() {
   if (liveWatchUrl) {
     const watchPage = await global.fetch(liveWatchUrl, { headers: { 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://animesalt.to/' }, timeoutMs: 12000 });
     const body = watchPage.body || '';
+    const episodeListProbe = await global.fetch('https://animesalt.to/ajax/episode/list/7174', { headers: { 'User-Agent': 'Mozilla/5.0', 'Referer': liveWatchUrl, 'X-Requested-With': 'XMLHttpRequest' }, timeoutMs: 12000 });
+    let episodeListJson = null;
+    try { episodeListJson = JSON.parse(episodeListProbe.body); } catch (_) {}
+    const episodeListHtml = episodeListJson && typeof episodeListJson.result === 'string' ? episodeListJson.result : episodeListProbe.body;
+    console.log('[AnimeSalt live] Episode-list endpoint:', JSON.stringify({
+      status: episodeListProbe.status, length: episodeListProbe.body.length,
+      jsonStatus: episodeListJson && episodeListJson.status,
+      resultType: episodeListJson && typeof episodeListJson.result,
+      dataIds: episodeListHtml.split('data-ids=').length - 1,
+      episodeLinks: episodeListHtml.split('data-num=').length - 1,
+      snippet: episodeListHtml.slice(0, 900)
+    }));
     console.log('[AnimeSalt live] Watch-page markers:', JSON.stringify({
       status: watchPage.status, length: body.length,
       dataId: body.includes('data-id='),
