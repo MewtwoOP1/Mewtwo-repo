@@ -460,7 +460,7 @@ function _expandQualities(masterUrl, hdrs, cat, subs, tag) {
   function autoEntry(ct) {
     return { url: masterUrl, quality: 'Auto', label: 'Auto' + suffix,
       container: ct, headers: hdrs,
-      kind: cat, audioLang: cat === 'dub' ? 'en' : 'ja', subtitles: subs };
+      kind: cat, audioLang: cat === 'dub' ? 'hi' : 'ja', subtitles: subs };
   }
   if (!/\.m3u8(\?|$)/i.test(String(masterUrl))) {
     return Promise.resolve([autoEntry('mp4')]);
