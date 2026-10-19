@@ -39,6 +39,29 @@ async function main() {
     let episodeListJson = null;
     try { episodeListJson = JSON.parse(episodeListProbe.body); } catch (_) {}
     const episodeListHtml = episodeListJson && typeof episodeListJson.result === 'string' ? episodeListJson.result : episodeListProbe.body;
+    const episodeHtml = episodeListJson && typeof episodeListJson.html === 'string' ? episodeListJson.html : '';
+    const encodedEpisodeId = episodeHtml.split('data-id="')[1] ? episodeHtml.split('data-id="')[1].split('"')[0] : '';
+    console.log('[AnimeSalt live] Episode ID extracted:', encodedEpisodeId ? 'yes' : 'no', '| encoded length:', encodedEpisodeId.length);
+    for (const route of [
+      '/ajax/episode/servers?episodeId=' + encodeURIComponent(encodedEpisodeId),
+      '/ajax/server/list?servers=' + encodeURIComponent(encodedEpisodeId),
+      '/ajax/server?get=' + encodeURIComponent(encodedEpisodeId)
+    ]) {
+      const probe = await global.fetch('https://animesalt.to' + route, { headers: { 'User-Agent': 'Mozilla/5.0', 'Referer': liveWatchUrl, 'X-Requested-With': 'XMLHttpRequest' }, timeoutMs: 12000 });
+      let parsed = null; try { parsed = JSON.parse(probe.body); } catch (_) {}
+      console.log('[AnimeSalt live] Server-route probe:', JSON.stringify({
+        route, status: probe.status, length: probe.body.length,
+        jsonKeys: parsed ? Object.keys(parsed) : [],
+        htmlLength: parsed && typeof parsed.html === 'string' ? parsed.html.length : 0,
+        resultType: parsed && typeof parsed.result,
+        snippet: (parsed && (parsed.html || parsed.result) || probe.body).slice(0, 350)
+      }));
+    }
+    console.log('[AnimeSalt live] AJAX markers:', JSON.stringify(
+      ['/ajax/episode/servers', '/ajax/server?get=', '/ajax/server/list', '/ajax/episode/list/'].map((marker) => {
+        const at = body.indexOf(marker); return {marker, snippet: at >= 0 ? body.slice(Math.max(0, at - 100), at + 180) : ''};
+      })
+    ));
     console.log('[AnimeSalt live] Episode-list endpoint:', JSON.stringify({
       status: episodeListProbe.status, length: episodeListProbe.body.length,
       jsonStatus: episodeListJson && episodeListJson.status,
