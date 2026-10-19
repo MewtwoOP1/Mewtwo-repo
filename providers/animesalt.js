@@ -198,21 +198,27 @@ function _slugFromAnime(href) {
   return m ? m[1] : null;
 }
 function _cards(html) {
-  var out = [], seen = {}, source = String(html || ''), re = /<a\b([^>]*\bhref="([^"]*\/watch\/[^"]+)"[^>]*)>([\s\S]*?)<\/a>/gi, m;
-  while ((m = re.exec(source)) !== null) {
-    var attrs = m[1], href = m[2], inner = m[3], slug = _slugFromAnime(href);
+  var out = [], seen = {}, source = String(html || ''), parts = source.split(/href="/i);
+  for (var i = 1; i < parts.length; i++) {
+    var part = parts[i], end = part.indexOf('"');
+    if (end < 0) continue;
+    var href = part.slice(0, end), slug = _slugFromAnime(href);
     if (!slug || seen[slug]) continue;
-    var title = (attrs.match(/\btitle="([^"]+)"/i) || [])[1]
-      || (inner.match(/<img[^>]*\balt="([^"]+)"/i) || [])[1]
-      || htmlText(inner).trim();
-    if (!title || /^episode\s*\d+$/i.test(title)) continue;
-    var poster = (inner.match(/<img[^>]+(?:data-src|data-lazy-src|src)="([^"]+)"/i) || [])[1] || '';
+    var near = part.slice(end + 1, end + 2400);
+    var title = (near.match(/\btitle="([^"]+)"/i) || [])[1]
+      || (near.match(/\bdata-jname="([^"]+)"/i) || [])[1]
+      || (near.match(/<h3[^>]*>\s*([^<]+)/i) || [])[1]
+      || (near.match(/\balt="([^"]+)"/i) || [])[1];
+    if (!title) continue;
+    title = htmlText(title).trim();
+    if (!title || /^episode\s*\d+$/i.test(title) || /^(?:play|watch)$/i.test(title)) continue;
+    var poster = (near.match(/<img[^>]+(?:data-src|data-lazy-src|src)="([^"]+)"/i) || [])[1] || '';
     if (!poster) {
-      var before = source.slice(Math.max(0, m.index - 1800), m.index);
+      var before = source.slice(Math.max(0, source.indexOf('href="' + href) - 2200), source.indexOf('href="' + href));
       poster = (before.match(/<img[^>]+(?:data-src|data-lazy-src|src)="([^"]+)"/i) || [])[1] || '';
     }
     seen[slug] = 1;
-    out.push({ id: slug, title: htmlText(title).trim(), url: 'watch/' + slug + '/ep-1',
+    out.push({ id: slug, title: title, url: 'watch/' + slug + '/ep-1',
       cover: poster || null, type: 'anime', sourceId: SOURCE_ID });
   }
   return out;
