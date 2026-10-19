@@ -17,11 +17,19 @@ global.fetch = async function(url, options) {
   if (url === 'https://megaplays.se/stream/getSources?id=7788&id=7788&type=sub') return {status:200,body:JSON.stringify({sources:{file:'https://cdn.example/frieren-sub-legacy.m3u8'}})};
   if (url === 'https://megaplays.se/stream/getSourcesNew?id=7788&id=7788&type=dub') return {status:200,body:JSON.stringify({sources:{file:'https://cdn.example/frieren-dub.m3u8'}})};
   if (url === 'https://megaplays.se/stream/getSources?id=7788&id=7788&type=dub') return {status:200,body:JSON.stringify({sources:{file:'https://cdn.example/frieren-dub-legacy.m3u8'}})};
+  if (url === 'https://anikototv.to/ajax/server/list?servers=vidstream-server') return {status:200,body:JSON.stringify({result:'<div data-type="sub"><a data-link-id="vidstream-link">Vidstream</a></div>'})};
+  if (url === 'https://anikototv.to/ajax/server?get=vidstream-link') return {status:200,body:JSON.stringify({result:{url:'https://vidstream.example/stream/123'}})};
+  if (url === 'https://vidstream.example/stream/123') return {status:200,body:'<div data-id="9900"></div><script src="/assets/player.js"></script>'};
+  if (url === 'https://vidstream.example/assets/player.js') return {status:200,body:"const legacy='stream/getSources'; const modern='stream/getSourcesNew'; /* AES-CBC */"};
+  if (url === 'https://vidstream.example/stream/getSourcesNew?id=9900&id=9900&type=sub') return {status:200,body:JSON.stringify({sources:{file:'https://cdn.example/vidstream-sub.m3u8'}})};
+  if (url === 'https://vidstream.example/stream/getSources?id=9900&id=9900&type=sub') return {status:200,body:JSON.stringify({sources:{file:'https://cdn.example/vidstream-sub-legacy.m3u8'}})};
+  if (url === 'https://anikototv.to/ajax/server/list?servers=direct-server') return {status:200,body:JSON.stringify({result:'<div data-type="sub"><a data-link-id="direct-link">Direct HLS</a></div>'})};
+  if (url === 'https://anikototv.to/ajax/server?get=direct-link') return {status:200,body:JSON.stringify({result:{url:'https://cdn.example/direct.m3u8?token=abc'}})};
   return {status:404,body:''};
 };
 const provider = require('../providers/megaplay.js');
 async function main() {
-  assert.equal(provider.version, '1.0.2');
+  assert.equal(provider.version, '1.0.3');
   assert.equal(provider.getInfo().name, 'MegaPlay');
   const results = await provider.search('Frieren', 1, {});
   assert.equal(results.length, 1); assert.equal(results[0].id, 'frieren');
@@ -41,6 +49,19 @@ async function main() {
   assert.ok(calls.some(c => c.url === 'https://anikototv.to/ajax/server?get=dub-link'));
   assert.ok(calls.some(c => c.url === 'https://megaplays.se/stream/getSourcesNew?id=7788&id=7788&type=sub'));
   assert.ok(calls.some(c => c.url === 'https://megaplays.se/stream/getSourcesNew?id=7788&id=7788&type=dub'));
-  console.log('MegaPlay mocked catalog, episode server-chain, sub/dub, HLS and subtitle tests passed.');
+
+  const vidstream = await provider.getVideoSources('megaplay://501/sub/1/vidstream-server', {});
+  assert.equal(vidstream.length, 1);
+  assert.equal(vidstream[0].url, 'https://cdn.example/vidstream-sub.m3u8');
+  assert.equal(vidstream[0].container, 'hls');
+  assert.ok(calls.some(c => c.url === 'https://vidstream.example/stream/getSourcesNew?id=9900&id=9900&type=sub'));
+
+  const direct = await provider.getVideoSources('megaplay://501/sub/1/direct-server', {});
+  assert.equal(direct.length, 1);
+  assert.equal(direct[0].url, 'https://cdn.example/direct.m3u8?token=abc');
+  assert.equal(direct[0].hls, true);
+  assert.equal(direct[0].embed, false);
+
+  console.log('MegaPlay mocked catalog, sub/dub, encrypted embed, Vidstream and direct HLS tests passed.');
 }
 main().catch(e => { console.error(e); process.exitCode = 1; });
