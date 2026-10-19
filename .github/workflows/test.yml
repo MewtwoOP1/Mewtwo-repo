@@ -21,6 +21,3 @@ jobs:
           node-version: 22
       - name: Validate providers and run tests
         run: node scripts/check-and-run.mjs
-      - name: Live AnimeSalt playback smoke test
-        if: github.event_name == 'pull_request'
-        run: node scripts/animesalt-live-check.cjs

@@ -49,19 +49,4 @@ The provider manifest and JavaScript interface follow the self-contained source 
 
 The code in this repository is licensed under the MIT License. See [LICENSE](LICENSE). Third-party names, logos, APIs, metadata, and content remain the property of their respective owners and are subject to their own terms.
 
-The active movie/series providers include PressPlayX, HDHub4u, and TMDB + Stremio. The active anime providers include AniKoto, AnV, HiAnime, AnimeSuge, AniZone, MegaPlay, and AnimeSalt.
-AnimeSalt uses the site's AJAX episode/server flow and keeps its multi-audio HLS master intact.
-
-Resolver note: AnimeSalt now parses `/watch/` cards and the site's `data-number` / `data-id` AJAX payloads.
-
-AnimeSalt card parsing follows the live site's `/watch/{slug}/ep-1` links rather than AnimeSuge `/anime/` cards.
-
-Live smoke diagnostics now capture the actual AnimeSalt watch-card markup for resolver debugging.
-
-The live diagnostic emits raw watch-link fragments without regex escaping.
-
-Search parser now resolves titles from nearby AnimeSalt watch-card metadata when poster links omit titles.
-
-AnimeSalt parsing is self-contained and does not require the app's global `htmlText` helper.
-
-AnimeSalt returns language-specific sub/dub streams when the upstream server does not publish a multi-audio HLS master.
+The active movie/series providers include PressPlayX, HDHub4u, and TMDB + Stremio. The active anime providers include AniKoto, AnV, HiAnime, AnimeSuge, AniZone, and MegaPlay.
