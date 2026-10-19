@@ -176,7 +176,7 @@ function _parseEpisodes(content) {
       var key = lang.toLowerCase();
       var v = current.variants.filter(function (x) { return x.lang.toLowerCase() === key; })[0];
       if (!v) { v = { lang: lang, url: preferred.url }; current.variants.push(v); }
-      else if (/watchnow|watch\\b/i.test(preferred.label)) v.url = preferred.url;
+      else if (/watchnow|watch\b/i.test(preferred.label)) v.url = preferred.url;
       pendingLang = '';
     }
   });
