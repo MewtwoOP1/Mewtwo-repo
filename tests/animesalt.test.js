@@ -15,7 +15,7 @@ global.htmlText = function (html) {
     .trim();
 };
 
-const provider = require("../providers/animesuge.js");
+const provider = require("../providers/animesalt.js");
 
 const calls = [];
 global.fetch = async (url) => {
@@ -68,7 +68,7 @@ async function main() {
   assert.equal(detail.episodes.length, 1);
   assert.equal(detail.episodes[0].number, 1);
   assert.equal(detail.episodes[0].title, "I Am the Strongest");
-  assert.match(detail.episodes[0].url, /^animesuge:\/\/sub\//);
+  assert.match(detail.episodes[0].url, /^animesalt:\/\/sub\//);
   assert.ok(calls.some((url) => url.includes("/ajax/episode/list/123?vrf=")));
 
   const episodes = await provider.getEpisodes("solo-leveling", { category: "sub" });
