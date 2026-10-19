@@ -57,3 +57,5 @@ Resolver note: AnimeSalt now parses `/watch/` cards and the site's `data-number`
 AnimeSalt card parsing follows the live site's `/watch/{slug}/ep-1` links rather than AnimeSuge `/anime/` cards.
 
 Live smoke diagnostics now capture the actual AnimeSalt watch-card markup for resolver debugging.
+
+The live diagnostic emits raw watch-link fragments without regex escaping.
