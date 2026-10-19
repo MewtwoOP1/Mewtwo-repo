@@ -303,7 +303,7 @@ function _episodes(lhtml, cat) {
     var initCat = (cat === 'dub' && dub) || (cat === 'sub' && !sub && dub) ? 'dub' : 'sub';
     out.push({ id: initCat + ':' + num, number: num,
       title: etitle || ('Episode ' + num),
-      url: 'animesuge://' + initCat + '/' + encodeURIComponent(serverIds)
+      url: 'animesalt://' + initCat + '/' + encodeURIComponent(serverIds)
         + '/' + (sub ? '1' : '0') + (dub ? '1' : '0') + '/' + num });
   }
   return out;
@@ -373,7 +373,7 @@ function _srvRank(name) {
   return 5;
 }
 function getVideoSources(episodeUrl) {
-  var raw = String(episodeUrl || '').replace('animesuge://', '');
+  var raw = String(episodeUrl || '').replace('animesalt://', '');
   var parts = raw.split('/');
   var cat = parts[0] === 'dub' ? 'dub' : 'sub';
   var serverIds = parts[1] ? decodeURIComponent(parts[1]) : '';
