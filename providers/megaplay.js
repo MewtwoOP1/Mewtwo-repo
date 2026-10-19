@@ -1,7 +1,7 @@
 // MegaPlay — Anikoto catalogue + MegaPlay embed playback for Zangetsu.
 // Version is mirrored in index.json; bump both whenever this source changes.
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID) ? String(__SOURCE_ID) : 'megaplay';
-var VERSION = '1.0.2';
+var VERSION = '1.0.3';
 var CATALOG = 'https://anikototv.to';
 var API = 'https://anikotoapi.site';
 var BASE = 'https://megaplays.se';
@@ -220,12 +220,25 @@ function _parseServers(html) {
   }
   return out;
 }
+function _directStream(url, lang) {
+  var isHls = /\.m3u8(?:[?#]|$)/i.test(url);
+  return [{
+    url: url, name: 'Direct stream', provider: 'MegaPlay', quality: 'auto',
+    container: isHls ? 'hls' : 'mp4', hls: isHls, embed: false,
+    downloadable: false, kind: lang, audioLang: lang === 'dub' ? 'en' : 'ja',
+    headers: { 'User-Agent': UA, 'Referer': CATALOG + '/', 'Origin': CATALOG },
+    subtitles: []
+  }];
+}
 function _tryServerList(list, i, lang) {
   if (i >= list.length) return Promise.resolve([]);
   return _ajax('/ajax/server?get=' + encodeURIComponent(list[i].linkId)).then(function(j) {
     var result = j && j.result;
     var embed = result && typeof result === 'object' ? result.url : '';
-    if (typeof embed === 'string' && /https?:\/\/(?:[^/]+\.)?(?:megaplay\.[a-z]+|megaplays\.se|vidtube\.[a-z]+)/i.test(embed)) {
+    if (typeof embed === 'string' && /^https?:\/\//i.test(embed) && /\.(?:m3u8|mp4)(?:[?#]|$)/i.test(embed)) {
+      return _directStream(embed, lang);
+    }
+    if (typeof embed === 'string' && /https?:\/\/(?:[^/]+\.)?(?:megaplay\.[a-z]+|megaplays\.se|vidtube\.[a-z]+|vidstream(?:ing)?\.[a-z]+)/i.test(embed)) {
       return _megaExtract(embed, lang).catch(function() { return _tryServerList(list, i + 1, lang); });
     }
     return _tryServerList(list, i + 1, lang);

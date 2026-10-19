@@ -44,6 +44,24 @@ global.fetch = async function (url, options) {
   if (url === "https://vidtube.site/stream/getSources?id=9001&type=dub") {
     return { status: 200, body: JSON.stringify({ sources: { file: "https://cdn.example/frieren-dub.m3u8" }, tracks: [] }) };
   }
+  if (url === "https://anikototv.to/ajax/server/list?servers=direct-server") {
+    return { status: 200, body: JSON.stringify({ ok: true, result: '<div data-type="sub"><li data-link-id="direct-link">Direct HLS</li></div>' }) };
+  }
+  if (url === "https://anikototv.to/ajax/server?get=direct-link") {
+    return { status: 200, body: JSON.stringify({ ok: true, result: { url: "https://cdn.example/direct.m3u8?token=abc" } }) };
+  }
+  if (url === "https://anikototv.to/ajax/server/list?servers=vidstream-server") {
+    return { status: 200, body: JSON.stringify({ ok: true, result: '<div data-type="sub"><li data-link-id="vidstream-link">Vidstream</li></div>' }) };
+  }
+  if (url === "https://anikototv.to/ajax/server?get=vidstream-link") {
+    return { status: 200, body: JSON.stringify({ ok: true, result: { url: "https://vidstream.example/stream/123" } }) };
+  }
+  if (url === "https://vidstream.example/stream/123") {
+    return { status: 200, body: '<div data-id="9002"></div>' };
+  }
+  if (url === "https://vidstream.example/stream/getSources?id=9002&type=sub") {
+    return { status: 200, body: JSON.stringify({ sources: { file: "https://cdn.example/vidstream.m3u8" }, tracks: [] }) };
+  }
   return { status: 404, body: "{}" };
 };
 
@@ -64,7 +82,7 @@ const provider = {
 };
 
 async function main() {
-  assert.equal(provider.version, "1.2.2");
+  assert.equal(provider.version, "1.2.3");
   assert.equal(provider.getInfo().name, "AniKoto");
 
   const cardSearch = await provider.search("Jujutsu Kaisen", 1, {});
@@ -94,7 +112,19 @@ async function main() {
   assert.equal(dubStreams[0].url, "https://cdn.example/frieren-dub.m3u8");
   assert.equal(dubStreams[0].kind, "dub");
 
-  console.log("AniKoto unchanged script-global API, catalogue, sub/dub and stream tests passed.");
+  const directStreams = await provider.getVideoSources("anikoto://sub/direct-server/1/1");
+  assert.equal(directStreams.length, 1);
+  assert.equal(directStreams[0].url, "https://cdn.example/direct.m3u8?token=abc");
+  assert.equal(directStreams[0].container, "hls");
+  assert.equal(directStreams[0].kind, "sub");
+  assert.equal(directStreams[0].headers.Referer, "https://anikototv.to/");
+
+  const vidstream = await provider.getVideoSources("anikoto://sub/vidstream-server/1/1");
+  assert.equal(vidstream.length, 1);
+  assert.equal(vidstream[0].url, "https://cdn.example/vidstream.m3u8");
+  assert.equal(vidstream[0].container, "hls");
+
+  console.log("AniKoto catalogue, sub/dub, direct HLS, Vidstream extraction and subtitle tests passed.");
 }
 
 main().catch(e => { console.error(e); process.exitCode = 1; });

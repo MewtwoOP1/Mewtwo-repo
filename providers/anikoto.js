@@ -30,13 +30,13 @@ var SITE = 'https://anikototv.to';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
   + '(KHTML, like Gecko) Chrome/124.0 Safari/537.36';
 // Embed hosts that hand back a plain m3u8 (via getSources or getSourcesNew).
-var PLAYER_RE = /^https?:\/\/(?:[a-z0-9-]+\.)?(?:vidtube\.[a-z]+|megaplay\.[a-z]+|vidwish\.[a-z]+)/i;
+var PLAYER_RE = /^https?:\/\/(?:[a-z0-9-]+\.)?(?:vidtube\.[a-z]+|vidstream(?:ing)?\.[a-z]+|megaplay\.[a-z]+|vidwish\.[a-z]+)/i;
 // Extra servers the episode's own list doesn't offer, keyed <mal>/<ep>/<ts>.
 var MAPPER = 'https://mapper.nekostream.site/api/mal/';
 
 function getInfo() {
   return { name: 'AniKoto', lang: 'en', baseUrl: SITE,
-    logo: SITE + '/favicon.ico', type: 'anime', version: '1.2.2' };
+    logo: SITE + '/favicon.ico', type: 'anime', version: '1.2.3' };
 }
 
 // MegaPlay/VidWish: getSourcesNew is the endpoint their player hits; both routes
@@ -376,10 +376,22 @@ function _mapperServers(token, cat, err) {
 // Resolve servers in preference order; take the first that yields a known embed
 // host, then extract its m3u8. A host that no longer returns a plain file (see
 // PLAYER_RE) just throws and we fall through to the next server.
+function _directStream(url, cat) {
+  var isHls = /\.m3u8(?:[?#]|$)/i.test(url);
+  return Promise.resolve([{
+    url: url, quality: 'auto', container: isHls ? 'hls' : 'mp4',
+    headers: { 'User-Agent': UA, 'Referer': SITE + '/', 'Origin': SITE },
+    kind: cat, audioLang: cat === 'dub' ? 'en' : 'ja', subtitles: []
+  }]);
+}
+
 function _tryServers(list, i, cat) {
   if (i >= list.length) return Promise.reject(new Error('AniKoto: no playable server'));
   return _ajax('/ajax/server?get=' + encodeURIComponent(list[i].linkId)).then(function (j) {
     var url = j && j.result && (typeof j.result === 'object' ? j.result.url : null);
+    if (url && /^https?:\/\//i.test(url) && /\.(?:m3u8|mp4)(?:[?#]|$)/i.test(url)) {
+      return _directStream(url, cat);
+    }
     if (url && PLAYER_RE.test(url)) return _extractPlayer(url, cat);
     return _tryServers(list, i + 1, cat);
   }).catch(function () { return _tryServers(list, i + 1, cat); });
