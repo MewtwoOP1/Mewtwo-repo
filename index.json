@@ -564,26 +564,6 @@
       "file": "providers/anizone.js",
       "logo": "https://www.google.com/s2/favicons?sz=256&domain=anizone.to",
       "nsfw": false
-    },
-    {
-      "id": "animesalt",
-      "name": "AnimeSalt",
-      "version": "1.0.2",
-      "type": "anime",
-      "lang": "hi",
-      "file": "providers/animesalt.js",
-      "logo": "https://www.google.com/s2/favicons?sz=256&domain=animesalt.to",
-      "nsfw": false
-    },
-    {
-      "id": "acdn",
-      "name": "ACDN Multi-Audio",
-      "version": "1.0.0",
-      "type": "anime",
-      "lang": "multi",
-      "file": "providers/acdn.js",
-      "logo": "https://www.google.com/s2/favicons?sz=256&domain=animesalt.cx",
-      "nsfw": false
     }
   ]
 }
