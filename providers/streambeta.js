@@ -3,10 +3,10 @@
  * Resolver-only integration: StreamBeta does not expose an independent catalog.
  * Accepts a StreamBeta URL, HubCloud ID, or StreamBeta file ID as a search query.
  *
- * v1.0.0: initial resolver with source and alternate-audio parsing.
+ * v1.0.1: expose alternate languages as player stream choices, not fake episodes.
  */
 var BASE = 'https://codedew.com/streambeta/';
-var VERSION = '1.0.0';
+var VERSION = '1.0.1';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
 
 function getInfo() {
@@ -87,14 +87,10 @@ function getDetail(url) {
   return _get(target).then(function (html) {
     var parsed = _parse(html);
     if (!parsed.sources.length && !parsed.fid) throw new Error('StreamBeta: page did not expose playable sources');
-    var eps = [];
-    if (parsed.fid) eps.push({ id: parsed.fid, title: parsed.lang || 'Default audio',
-      url: 'streambeta://v/' + parsed.fid, number: 1 });
-    parsed.langs.forEach(function (l, i) {
-      if (!eps.some(function (e) { return e.url === 'streambeta://v/' + l.fid; }))
-        eps.push({ id: l.fid, title: l.lang || ('Audio ' + (i + 1)), url: 'streambeta://v/' + l.fid, number: i + 2 });
-    });
-    if (!eps.length) eps.push({ id: 'default', title: 'Default source', url: url, number: 1 });
+    // Language buttons are alternate audio versions of the same file, not episodes.
+    // Keep one playable item; getVideoSources exposes each language as a player choice.
+    var eps = [{ id: parsed.fid || 'default', title: parsed.title || 'Play',
+      url: parsed.fid ? ('streambeta://v/' + parsed.fid) : url, number: 1 }];
     return { id: 'streambeta-' + (parsed.fid || 'url'), title: parsed.title || 'StreamBeta',
       url: url, type: 'anime', description: parsed.size ? 'File size: ' + parsed.size : null, episodes: eps };
   });
@@ -105,19 +101,48 @@ function getEpisodes(url) {
 function getVideoSources(url) {
   var target = _urlFor(url);
   if (!target) return Promise.resolve([]);
-  return _get(target).then(function (html) {
-    var parsed = _parse(html), out = [], seen = {};
-    parsed.sources.forEach(function (s) {
-      var u = s && (s.stream_url || s.url);
-      if (!u || !/^https?:\/\//i.test(u) || seen[u] || /pixeldrain/i.test(String(s.type || ''))) return;
-      seen[u] = true;
-      out.push({ url: u, quality: /2160p/i.test(String(s.name || s.type || '')) ? '2160p' :
-        (/1080p/i.test(String(s.name || s.type || '')) ? '1080p' : 'auto'),
-        label: [parsed.lang || 'Auto', s.name || s.type || 'StreamBeta'].filter(Boolean).join(' • '),
-        container: /\.m3u8(?:[?#]|$)/i.test(u) ? 'hls' : 'mp4',
-        kind: 'dub', headers: { 'User-Agent': UA, 'Referer': target } });
+  function loadPage(pageUrl) {
+    return _get(pageUrl).then(function (html) {
+      var parsed = _parse(html);
+      return { pageUrl: pageUrl, parsed: parsed };
+    }).catch(function () { return { pageUrl: pageUrl, parsed: { sources: [], fid: '', lang: '', langs: [] } }; });
+  }
+  return loadPage(target).then(function (first) {
+    var parsed = first.parsed;
+    var choices = [], seenFids = {};
+    function add(fid, lang, pageUrl) {
+      fid = String(fid || '');
+      if (!fid || seenFids[fid]) return;
+      seenFids[fid] = true;
+      choices.push({ fid: fid, lang: String(lang || 'Audio'), pageUrl: pageUrl });
+    }
+    add(parsed.fid, parsed.lang || 'Default audio', first.pageUrl);
+    (parsed.langs || []).forEach(function (l) {
+      add(l.fid, l.lang, BASE + '?v=' + encodeURIComponent(l.fid));
     });
-    return out;
+    // If no language selector exists, use the page's sources directly.
+    var pages = choices.length ? Promise.all(choices.map(function (choice) {
+      return loadPage(choice.pageUrl).then(function (r) { return { choice: choice, parsed: r.parsed, pageUrl: r.pageUrl }; });
+    })) : Promise.resolve([{ choice: { lang: parsed.lang || 'Default audio', pageUrl: first.pageUrl }, parsed: parsed, pageUrl: first.pageUrl }]);
+    return pages.then(function (results) {
+      var out = [], seen = {};
+      results.forEach(function (entry) {
+        (entry.parsed.sources || []).forEach(function (s) {
+          var u = s && (s.stream_url || s.url);
+          if (!u || !/^https?:\/\//i.test(u) || seen[u] || /pixeldrain/i.test(String(s.type || ''))) return;
+          seen[u] = true;
+          var qualityText = String(s.name || s.type || '');
+          out.push({ url: u,
+            quality: /2160p/i.test(qualityText) ? '2160p' : (/1080p/i.test(qualityText) ? '1080p' : 'auto'),
+            label: [entry.choice.lang || entry.parsed.lang || 'Auto', s.name || s.type || 'StreamBeta'].filter(Boolean).join(' • '),
+            container: /\.m3u8(?:[?#]|$)/i.test(u) ? 'hls' : 'mp4',
+            kind: /\b(hindi|tamil|telugu|malayalam|kannada|dub)\b/i.test(entry.choice.lang || '') ? 'dub' : 'sub',
+            audioLang: entry.choice.lang || entry.parsed.lang || '',
+            headers: { 'User-Agent': UA, 'Referer': entry.pageUrl || target } });
+        });
+      });
+      return out;
+    });
   }).catch(function () { return []; });
 }
 function getStreams(url, opts) { return getVideoSources(url, opts); }
