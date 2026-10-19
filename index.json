@@ -574,6 +574,16 @@
       "file": "providers/animesalt.js",
       "logo": "https://www.google.com/s2/favicons?sz=256&domain=animesalt.to",
       "nsfw": false
+    },
+    {
+      "id": "acdn",
+      "name": "ACDN Multi-Audio",
+      "version": "1.0.0",
+      "type": "anime",
+      "lang": "multi",
+      "file": "providers/acdn.js",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=animesalt.cx",
+      "nsfw": false
     }
   ]
 }
