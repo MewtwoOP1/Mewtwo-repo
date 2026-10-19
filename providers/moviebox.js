@@ -10,6 +10,47 @@ const UA_BASE = PKG + "/50020042 (Linux; U; Android 16; en_IN; sdk_gphone64_x86_
 const SECRET_DEFAULT = "NzZpUmwwN3MweFNOOWpxbUVXQXQ3OUVCSlp1bElRSXNWNjRGWnIyTw==";
 const SECRET_ALT = "WHFuMm5uTzQxL0w5Mm8xaXVYaFNMSFRiWHZZNFo1Wlo2Mm04bVNMQQ==";
 
+const SUBJECT_CACHE = new Map();
+const SUBJECT_CACHE_LIMIT = 400;
+
+function _rememberSubject(id, item) {
+  const key = String(id == null ? "" : id);
+  if (!key || !item) return;
+  const title = String(item.title || item.name || "").split("[")[0].trim();
+  if (!title) return;
+  const cover = item.cover && item.cover.url ? item.cover.url : null;
+  const rating = parseFloat(item.imdbRatingValue);
+  const date = String(item.releaseDate || item.release_date || item.first_air_date || "");
+  const yearMatch = /^(\\d{4})/.exec(date);
+  const cached = {
+    id: key, url: key, title,
+    description: String(item.description || item.overview || ""),
+    poster: cover, cover, background: cover,
+    year: yearMatch ? parseInt(yearMatch[1], 10) : null,
+    rating: Number.isFinite(rating) ? rating : null,
+    duration: parseDurationMinutes(item.duration),
+    genres: item.genre ? String(item.genre).split(",").map((g) => g.trim()).filter(Boolean) : [],
+    cast: [],
+    type: typeOf(item.subjectType),
+    episodes: [], subCount: 0,
+    dubCount: Array.isArray(item.dubs) ? item.dubs.length : 0
+  };
+  SUBJECT_CACHE.delete(key);
+  SUBJECT_CACHE.set(key, cached);
+  while (SUBJECT_CACHE.size > SUBJECT_CACHE_LIMIT) {
+    SUBJECT_CACHE.delete(SUBJECT_CACHE.keys().next().value);
+  }
+}
+
+function _cachedSubjectDetail(id) {
+  const key = String(id == null ? "" : id);
+  const cached = SUBJECT_CACHE.get(key);
+  if (!cached) return null;
+  SUBJECT_CACHE.delete(key);
+  SUBJECT_CACHE.set(key, cached);
+  return Object.assign({}, cached, { episodes: [], subCount: 0 });
+}
+
 // ---------- byte / base64 helpers (no Node, no atob, no TextEncoder needed) ----------
 const B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
@@ -395,6 +436,7 @@ function mapSubject(item) {
   const id = item && item.subjectId != null ? String(item.subjectId) : null;
   const rawTitle = item && item.title;
   if (!id || !rawTitle) return null;
+  _rememberSubject(id, item);
   const rating = parseFloat(item.imdbRatingValue);
   return {
     id,
@@ -522,7 +564,7 @@ function parseDurationMinutes(dur) {
 
 // ---------- Zangetsu provider contract + playable MovieBox streams ----------
 function getInfo() {
-  return { name: "MovieBox", lang: "hi", baseUrl: PLAYER_BASE, logo: "https://www.google.com/s2/favicons?sz=256&domain=movie-box.co", type: "movie", version: "1.0.4" };
+  return { name: "MovieBox", lang: "hi", baseUrl: PLAYER_BASE, logo: "https://www.google.com/s2/favicons?sz=256&domain=movie-box.co", type: "movie", version: "1.0.5" };
 }
 function getSettings() { return []; }
 function _subjectId(value) {
@@ -589,26 +631,41 @@ async function _makeEpisodes(id, d) {
 async function getDetail(urlOrId) {
   const id = _subjectId(urlOrId);
   if (!id) throw new Error("MovieBox: missing subject ID");
-  await ensureToken();
-  const json = await httpJson("GET", MAIN_URL + "/wefeed-mobile-bff/subject-api/get?subjectId=" + encodeURIComponent(id));
-  const d = json && json.data;
-  if (!d || !d.title) throw new Error("MovieBox: no detail data for " + id);
-  const yearMatch = /^(\d{4})/.exec(d.releaseDate || "");
-  const rating = parseFloat(d.imdbRatingValue), seen = {};
-  const cast = (d.staffList || []).filter((s) => s.staffType === 1 && s.name && !seen[s.name] && (seen[s.name] = true))
-    .map((s) => ({ name: s.name, role: s.character || null, image: s.avatarUrl || null }));
-  const episodes = await _makeEpisodes(id, d);
-  return {
-    id: String(id), url: String(id), title: String(d.title).split("[")[0].trim(),
-    description: d.description || "", poster: d.cover && d.cover.url ? d.cover.url : null,
-    cover: d.cover && d.cover.url ? d.cover.url : null,
-    background: d.cover && d.cover.url ? d.cover.url : null,
-    year: yearMatch ? parseInt(yearMatch[1], 10) : null, rating: isNaN(rating) ? null : rating,
-    duration: parseDurationMinutes(d.duration),
-    genres: d.genre ? String(d.genre).split(",").map((g) => g.trim()).filter(Boolean) : [],
-    cast, type: typeOf(d.subjectType), episodes, subCount: episodes.length,
-    dubCount: Array.isArray(d.dubs) ? d.dubs.length : 0
-  };
+  try {
+    await ensureToken();
+    const json = await httpJson("GET", MAIN_URL + "/wefeed-mobile-bff/subject-api/get?subjectId=" + encodeURIComponent(id));
+    const d = json && json.data;
+    if (!d || !d.title) throw new Error("MovieBox: no detail data for " + id);
+    // Refresh the cache before fetching season-info, so transient failures can
+    // retain the real MovieBox identity and catalogue fields.
+    _rememberSubject(id, d);
+    const yearMatch = /^(\d{4})/.exec(d.releaseDate || "");
+    const rating = parseFloat(d.imdbRatingValue), seen = {};
+    const cast = (d.staffList || []).filter((s) => s.staffType === 1 && s.name && !seen[s.name] && (seen[s.name] = true))
+      .map((s) => ({ name: s.name, role: s.character || null, image: s.avatarUrl || null }));
+    const episodes = await _makeEpisodes(id, d);
+    return {
+      id: String(id), url: String(id), title: String(d.title).split("[")[0].trim(),
+      description: d.description || "", poster: d.cover && d.cover.url ? d.cover.url : null,
+      cover: d.cover && d.cover.url ? d.cover.url : null,
+      background: d.cover && d.cover.url ? d.cover.url : null,
+      year: yearMatch ? parseInt(yearMatch[1], 10) : null, rating: isNaN(rating) ? null : rating,
+      duration: parseDurationMinutes(d.duration),
+      genres: d.genre ? String(d.genre).split(",").map((g) => g.trim()).filter(Boolean) : [],
+      cast, type: typeOf(d.subjectType), episodes, subCount: episodes.length,
+      dubCount: Array.isArray(d.dubs) ? d.dubs.length : 0
+    };
+  } catch (error) {
+    const cached = _cachedSubjectDetail(id);
+    if (!cached) throw error;
+    console.log("[MovieBox] detail temporarily unavailable for " + id +
+      "; keeping cached listing metadata without episodes: " +
+      (error && error.message ? error.message : String(error)));
+    // MetadataRepository keeps the canonical catalogue episode list when a
+    // matched source returns a valid detail with no episodes. Do not convert a
+    // MovieBox outage into a false "AniList is having a moment" error.
+    return cached;
+  }
 }
 function getEpisodes(urlOrId, opts) { return getDetail(urlOrId, opts).then((d) => d.episodes || []); }
 function _collectStreams(playData) {
