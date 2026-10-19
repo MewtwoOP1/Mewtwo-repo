@@ -1,6 +1,6 @@
 // MovieBox provider — JS port of the Kotlin CloudStream provider.
 // Ported: signed API requests, home/search/detail, episode lists and playback links.
-// version: 1.0.2
+// version: 1.0.3
 
 const MAIN_URL = "https://api3.aoneroom.com";
 const PKG = "com.community.mbox.in";
@@ -172,6 +172,25 @@ function clientInfo() {
   });
 }
 
+function playerClientInfo() {
+  return JSON.stringify({
+    package_name: "com.community.oneroom",
+    version_name: "3.0.13.0325.03",
+    version_code: 50020088,
+    os: "android",
+    os_version: "13",
+    device_id: DEVICE_ID,
+    install_store: "ps",
+    gaid: "d7578036d13336cc",
+    brand: "google",
+    model: "Pixel 7",
+    system_language: "en",
+    net: "NETWORK_WIFI",
+    region: "US",
+    timezone: "Asia/Calcutta",
+    sp_code: ""
+  });
+}
 function buildHeaders(method, url, body, contentType) {
   const ct = contentType || "application/json";
   return {
@@ -188,26 +207,44 @@ function buildHeaders(method, url, body, contentType) {
 }
 
 // ---------- HTTP adapter + anonymous MovieBox session ----------
-const API_HOSTS = ["https://api6.aoneroom.com","https://api5.aoneroom.com","https://api4.aoneroom.com","https://api4sg.aoneroom.com","https://api3.aoneroom.com"];
+const API_HOSTS = [
+  "https://api6.aoneroom.com",
+  "https://api5.aoneroom.com",
+  "https://api4.aoneroom.com",
+  "https://api4sg.aoneroom.com",
+  "https://api3.aoneroom.com",
+  "https://api6sg.aoneroom.com",
+  "https://api.inmoviebox.com"
+];
 const PLAYER_BASE = "https://moviebox.ph";
-const PLAYER_UA = "Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Mobile Safari/537.36";
-const TOKEN_URL = "https://api3.aoneroom.com/wefeed-mobile-bff/tab/ranking-list?tabId=0&categoryType=4516404531735022304&page=1&perPage=1";
+const PLAYER_UA = "com.community.oneroom/50020088 (Linux; U; Android 13; en_US; Pixel 7; Build/TQ3A.230901.001; Cronet/145.0.7582.0)";
+const TOKEN_URL = "https://api3.aoneroom.com/wefeed-mobile-bff/tab-operating?page=1&tabId=0&version=";
 let bearerToken = "";
 let tokenCheckedAt = 0;
-let tokenRequestInProgress = false;
+let tokenBootstrapPromise = null;
 
 function _header(headers, name) {
   if (!headers) return "";
+  if (typeof headers.get === "function") {
+    const value = headers.get(name);
+    if (value != null && value !== "") return String(value);
+  }
   const target = String(name).toLowerCase();
-  for (const k of Object.keys(headers)) if (k.toLowerCase() === target) {
-    const v = headers[k]; return Array.isArray(v) ? String(v[0] || "") : String(v || "");
+  for (const k of Object.keys(headers)) {
+    if (k.toLowerCase() === target) {
+      const value = headers[k];
+      return Array.isArray(value) ? String(value[0] || "") : String(value || "");
+    }
   }
   return "";
 }
 function _captureToken(headers) {
   const raw = _header(headers, "x-user");
   if (!raw) return;
-  try { const obj = JSON.parse(raw); if (obj && obj.token) bearerToken = String(obj.token); } catch (_) {}
+  try {
+    const obj = JSON.parse(raw);
+    if (obj && obj.token) bearerToken = String(obj.token);
+  } catch (_) {}
 }
 function _tokenExpiry(token) {
   try {
@@ -217,49 +254,112 @@ function _tokenExpiry(token) {
     return Number(JSON.parse(json).exp) || 0;
   } catch (_) { return 0; }
 }
-async function ensureToken() {
-  if (bearerToken && _tokenExpiry(bearerToken) > Date.now() / 1000 + 300) return bearerToken;
-  if (tokenRequestInProgress || Date.now() - tokenCheckedAt < 15000) return bearerToken;
-  tokenRequestInProgress = true;
-  tokenCheckedAt = Date.now();
-  try { await httpJson("GET", TOKEN_URL, undefined, {}, true); }
-  catch (e) { console.log("[MovieBox] anonymous token bootstrap failed: " + e.message); }
-  finally { tokenRequestInProgress = false; }
-  return bearerToken;
+async function ensureToken(force) {
+  const now = Date.now();
+  const expiry = bearerToken ? _tokenExpiry(bearerToken) : 0;
+  if (!force && bearerToken && (!expiry || expiry > now / 1000 + 300)) return bearerToken;
+  if (tokenBootstrapPromise) return tokenBootstrapPromise;
+
+  bearerToken = "";
+  tokenBootstrapPromise = (async () => {
+    try {
+      // Any signed mobile API GET can issue x-user. The lightweight tab-operating
+      // route is the bootstrap used by maintained MovieBox API clients.
+      await httpJson("GET", TOKEN_URL, undefined, {}, true);
+      if (!bearerToken) throw new Error("MovieBox bootstrap returned no x-user bearer token");
+      return bearerToken;
+    } catch (e) {
+      bearerToken = "";
+      console.log("[MovieBox] anonymous token bootstrap failed: " + (e && e.message ? e.message : String(e)));
+      throw e;
+    } finally {
+      tokenBootstrapPromise = null;
+    }
+  })();
+  return tokenBootstrapPromise;
 }
-function _withApiHost(url, host) { return String(url).replace(/^https:\/\/[^/]+/i, host); }
-async function httpJson(method, url, body, extraHeaders, skipAuth) {
+function _withApiHost(url, host) {
+  return String(url).replace(/^https:\/\/[^/]+/i, host);
+}
+async function httpJson(method, url, body, extraHeaders, skipAuth, retryAuth) {
+  const request = String(url);
+  const isApi = /\.(?:aoneroom|inmoviebox)\.com\//i.test(request);
+  if (isApi && !skipAuth) await ensureToken();
+
   const ct = method === "POST" ? "application/json; charset=utf-8" : "application/json";
-  const isApi = /\.aoneroom\.com\//i.test(url);
-  const originalHost = (String(url).match(/^https:\/\/[^/]+/i) || [MAIN_URL])[0];
+  const originalHost = (request.match(/^https:\/\/[^/]+/i) || [MAIN_URL])[0];
   const hosts = isApi ? [originalHost].concat(API_HOSTS.filter((h) => h !== originalHost)) : [originalHost];
   let lastError = null;
-  const attempts = Math.min(hosts.length, isApi ? 3 : 1);
-  for (let i = 0; i < attempts; i++) {
-    const requestUrl = _withApiHost(url, hosts[i]);
+  let sawAuthFailure = false;
+  const retryableStatuses = [401, 403, 407, 429, 440, 500, 502, 503, 504, 530];
+  const authStatuses = [401, 403, 407, 440, 530];
+
+  for (let i = 0; i < (isApi ? hosts.length : 1); i++) {
+    const requestUrl = _withApiHost(request, hosts[i]);
     const headers = buildHeaders(method, requestUrl, body === undefined ? null : body, ct);
     Object.keys(extraHeaders || {}).forEach((k) => { headers[k] = extraHeaders[k]; });
     if (!skipAuth && bearerToken) headers.Authorization = "Bearer " + bearerToken;
+
+    let res;
     try {
-      const res = await fetch(requestUrl, { method, headers, body: body === undefined ? undefined : body, timeoutMs: 12000 });
-      _captureToken(res.headers);
-      if (res.status < 200 || res.status >= 300) {
-        lastError = new Error("MovieBox HTTP " + res.status + " for " + requestUrl + " " + String(res.body || "").slice(0, 160));
-        if ((res.status === 403 || res.status === 429 || res.status >= 500) && i + 1 < attempts) continue;
-        throw lastError;
-      }
-      try { return JSON.parse(String(res.body || "null")); }
-      catch (_) { throw new Error("MovieBox returned invalid JSON for " + requestUrl); }
+      res = await fetch(requestUrl, {
+        method,
+        headers,
+        body: body === undefined ? undefined : body,
+        timeoutMs: 12000
+      });
     } catch (e) {
       lastError = e;
-      if (i + 1 >= attempts) break;
+      if (i + 1 < (isApi ? hosts.length : 1)) continue;
+      break;
+    }
+
+    _captureToken(res.headers);
+    const status = Number(res.status);
+    if (status < 200 || status >= 300) {
+      lastError = new Error("MovieBox HTTP " + status + " for " + requestUrl + " " + String(res.body || "").slice(0, 160));
+      if (authStatuses.includes(status)) sawAuthFailure = true;
+      if (retryableStatuses.includes(status) && i + 1 < (isApi ? hosts.length : 1)) continue;
+      break;
+    }
+
+    let parsed;
+    try {
+      parsed = JSON.parse(String(res.body || "null"));
+    } catch (_) {
+      lastError = new Error("MovieBox returned invalid JSON for " + requestUrl);
+      break;
+    }
+
+    // The API frequently returns HTTP 200 for application-level failures.
+    // Do not silently convert those failures into empty search/episode results.
+    if (parsed && parsed.code != null && Number(parsed.code) !== 0) {
+      const detail = String(parsed.message || parsed.msg || parsed.error || "");
+      const authError = /token|auth|unauthor|expired|login|credential/i.test(detail) ||
+        [401, 403, 407, 440].includes(Number(parsed.code));
+      lastError = new Error("MovieBox API code " + parsed.code + (detail ? ": " + detail : "") + " for " + requestUrl);
+      if (authError) {
+        sawAuthFailure = true;
+        if (i + 1 < (isApi ? hosts.length : 1)) continue;
+      }
+      break;
+    }
+    return parsed;
+  }
+
+  if (sawAuthFailure && !skipAuth && retryAuth !== false) {
+    try {
+      await ensureToken(true);
+      return await httpJson(method, request, body, extraHeaders, false, false);
+    } catch (e) {
+      lastError = e;
     }
   }
-  throw lastError || new Error("MovieBox request failed: " + url);
+  throw lastError || new Error("MovieBox request failed: " + request);
 }
 
 // ---------- mapping helpers ----------
-function typeOf(subjectType) { return subjectType === 2 ? "series" : "movie"; }
+function typeOf(subjectType) { return Number(subjectType) === 2 || Number(subjectType) === 7 ? "series" : "movie"; }
 
 function mapSubject(item) {
   const id = item && item.subjectId != null ? String(item.subjectId) : null;
@@ -320,7 +420,7 @@ async function fetchCategory(cat, page) {
       if (i > 0 && i < kv.length - 1) opts[kv.slice(0, i)] = kv.slice(i + 1);
     });
     const body = JSON.stringify({
-      page: parseInt(head[0], 10) || 1, // NOTE: Kotlin used the "1" prefix as the page number, so paging never advanced.
+      page: Number(page) || 1,
       perPage,
       channelId: head[1],
       classify: opts.classify || "All",
@@ -378,7 +478,7 @@ async function search(query, page) {
   return out;
 }
 
-// ---------- detail (metadata only — episodes/links need the rest of the Kotlin) ----------
+// ---------- detail helpers ----------
 function parseDurationMinutes(dur) {
   if (!dur) return null;
   const hm = /(\d+)\s*h\s*(\d+)\s*m/i.exec(dur);
@@ -390,40 +490,9 @@ function parseDurationMinutes(dur) {
   return isNaN(n) ? null : n;
 }
 
-async function getDetail(urlOrId) {
-  const m = /subjectId=([^&]+)/.exec(urlOrId);
-  const id = m ? m[1] : String(urlOrId).split("/").pop();
-  const json = await httpJson("GET", MAIN_URL + "/wefeed-mobile-bff/subject-api/get?subjectId=" + id);
-  const d = json && json.data;
-  if (!d) throw new Error("MovieBox: no data for " + id);
-  if (!d.title) throw new Error("MovieBox: no title for " + id);
-
-  const yearMatch = /^(\d{4})/.exec(d.releaseDate || "");
-  const rating = parseFloat(d.imdbRatingValue);
-  const seen = {};
-  const cast = (d.staffList || [])
-    .filter((s) => s.staffType === 1 && s.name && !seen[s.name] && (seen[s.name] = true))
-    .map((s) => ({ name: s.name, role: s.character || null, image: s.avatarUrl || null }));
-
-  return {
-    id: String(id),
-    title: String(d.title).split("[")[0].trim(),
-    description: d.description || "",
-    poster: d.cover && d.cover.url ? d.cover.url : null,
-    background: d.cover && d.cover.url ? d.cover.url : null,
-    year: yearMatch ? parseInt(yearMatch[1], 10) : null,
-    rating: isNaN(rating) ? null : rating,
-    duration: parseDurationMinutes(d.duration),
-    genres: d.genre ? String(d.genre).split(",").map((g) => g.trim()).filter(Boolean) : [],
-    cast,
-    type: typeOf(d.subjectType)
-    // TODO: episodes (series) + stream links — paste the rest of load()/loadLinks() from the Kotlin.
-  };
-}
-
 // ---------- Zangetsu provider contract + playable MovieBox streams ----------
 function getInfo() {
-  return { name: "MovieBox", lang: "hi", baseUrl: PLAYER_BASE, logo: "https://www.google.com/s2/favicons?sz=256&domain=movie-box.co", type: "movie", version: "1.0.2" };
+  return { name: "MovieBox", lang: "hi", baseUrl: PLAYER_BASE, logo: "https://www.google.com/s2/favicons?sz=256&domain=movie-box.co", type: "movie", version: "1.0.3" };
 }
 function getSettings() { return []; }
 function _subjectId(value) {
@@ -438,33 +507,55 @@ function _parseEpisodeUrl(value) {
   const m = /^mbx:\/\/([^?]+)(?:\?se=(\d+)&ep=(\d+))?$/.exec(String(value || ""));
   return m ? { id: decodeURIComponent(m[1]), season: Number(m[2] || 0), episode: Number(m[3] || 0) } : { id: _subjectId(value), season: 0, episode: 0 };
 }
-function _seasonInfo(d) {
-  const seasons = Array.isArray(d.seasons) ? d.seasons : [];
-  const out = [];
-  seasons.forEach((s, i) => {
-    const season = Number(s.se != null ? s.se : (s.seasonNumber != null ? s.seasonNumber : i + 1));
-    const count = Number(s.maxEp != null ? s.maxEp : (s.episodeCount != null ? s.episodeCount : s.maxEpisode));
-    if (season >= 0 && count > 0) out.push({ season, count: Math.min(count, 1000) });
-  });
-  if (!out.length) {
-    const count = Number(d.maxEp || d.episodeCount || d.maxEpisode || 0);
-    if (count > 0) out.push({ season: 1, count: Math.min(count, 1000) });
-  }
-  return out;
+async function _fetchSeasonInfo(subjectId) {
+  const url = MAIN_URL + "/wefeed-mobile-bff/subject-api/season-info?subjectId=" + encodeURIComponent(subjectId);
+  const json = await httpJson("GET", url);
+  const seasons = json && json.data && Array.isArray(json.data.seasons) ? json.data.seasons : [];
+  return seasons.map((s) => ({
+    season: Number(s.se != null ? s.se : (s.seasonNumber != null ? s.seasonNumber : 1)),
+    count: Math.min(Number(s.maxEp != null ? s.maxEp : (s.episodeCount != null ? s.episodeCount : 0)), 1000)
+  })).filter((s) => Number.isFinite(s.season) && s.season >= 1 && Number.isFinite(s.count) && s.count > 0);
 }
-function _makeEpisodes(id, d) {
-  if (Number(d.subjectType) !== 2) return [{ id: "movie", number: 1, title: String(d.title || "Movie"), url: _episodeUrl(id, 0, 0) }];
-  const seasons = _seasonInfo(d), out = [];
-  seasons.forEach((s) => {
-    for (let ep = 1; ep <= s.count; ep++) out.push({
-      id: "S" + s.season + "E" + ep, number: ep, season: s.season,
-      title: seasons.length > 1 ? "Season " + s.season + " - Episode " + ep : "Episode " + ep,
-      url: _episodeUrl(id, s.season, ep)
+async function _makeEpisodes(id, d) {
+  const subjectType = Number(d.subjectType);
+  if (subjectType !== 2 && subjectType !== 7) {
+    return [{ id: "movie", number: 1, title: String(d.title || "Movie"), url: _episodeUrl(id, 0, 0) }];
+  }
+
+  const subjectIds = [String(id)];
+  (Array.isArray(d.dubs) ? d.dubs : []).forEach((dub) => {
+    if (dub && dub.subjectId != null) {
+      const dubId = String(dub.subjectId);
+      if (dubId && !subjectIds.includes(dubId)) subjectIds.push(dubId);
+    }
+  });
+
+  const seasonSets = await Promise.all(subjectIds.map((subjectId) =>
+    _fetchSeasonInfo(subjectId).catch((e) => {
+      console.log("[MovieBox] season-info failed for " + subjectId + ": " + (e && e.message ? e.message : String(e)));
+      return [];
+    })
+  ));
+  const seasonCounts = new Map();
+  seasonSets.forEach((rows) => rows.forEach((row) => {
+    seasonCounts.set(row.season, Math.max(seasonCounts.get(row.season) || 0, row.count));
+  }));
+  if (!seasonCounts.size) seasonCounts.set(1, 1);
+
+  const seasons = Array.from(seasonCounts.entries()).sort((a, b) => a[0] - b[0]);
+  const out = [];
+  seasons.forEach(([season, count]) => {
+    for (let episode = 1; episode <= count; episode++) out.push({
+      id: "S" + season + "E" + episode,
+      number: episode,
+      season,
+      title: seasons.length > 1 ? "Season " + season + " - Episode " + episode : "Episode " + episode,
+      url: _episodeUrl(id, season, episode)
     });
   });
   return out;
 }
-// Override the metadata-only draft with the full detail shape expected by Zangetsu.
+
 async function getDetail(urlOrId) {
   const id = _subjectId(urlOrId);
   if (!id) throw new Error("MovieBox: missing subject ID");
@@ -476,7 +567,7 @@ async function getDetail(urlOrId) {
   const rating = parseFloat(d.imdbRatingValue), seen = {};
   const cast = (d.staffList || []).filter((s) => s.staffType === 1 && s.name && !seen[s.name] && (seen[s.name] = true))
     .map((s) => ({ name: s.name, role: s.character || null, image: s.avatarUrl || null }));
-  const episodes = _makeEpisodes(id, d);
+  const episodes = await _makeEpisodes(id, d);
   return {
     id: String(id), url: String(id), title: String(d.title).split("[")[0].trim(),
     description: d.description || "", poster: d.cover && d.cover.url ? d.cover.url : null,
@@ -575,9 +666,11 @@ async function getVideoSources(episodeUrl, opts) {
   const subject = detailJson && detailJson.data;
   if (!subject) return [];
   const playerHeaders = {
-    Origin: PLAYER_BASE, Referer: PLAYER_BASE + "/", "User-Agent": PLAYER_UA,
-    "x-request-lang": "en", "x-vip-restrict": "0", "x-no-high-risk-restrict": "0"
+    Referer: MAIN_URL,
+    "user-agent": PLAYER_UA,
+    "x-client-info": playerClientInfo()
   };
+  const mediaHeaders = { Referer: MAIN_URL, "User-Agent": PLAYER_UA, Accept: "*/*" };
   const ids = []; let original = "Original";
   if (Array.isArray(subject.dubs)) subject.dubs.forEach((dub) => {
     if (String(dub.subjectId) === String(ep.id)) original = dub.lanName || "Original";
@@ -586,8 +679,7 @@ async function getVideoSources(episodeUrl, opts) {
   ids.unshift({ id: String(ep.id), lang: original });
   const results = [];
   for (const item of ids) {
-    const query = "subjectId=" + encodeURIComponent(item.id) + "&se=" + ep.season + "&ep=" + ep.episode +
-      "&streamSignType=1&supportCodecs%5Bhevc%5D=1&supportCodecs%5Bh264%5D=1";
+    const query = "subjectId=" + encodeURIComponent(item.id) + "&se=" + ep.season + "&ep=" + ep.episode;
     try {
       const response = await httpJson("GET", MAIN_URL + "/wefeed-mobile-bff/subject-api/play-info?" + query, undefined, playerHeaders);
       const data = response && response.data;
@@ -596,12 +688,12 @@ async function getVideoSources(episodeUrl, opts) {
       for (const stream of streams) {
         const raw = stream.url || stream.playUrl || stream.resourceLink || stream.streamUrl || "";
         const cookie = stream.signCookie || "";
-        const url = _policyStreamUrl(cookie) || raw;
+        const url = raw;
         if (!/^https?:\/\//i.test(url)) continue;
         const quality = _streamQuality(stream), container = _streamFormat(url, stream.format);
         const streamId = stream.id || (item.id + "|" + ep.season + "|" + ep.episode);
         const subtitles = await _getCaptions(item.id, streamId, item.lang);
-        const headers = Object.assign({}, playerHeaders);
+        const headers = Object.assign({}, mediaHeaders);
         if (cookie) headers[stream.signHeaderKey || stream.sign_header_key || "Cookie"] = cookie;
         results.push({ url, quality, container, headers, kind: "sub", audioLang: item.lang || "Original", subtitles,
           label: "MovieBox · " + quality + " · " + _audioLanguage(stream, item.lang) + " · " + container.toUpperCase() });
@@ -640,7 +732,7 @@ function getHome(opts) {
 
 // Exposed for tests / the app's loader
 const provider = {
-  id: "moviebox", name: "MovieBox", lang: "hi", version: "1.0.2",
+  id: "moviebox", name: "MovieBox", lang: "hi", version: "1.0.3",
   getInfo, getSettings, getHome, popular, getCategory, search, getDetail, getEpisodes, getVideoSources,
   getStreams: getVideoSources,
   _internals: { md5Bytes, hmacMd5, xTrSignature, canonicalString, xClientToken, toHex, utf8Bytes, _parseEpisodeUrl, _collectStreams, _policyStreamUrl }
