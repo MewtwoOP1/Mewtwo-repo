@@ -194,32 +194,27 @@ function _ajax(path) {
 }
 
 function _slugFromAnime(href) {
-  var m = String(href || '').match(/\/anime\/([^/"?#]+)/);
+  var m = String(href || '').match(/\\/watch\\/([^/"?#]+)/i);
   return m ? m[1] : null;
 }
-
-// ── Cards (search results, home widgets) ────────────────────────────────────
 function _cards(html) {
-  var out = [], seen = {};
-  var chunks = String(html || '').split('<div class="item">');
-  for (var i = 1; i < chunks.length; i++) {
-    var c = chunks[i];
-    var href = (c.match(/href="([^"]*\/anime\/[^"]+)"/) || [])[1];
+  var out = [], seen = {}, source = String(html || ''), re = /<div\\b[^>]*class="[^"]*\\bflw-item\\b[^"]*"[^>]*>[\\s\\S]*?(?=<div\\b[^>]*class="[^"]*\\bflw-item\\b|$)/gi, m;
+  while ((m = re.exec(source)) !== null) {
+    var block = m[0];
+    var href = (block.match(/href="([^"]*\\/watch\\/[^"]+)"/i) || [])[1];
     var slug = _slugFromAnime(href);
     if (!slug || seen[slug]) continue;
-    var title = (c.match(/data-jp="([^"]+)"/) || [])[1]
-      || (c.match(/<div class="name">\s*<a[^>]*>([^<]+)<\/a>/) || [])[1];
+    var title = (block.match(/<h3[^>]*class="[^"]*film-name[^"]*"[^>]*>[\\s\\S]*?<a[^>]*title="([^"]+)"/i) || [])[1]
+      || (block.match(/<a[^>]+title="([^"]+)"[^>]+href="[^"]*\\/watch\\//i) || [])[1]
+      || (block.match(/<h3[^>]*>[\\s\\S]*?<a[^>]*>([^<]+)<\\/a>/i) || [])[1];
     if (!title) continue;
-    var poster = (c.match(/<img[^>]+data-src="([^"]+)"/) || c.match(/<img[^>]+src="([^"]+)"/) || [])[1];
-    var hasSub = /<span class="sub">/.test(c), hasDub = /<span class="dub">/.test(c);
+    var poster = (block.match(/<img[^>]+(?:data-src|data-lazy-src|src)="([^"]+)"/i) || [])[1] || '';
     seen[slug] = 1;
-    out.push({ id: slug, title: htmlText(title).trim(), url: slug,
-      cover: poster || null, type: 'anime', sourceId: SOURCE_ID,
-      dubBadge: (hasSub && hasDub) ? 'SUB DUB' : (hasDub ? 'DUB' : 'SUB') });
+    out.push({ id: slug, title: htmlText(title).trim(), url: 'watch/' + slug + '/ep-1',
+      cover: poster || null, type: 'anime', sourceId: SOURCE_ID });
   }
   return out;
 }
-
 function search(query, page, opts) {
   var q = String(query || '').trim();
   if (!q) return Promise.resolve([]);
@@ -289,54 +284,33 @@ function _metaList(html, label) {
 // data-num can be a label like "Full"; data-slug (or the anchor text) carries
 // the real episode number.
 function _episodes(lhtml, cat) {
-  var out = [];
-  var re = /<a\b([^>]*\bdata-ids="([^"]+)"[^>]*)>([^<]*)/g, m;
-  while ((m = re.exec(lhtml)) !== null) {
-    var attrs = m[1], serverIds = m[2], inner = (m[3] || '').trim();
-    var sub = /data-sub="1"/.test(attrs), dub = /data-dub="1"/.test(attrs);
-    if (!sub && !dub) continue;
-    var num = parseInt((attrs.match(/data-slug="(\d+)"/) || [])[1] || '', 10);
-    if (!(num >= 1)) num = parseInt(inner, 10);
-    if (!(num >= 1)) num = parseInt((attrs.match(/data-num="(\d+)"/) || [])[1] || '', 10);
+  var out = [], seen = {}, re = /<a\\b([^>]*\\bdata-number="([^"]+)"[^>]*\\bdata-id="([^"]+)"[^>]*)>([\\s\\S]*?)<\\/a>/gi, m;
+  while ((m = re.exec(String(lhtml || ''))) !== null) {
+    var attrs = m[1], num = parseInt(m[2], 10), episodeId = m[3];
+    if (!episodeId || seen[episodeId]) continue;
+    seen[episodeId] = 1;
     if (!(num >= 1)) num = out.length + 1;
-    var etitle = htmlText((attrs.match(/title="([^"]*)"/) || [])[1] || '').trim();
-    var initCat = (cat === 'dub' && dub) || (cat === 'sub' && !sub && dub) ? 'dub' : 'sub';
-    out.push({ id: initCat + ':' + num, number: num,
-      title: etitle || ('Episode ' + num),
-      url: 'animesalt://' + initCat + '/' + encodeURIComponent(serverIds)
-        + '/' + (sub ? '1' : '0') + (dub ? '1' : '0') + '/' + num });
+    var title = htmlText((attrs.match(/title="([^"]*)"/i) || [])[1] || '').trim();
+    out.push({ id: 'episode:' + episodeId, number: num, title: title && title !== 'Full' ? title : 'Episode ' + num,
+      url: 'animesalt://' + ((cat === 'dub') ? 'dub' : 'sub') + '/' + encodeURIComponent(episodeId) + '/' + num });
   }
   return out;
 }
 function getDetail(url, opts) {
-  var slug = String(url || '');
-  return _get(SITE + '/anime/' + encodeURIComponent(slug), SITE + '/').then(function (html) {
-    var animeId = (html.match(/data-id="(\d+)"/) || [])[1];
-    var title = htmlText((html.match(/<h1[^>]*itemprop="name"[^>]*>([\s\S]*?)<\/h1>/) || [])[1] || '').trim()
-      || slug;
-    var poster = (html.match(/og:image"\s+content="([^"]+)"/) || [])[1] || null;
-    var desc = (html.match(/class="full cts-block"[^>]*>\s*<div>([\s\S]*?)<\/div>/) || [])[1]
-      || (html.match(/class="short cts-block"[^>]*>\s*<div>([\s\S]*?)<\/div>/) || [])[1] || '';
-    var year = null;
-    var ym = html.match(/itemprop="dateCreated">\s*([^<]+)</);
-    if (ym) { var yy = ym[1].match(/(19|20)\d{2}/); year = yy ? yy[0] : null; }
-    var statusRaw = htmlText((html.match(/>Status:<\/div>\s*<span>\s*<a[^>]*>([^<]+)<\/a>/) || [])[1] || '')
-      .trim().toLowerCase();
-    var status = statusRaw.indexOf('finish') >= 0 ? 'completed'
-      : statusRaw.indexOf('airing') >= 0 ? 'ongoing' : 'unknown';
-    var base = { id: slug, title: title, url: slug, cover: poster,
-      description: htmlText(desc).trim(), status: status,
-      genres: _metaList(html, 'Genre:'), studios: _metaList(html, 'Studios:'),
-      type: 'anime', sourceId: SOURCE_ID, episodes: [], year: year,
-      subCount: 0, dubCount: 0 };
-    var sm = html.match(/<span class="sub">[\s\S]*?(\d+)\s*<\/span>/);
-    var dm = html.match(/<span class="dub">[\s\S]*?(\d+)\s*<\/span>/);
-    if (sm) base.subCount = parseInt(sm[1], 10);
-    if (dm) base.dubCount = parseInt(dm[1], 10);
+  var raw = String(url || '').trim();
+  var watchPath = /^https?:\\/\\//i.test(raw) ? raw : (SITE + '/' + raw.replace(/^\\/+/, ''));
+  if (!/\\/watch\\//i.test(watchPath)) watchPath = SITE + '/watch/' + encodeURIComponent(raw.replace(/^.*\\//, '')) + '/ep-1';
+  return _get(watchPath, SITE + '/').then(function (html) {
+    var animeId = (html.match(/data-id="(\\d+)"/) || [])[1];
+    var title = htmlText((html.match(/<title[^>]*>([\\s\\S]*?)<\\/title>/i) || [])[1] || '').replace(/^Watch Free!\\s*/i, '').replace(/\\s+Online in HD.*$/i, '').replace(/\\s+-\\s+AnimeSalt$/i, '').trim();
+    var poster = (html.match(/property="og:image" content="([^"]+)"/i) || [])[1] || null;
+    var base = { id: raw, title: title || raw, url: raw, cover: poster, description: '',
+      status: 'unknown', genres: [], studios: [], type: 'anime', sourceId: SOURCE_ID, episodes: [], subCount: 0, dubCount: 0 };
     if (!animeId) return base;
-    return _ajax('/ajax/episode/list/' + animeId + '?vrf=' + _vrf(animeId)).then(function (j) {
-      var lhtml = (j && typeof j.result === 'string') ? j.result : '';
+    return _ajax('/ajax/episode/list/' + animeId).then(function (j) {
+      var lhtml = j && (typeof j.html === 'string' ? j.html : (typeof j.result === 'string' ? j.result : ''));
       base.episodes = _episodes(lhtml, (opts && opts.category === 'dub') ? 'dub' : 'sub');
+      base.subCount = base.episodes.length;
       return base;
     }).catch(function () { return base; });
   });
@@ -347,22 +321,15 @@ function getEpisodes(url, opts) {
 
 // ── Streams: server_ids -> server list -> server?get -> embed getSources(New) ─
 function _parseServers(lhtml) {
-  var servers = [];
-  var blocks = String(lhtml || '').split('data-type="');
-  for (var b = 1; b < blocks.length; b++) {
-    var type = (blocks[b].match(/^(\w+)"/) || [])[1] || '';
-    var rest = blocks[b];
-    var re = /data-link-id="([^"]+)"/g, m;
-    while ((m = re.exec(rest)) !== null) {
-      var after = rest.substring(m.index, m.index + 800);
-      var name = (after.match(/<span>([^<]*)<\/span>/) || [])[1] || '';
-      servers.push({ type: type, linkId: m[1], name: name.trim() });
-    }
+  var servers = [], source = String(lhtml || ''), blocks = source.split(/data-type="/);
+  for (var i = 1; i < blocks.length; i++) {
+    var type = (blocks[i].match(/^([^"]+)/) || [])[1] || '';
+    var id = (blocks[i].match(/data-id="([^"]+)"/) || [])[1];
+    var name = (blocks[i].match(/<a[^>]*class="[^"]*btn[^"]*"[^>]*>([^<]+)<\\/a>/i) || [])[1] || '';
+    if (id) servers.push({ type: type, linkId: id, name: htmlText(name).trim() });
   }
   return servers;
 }
-// Vidstream (plain file) first, then the MegaPlay-family hosts whose `enc`
-// decrypts with the player's own AES key.
 function _srvRank(name) {
   var n = String(name || '').toLowerCase();
   if (n.indexOf('vidstream') >= 0) return 0;
@@ -376,43 +343,26 @@ function getVideoSources(episodeUrl) {
   var raw = String(episodeUrl || '').replace('animesalt://', '');
   var parts = raw.split('/');
   var cat = parts[0] === 'dub' ? 'dub' : 'sub';
-  var serverIds = parts[1] ? decodeURIComponent(parts[1]) : '';
-  if (!serverIds) return Promise.reject(new Error('AnimeSalt: no server ids'));
-  return _ajax('/ajax/server/list?servers=' + encodeURIComponent(serverIds)).then(function (j) {
-    var lhtml = (j && typeof j.result === 'string') ? j.result : '';
+  var episodeId = parts[1] ? decodeURIComponent(parts[1]) : '';
+  if (!episodeId) return Promise.reject(new Error('AnimeSalt: no episode id'));
+  return _ajax('/ajax/server/list?servers=' + encodeURIComponent(episodeId)).then(function (j) {
+    var lhtml = j && (typeof j.html === 'string' ? j.html : (typeof j.result === 'string' ? j.result : ''));
     var servers = _parseServers(lhtml);
-    var want = [];
-    for (var i = 0; i < servers.length; i++) {
-      var s = servers[i];
-      var ok = (cat === 'dub') ? (s.type === 'dub') : (s.type === 'sub' || s.type === 'hsub');
-      if (ok) want.push(s);
-    }
+    var want = servers.filter(function (srv) { return srv.type === cat || (cat === 'sub' && srv.type === 'hsub'); });
     if (!want.length) want = servers;
     want.sort(function (a, b) { return _srvRank(a.name) - _srvRank(b.name); });
-    // List streams from EVERY working server, tagged by server name — the way
-    // AnimeX v1.0.1 fixed its own flakiness. A dead default server no longer
-    // kills the whole list; the user just picks another server's entry.
-    var jobs = want.map(function (srv) { return _resolveServer(srv, cat); });
-    return Promise.all(jobs).then(function (lists) {
+    return Promise.all(want.map(function (srv) { return _resolveServer(srv, cat); })).then(function (lists) {
       var out = [], seen = {};
-      lists.forEach(function (l) {
-        (l || []).forEach(function (v) {
-          if (!v || !v.url || seen[v.url]) return;
-          seen[v.url] = 1; out.push(v);
-        });
-      });
-      if (!out.length) return Promise.reject(new Error('AnimeSalt: no playable server'));
+      lists.forEach(function (list) { (list || []).forEach(function (v) { if (v && v.url && !seen[v.url]) { seen[v.url] = 1; out.push(v); } }); });
+      if (!out.length) throw new Error('AnimeSalt: no playable server');
       return out;
     });
   });
 }
-// Resolve servers in preference order; take the first that yields a known
-// embed host, then extract its m3u8. Anything else throws and we fall through
-// to the next server.
 function _tryServers(list, i, cat) {
   if (i >= list.length) return Promise.reject(new Error('AnimeSalt: no playable server'));
   return _ajax('/ajax/server?get=' + encodeURIComponent(list[i].linkId)).then(function (j) {
-    var url = j && j.result && j.result.url;
+    var url = j && ((j.result && j.result.url) || (typeof j.result === 'string' ? j.result : '') || j.link || '');
     if (url && PLAYER_RE.test(url)) return _extractPlayer(url, cat);
     return _tryServers(list, i + 1, cat);
   }).catch(function () { return _tryServers(list, i + 1, cat); });
