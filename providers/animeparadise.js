@@ -2,10 +2,10 @@
 // Uses AnimeParadise's own REST API; episode stream tokens are short-lived.
 // Keep VERSION in sync with index.json whenever this source changes.
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID) ? String(__SOURCE_ID) : 'animeparadise';
-var VERSION = '1.0.0';
+var VERSION = '1.0.1';
 var API = 'https://api.animeparadise.moe';
 var STREAM = 'https://stream.animeparadise.moe';
-var SITE = 'https://www.animeparadise.moe';
+var SITE = 'https://animeparadise.moe';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 var EPISODE_CACHE = Object.create(null);
 var EPISODE_CACHE_TTL = 30000;
