@@ -70,11 +70,11 @@
     {
       "id": "anikoto",
       "name": "AniKoto",
-      "version": "1.2.0",
+      "version": "1.2.1",
       "type": "anime",
       "lang": "en",
       "file": "providers/anikoto.js",
-      "logo": "https://www.google.com/s2/favicons?sz=256&domain=anikotoapi.site",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=anikototv.to",
       "nsfw": false
     },
     {
