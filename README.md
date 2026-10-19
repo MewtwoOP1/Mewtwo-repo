@@ -61,3 +61,5 @@ Live smoke diagnostics now capture the actual AnimeSalt watch-card markup for re
 The live diagnostic emits raw watch-link fragments without regex escaping.
 
 Search parser now resolves titles from nearby AnimeSalt watch-card metadata when poster links omit titles.
+
+AnimeSalt parsing is self-contained and does not require the app's global `htmlText` helper.
