@@ -1,6 +1,6 @@
 // MovieBox provider — JS port of the Kotlin CloudStream provider.
 // Ported: signed API requests, home/search/detail, episode lists and playback links.
-// version: 1.0.3
+// version: 1.0.4
 
 const MAIN_URL = "https://api3.aoneroom.com";
 const PKG = "com.community.mbox.in";
@@ -206,6 +206,21 @@ function buildHeaders(method, url, body, contentType) {
   };
 }
 
+function buildBootstrapHeaders(method, url, body, contentType) {
+  const ct = contentType || "application/json";
+  return {
+    "user-agent": PLAYER_UA,
+    "accept": "application/json",
+    "content-type": ct,
+    "connection": "keep-alive",
+    "x-client-token": xClientToken(),
+    "x-tr-signature": xTrSignature(method, "application/json", ct, url, body),
+    "x-client-info": playerClientInfo(),
+    "x-client-status": "0",
+    "x-play-mode": "2"
+  };
+}
+
 // ---------- HTTP adapter + anonymous MovieBox session ----------
 const API_HOSTS = [
   "https://api6.aoneroom.com",
@@ -218,7 +233,10 @@ const API_HOSTS = [
 ];
 const PLAYER_BASE = "https://moviebox.ph";
 const PLAYER_UA = "com.community.oneroom/50020088 (Linux; U; Android 13; en_US; Pixel 7; Build/TQ3A.230901.001; Cronet/145.0.7582.0)";
-const TOKEN_URL = "https://api3.aoneroom.com/wefeed-mobile-bff/tab-operating?page=1&tabId=0&version=";
+const TOKEN_URLS = [
+  "/wefeed-mobile-bff/tab-operating?page=1&tabId=0&version=",
+  "/wefeed-mobile-bff/tab/ranking-list?tabId=0&categoryType=4516404531735022304&page=1&perPage=1"
+];
 let bearerToken = "";
 let tokenCheckedAt = 0;
 let tokenBootstrapPromise = null;
@@ -263,11 +281,21 @@ async function ensureToken(force) {
   bearerToken = "";
   tokenBootstrapPromise = (async () => {
     try {
-      // Any signed mobile API GET can issue x-user. The lightweight tab-operating
-      // route is the bootstrap used by maintained MovieBox API clients.
-      await httpJson("GET", TOKEN_URL, undefined, {}, true);
-      if (!bearerToken) throw new Error("MovieBox bootstrap returned no x-user bearer token");
-      return bearerToken;
+      // The token handshake must use the OneRoom playback identity, not the
+      // MovieBox catalogue identity. Some upstreams return 200 from
+      // tab-operating without x-user, so fall back to the lightweight ranking
+      // endpoint used by the maintained MovieBox REST provider.
+      let lastError = null;
+      for (const path of TOKEN_URLS) {
+        try {
+          await httpJson("GET", MAIN_URL + path, undefined, {}, true);
+          if (bearerToken) return bearerToken;
+          lastError = new Error("bootstrap endpoint returned no x-user token: " + path);
+        } catch (e) {
+          lastError = e;
+        }
+      }
+      throw lastError || new Error("MovieBox bootstrap returned no x-user bearer token");
     } catch (e) {
       bearerToken = "";
       console.log("[MovieBox] anonymous token bootstrap failed: " + (e && e.message ? e.message : String(e)));
@@ -296,7 +324,9 @@ async function httpJson(method, url, body, extraHeaders, skipAuth, retryAuth) {
 
   for (let i = 0; i < (isApi ? hosts.length : 1); i++) {
     const requestUrl = _withApiHost(request, hosts[i]);
-    const headers = buildHeaders(method, requestUrl, body === undefined ? null : body, ct);
+    const headers = skipAuth
+      ? buildBootstrapHeaders(method, requestUrl, body === undefined ? null : body, ct)
+      : buildHeaders(method, requestUrl, body === undefined ? null : body, ct);
     Object.keys(extraHeaders || {}).forEach((k) => { headers[k] = extraHeaders[k]; });
     if (!skipAuth && bearerToken) headers.Authorization = "Bearer " + bearerToken;
 
@@ -492,7 +522,7 @@ function parseDurationMinutes(dur) {
 
 // ---------- Zangetsu provider contract + playable MovieBox streams ----------
 function getInfo() {
-  return { name: "MovieBox", lang: "hi", baseUrl: PLAYER_BASE, logo: "https://www.google.com/s2/favicons?sz=256&domain=movie-box.co", type: "movie", version: "1.0.3" };
+  return { name: "MovieBox", lang: "hi", baseUrl: PLAYER_BASE, logo: "https://www.google.com/s2/favicons?sz=256&domain=movie-box.co", type: "movie", version: "1.0.4" };
 }
 function getSettings() { return []; }
 function _subjectId(value) {
@@ -732,7 +762,7 @@ function getHome(opts) {
 
 // Exposed for tests / the app's loader
 const provider = {
-  id: "moviebox", name: "MovieBox", lang: "hi", version: "1.0.3",
+  id: "moviebox", name: "MovieBox", lang: "hi", version: "1.0.4",
   getInfo, getSettings, getHome, popular, getCategory, search, getDetail, getEpisodes, getVideoSources,
   getStreams: getVideoSources,
   _internals: { md5Bytes, hmacMd5, xTrSignature, canonicalString, xClientToken, toHex, utf8Bytes, _parseEpisodeUrl, _collectStreams, _policyStreamUrl }
