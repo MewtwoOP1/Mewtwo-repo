@@ -56,6 +56,28 @@ async function main() {
         resultType: parsed && typeof parsed.result,
         snippet: (parsed && (parsed.html || parsed.result) || probe.body).slice(0, 350)
       }));
+    if (route.startsWith('/ajax/server/list') && parsed && typeof parsed.html === 'string') {
+      const serverHtml = parsed.html;
+      const ids = serverHtml.split('data-link-id="').slice(1).map((part) => part.split('"')[0]).filter(Boolean);
+      console.log('[AnimeSalt live] Server list details:', JSON.stringify({
+        dataTypeCount: serverHtml.split('data-type="').length - 1,
+        linkCount: ids.length,
+        firstIds: ids.slice(0, 5),
+        serverHtml: serverHtml.slice(0, 1800)
+      }));
+      if (ids[0]) {
+        const resolved = await global.fetch('https://animesalt.to/ajax/server?get=' + encodeURIComponent(ids[0]), { headers: { 'User-Agent': 'Mozilla/5.0', 'Referer': liveWatchUrl, 'X-Requested-With': 'XMLHttpRequest' }, timeoutMs: 12000 });
+        let resolvedJson = null; try { resolvedJson = JSON.parse(resolved.body); } catch (_) {}
+        const resultUrl = resolvedJson && resolvedJson.result && resolvedJson.result.url;
+        console.log('[AnimeSalt live] Server resolve:', JSON.stringify({
+          status: resolved.status, jsonKeys: resolvedJson ? Object.keys(resolvedJson) : [],
+          resultType: resolvedJson && typeof resolvedJson.result,
+          urlHost: resultUrl ? new URL(resultUrl).host : null,
+          urlPath: resultUrl ? new URL(resultUrl).pathname : null,
+          snippet: resolved.body.slice(0, 500)
+        }));
+      }
+    }
     }
     console.log('[AnimeSalt live] AJAX markers:', JSON.stringify(
       ['/ajax/episode/servers', '/ajax/server?get=', '/ajax/server/list', '/ajax/episode/list/'].map((marker) => {
