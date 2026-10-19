@@ -598,7 +598,7 @@
     {
       "id": "rareanimes-streambeta",
       "name": "RareAnimes",
-      "version": "1.0.3",
+      "version": "1.0.4",
       "type": "anime",
       "lang": "hi",
       "file": "providers/rareanimes.js",
