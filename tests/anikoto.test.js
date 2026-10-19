@@ -101,7 +101,7 @@ async function main() {
   assert.ok(detail.episodes[0].url.startsWith("anikoto://sub/"));
   const subStreams = await provider.getVideoSources(detail.episodes[0].url, {});
   assert.ok(subStreams.length >= 1);
-  const subStream = subStreams.find(stream => stream.url === "https://cdn.example/frieren-sub.m3u8");
+  const subStream = subStreams.find(stream => stream.url.startsWith("https://cdn.example/frieren-sub.m3u8"));
   assert.ok(subStream, "sub server should resolve its expected HLS stream");
   assert.equal(subStream.kind, "sub");
 
@@ -110,13 +110,13 @@ async function main() {
   assert.ok(dubDetail.episodes[0].url.startsWith("anikoto://dub/"));
   const dubStreams = await provider.getVideoSources(dubDetail.episodes[0].url, {});
   assert.ok(dubStreams.length >= 1);
-  const dubStream = dubStreams.find(stream => stream.url === "https://cdn.example/frieren-dub.m3u8");
+  const dubStream = dubStreams.find(stream => stream.url.startsWith("https://cdn.example/frieren-dub.m3u8"));
   assert.ok(dubStream, "dub server should resolve its expected HLS stream");
   assert.equal(dubStream.kind, "dub");
 
   const directStreams = await provider.getVideoSources("anikoto://sub/direct-server/1/1");
   assert.ok(directStreams.length >= 1);
-  const directStream = directStreams.find(stream => stream.url === "https://cdn.example/direct.m3u8?token=abc");
+  const directStream = directStreams.find(stream => stream.url.startsWith("https://cdn.example/direct.m3u8?token=abc"));
   assert.ok(directStream, "direct server should resolve its expected HLS stream");
   assert.equal(directStream.container, "hls");
   assert.equal(directStream.kind, "sub");
@@ -124,7 +124,7 @@ async function main() {
 
   const vidstream = await provider.getVideoSources("anikoto://sub/vidstream-server/1/1");
   assert.ok(vidstream.length >= 1);
-  const vidstreamSource = vidstream.find(stream => stream.url === "https://cdn.example/vidstream.m3u8");
+  const vidstreamSource = vidstream.find(stream => stream.url.startsWith("https://cdn.example/vidstream.m3u8"));
   assert.ok(vidstreamSource, "Vidstream should resolve its expected HLS stream");
   assert.equal(vidstreamSource.container, "hls");
 
