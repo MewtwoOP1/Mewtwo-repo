@@ -517,6 +517,21 @@ function _resolveServer(server, cat) {
     // hosts (including Vidstream aliases); let the extractor validate the
     // player page and stream response instead of silently dropping the host.
     if (!url || !/^https?:\/\//i.test(url)) return [];
+    // Some mirrors return a direct media URL instead of an embed page. Keep
+    // that supported path while other servers continue through extraction.
+    if (/\.(?:m3u8|mp4)(?:[?#]|$)/i.test(url)) {
+      var directBase = (url.match(/^(https?:\/\/[^/]+)/i) || [])[1] || SITE;
+      return [{
+        url: url + '#anikoto-' + String(server.name || 'server').toLowerCase().replace(/[^a-z0-9]+/g, '-') + '-' + serverCat,
+        label: (server.name || 'AniKoto') + ' · ' + serverCat,
+        quality: 'auto',
+        container: /\.m3u8(?:[?#]|$)/i.test(url) ? 'hls' : 'mp4',
+        headers: { 'User-Agent': UA, 'Referer': SITE + '/', 'Origin': directBase },
+        kind: serverCat,
+        audioLang: serverCat === 'dub' ? 'en' : 'ja',
+        subtitles: []
+      }];
+    }
     return _extractPlayer(url, serverCat, server.name).then(function (group) {
       return group || [];
     });
