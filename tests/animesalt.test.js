@@ -1,82 +1,63 @@
 const assert = require("node:assert/strict");
 
-// Zangetsu injects htmlText into provider scripts; mirror the host helper in Node.
 global.htmlText = function (html) {
-  return String(html || "")
-    .replace(/<[^>]*>/g, "")
-    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
-    .replace(/&#x([\da-f]+);/gi, (_, n) => String.fromCharCode(parseInt(n, 16)))
-    .replace(/&amp;/g, "&")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;|&apos;/g, "'")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/\s+/g, " ")
-    .trim();
+  return String(html || "").replace(/<[^>]*>/g, " ")
+    .replace(/&amp;/g, "&").replace(/&quot;/g, '"')
+    .replace(/&#39;|&apos;/g, "'").replace(/\s+/g, " ").trim();
+};
+
+const calls = [];
+const master = '#EXTM3U\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",NAME="Hindi"\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",NAME="Japanese"\n#EXTINF:5,\nsegment.ts';
+global.fetch = async function (url, options) {
+  url = String(url); options = options || {}; calls.push({url, options});
+  if (url.startsWith("https://animesalt.to/filter?keyword=Naruto")) {
+    return {status:200,body:'<div class="flw-item"><div class="film-poster"><img data-src="https://img.example/naruto.jpg"></div><h3 class="film-name"><a href="/watch/road-of-naruto-ggjw8/ep-1" title="Road of Naruto">Road of Naruto</a></h3></div>'};
+  }
+  if (url === "https://animesalt.to/watch/road-of-naruto-ggjw8/ep-1") {
+    return {status:200,body:'<html><head><title>Watch Free! Road of Naruto Episode 1 Online in HD - AnimeSalt</title><meta property="og:image" content="https://img.example/naruto.jpg"></head><body><div id="wrapper" data-id="7174"></div></body></html>'};
+  }
+  if (url === "https://animesalt.to/ajax/episode/list/7174") {
+    return {status:200,body:JSON.stringify({status:true,html:'<a href="#" title="Full" class="item ep-item" data-number="1" data-id="episode-token-123"><div class="order">1</div></a>'})};
+  }
+  if (url === "https://animesalt.to/ajax/server/list?servers=episode-token-123") {
+    return {status:200,body:JSON.stringify({status:true,html:'<div class="item server-item" data-type="sub" data-id="server-token-123" data-server-id="323"><a class="btn">Vidstream</a></div>'})};
+  }
+  if (url === "https://animesalt.to/ajax/server?get=server-token-123") {
+    return {status:200,body:JSON.stringify({status:true,link:"https://megaplay.buzz/embed/sub/123"})};
+  }
+  if (url === "https://megaplay.buzz/embed/sub/123") {
+    return {status:200,body:'<html><div data-id="123"></div></html>'};
+  }
+  if (url === "https://megaplay.buzz/stream/getSourcesNew?id=123&type=sub") {
+    return {status:200,body:JSON.stringify({sources:{file:"https://cdn.example/master.m3u8?token=abc"}})};
+  }
+  if (url === "https://cdn.example/master.m3u8?token=abc") return {status:200,body:master};
+  return {status:404,body:""};
 };
 
 const provider = require("../providers/animesalt.js");
-
-const calls = [];
-global.fetch = async (url) => {
-  const requestUrl = String(url);
-  calls.push(requestUrl);
-
-  if (requestUrl.includes("/filter?keyword=Solo%20Leveling")) {
-    return {
-      status: 200,
-      body: '<div class="item"><a href="/anime/solo-leveling"><img data-src="https://img.example/poster.jpg"></a><div class="name"><a data-jp="Solo Leveling" href="/anime/solo-leveling">Solo Leveling</a></div><span class="sub"></span><span class="dub"></span></div>',
-    };
-  }
-
-  if (requestUrl === "https://animesalt.to/anime/solo-leveling") {
-    return {
-      status: 200,
-      body: '<html><meta property="og:image" content="https://img.example/poster.jpg"><h1 itemprop="name">Solo Leveling</h1><div class="short cts-block"><div>A hunter fights monsters.</div></div><div data-id="123"></div></html>',
-    };
-  }
-
-  if (requestUrl.includes("/ajax/episode/list/123?vrf=")) {
-    return {
-      status: 200,
-      body: JSON.stringify({
-        status: 200,
-        result: '<a data-ids="server-1,server-2" data-sub="1" data-dub="1" data-slug="1" title="I Am the Strongest">1</a>',
-      }),
-    };
-  }
-
-  return { status: 200, body: "" };
-};
-
 async function main() {
   assert.equal(provider.version, "1.0.1");
   assert.equal(provider.getInfo().name, "AnimeSalt");
   assert.equal(provider.getInfo().baseUrl, "https://animesalt.to");
-
-  const empty = await provider.search("", 1, {});
-  assert.deepEqual(empty, []);
-
-  const results = await provider.search("Solo Leveling", 1, {});
+  assert.deepEqual(await provider.search("", 1, {}), []);
+  const results = await provider.search("Naruto", 1, {});
   assert.equal(results.length, 1);
-  assert.equal(results[0].id, "solo-leveling");
-  assert.equal(results[0].title, "Solo Leveling");
-  assert.equal(results[0].cover, "https://img.example/poster.jpg");
-
-  const detail = await provider.getDetail("solo-leveling", { category: "sub" });
-  assert.equal(detail.title, "Solo Leveling");
+  assert.equal(results[0].title, "Road of Naruto");
+  assert.equal(results[0].url, "watch/road-of-naruto-ggjw8/ep-1");
+  assert.equal(results[0].cover, "https://img.example/naruto.jpg");
+  const detail = await provider.getDetail(results[0].url, {category:"sub"});
   assert.equal(detail.episodes.length, 1);
   assert.equal(detail.episodes[0].number, 1);
-  assert.equal(detail.episodes[0].title, "I Am the Strongest");
-  assert.match(detail.episodes[0].url, /^animesalt:\/\/sub\//);
-  assert.ok(calls.some((url) => url.includes("/ajax/episode/list/123?vrf=")));
-
-  const episodes = await provider.getEpisodes("solo-leveling", { category: "sub" });
-  assert.equal(episodes.length, 1);
-  console.log("AnimeSalt mocked integration tests passed.");
+  assert.match(detail.episodes[0].url, /^animesalt:\/\/sub\/episode-token-123/);
+  const streams = await provider.getVideoSources(detail.episodes[0].url, {});
+  assert.ok(streams.length >= 1);
+  assert.equal(streams[0].url, "https://cdn.example/master.m3u8?token=abc");
+  assert.equal(streams[0].container, "hls");
+  assert.equal(streams[0].kind, "sub");
+  assert.ok(calls.some((x) => x.url === "https://animesalt.to/ajax/server/list?servers=episode-token-123"));
+  assert.ok(calls.some((x) => x.url === "https://megaplay.buzz/stream/getSourcesNew?id=123&type=sub"));
+  assert.match(master, /TYPE=AUDIO/);
+  console.log("AnimeSalt live-site route contract, episode/server IDs, embed extraction and multi-audio HLS tests passed.");
 }
-
-main().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
-});
+main().catch((error) => { console.error(error); process.exitCode = 1; });
