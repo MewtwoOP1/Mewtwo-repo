@@ -564,6 +564,16 @@
       "file": "providers/anizone.js",
       "logo": "https://www.google.com/s2/favicons?sz=256&domain=anizone.to",
       "nsfw": false
+    },
+    {
+      "id": "animesalt",
+      "name": "AnimeSalt",
+      "version": "1.0.1",
+      "type": "anime",
+      "lang": "hi",
+      "file": "providers/animesalt.js",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=animesalt.cx",
+      "nsfw": false
     }
   ]
 }
