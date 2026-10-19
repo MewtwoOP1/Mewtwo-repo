@@ -14,8 +14,7 @@
 // 32 bytes, IV "W0;27ToaUpl_P%'c" — pure-JS CBC, byte-verified against a live
 // `enc` blob (2026-09-27).
 
-var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID)
-  ? String(__SOURCE_ID) : 'animesalt';
+var SOURCE_ID = 'acdn';
 
 var SITE = 'https://animesalt.to';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
@@ -24,8 +23,8 @@ var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
 var PLAYER_RE = /^https?:\/\/(?:[a-z0-9-]+\.)?(?:vidtube\.[a-z]+|megaplay\.[a-z]+|vidwish\.[a-z]+|vidstream\.[a-z]+|vidcloud\.[a-z]+)/i;
 
 function getInfo() {
-  return { name: 'AnimeSalt', lang: 'hi', baseUrl: SITE,
-    logo: 'https://www.google.com/s2/favicons?sz=256&domain=animesalt.to', type: 'anime', version: '1.0.2' };
+  return { name: 'ACDN Multi-Audio', lang: 'multi', baseUrl: SITE,
+    logo: 'https://www.google.com/s2/favicons?sz=256&domain=animesalt.cx', type: 'anime', version: '1.0.0' };
 }
 
 // ── Pure-JS base64 (encode + decode). Self-contained: the app injects no
@@ -367,7 +366,7 @@ function _baseGetDetail(url, opts) {
   if (!/\/watch\//i.test(watchPath)) watchPath = SITE + '/watch/' + encodeURIComponent(raw.replace(/^.*\//, '')) + '/ep-1';
   return _get(watchPath, SITE + '/').then(function (html) {
     var animeId = (html.match(/data-id="(\d+)"/) || [])[1];
-    var title = _htmlText((html.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1] || '').replace(/^Watch Free!\s*/i, '').replace(/\s+Online in HD.*$/i, '').replace(/\s+-\s+AnimeSalt$/i, '').trim();
+    var title = _htmlText((html.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1] || '').replace(/^Watch Free!\s*/i, '').replace(/\s+Online in HD.*$/i, '').replace(/\s+-\s+AnimeSalt$/i, '').replace(/\s+(?:Episode|Ep\.?)\s*\d+(?:\.\d+)?\s*$/i, '').trim();
     var poster = (html.match(/property="og:image" content="([^"]+)"/i) || [])[1] || null;
     var season = _seasonFromTitle(title, watchPath);\n    var base = { id: raw, title: title || raw, url: raw, cover: poster, season: season, description: '',
       status: 'unknown', genres: [], studios: [], type: 'anime', sourceId: SOURCE_ID, episodes: [], subCount: 0, dubCount: 0 };
@@ -388,6 +387,7 @@ function getDetail(url, opts) {
     var animeTitle = _htmlText((html.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1] || '').replace(/^Watch Free!\s*/i, '').replace(/\s+Online in HD.*$/i, '').replace(/\s+-\s+AnimeSalt$/i, '').trim();
     return _baseGetDetail(url, opts).then(function (d) {
       var season = _seasonFromTitle(animeTitle || d.title, watchPath);
+      if (animeTitle) d.title = animeTitle;
       d.season = season;
       d.episodes = (d.episodes || []).map(function (ep) {
         return Object.assign({}, ep, { season: season, url: 'acdn://' + encodeURIComponent(JSON.stringify({ title: animeTitle || d.title, season: season, episode: ep.number, isMovie: false })) });
