@@ -321,7 +321,7 @@ function getVideoSources(episodeUrl, opts) {
       r.parsed.sources.forEach(function (s) {
         if (!s || /pixeldrain/i.test(String(s.type || ''))) return;
         var url = s.stream_url || s.streamUrl || s.file || s.url || '';
-        if (!/^https?:\\/\\//i.test(url)) return;
+        if (!url || !url.startsWith('http')) return;
         var name = String(s.name || s.type || 'Server');
         var lang = variant.lang || r.parsed.lang || 'Auto';
         out.push({ url: url,
