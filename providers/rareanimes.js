@@ -1,12 +1,12 @@
 /*
  * RareAnimes — catalog, episode metadata and alternate-language playback.
  *
- * v1.0.2: group language variants under one episode and expose them as player
+ * v1.0.3: preserve episode numbering and group language variants under one episode and expose them as player
  * audio choices rather than duplicate episode entries.
  */
 var SITE = 'https://www.rareanimes.mov';
 var SB = 'https://codedew.com/streambeta/';
-var VERSION = '1.0.2';
+var VERSION = '1.0.3';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
 var ROWS = [
   { title: 'Trending', path: '/home/' },
@@ -127,7 +127,11 @@ function _episodePayload(url, title, number, lang) {
 function _postLines(content) {
   var html = String(content || '').replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi, '');
   var links = [];
-  html = html.replace(/<a\b[^>]*href=["'](https?:\/\/(?:www\.)?codedew\.com\/zipper\/[^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi,
+  // RareAnimes routes its watch buttons through CodeDew, but the path varies
+  // by button (WatchNow, HubCloud, MultiQuality and fallbacks). Capture the
+  // whole CodeDew link family rather than silently losing an episode when the
+  // site changes a path from /zipper/ to another resolver endpoint.
+  html = html.replace(/<a\b[^>]*href=["'](https?:\/\/(?:www\.)?codedew\.com\/[^"']*)["'][^>]*>([\s\S]*?)<\/a>/gi,
     function (_, url, label) {
       links.push({ url: _decode(url), label: _strip(label) });
       return ' __RAI_LINK_' + (links.length - 1) + '__ ';
@@ -151,28 +155,41 @@ function _variant(text) {
 }
 function _parseEpisodes(content) {
   var lines = _postLines(content), eps = [], current = null, nextLoose = 1, pendingLang = '';
-  function ensure(n, title) {
+  function ensure(n, title, explicitHeader) {
     var found = eps.filter(function (e) { return e.number === n; })[0];
-    if (found) { if (title && !found.title) found.title = title; return found; }
-    found = { number: n, title: title || ('Episode ' + n), variants: [] }; eps.push(found); return found;
+    if (found) {
+      if (title && (!found.title || /^Episode \d+$/i.test(found.title))) found.title = title;
+      if (explicitHeader) found.hasHeader = true;
+      return found;
+    }
+    found = { number: n, title: title || ('Episode ' + n), variants: [],
+      hasHeader: !!explicitHeader };
+    eps.push(found);
+    return found;
   }
   lines.forEach(function (line) {
     var h = line.text.match(/^(?:episode|ep\.?)\s*0*(\d{1,4})\b\s*(?:[-–:]\s*(.*))?$/i);
     if (h) {
-      current = ensure(+h[1], (h[2] || '').trim());
+      current = ensure(+h[1], (h[2] || '').trim(), true);
       pendingLang = '';
     } else if (line.text) {
       var detectedLang = _variant(line.text);
       if (detectedLang) pendingLang = detectedLang;
     }
     if (line.links.length) {
-      if (!current) current = ensure(nextLoose++, 'Episode ' + nextLoose);
+      if (!current) {
+        current = ensure(nextLoose, 'Episode ' + nextLoose, false);
+        nextLoose++;
+      }
       var lang = _variant(line.text) || pendingLang ||
         (/^episode\s+\d+$/i.test(current.title) ? 'Default' : current.title) || 'Default';
       var usable = line.links.filter(function (l) { return /watchnow|watch\b|hubcloud/i.test(l.label); });
-      if (!usable.length) usable = line.links.filter(function (l) { return /streambeta/i.test(l.label); });
+      if (!usable.length) usable = line.links.filter(function (l) { return /streambeta|multiquality|dlbeta|filepress|download|play/i.test(l.label); });
+      if (!usable.length) usable = line.links;
       if (!usable.length) return;
-      var preferred = usable.filter(function (l) { return /watchnow|watch\b/i.test(l.label); })[0] || usable[0];
+      var preferred = usable.filter(function (l) { return /watchnow|watch\b/i.test(l.label); })[0]
+        || usable.filter(function (l) { return /hubcloud/i.test(l.label); })[0]
+        || usable[0];
       var key = lang.toLowerCase();
       var v = current.variants.filter(function (x) { return x.lang.toLowerCase() === key; })[0];
       if (!v) { v = { lang: lang, url: preferred.url }; current.variants.push(v); }
@@ -180,13 +197,18 @@ function _parseEpisodes(content) {
       pendingLang = '';
     }
   });
-  return eps.filter(function (e) { return e.variants.length; }).map(function (e) {
-    var episodeUrl = 'rareanimes://episode/' + encodeURIComponent(JSON.stringify({
-      title: e.title, number: e.number, variants: e.variants
-    }));
-    return { id: episodeUrl, title: e.title, number: e.number, url: episodeUrl,
-      type: 'anime', sourceId: 'rareanimes-streambeta' };
-  });
+  // IMPORTANT: Zangetsu resolves metadata episode N against list position N-1.
+  // Keep explicit episode headings even if the site has no link for that
+  // episode; dropping one "NOT RELEASED YET" entry shifts every later episode.
+  return eps.filter(function (e) { return e.hasHeader || e.variants.length; })
+    .sort(function (a, b) { return a.number - b.number; })
+    .map(function (e) {
+      var episodeUrl = 'rareanimes://episode/' + encodeURIComponent(JSON.stringify({
+        title: e.title, number: e.number, variants: e.variants
+      }));
+      return { id: episodeUrl, title: e.title, number: e.number, url: episodeUrl,
+        type: 'anime', sourceId: 'rareanimes-streambeta' };
+    });
 }
 function getDetail(url) {
   var pageUrl = String(url || '');
@@ -284,37 +306,50 @@ function _parseStreamBeta(html) {
   return { title: title, lang: lang, fid: fid, variants: variants, sources: sources };
 }
 function _streamBetaUrl(url) {
-  var u = String(url || '');
-  if (/^https?:\/\//i.test(u)) {
-    try {
-      var parsed = new URL(u);
-      if (!/(^|\.)codedew\.com$/i.test(parsed.hostname) || !/\/(?:zipper|streambeta)\/?$/i.test(parsed.pathname)) return '';
-      if (/\/streambeta\/?$/i.test(parsed.pathname)) return u;
-      return u;
-    } catch (_) { return ''; }
-  }
-  return '';
+  var u = String(url || '').trim();
+  if (!/^https?:\/\//i.test(u)) return '';
+  try {
+    var parsed = new URL(u);
+    // Restrict redirects to CodeDew, but don't hard-code one URL path: the
+    // site exposes several buttons backed by different CodeDew endpoints.
+    if (!/(^|\.)codedew\.com$/i.test(parsed.hostname)) return '';
+    return u;
+  } catch (_) { return ''; }
 }
 function _decodeEpisodeUrl(url) {
   var m = String(url || '').match(/^rareanimes:\/\/episode\/(.+)$/i);
   if (!m) return null;
   try { return JSON.parse(decodeURIComponent(m[1])); } catch (_) { return null; }
 }
-function _resolveStreamBeta(url) {
+function _resolveStreamBeta(url, depth, seen) {
   var target = _streamBetaUrl(url);
-  if (!target) return Promise.reject(new Error('RareAnimes: invalid StreamBeta/zipper URL'));
+  depth = depth || 0;
+  seen = seen || {};
+  if (!target) return Promise.reject(new Error('RareAnimes: invalid CodeDew URL'));
+  if (depth > 3 || seen[target]) return Promise.reject(new Error('RareAnimes: CodeDew redirect loop or depth limit'));
+  seen[target] = true;
   return _get(target, SITE + '/').then(function (html) {
     var parsed = _parseStreamBeta(html);
     if (parsed.sources.length) return { html: html, parsed: parsed, url: target };
-    var href = _decode((html.match(/(?:data-href|href|content)=["']([^"']*(?:streambeta|hubcloud)[^"']*)["']/i) || [])[1] || '');
+
+    // Some CodeDew wrappers point at their real player via iframe/src or a
+    // data attribute rather than a plain href. Follow a bounded same-host hop.
+    var candidate = '';
+    var attr = /(?:data-href|data-src|data-url|data-link|href|src|content)\s*=\s*["']([^"']+)["']/gi, match;
+    while ((match = attr.exec(html))) {
+      var raw = _decode(match[1]).trim();
+      if (!/^https?:\/\//i.test(raw)) continue;
+      var next = _streamBetaUrl(raw);
+      if (!next || next === target || seen[next]) continue;
+      if (/streambeta|hubcloud|zipper|multiquality|dlbeta/i.test(next)) { candidate = next; break; }
+    }
+    if (candidate) return _resolveStreamBeta(candidate, depth + 1, seen);
+
+    // Compatibility fallback for pages exposing only a StreamBeta/HubCloud ID.
+    var href = _decode((html.match(/(?:data-href|data-src|data-url|href|src|content)=["']([^"']*(?:streambeta|hubcloud)[^"']*)["']/i) || [])[1] || '');
     var id = (href.match(/(?:streambeta\/[^?]*\?|hubcloud\.[a-z]+\/drive\/)(?:url=)?([A-Za-z0-9_-]{4,160})/i) || [])[1];
-    if (!id) throw new Error('RareAnimes: StreamBeta playerSources not found');
-    var next = SB + '?url=' + encodeURIComponent(id);
-    return _get(next, target).then(function (page) {
-      var p = _parseStreamBeta(page);
-      if (!p.sources.length) throw new Error('RareAnimes: StreamBeta returned no playable sources');
-      return { html: page, parsed: p, url: next };
-    });
+    if (!id) throw new Error('RareAnimes: CodeDew playerSources not found');
+    return _resolveStreamBeta(SB + '?url=' + encodeURIComponent(id), depth + 1, seen);
   });
 }
 function getVideoSources(episodeUrl, opts) {
@@ -323,6 +358,7 @@ function getVideoSources(episodeUrl, opts) {
   // Language links are alternatives for one episode, not separate episodes.
   var variants = Array.isArray(payload.variants) && payload.variants.length
     ? payload.variants : (payload.url ? [{ url: payload.url, lang: payload.lang || '' }] : []);
+  if (!variants.length) return Promise.resolve([]);
   return Promise.all(variants.map(function (variant) {
     return _resolveStreamBeta(variant.url).then(function (r) {
       var out = [];
