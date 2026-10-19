@@ -2,7 +2,7 @@ const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 
 const API = 'https://api.inmoviebox.com';
-const API_ROOT = API + '/wefeed-mobile-bff';
+const API_ROOT = '/wefeed-mobile-bff';
 const DEFAULT_KEY = '76iRl07s0xSN9jqmEWAt79EBJZulIQIsV64FZr2O';
 const ALT_KEY = 'Xqn2nnO41/L92o1iuXhSLHTbXvY4Z5ZZ62m8mSLA';
 const calls = [];
