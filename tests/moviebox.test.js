@@ -4,6 +4,7 @@ const TOKEN_OLD = "old.eyJleHAiOjQwMDAwMDAwMDB9.signature";
 const TOKEN_NEW = "fresh.eyJleHAiOjQwMDAwMDAwMDB9.signature";
 let currentToken = TOKEN_OLD;
 let bootstrapCount = 0;
+let bootstrapAttempts = 0;
 let rejectOldPlayback = false;
 const calls = [];
 
@@ -26,9 +27,22 @@ global.fetch = async function (url, options) {
   calls.push({ url, options });
 
   if (url.indexOf("/tab-operating?") >= 0) {
+    bootstrapAttempts += 1;
+    assert.ok(String(options.headers["user-agent"]).startsWith("com.community.oneroom/50020088"),
+      "bootstrap must use the separate OneRoom playback identity");
+    assert.ok(String(options.headers["x-client-info"]).includes('"package_name":"com.community.oneroom"'));
+    assert.ok(options.headers["x-tr-signature"], "bootstrap request must be signed");
+    assert.equal(options.headers.Authorization, undefined, "bootstrap must not send a stale bearer");
+    // Upstream may return HTTP 200 without x-user; ensureToken must try fallback.
+    return { status: 200, headers: {}, body: JSON.stringify({ code: 0, data: {} }) };
+  }
+
+  if (url.indexOf("/tab/ranking-list?") >= 0 && url.indexOf("perPage=1") >= 0) {
     bootstrapCount += 1;
+    bootstrapAttempts += 1;
     currentToken = bootstrapCount > 1 ? TOKEN_NEW : TOKEN_OLD;
-    return { status: 200, headers: { "x-user": JSON.stringify({ token: currentToken }) }, body: JSON.stringify({ code: 0, data: {} }) };
+    assert.ok(String(options.headers["user-agent"]).startsWith("com.community.oneroom/50020088"));
+    return { status: 200, headers: { "x-user": JSON.stringify({ token: currentToken }) }, body: JSON.stringify({ code: 0, data: { items: [] } }) };
   }
 
   const headers = { "x-user": JSON.stringify({ token: currentToken }) };
@@ -76,7 +90,7 @@ global.fetch = async function (url, options) {
 const provider = require("../providers/moviebox.js");
 
 async function main() {
-  assert.equal(provider.version, "1.0.3");
+  assert.equal(provider.version, "1.0.4");
   assert.equal(provider.getInfo().name, "MovieBox");
   assert.equal(provider.getInfo().type, "movie");
   assert.equal(provider.getSettings().length, 0);
@@ -88,7 +102,8 @@ async function main() {
   const found = await provider.search("Mock Movie", 1, {});
   assert.equal(found.length, 1);
   assert.equal(found[0].id, "movie-1");
-  assert.equal(bootstrapCount, 1, "bootstrap must run once before protected API requests");
+  assert.equal(bootstrapCount, 1, "fallback bootstrap must obtain a token before protected API requests");
+  assert.equal(bootstrapAttempts, 2, "tab-operating without x-user must fall back to ranking-list");
 
   const category = await provider.getCategory("1|1", 3);
   assert.equal(category.length, 1);
@@ -132,6 +147,7 @@ async function main() {
   rejectOldPlayback = false;
   assert.equal(refreshedStreams.length, 2);
   assert.ok(bootstrapCount > beforeRefresh, "auth failure must trigger a fresh token bootstrap");
+  assert.ok(bootstrapAttempts >= 4, "each token refresh should retry tab-operating then ranking-list fallback");
   assert.ok(calls.some((c) => c.url.indexOf("/subject-api/play-info?") >= 0 &&
     c.options.headers && c.options.headers.Authorization === "Bearer " + TOKEN_NEW));
 
