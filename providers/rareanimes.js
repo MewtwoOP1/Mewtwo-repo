@@ -1,13 +1,12 @@
 /*
- * RareAnimes + StreamBeta — catalog, episode metadata and direct playback.
- * StreamBeta itself is a resolver, not a catalog; this provider reads titles
- * from RareAnimes and resolves WatchNow/HubCloud links through codedew StreamBeta.
+ * RareAnimes — catalog, episode metadata and alternate-language playback.
  *
- * v1.0.0: catalog parsing, encoded playerSources support, and StreamBeta playback.
+ * v1.0.1: group language variants under one episode and expose them as player
+ * audio choices rather than duplicate episode entries.
  */
 var SITE = 'https://www.rareanimes.mov';
 var SB = 'https://codedew.com/streambeta/';
-var VERSION = '1.0.0';
+var VERSION = '1.0.1';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
 var ROWS = [
   { title: 'Trending', path: '/home/' },
@@ -19,7 +18,7 @@ var ROWS = [
 ];
 
 function getInfo() {
-  return { name: 'RareAnimes • StreamBeta', lang: 'hi', baseUrl: SITE,
+  return { name: 'RareAnimes', lang: 'hi', baseUrl: SITE,
     logo: 'https://www.google.com/s2/favicons?sz=256&domain=rareanimes.mov',
     type: 'anime', version: VERSION };
 }
@@ -35,7 +34,7 @@ function _get(url, referer) {
     'User-Agent': UA, 'Accept': 'text/html,application/xhtml+xml,application/json,*/*;q=0.8',
     'Referer': referer || SITE + '/'
   }}).then(function (r) {
-    if (_failed(r)) throw new Error('RareAnimes/StreamBeta HTTP ' + (r && r.status) + ': ' + url);
+    if (_failed(r)) throw new Error('RareAnimes HTTP ' + (r && r.status) + ': ' + url);
     return _body(r);
   });
 }
@@ -174,12 +173,12 @@ function _parseEpisodes(content) {
     }
   });
   return eps.filter(function (e) { return e.variants.length; }).map(function (e) {
-    return e.variants.map(function (v) {
-      return { id: _episodePayload(v.url, e.title, e.number, v.lang),
-        title: e.title + ' • ' + v.lang, number: e.number, url: _episodePayload(v.url, e.title, e.number, v.lang),
-        type: 'anime', sourceId: 'rareanimes-streambeta' };
-    });
-  }).reduce(function (a, b) { return a.concat(b); }, []);
+    var episodeUrl = 'rareanimes://episode/' + encodeURIComponent(JSON.stringify({
+      title: e.title, number: e.number, variants: e.variants
+    }));
+    return { id: episodeUrl, title: e.title, number: e.number, url: episodeUrl,
+      type: 'anime', sourceId: 'rareanimes' };
+  });
 }
 function getDetail(url) {
   var pageUrl = String(url || '');
@@ -312,21 +311,35 @@ function _resolveStreamBeta(url) {
 }
 function getVideoSources(episodeUrl, opts) {
   var payload = _decodeEpisodeUrl(episodeUrl);
-  if (!payload || !payload.url) return Promise.resolve([]);
-  return _resolveStreamBeta(payload.url).then(function (r) {
+  if (!payload) return Promise.resolve([]);
+  // Language links are alternatives for one episode, not separate episodes.
+  var variants = Array.isArray(payload.variants) && payload.variants.length
+    ? payload.variants : (payload.url ? [{ url: payload.url, lang: payload.lang || '' }] : []);
+  return Promise.all(variants.map(function (variant) {
+    return _resolveStreamBeta(variant.url).then(function (r) {
+      var out = [];
+      r.parsed.sources.forEach(function (s) {
+        if (!s || /pixeldrain/i.test(String(s.type || ''))) return;
+        var url = s.stream_url || s.streamUrl || s.file || s.url || '';
+        if (!/^https?:\\/\\//i.test(url)) return;
+        var name = String(s.name || s.type || 'Server');
+        var lang = variant.lang || r.parsed.lang || 'Auto';
+        out.push({ url: url,
+          quality: /2160p/i.test(name) ? '2160p' : (/1080p/i.test(name) ? '1080p' : (/720p/i.test(name) ? '720p' : 'auto')),
+          label: [lang, name].join(' • '),
+          container: /\\.m3u8(?:[?#]|$)/i.test(url) ? 'hls' : 'mp4',
+          kind: /^(?:Japanese|Original|Sub|Subbed)$/i.test(lang) ? 'sub' : 'dub',
+          headers: { 'User-Agent': UA, 'Referer': r.url || SB } });
+      });
+      return out;
+    }).catch(function () { return []; });
+  })).then(function (groups) {
     var out = [], seen = {};
-    r.parsed.sources.forEach(function (s) {
-      if (!s || /pixeldrain/i.test(String(s.type || ''))) return;
-      var url = s.stream_url || s.streamUrl || s.file || s.url || '';
-      if (!/^https?:\/\//i.test(url) || seen[url]) return;
-      seen[url] = 1;
-      var name = String(s.name || s.type || 'Server');
-      out.push({ url: url, quality: /2160p/i.test(name) ? '2160p' : (/1080p/i.test(name) ? '1080p' : (/720p/i.test(name) ? '720p' : 'auto')),
-        label: [payload.lang || r.parsed.lang || 'Auto', name].join(' • '),
-        container: /\.m3u8(?:[?#]|$)/i.test(url) ? 'hls' : 'mp4', kind: 'dub',
-        headers: { 'User-Agent': UA, 'Referer': r.url || SB } });
-    });
-    if (!out.length) throw new Error('RareAnimes: StreamBeta page contains no usable direct sources');
+    groups.forEach(function (group) { group.forEach(function (s) {
+      var key = s.url + '|' + s.label;
+      if (!seen[key]) { seen[key] = true; out.push(s); }
+    }); });
+    if (!out.length) throw new Error('RareAnimes: no usable direct sources across available language variants');
     return out;
   });
 }
