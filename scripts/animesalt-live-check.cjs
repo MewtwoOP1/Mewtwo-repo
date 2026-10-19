@@ -31,7 +31,7 @@ async function main() {
     const hrefEnd = filterProbe.body.indexOf('"', watchIndex);
     if (hrefStart >= 6 && hrefEnd > watchIndex) liveWatchUrl = new URL(filterProbe.body.slice(hrefStart, hrefEnd), 'https://animesalt.to').href;
   }
-  console.log('[AnimeSalt live] Filter probe:', JSON.stringify({status: filterProbe.status, length: filterProbe.body.length, watchUrl: liveWatchUrl, watchCount: filterProbe.body.split('/watch/').length - 1}));
+  console.log('[AnimeSalt live] Filter probe:', JSON.stringify({status: filterProbe.status, length: filterProbe.body.length, watchUrl: liveWatchUrl, watchCount: filterProbe.body.split('/watch/').length - 1, cardSnippets: (filterProbe.body.match(/.{0,220}\\/watch\\/[^\\\"']+.{0,220}/g) || []).slice(0, 3)}));
   if (liveWatchUrl) {
     const watchPage = await global.fetch(liveWatchUrl, { headers: { 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://animesalt.to/' }, timeoutMs: 12000 });
     const body = watchPage.body || '';
