@@ -70,11 +70,21 @@
     {
       "id": "anikoto",
       "name": "AniKoto",
-      "version": "1.2.0",
+      "version": "1.2.2",
       "type": "anime",
       "lang": "en",
       "file": "providers/anikoto.js",
-      "logo": "https://www.google.com/s2/favicons?sz=256&domain=anikotoapi.site",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=anikototv.to",
+      "nsfw": false
+    },
+    {
+      "id": "animeparadise",
+      "name": "AnimeParadise",
+      "version": "1.0.1",
+      "type": "anime",
+      "lang": "en",
+      "file": "providers/animeparadise.js",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=animeparadise.moe",
       "nsfw": false
     },
     {

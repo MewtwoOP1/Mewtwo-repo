@@ -20,14 +20,13 @@
 // those three through the episode url and ask the same API when the episode's
 // own servers all come up empty.
 //
-// Home = /home spotlight (hero) + recent from the JSON API (anikotoapi.site);
+// Home, search, details, episodes and playback are resolved from the Anikoto site itself.
 // slugs are shared with the site, so those cards resolve through getDetail.
 
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID)
   ? String(__SOURCE_ID) : 'anikoto';
 
 var SITE = 'https://anikototv.to';
-var API = 'https://anikotoapi.site';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
   + '(KHTML, like Gecko) Chrome/124.0 Safari/537.36';
 // Embed hosts that hand back a plain m3u8 (via getSources or getSourcesNew).
@@ -37,7 +36,7 @@ var MAPPER = 'https://mapper.nekostream.site/api/mal/';
 
 function getInfo() {
   return { name: 'AniKoto', lang: 'en', baseUrl: SITE,
-    logo: SITE + '/favicon.ico', type: 'anime', version: '1.2.0' };
+    logo: SITE + '/favicon.ico', type: 'anime', version: '1.2.2' };
 }
 
 // MegaPlay/VidWish: getSourcesNew is the endpoint their player hits; both routes
@@ -137,17 +136,11 @@ function search(query, page, opts) {
   }).catch(function () { return []; });
 }
 
-// ── Home: /home spotlight (hero) + recent from the JSON API ──────────────────
-function _apiCard(a) {
-  if (!a || !a.slug) return null;
-  return { id: a.slug, title: a.title || a.alternative || a.slug, url: a.slug,
-    cover: a.poster || null, type: 'anime', sourceId: SOURCE_ID,
-    subCount: a.is_sub ? 1 : 0, dubCount: 0 };
-}
 // Slice the /home page into its section containers (#hotest / #top-anime /
 // #recent-update), each bounded by the next section so cards don't bleed across.
 function _sections(html) {
   var ids = ['hotest', 'top-anime', 'recent-update'], marks = [];
+  html = String(html || '');
   for (var i = 0; i < ids.length; i++) {
     var k = html.indexOf('id="' + ids[i] + '"');
     if (k >= 0) marks.push({ id: ids[i], at: k });
@@ -162,7 +155,7 @@ function _sections(html) {
 }
 // Spotlight (#hotest) cards carry the title in an <h2 …d-title> + a bg-image.
 function _spotlight(seg) {
-  var out = [], seen = {}, chunks = seg.split('swiper-slide item');
+  var out = [], seen = {}, chunks = String(seg || '').split('swiper-slide item');
   for (var i = 1; i < chunks.length; i++) {
     var c = chunks[i];
     var slug = _slugFromWatch((c.match(/href="([^"]*\/watch\/[^"]+)"/) || [])[1]);
@@ -197,25 +190,19 @@ function _gridCards(seg) {
   }
   return out;
 }
+
+// ── Home: site-scraped spotlight and catalogue sections ─────────────────────
 function getHome(opts) {
   return _get(SITE + '/home', SITE + '/').then(function (html) {
-    var s = _sections(html), rows = [];
-    var spot = _spotlight(s.hotest || html);
-    if (spot.length) rows.push({ title: 'Spotlight', items: spot });
-    var top = _gridCards(s['top-anime']);
+    var sections = _sections(html), rows = [];
+    var spotlight = _spotlight(sections.hotest || html);
+    if (spotlight.length) rows.push({ title: 'Spotlight', items: spotlight });
+    var top = _gridCards(sections['top-anime']);
     if (top.length) rows.push({ title: 'Top Anime', items: top });
-    var recent = _gridCards(s['recent-update']);
+    var recent = _gridCards(sections['recent-update']);
     if (recent.length) rows.push({ title: 'Recently Updated', items: recent });
     return rows;
-  }).catch(function () { return []; }).then(function (rows) {
-    if (rows.length) return rows;
-    // Fallback: the JSON API's recent list if the /home scrape yielded nothing.
-    return _json(API + '/recent-anime?page=1&per_page=24').then(function (j) {
-      var data = (j && j.data) || [], items = [];
-      for (var k = 0; k < data.length; k++) { var cc = _apiCard(data[k]); if (cc) items.push(cc); }
-      return items.length ? [{ title: 'Recently Updated', items: items }] : [];
-    }).catch(function () { return []; });
-  });
+  }).catch(function () { return []; });
 }
 
 // ── Detail + episodes ───────────────────────────────────────────────────────
