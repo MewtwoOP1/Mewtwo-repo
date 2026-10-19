@@ -10,13 +10,18 @@ global.fetch = async function (url, options) {
   }
   const response = await nativeFetch(url, init);
   const body = await response.text();
-  liveCalls.push({ url: String(url), status: response.status, length: body.length, snippet: body.slice(0, 500) });
+  liveCalls.push({ url: String(url), status: response.status, length: body.length, snippet: body.slice(0, 500), title: (body.match(/<title[^>]*>([\\s\\S]*?)<\\/title>/i) || [])[1] || '', hrefs: (body.match(/href=[\"'][^\"']+/gi) || []).slice(0, 10), watchCount: (body.match(/\\/watch\\//gi) || []).length, articleCount: (body.match(/<article/gi) || []).length });
   return { status: response.status, body: body };
 };
 
 const provider = require('../providers/animesalt.js');
 
 async function main() {
+  console.log('[AnimeSalt live] Probing public search route variants...');
+  for (const url of ['https://animesalt.to/search?keyword=Naruto','https://animesalt.to/filter?keyword=Naruto','https://animesalt.to/?s=Naruto','https://animesalt.to/ajax/search/suggest?keyword=Naruto']) {
+    const response = await global.fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' }, timeoutMs: 10000 });
+    console.log('[AnimeSalt live] Probe:', JSON.stringify(liveCalls[liveCalls.length - 1]));
+  }
   console.log('[AnimeSalt live] Checking mirror selection and search...');
   const results = await provider.search('Naruto', 1, {});
   if (!Array.isArray(results) || results.length === 0) {
