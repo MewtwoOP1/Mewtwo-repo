@@ -88,6 +88,16 @@
       "nsfw": false
     },
     {
+      "id": "desidubanime",
+      "name": "DesiDub Anime",
+      "version": "1.0.1",
+      "type": "anime",
+      "lang": "hi",
+      "file": "providers/desidubanime.js",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=desidubanime.me",
+      "nsfw": false
+    },
+    {
       "id": "animeparadise",
       "name": "AnimeParadise",
       "version": "1.0.1",
