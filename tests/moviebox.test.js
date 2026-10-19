@@ -42,10 +42,12 @@ global.fetch = async function (url, options) {
 
 const provider = require("../providers/moviebox.js");
 async function main() {
-  assert.equal(provider.version, "1.0.1");
+  assert.equal(provider.version, "1.0.2");
   assert.equal(provider.getInfo().name, "MovieBox");
   assert.equal(provider.getInfo().type, "movie");
-  for (const method of ["popular", "search", "getDetail", "getEpisodes", "getVideoSources"]) {
+  assert.deepEqual(provider.getSettings(), []);
+  assert.equal(provider.getStreams, provider.getVideoSources);
+  for (const method of ["getInfo", "getSettings", "getHome", "popular", "search", "getDetail", "getEpisodes", "getVideoSources", "getStreams"]) {
     assert.equal(typeof provider[method], "function", "missing provider method: " + method);
   }
 
