@@ -10,7 +10,7 @@ global.fetch = async function (url, options) {
   }
   const response = await nativeFetch(url, init);
   const body = await response.text();
-  liveCalls.push({ url: String(url), status: response.status, length: body.length, snippet: body.slice(0, 500), title: (body.match(/<title[^>]*>([\\s\\S]*?)<\\/title>/i) || [])[1] || '', hrefs: (body.match(/href=[\"'][^\"']+/gi) || []).slice(0, 10), watchCount: (body.match(/\\/watch\\//gi) || []).length, articleCount: (body.match(/<article/gi) || []).length });
+  liveCalls.push({ url: String(url), status: response.status, length: body.length, snippet: body.slice(0, 500), title: body.includes('<title') ? body.split('<title')[1].split('</title>')[0].replace(/>/g, '').slice(0, 120) : '', hrefs: body.split('href=').slice(1, 11).map((x) => x.slice(0, 120)), watchCount: body.split('/watch/').length - 1, articleCount: body.split('<article').length - 1 });
   return { status: response.status, body: body };
 };
 
