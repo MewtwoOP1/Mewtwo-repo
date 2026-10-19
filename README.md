@@ -63,3 +63,5 @@ The live diagnostic emits raw watch-link fragments without regex escaping.
 Search parser now resolves titles from nearby AnimeSalt watch-card metadata when poster links omit titles.
 
 AnimeSalt parsing is self-contained and does not require the app's global `htmlText` helper.
+
+AnimeSalt returns language-specific sub/dub streams when the upstream server does not publish a multi-audio HLS master.
