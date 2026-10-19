@@ -60,7 +60,7 @@
     {
       "id": "moviebox",
       "name": "MovieBox",
-      "version": "1.0.3",
+      "version": "1.0.4",
       "type": "movie",
       "lang": "hi",
       "file": "providers/moviebox.js",
