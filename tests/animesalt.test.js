@@ -37,7 +37,7 @@ global.fetch = async function (url, options) {
 
 const provider = require("../providers/animesalt.js");
 async function main() {
-  assert.equal(provider.version, "1.0.1");
+  assert.equal(provider.version, "1.0.2");
   assert.equal(provider.getInfo().name, "AnimeSalt");
   assert.equal(provider.getInfo().baseUrl, "https://animesalt.to");
   assert.deepEqual(await provider.search("", 1, {}), []);

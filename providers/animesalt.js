@@ -25,7 +25,7 @@ var PLAYER_RE = /^https?:\/\/(?:[a-z0-9-]+\.)?(?:vidtube\.[a-z]+|megaplay\.[a-z]
 
 function getInfo() {
   return { name: 'AnimeSalt', lang: 'hi', baseUrl: SITE,
-    logo: 'https://www.google.com/s2/favicons?sz=256&domain=animesalt.to', type: 'anime', version: '1.0.1' };
+    logo: 'https://www.google.com/s2/favicons?sz=256&domain=animesalt.to', type: 'anime', version: '1.0.2' };
 }
 
 // ── Pure-JS base64 (encode + decode). Self-contained: the app injects no
@@ -303,18 +303,63 @@ function _metaList(html, label) {
 }
 // data-num can be a label like "Full"; data-slug (or the anchor text) carries
 // the real episode number.
-function _episodes(lhtml, cat) {
-  var out = [], seen = {}, re = /<a\b([^>]*\bdata-number="([^"]+)"[^>]*\bdata-id="([^"]+)"[^>]*)>([\s\S]*?)<\/a>/gi, m;
-  while ((m = re.exec(String(lhtml || ''))) !== null) {
-    var attrs = m[1], num = parseInt(m[2], 10), episodeId = m[3];
-    if (!episodeId || seen[episodeId]) continue;
-    seen[episodeId] = 1;
-    if (!(num >= 1)) num = out.length + 1;
-    var title = _htmlText((attrs.match(/title="([^"]*)"/i) || [])[1] || '').trim();
-    out.push({ id: 'episode:' + episodeId, number: num, title: title && title !== 'Full' ? title : 'Episode ' + num,
-      url: 'animesalt://' + ((cat === 'dub') ? 'dub' : 'sub') + '/' + encodeURIComponent(episodeId) + '/' + num });
+function _episodeNumber(attrs, inner, fallback) {
+  var candidates = [
+    (attrs.match(/\bdata-number=["']([^"']+)["']/i) || [])[1],
+    (attrs.match(/\bdata-episode=["']([^"']+)["']/i) || [])[1],
+    (attrs.match(/\bdata-slug=["']([^"']+)["']/i) || [])[1],
+    (attrs.match(/\btitle=["']([^"']+)["']/i) || [])[1],
+    _htmlText(inner)
+  ];
+  for (var i = 0; i < candidates.length; i++) {
+    var value = String(candidates[i] || '').trim();
+    if (!value || /^(full|movie|special)$/i.test(value)) continue;
+    var m = value.match(/(?:episode|ep\.?|e)\s*[-:#]?\s*(\d+(?:\.\d+)?)/i)
+      || value.match(/(?:^|[-_\s])(?:episode[-_\s]?)?(\d+(?:\.\d+)?)(?:$|[-_\s])/i);
+    if (m) {
+      var n = Number(m[1]);
+      if (Number.isFinite(n) && n > 0) return n;
+    }
   }
-  return out;
+  return fallback;
+}
+function _seasonFromTitle(title, url) {
+  var text = String(title || '') + ' ' + String(url || '');
+  var patterns = [
+    /\b(?:season|series|part|cour)\s*[-:]?\s*(\d+)\b/i,
+    /\b(\d+)(?:st|nd|rd|th)\s+season\b/i,
+    /(?:^|[-_/])s(\d+)(?:[-_/]|$)/i,
+    /(?:^|[-_/])(\d+)(?:st|nd|rd|th)-season(?:[-_/]|$)/i
+  ];
+  for (var i = 0; i < patterns.length; i++) {
+    var m = text.match(patterns[i]);
+    if (m && Number(m[1]) > 0) return Number(m[1]);
+  }
+  return 1;
+}
+function _episodes(lhtml, cat) {
+  var rows = [], seen = {}, re = /<a\b([^>]*\bdata-id=["']([^"']+)["'][^>]*)>([\s\S]*?)<\/a>/gi, m;
+  while ((m = re.exec(String(lhtml || ''))) !== null) {
+    var attrs = m[1], episodeId = m[2];
+    if (!episodeId || seen[episodeId] || !(/ep-item|data-number|data-episode/i.test(attrs))) continue;
+    seen[episodeId] = 1;
+    var title = _htmlText((attrs.match(/\btitle=["']([^"']*)["']/i) || [])[1] || m[3]).trim();
+    rows.push({ id: 'episode:' + episodeId, number: _episodeNumber(attrs, m[3], null),
+      title: title && title.toLowerCase() !== 'full' ? title : null,
+      url: 'animesalt://' + ((cat === 'dub') ? 'dub' : 'sub') + '/' + encodeURIComponent(episodeId) });
+  }
+  rows.sort(function (a, b) {
+    if (a.number == null && b.number == null) return 0;
+    if (a.number == null) return 1;
+    if (b.number == null) return -1;
+    return a.number - b.number;
+  });
+  for (var i = 0; i < rows.length; i++) {
+    if (!(rows[i].number > 0)) rows[i].number = i + 1;
+    if (!rows[i].title) rows[i].title = 'Episode ' + rows[i].number;
+    rows[i].url += '/' + rows[i].number;
+  }
+  return rows;
 }
 function getDetail(url, opts) {
   var raw = String(url || '').trim();
@@ -322,9 +367,10 @@ function getDetail(url, opts) {
   if (!/\/watch\//i.test(watchPath)) watchPath = SITE + '/watch/' + encodeURIComponent(raw.replace(/^.*\//, '')) + '/ep-1';
   return _get(watchPath, SITE + '/').then(function (html) {
     var animeId = (html.match(/data-id="(\d+)"/) || [])[1];
-    var title = _htmlText((html.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1] || '').replace(/^Watch Free!\s*/i, '').replace(/\s+Online in HD.*$/i, '').replace(/\s+-\s+AnimeSalt$/i, '').trim();
+    var title = _htmlText((html.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1] || '').replace(/^Watch Free!\s*/i, '').replace(/\s+Online in HD.*$/i, '').replace(/\s+-\s+AnimeSalt$/i, '').replace(/\s+(?:Episode|Ep\.?)\s*\d+(?:\.\d+)?\s*$/i, '').trim();
     var poster = (html.match(/property="og:image" content="([^"]+)"/i) || [])[1] || null;
-    var base = { id: raw, title: title || raw, url: raw, cover: poster, description: '',
+    var season = _seasonFromTitle(title, watchPath);
+    var base = { id: raw, title: title || raw, url: raw, cover: poster, season: season, description: '',
       status: 'unknown', genres: [], studios: [], type: 'anime', sourceId: SOURCE_ID, episodes: [], subCount: 0, dubCount: 0 };
     if (!animeId) return base;
     return _ajax('/ajax/episode/list/' + animeId).then(function (j) {
@@ -517,7 +563,7 @@ function getLinks(id, opts) { return getVideoSources(id, opts); }
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    version: '1.0.1',
+    version: '1.0.2',
     getInfo: getInfo,
     getSettings: getSettings,
     getHome: getHome,
