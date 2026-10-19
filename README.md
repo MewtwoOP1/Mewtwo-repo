@@ -49,4 +49,4 @@ The provider manifest and JavaScript interface follow the self-contained source 
 
 The code in this repository is licensed under the MIT License. See [LICENSE](LICENSE). Third-party names, logos, APIs, metadata, and content remain the property of their respective owners and are subject to their own terms.
 
-The active movie/series providers include PressPlayX, HDHub4u, and TMDB + Stremio. The active anime providers include AniKoto, AnV, HiAnime, AnimeSuge, AniZone, and MegaPlay.
+The active movie/series providers include PressPlayX, HDHub4u, and TMDB + Stremio. The active anime providers include AniKoto, AnV, HiAnime, AnimeSuge, AniZone, MegaPlay, and AnimeSalt.
