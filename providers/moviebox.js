@@ -1,7 +1,6 @@
 // MovieBox provider — JS port of the Kotlin CloudStream provider.
-// Ported: signing/headers, home lists, search, detail metadata.
-// NOT ported yet (missing from the pasted Kotlin, file was cut off): episodes + loadLinks.
-// version: 1.0.0
+// Ported: signed API requests, home/search/detail, episode lists and playback links.
+// version: 1.0.2
 
 const MAIN_URL = "https://api3.aoneroom.com";
 const PKG = "com.community.mbox.in";
@@ -424,8 +423,9 @@ async function getDetail(urlOrId) {
 
 // ---------- Zangetsu provider contract + playable MovieBox streams ----------
 function getInfo() {
-  return { name: "MovieBox", lang: "hi", baseUrl: PLAYER_BASE, logo: "https://www.google.com/s2/favicons?sz=256&domain=movie-box.co", type: "movie", version: "1.0.1" };
+  return { name: "MovieBox", lang: "hi", baseUrl: PLAYER_BASE, logo: "https://www.google.com/s2/favicons?sz=256&domain=movie-box.co", type: "movie", version: "1.0.2" };
 }
+function getSettings() { return []; }
 function _subjectId(value) {
   const s = String(value || "");
   const m = /subjectId=([^&]+)/.exec(s);
@@ -640,8 +640,9 @@ function getHome(opts) {
 
 // Exposed for tests / the app's loader
 const provider = {
-  id: "moviebox", name: "MovieBox", lang: "hi", version: "1.0.1",
-  getInfo, getHome, popular, getCategory, search, getDetail, getEpisodes, getVideoSources,
+  id: "moviebox", name: "MovieBox", lang: "hi", version: "1.0.2",
+  getInfo, getSettings, getHome, popular, getCategory, search, getDetail, getEpisodes, getVideoSources,
+  getStreams: getVideoSources,
   _internals: { md5Bytes, hmacMd5, xTrSignature, canonicalString, xClientToken, toHex, utf8Bytes, _parseEpisodeUrl, _collectStreams, _policyStreamUrl }
 };
 if (typeof module !== "undefined") module.exports = provider;
