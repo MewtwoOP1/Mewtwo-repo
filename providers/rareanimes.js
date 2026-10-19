@@ -1,13 +1,23 @@
 /*
  * RareAnimes — catalog, episode metadata and alternate-language playback.
  *
- * v1.0.2: group language variants under one episode and expose them as player
- * audio choices rather than duplicate episode entries.
+ * v1.0.4 — playback fixes (no links were coming back):
+ *  - Player-data extraction no longer truncates at the first ';' (broke any array whose
+ *    strings contained ';') and now tries 5 methods in order (see _extractSources).
+ *  - Every link for an episode variant is tried in turn, not only the "preferred" one.
+ *  - Wrapper/redirect pages: follows meta-refresh, location.*, iframe/data-* and CodeDew-family hosts.
+ *  - Relative site links (nav/category) are no longer mistaken for CodeDew buttons.
+ *  - lang-btn parsing is attribute-order independent; extra languages are attempted.
+ *  - Stream URLs are normalised (//cdn, \/ escapes, relative); Origin header added.
+ *  - Failures are no longer swallowed: the thrown error lists why each attempt failed.
  */
 var SITE = 'https://www.rareanimes.mov';
 var SB = 'https://codedew.com/streambeta/';
-var VERSION = '1.0.3';
+var VERSION = '1.0.4';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
+var FAMILY_RE = /(^|\.)(codedew\.com|hubcloud\.[a-z]+|dlbeta\.[a-z]+|streambeta\.[a-z]+)$/i;
+var REL_PATH_RE = /streambeta|zipper|multiquality|hubcloud|dlbeta|filepress/i;
+var REL_LABEL_RE = /watch\s*now|stream|play|hubcloud|multiquality|download/i;
 var ROWS = [
   { title: 'Trending', path: '/home/' },
   { title: 'Hindi Anime', path: '/hindi/category/crunchyroll/' },
@@ -23,21 +33,32 @@ function getInfo() {
     type: 'anime', version: VERSION };
 }
 function getSettings() { return []; }
+
 function _failed(r) { return !r || r.ok === false || (typeof r.status === 'number' && r.status >= 400); }
 function _body(r) {
   if (r && typeof r.body === 'string') return Promise.resolve(r.body);
   if (r && typeof r.text === 'function') return r.text();
   return Promise.resolve('');
 }
+function _msg(e) { return e && e.message ? e.message : String(e); }
+function _host(u) { return ((String(u).match(/^https?:\/\/([^\/:?#]+)/i) || [])[1] || '').toLowerCase(); }
+function _origin(u) { return (String(u).match(/^(https?:\/\/[^\/?#]+)/i) || [])[1] || ''; }
+
 function _get(url, referer) {
   return fetch(url, { headers: {
     'User-Agent': UA, 'Accept': 'text/html,application/xhtml+xml,application/json,*/*;q=0.8',
     'Referer': referer || SITE + '/'
   }}).then(function (r) {
-    if (_failed(r)) throw new Error('RareAnimes HTTP ' + (r && r.status) + ': ' + url);
+    if (_failed(r)) throw new Error('HTTP ' + (r && r.status) + ' ' + url);
     return _body(r);
+  }).then(function (body) {
+    // Report Cloudflare challenges distinctly instead of failing silently later.
+    if (body.length < 60000 && /<title>\s*Just a moment|cf-browser-verification|challenge-platform|cf_chl_opt/i.test(body))
+      throw new Error('Cloudflare challenge at ' + url);
+    return body;
   });
 }
+
 function _decode(s) {
   return String(s == null ? '' : s)
     .replace(/&#x([0-9a-f]+);/gi, function (_, n) { return String.fromCharCode(parseInt(n, 16)); })
@@ -62,6 +83,7 @@ function _item(title, url, cover, classes) {
   return { id: url, title: _cleanTitle(title), url: url, cover: cover || null,
     type: /\bmovie|film\b/i.test(title + ' ' + (classes || '')) ? 'movie' : 'anime' };
 }
+
 function _parseListing(html) {
   html = String(html || '');
   var out = [], seen = {};
@@ -86,9 +108,8 @@ function _parseListing(html) {
     seen[href] = 1;
     out.push(_item(title, href, im ? _abs(im[1], SITE) : null, cls));
   }
-  // Some theme layouts use cards instead of article wrappers.
   if (!out.length) {
-    var ar = /<a\b[^>]*href=["'](https?:\/\/(?:www\.)?rareanimes\.mov\/[^"'#?]+)["'][^>]*>([\s\S]{0,1800}?)<\/a>/gi, x;
+    var ar = /<a\b[^>]*href=["'](https?:\/\/(?:www\.)?rareanimes\.[a-z]{2,}\/[^"'#?]+)["'][^>]*>([\s\S]{0,1800}?)<\/a>/gi, x;
     while ((x = ar.exec(html))) {
       var t = _strip((x[2].match(/<h[1-4][^>]*>([\s\S]*?)<\/h[1-4]>/i) || [])[1] || x[2]);
       if (!t || seen[x[1]] || t.length > 140) continue;
@@ -99,6 +120,7 @@ function _parseListing(html) {
   }
   return out;
 }
+
 function getHome() {
   return Promise.all(ROWS.map(function (row) {
     return _get(SITE + row.path).then(function (html) {
@@ -119,23 +141,22 @@ function search(query) {
   return _get(SITE + '/?s=' + encodeURIComponent(q).replace(/%20/g, '+'))
     .then(_parseListing).catch(function () { return []; });
 }
-function _episodePayload(url, title, number, lang) {
-  return 'rareanimes://episode/' + encodeURIComponent(JSON.stringify({
-    url: url, title: title || '', number: number || 1, lang: lang || ''
-  }));
-}
+
+// ---------------------------------------------------------------- episodes
 function _postLines(content) {
   var html = String(content || '').replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi, '');
   var links = [];
-  // CodeDew buttons are served from multiple paths, including zipper,
-  // multiquality, hubcloud and other wrappers. Capture the complete CodeDew
-  // link family rather than silently losing episode variants as paths change.
-  html = html.replace(/<a\b[^>]*href=["']((?:https?:\/\/(?:www\.)?codedew\.com\/|\/)[^"']*)["'][^>]*>([\s\S]*?)<\/a>/gi,
-    function (_, url, label) {
-      if (url.charAt(0) === '/') url = 'https://codedew.com' + url;
-      links.push({ url: _decode(url), label: _strip(label) });
-      return ' __RAI_LINK_' + (links.length - 1) + '__ ';
-    });
+  html = html.replace(/<a\b[^>]*href=["']([^"']*)["'][^>]*>([\s\S]*?)<\/a>/gi, function (all, url, label) {
+    var raw = _decode(url).trim(), text = _strip(label), full = '';
+    if (/^https?:\/\//i.test(raw)) { if (FAMILY_RE.test(_host(raw))) full = raw; }
+    else if (/^\/\//.test(raw)) { var p = 'https:' + raw; if (FAMILY_RE.test(_host(p))) full = p; }
+    // Relative links are CodeDew buttons only if they look like one; plain site
+    // navigation/category links used to be captured here and poisoned the variants.
+    else if (raw.charAt(0) === '/' && (REL_PATH_RE.test(raw) || REL_LABEL_RE.test(text))) full = 'https://codedew.com' + raw;
+    if (!full) return all;
+    links.push({ url: full, label: text });
+    return ' __RAI_LINK_' + (links.length - 1) + '__ ';
+  });
   html = html.replace(/<(?:p|h[1-6]|hr|br|div|li|tr)\b[^>]*>/gi, '\n');
   return html.split(/\n/).map(function (line) {
     var toks = [];
@@ -145,6 +166,7 @@ function _postLines(content) {
     return { text: _strip(line), links: toks };
   }).filter(function (x) { return x.text || x.links.length; });
 }
+
 function _variant(text) {
   var s = String(text || '').replace(/^\s*(?:episode|ep\.?)\s*\d+\s*[-–:]\s*/i, '');
   s = s.split(/\s[-–]\s|[-–]\s*$/)[0].replace(/[\[\]]/g, '').trim();
@@ -153,6 +175,7 @@ function _variant(text) {
   if (/^untouched\b/i.test(s)) return s.slice(0, 48);
   return '';
 }
+
 function _parseEpisodes(content) {
   var lines = _postLines(content), eps = [], current = null, nextLoose = 1, pendingLang = '';
   function ensure(n, title, explicitHeader) {
@@ -162,8 +185,7 @@ function _parseEpisodes(content) {
       if (explicitHeader) found.hasHeader = true;
       return found;
     }
-    found = { number: n, title: title || ('Episode ' + n), variants: [],
-      hasHeader: !!explicitHeader };
+    found = { number: n, title: title || ('Episode ' + n), variants: [], hasHeader: !!explicitHeader };
     eps.push(found);
     return found;
   }
@@ -192,16 +214,20 @@ function _parseEpisodes(content) {
       var preferred = usable.filter(function (l) { return /watchnow|watch\b/i.test(l.label); })[0]
         || usable.filter(function (l) { return /hubcloud/i.test(l.label); })[0]
         || usable[0];
+      // Keep every link as a fallback so a dead "preferred" button doesn't kill playback.
+      var ordered = [preferred].concat(usable.filter(function (l) { return l !== preferred; }));
+      line.links.forEach(function (l) { if (ordered.indexOf(l) < 0) ordered.push(l); });
+      var urls = ordered.map(function (l) { return l.url; }).slice(0, 6);
       var key = lang.toLowerCase();
       var v = current.variants.filter(function (x) { return x.lang.toLowerCase() === key; })[0];
-      if (!v) { v = { lang: lang, url: preferred.url }; current.variants.push(v); }
-      else if (/watchnow|watch\b/i.test(preferred.label)) v.url = preferred.url;
+      if (!v) { v = { lang: lang, url: preferred.url, alts: urls }; current.variants.push(v); }
+      else {
+        urls.forEach(function (u) { if (v.alts.indexOf(u) < 0 && v.alts.length < 8) v.alts.push(u); });
+        if (/watchnow|watch\b/i.test(preferred.label)) v.url = preferred.url;
+      }
       pendingLang = '';
     }
   });
-  // Zangetsu maps metadata episode N to source-list position N-1. Keep
-  // explicitly numbered episodes even if the site has no link for them;
-  // dropping an unavailable episode shifts all subsequent entries.
   return eps.filter(function (e) { return e.hasHeader || e.variants.length; })
     .sort(function (a, b) { return a.number - b.number; })
     .map(function (e) {
@@ -212,10 +238,11 @@ function _parseEpisodes(content) {
         type: 'anime', sourceId: 'rareanimes-streambeta' };
     });
 }
+
 function getDetail(url) {
   var pageUrl = String(url || '');
   if (!/^https?:\/\//i.test(pageUrl)) pageUrl = _abs(pageUrl, SITE);
-  if (!/^https?:\/\/(?:www\.)?rareanimes\.mov\//i.test(pageUrl)) return Promise.reject(new Error('RareAnimes: invalid detail URL'));
+  if (!/^https?:\/\/(?:www\.)?rareanimes\.[a-z]{2,}\//i.test(pageUrl)) return Promise.reject(new Error('RareAnimes: invalid detail URL'));
   return _get(pageUrl).then(function (html) {
     var title = _strip((html.match(/<h1\b[^>]*class=["'][^"']*entry-title[^"']*["'][^>]*>([\s\S]*?)<\/h1>/i) || [])[1]
       || (html.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1] || '');
@@ -237,6 +264,7 @@ function getDetail(url) {
 }
 function getEpisodes(url, opts) { return getDetail(url, opts).then(function (d) { return d.episodes || []; }); }
 
+// ---------------------------------------------------------------- player-data extraction
 var _B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
 function _b64decode(s) {
   s = String(s || '').replace(/-/g, '+').replace(/_/g, '/').replace(/[^A-Za-z0-9+/=]/g, '');
@@ -253,8 +281,10 @@ function _b64decode(s) {
   }
   try { return decodeURIComponent(escape(out)); } catch (_) { return out; }
 }
-function _balancedArray(s) {
-  var start = s.indexOf('[');
+
+// Returns the balanced [..] / {..} slice that starts at the first `open`, string-aware.
+function _balanced(s, open, close) {
+  var start = s.indexOf(open);
   if (start < 0) return '';
   var depth = 0, quote = '', esc = false;
   for (var i = start; i < s.length; i++) {
@@ -266,132 +296,278 @@ function _balancedArray(s) {
       continue;
     }
     if (ch === '"' || ch === "'") { quote = ch; continue; }
-    if (ch === '[') depth++;
-    if (ch === ']' && --depth === 0) return s.slice(start, i + 1);
+    if (ch === open) depth++;
+    if (ch === close && --depth === 0) return s.slice(start, i + 1);
   }
   return '';
 }
-function _decodePlayerArray(html) {
-  var h = String(html || '');
-  var at = h.search(/playerSources\s*=/i);
-  if (at < 0) return [];
-  var rhs = h.slice(h.indexOf('=', at) + 1, h.indexOf(';', at) > -1 ? h.indexOf(';', at) : h.length).trim();
-  var array = _balancedArray(rhs);
-  if (array) {
-    try { var direct = JSON.parse(array); if (Array.isArray(direct)) return direct; } catch (_) {}
+
+// Reads a JS string literal starting at s[i] and returns its decoded value.
+function _readString(s, i) {
+  var q = s.charAt(i), out = '';
+  if (q !== '"' && q !== "'") return null;
+  for (var k = i + 1; k < s.length; k++) {
+    var ch = s.charAt(k);
+    if (ch === '\\') {
+      var n = s.charAt(k + 1);
+      if (n === 'u' && /^[0-9a-f]{4}$/i.test(s.substr(k + 2, 4))) { out += String.fromCharCode(parseInt(s.substr(k + 2, 4), 16)); k += 5; }
+      else if (n === 'n') { out += '\n'; k++; }
+      else if (n === 'r') { out += '\r'; k++; }
+      else if (n === 't') { out += '\t'; k++; }
+      else { out += n; k++; }
+    } else if (ch === q) return { value: out, end: k + 1 };
+    else out += ch;
   }
-  var encoded = (rhs.match(/(?:atob|base64_decode)\s*\(\s*["']([^"']+)["']\s*\)/i) || [])[1];
-  if (!encoded) encoded = (rhs.match(/^["']([^"']{16,})["']$/) || [])[1];
-  if (encoded) {
-    var decoded = _b64decode(encoded);
-    try { var json = JSON.parse(decoded); if (Array.isArray(json)) return json; } catch (_) {}
-    var nested = _balancedArray(decoded);
-    try { var json2 = JSON.parse(nested); if (Array.isArray(json2)) return json2; } catch (_) {}
-  }
-  // Some templates assign an escaped JSON string or call JSON.parse on it.
-  var quoted = (rhs.match(/JSON\.parse\s*\(\s*["']([\s\S]*?)["']\s*\)/i) || [])[1];
-  if (quoted) {
-    quoted = quoted.replace(/\\(["'\\])/g, '$1');
-    try { var json3 = JSON.parse(quoted); if (Array.isArray(json3)) return json3; } catch (_) {}
-    try { var json4 = JSON.parse(_b64decode(quoted)); if (Array.isArray(json4)) return json4; } catch (_) {}
+  return null;
+}
+
+function _asArray(x) {
+  if (Array.isArray(x)) return x;
+  if (x && typeof x === 'object') {
+    var keys = ['sources', 'playerSources', 'data', 'links', 'streams'];
+    for (var i = 0; i < keys.length; i++) if (Array.isArray(x[keys[i]])) return x[keys[i]];
   }
   return [];
 }
+
+// JSON -> embedded array -> base64 (up to 2 layers).
+function _parseMaybe(str, depth) {
+  str = String(str || '').trim();
+  depth = depth || 0;
+  if (!str) return [];
+  var a;
+  try { a = _asArray(JSON.parse(str)); if (a.length) return a; } catch (_) {}
+  var bal = _balanced(str, '[', ']');
+  if (bal && bal !== str) { try { a = _asArray(JSON.parse(bal)); if (a.length) return a; } catch (_) {} }
+  if (depth < 2 && /^[A-Za-z0-9+\/_\-=\s]{16,}$/.test(str)) return _parseMaybe(_b64decode(str), depth + 1);
+  return [];
+}
+
+var _WRAP_RE = /^(?:window\s*\.\s*)?(?:JSON\s*\.\s*parse|atob|base64_decode|decodeURIComponent|escape|unescape)\s*\(\s*/i;
+function _fromRhs(rhs) {
+  rhs = String(rhs).replace(/^\s+/, '');
+  for (var g = 0; g < 6 && _WRAP_RE.test(rhs); g++) rhs = rhs.replace(_WRAP_RE, '');
+  var c = rhs.charAt(0);
+  if (c === '[') return _parseMaybe(_balanced(rhs, '[', ']'));
+  if (c === '{') return _parseMaybe(_balanced(rhs, '{', '}'));
+  if (c === '"' || c === "'") { var r = _readString(rhs, 0); return r ? _parseMaybe(r.value) : []; }
+  return [];
+}
+
+function _norm(list) {
+  var out = [];
+  (list || []).forEach(function (s) {
+    if (typeof s === 'string') s = { stream_url: s };
+    if (!s || typeof s !== 'object') return;
+    var u = s.stream_url || s.streamUrl || s.file || s.url || s.src || s.link || '';
+    if (!u) return;
+    out.push({ stream_url: String(u), name: String(s.name || s.label || s.quality || s.type || 'Server'),
+      type: String(s.type || '') });
+  });
+  return out;
+}
+
+// Five methods, first one that yields anything wins.
+function _extractSources(html) {
+  var h = String(html || ''), found, m, re, n = 0;
+  // 1) playerSources = [...] | : [...] | atob(...) | JSON.parse(...) | "base64"
+  re = /playerSources\s*[:=]\s*/gi;
+  while ((m = re.exec(h)) && n++ < 6) {
+    found = _norm(_fromRhs(h.slice(m.index + m[0].length, m.index + m[0].length + 400000)));
+    if (found.length) return found;
+  }
+  // 2) data-sources / data-playlist attributes (HTML-escaped JSON)
+  re = /data-(?:player-)?(?:sources|playlist)\s*=\s*["']([^"']+)["']/gi;
+  while ((m = re.exec(h))) {
+    found = _norm(_parseMaybe(_decode(m[1])));
+    if (found.length) return found;
+  }
+  // 3) generic JSON-ish keys that point at media files + <source>/<video> tags
+  var flat = h.replace(/\\u0026/g, '&').replace(/\\\//g, '/');
+  var seen = {}, list = [];
+  function push(u, name) {
+    u = _decode(u);
+    if (!/^(?:https?:)?\/\//i.test(u) || seen[u]) return;
+    seen[u] = 1; list.push({ stream_url: u, name: name || 'Server' });
+  }
+  re = /["']?(?:stream_url|streamUrl|file|src|url|source)["']?\s*[:=]\s*["']((?:https?:)?\/\/[^"'\s]+?\.(?:m3u8|mp4|mkv|webm)(?:\?[^"'\s]*)?)["']/gi;
+  while ((m = re.exec(flat))) push(m[1], 'Server');
+  re = /<(?:source|video)\b[^>]*\bsrc=["']([^"']+)["']/gi;
+  while ((m = re.exec(flat))) push(m[1], 'Server');
+  if (list.length) return _norm(list);
+  // 4) last resort: any bare .m3u8/.mp4 URL in the page
+  re = /https?:\/\/[^\s"'<>\\()]+?\.(?:m3u8|mp4)(?:\?[^\s"'<>\\()]*)?/gi;
+  while ((m = re.exec(flat))) push(m[0], 'Fallback');
+  return _norm(list);
+}
+
 function _parseStreamBeta(html) {
-  var h = String(html || ''), sources = _decodePlayerArray(h);
+  var h = String(html || ''), sources = _extractSources(h);
   var title = _strip((h.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1] || '');
-  var lang = _strip((h.match(/currentLangNative\s*=\s*["']([^"']+)["']/i) || [])[1] || '');
-  var fid = (h.match(/maskedFileId\s*=\s*["']([^"']+)["']/i) || [])[1] || '';
-  var re = /class=["'][^"']*lang-btn[^"']*["'][^>]*data-fid=["'](sb_[^"']+)["'][^>]*data-lang=["']([^"']+)["']/gi;
-  var variants = [], m;
-  while ((m = re.exec(h))) variants.push({ fid: m[1], lang: _strip(m[2]) });
+  var lang = _strip((h.match(/currentLangNative\s*[=:]\s*["']([^"']+)["']/i) || [])[1] || '');
+  var fid = (h.match(/maskedFileId\s*[=:]\s*["']([^"']+)["']/i) || [])[1] || '';
+  var variants = [], seenFid = {}, m, re = /<[^>]*\blang-btn\b[^>]*>/gi;
+  while ((m = re.exec(h))) {   // attribute order independent
+    var f = (m[0].match(/data-fid=["']([^"']+)["']/i) || [])[1];
+    var l = (m[0].match(/data-lang=["']([^"']+)["']/i) || [])[1];
+    if (f && !seenFid[f]) { seenFid[f] = 1; variants.push({ fid: f, lang: _strip(l || '') }); }
+  }
   return { title: title, lang: lang, fid: fid, variants: variants, sources: sources };
 }
-function _streamBetaUrl(url) {
-  var u = String(url || '').trim();
-  if (!/^https?:\/\//i.test(u)) {
-    if (u.charAt(0) === '/') u = 'https://codedew.com' + u;
-    else return '';
-  }
-  try {
-    var parsed = new URL(u);
-    // Redirects remain same-provider only, but valid CodeDew endpoints are not
-    // restricted to the two paths the site used when this resolver was written.
-    if (!/(^|\.)codedew\.com$/i.test(parsed.hostname)) return '';
-    return u;
-  } catch (_) { return ''; }
+
+// ---------------------------------------------------------------- resolver
+function _streamBetaUrl(url, base) {
+  var u = _decode(String(url || '')).replace(/\\\//g, '/').trim();
+  if (/^\/\//.test(u)) u = 'https:' + u;
+  else if (u.charAt(0) === '/') u = (base ? _origin(base) : 'https://codedew.com') + u;
+  if (!/^https?:\/\//i.test(u)) return '';
+  return FAMILY_RE.test(_host(u)) ? u : '';
 }
+
 function _decodeEpisodeUrl(url) {
   var m = String(url || '').match(/^rareanimes:\/\/episode\/(.+)$/i);
   if (!m) return null;
   try { return JSON.parse(decodeURIComponent(m[1])); } catch (_) { return null; }
 }
-function _resolveStreamBeta(url, depth, seen) {
+
+function _followCandidates(html, target, ctx) {
+  var raws = [], m, re;
+  re = /<meta[^>]+http-equiv=["']?refresh["']?[^>]*content=["'][^"']*?url=([^"']+)["']/gi;
+  while ((m = re.exec(html))) raws.push(m[1]);
+  re = /(?:location(?:\.href)?\s*=|location\.(?:replace|assign)\s*\(|window\.open\s*\()\s*["']([^"']+)["']/gi;
+  while ((m = re.exec(html))) raws.push(m[1]);
+  re = /(?:data-href|data-src|data-url|data-link|href|src|action|content)\s*=\s*["']([^"']+)["']/gi;
+  while ((m = re.exec(html))) raws.push(m[1]);
+  var out = [], dup = {};
+  raws.forEach(function (raw) {
+    raw = _decode(raw).trim();
+    if (!/^(?:https?:)?\/\//i.test(raw) && raw.charAt(0) !== '/') return;
+    if (/\.(?:css|js|png|jpe?g|gif|svg|ico|woff2?)(?:[?#]|$)/i.test(raw)) return;
+    var next = _streamBetaUrl(raw, target);
+    if (!next || next === target || ctx.seen[next] || dup[next]) return;
+    dup[next] = 1; out.push(next);
+  });
+  out.sort(function (a, b) {
+    var ka = /streambeta|hubcloud|zipper|multiquality|dlbeta|player|embed/i.test(a) ? 0 : 1;
+    var kb = /streambeta|hubcloud|zipper|multiquality|dlbeta|player|embed/i.test(b) ? 0 : 1;
+    return ka - kb;
+  });
+  // Wrapper pages that only expose a StreamBeta/HubCloud id.
+  var href = _decode((html.match(/(?:data-href|data-src|data-url|href|src|content)=["']([^"']*(?:streambeta|hubcloud)[^"']*)["']/i) || [])[1] || '');
+  var id = (href.match(/(?:streambeta\/[^?]*\?|hubcloud\.[a-z]+\/drive\/)(?:url=)?([A-Za-z0-9_-]{4,160})/i) || [])[1];
+  if (id) {
+    var idUrl = SB + '?url=' + encodeURIComponent(id);
+    if (!ctx.seen[idUrl] && out.indexOf(idUrl) < 0) out.push(idUrl);
+  }
+  return out;
+}
+
+function _newCtx() { return { seen: {}, fetches: 0 }; }
+
+// Resolves only when the page (or a page it leads to) actually yields stream URLs.
+function _resolveStreamBeta(url, depth, ctx, ref) {
   var target = _streamBetaUrl(url);
   depth = depth || 0;
-  seen = seen || {};
-  if (!target) return Promise.reject(new Error('RareAnimes: invalid CodeDew URL'));
-  if (depth > 4 || seen[target]) return Promise.reject(new Error('RareAnimes: CodeDew redirect loop or depth limit'));
-  seen[target] = true;
-  return _get(target, SITE + '/').then(function (html) {
+  if (!target) return Promise.reject(new Error('unsupported player URL ' + String(url).slice(0, 80)));
+  if (depth > 4 || ctx.seen[target] || ctx.fetches >= 10) return Promise.reject(new Error('redirect loop/limit at ' + target));
+  ctx.seen[target] = true; ctx.fetches++;
+  return _get(target, ref || SITE + '/').then(function (html) {
     var parsed = _parseStreamBeta(html);
     if (parsed.sources.length) return { html: html, parsed: parsed, url: target };
-
-    // Wrapper pages can point to the real player through iframe/src or data
-    // attributes. Follow only CodeDew URLs and put a hard cap on redirect depth.
-    var candidate = '';
-    var attr = /(?:data-href|data-src|data-url|data-link|href|src|content)\s*=\s*["']([^"']+)["']/gi, match;
-    while ((match = attr.exec(html))) {
-      var raw = _decode(match[1]).trim();
-      if (!/^https?:\/\//i.test(raw) && raw.charAt(0) !== '/') continue;
-      var next = _streamBetaUrl(raw);
-      if (!next || next === target || seen[next]) continue;
-      if (/streambeta|hubcloud|zipper|multiquality|dlbeta/i.test(next)) { candidate = next; break; }
+    var cands = _followCandidates(html, target, ctx), i = 0, lastErr = null;
+    function next() {
+      if (i >= cands.length) return Promise.reject(lastErr || new Error('no stream data and no wrapper link at ' + target));
+      var c = cands[i++];
+      return _resolveStreamBeta(c, depth + 1, ctx, target).catch(function (e) { lastErr = e; return next(); });
     }
-    if (candidate) return _resolveStreamBeta(candidate, depth + 1, seen);
-
-    // Fallback for wrapper pages that expose only a StreamBeta/HubCloud ID.
-    var href = _decode((html.match(/(?:data-href|data-src|data-url|href|src|content)=["']([^"']*(?:streambeta|hubcloud)[^"']*)["']/i) || [])[1] || '');
-    var id = (href.match(/(?:streambeta\/[^?]*\?|hubcloud\.[a-z]+\/drive\/)(?:url=)?([A-Za-z0-9_-]{4,160})/i) || [])[1];
-    if (!id) throw new Error('RareAnimes: CodeDew playerSources not found');
-    return _resolveStreamBeta(SB + '?url=' + encodeURIComponent(id), depth + 1, seen);
+    return next();
   });
 }
+
+function _firstResolved(urls, errs) {
+  var i = 0;
+  function next() {
+    if (i >= urls.length) return Promise.resolve(null);
+    var u = urls[i++];
+    return _resolveStreamBeta(u, 0, _newCtx()).then(null, function (e) {
+      errs.push(_msg(e));
+      return next();
+    });
+  }
+  return next();
+}
+
+function _fixUrl(u, base) {
+  u = _decode(String(u || '')).replace(/\\u0026/g, '&').replace(/\\\//g, '/').trim();
+  if (/^\/\//.test(u)) return 'https:' + u;
+  if (/^https?:\/\//i.test(u)) return u;
+  if (u.charAt(0) === '/' && base) return _origin(base) + u;
+  return '';
+}
+
+function _toSources(r, lang) {
+  function build(includePixeldrain) {
+    var out = [];
+    r.parsed.sources.forEach(function (s) {
+      if (!s) return;
+      var isPix = /pixeldrain/i.test(s.type) || /pixeldrain/i.test(s.stream_url);
+      if (isPix && !includePixeldrain) return;
+      var url = _fixUrl(s.stream_url, r.url);
+      if (!url) return;
+      var name = String(s.name || 'Server');
+      var probe = name + ' ' + url;
+      out.push({ url: url,
+        quality: /2160p|\b4k\b/i.test(probe) ? '2160p' : (/1080p/i.test(probe) ? '1080p' : (/720p/i.test(probe) ? '720p' : (/480p/i.test(probe) ? '480p' : 'auto'))),
+        label: [lang, name].join(' • '),
+        container: /\.m3u8(?:[?#]|$)/i.test(url) ? 'hls' : 'mp4',
+        kind: /^(?:Japanese|Original|Sub|Subbed)$/i.test(lang) ? 'sub' : 'dub',
+        headers: { 'User-Agent': UA, 'Referer': r.url || SB, 'Origin': _origin(r.url || SB) } });
+    });
+    return out;
+  }
+  var out = build(false);
+  return out.length ? out : build(true);   // pixeldrain only as a last resort
+}
+
 function getVideoSources(episodeUrl, opts) {
   var payload = _decodeEpisodeUrl(episodeUrl);
   if (!payload) return Promise.resolve([]);
-  // Language links are alternatives for one episode, not separate episodes.
   var variants = Array.isArray(payload.variants) && payload.variants.length
     ? payload.variants : (payload.url ? [{ url: payload.url, lang: payload.lang || '' }] : []);
   if (!variants.length) return Promise.resolve([]);
+  var errs = [];
+
   return Promise.all(variants.map(function (variant) {
-    return _resolveStreamBeta(variant.url).then(function (r) {
-      var out = [];
-      r.parsed.sources.forEach(function (s) {
-        if (!s || /pixeldrain/i.test(String(s.type || ''))) return;
-        var url = s.stream_url || s.streamUrl || s.file || s.url || '';
-        if (!/^https?:\/\//i.test(url)) return;
-        var name = String(s.name || s.type || 'Server');
-        var lang = variant.lang || r.parsed.lang || 'Auto';
-        out.push({ url: url,
-          quality: /2160p/i.test(name) ? '2160p' : (/1080p/i.test(name) ? '1080p' : (/720p/i.test(name) ? '720p' : 'auto')),
-          label: [lang, name].join(' • '),
-          container: /\.m3u8(?:[?#]|$)/i.test(url) ? 'hls' : 'mp4',
-          kind: /^(?:Japanese|Original|Sub|Subbed)$/i.test(lang) ? 'sub' : 'dub',
-          headers: { 'User-Agent': UA, 'Referer': r.url || SB } });
+    var urls = [variant.url].concat(variant.alts || []).filter(function (u, i, a) { return u && a.indexOf(u) === i; });
+    return _firstResolved(urls, errs).then(function (r) {
+      if (!r) return [];
+      var out = _toSources(r, variant.lang || r.parsed.lang || 'Auto');
+      // Experimental: the player page lists other languages by file id; try them when
+      // the episode page only offered one language. Failures here are non-fatal.
+      if (variants.length !== 1 || r.parsed.variants.length < 2) return out;
+      var extra = r.parsed.variants.filter(function (v) { return v.fid && v.fid !== r.parsed.fid; }).slice(0, 4);
+      return Promise.all(extra.map(function (v) {
+        return _resolveStreamBeta(SB + '?url=' + encodeURIComponent(v.fid), 0, _newCtx(), r.url).then(function (r2) {
+          return _toSources(r2, v.lang || 'Auto');
+        }, function (e) { errs.push('lang ' + v.lang + ': ' + _msg(e)); return []; });
+      })).then(function (groups) {
+        var have = {};
+        out.forEach(function (s) { have[s.url] = 1; });
+        groups.forEach(function (g) { g.forEach(function (s) { if (!have[s.url]) { have[s.url] = 1; out.push(s); } }); });
+        return out;
       });
-      return out;
-    }).catch(function () { return []; });
+    });
   })).then(function (groups) {
     var out = [], seen = {};
     groups.forEach(function (group) { group.forEach(function (s) {
       var key = s.url + '|' + s.label;
       if (!seen[key]) { seen[key] = true; out.push(s); }
     }); });
-    if (!out.length) throw new Error('RareAnimes: no usable direct sources across available language variants');
+    if (!out.length) throw new Error('RareAnimes: no usable direct sources. ' + (errs.length ? errs.slice(0, 6).join(' | ') : 'no player links found'));
     return out;
   });
 }
+
 function getStreams(url, opts) { return getVideoSources(url, opts); }
 function getLinks(url, opts) { return getVideoSources(url, opts); }
 
@@ -399,5 +575,6 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = { version: VERSION, getInfo: getInfo, getSettings: getSettings,
     getHome: getHome, popular: popular, search: search, getDetail: getDetail,
     getEpisodes: getEpisodes, getVideoSources: getVideoSources, getStreams: getStreams,
-    getLinks: getLinks };
+    getLinks: getLinks,
+    _test: { _extractSources: _extractSources, _parseEpisodes: _parseEpisodes, _postLines: _postLines } };
 }
