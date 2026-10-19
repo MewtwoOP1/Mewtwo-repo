@@ -55,3 +55,5 @@ AnimeSalt uses the site's AJAX episode/server flow and keeps its multi-audio HLS
 Resolver note: AnimeSalt now parses `/watch/` cards and the site's `data-number` / `data-id` AJAX payloads.
 
 AnimeSalt card parsing follows the live site's `/watch/{slug}/ep-1` links rather than AnimeSuge `/anime/` cards.
+
+Live smoke diagnostics now capture the actual AnimeSalt watch-card markup for resolver debugging.
