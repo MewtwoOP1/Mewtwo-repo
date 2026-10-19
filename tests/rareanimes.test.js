@@ -8,7 +8,7 @@ const playerJson = JSON.stringify([
   { name: "dead", type: "pixeldrain", url: "https://pixeldrain.example/file" }
 ]);
 const listing = '<article class="post-123"><a href="https://www.rareanimes.mov/sample-anime/" title="Sample Anime Hindi Dubbed"><img src="https://img.example/poster.jpg"></a></article>';
-const post = '<h1 class="entry-title">Sample Anime Hindi Dubbed</h1><meta property="og:image" content="https://img.example/poster.jpg"><article><div class="entry-content"><p>Episode 01 – Hindi</p><p><a href="https://codedew.com/zipper/?url=encodedHindi">WatchNow</a></p><p>Episode 02 – Tamil</p><p><a href="https://codedew.com/zipper/?url=encodedTamil">WatchNow</a></p></div></article>';
+const post = '<h1 class="entry-title">Sample Anime Hindi Dubbed</h1><meta property="og:image" content="https://img.example/poster.jpg"><article><div class="entry-content"><p>Episode 01</p><p>Hindi Dub</p><p><a href="https://codedew.com/zipper/?url=encodedHindi">WatchNow</a></p><p>Tamil Dub</p><p><a href="https://codedew.com/zipper/?url=encodedTamil">WatchNow</a></p><p>Episode 02</p><p><a href="https://codedew.com/zipper/?url=encodedHindi">WatchNow</a></p></div></article>';
 const player = '<title>Sample Anime Hindi</title><script>var maskedFileId = "sb_hi123"; var currentLangNative = "Hindi"; var playerSources = JSON.parse(atob("' + b64(playerJson) + '"));</script><button class="lang-btn" data-fid="sb_hi123" data-lang="Hindi"></button>';
 global.fetch = async function (url, options) {
   url = String(url); calls.push({ url, options: options || {} });
@@ -20,15 +20,15 @@ global.fetch = async function (url, options) {
   return { status: 404, body: "" };
 };
 async function main() {
-  assert.equal(provider.version, "1.0.0");
-  assert.equal(provider.getInfo().name, "RareAnimes • StreamBeta");
+  assert.equal(provider.version, "1.0.1");
+  assert.equal(provider.getInfo().name, "RareAnimes");
   const home = await provider.getHome();
   assert.ok(home.some(row => row.items.length === 1));
   const results = await provider.search("Sample Anime");
   assert.equal(results.length, 1);
   assert.equal(results[0].title, "Sample Anime");
   const detail = await provider.getDetail(results[0].url);
-  assert.equal(detail.episodes.length, 2);
+  assert.equal(detail.episodes.length, 2);\n  assert.equal(detail.episodes[0].title, "Episode 1");\n  const payload = JSON.parse(decodeURIComponent(detail.episodes[0].url.split("/").slice(3).join("/")));\n  assert.equal(payload.variants.length, 2);
   assert.match(detail.episodes[0].url, /^rareanimes:\/\/episode\//);
   const streams = await provider.getVideoSources(detail.episodes[0].url);
   assert.equal(streams.length, 2);
