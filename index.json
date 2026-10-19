@@ -58,6 +58,16 @@
       ]
     },
     {
+      "id": "moviebox",
+      "name": "MovieBox",
+      "version": "1.0.0",
+      "type": "movie",
+      "lang": "hi",
+      "file": "providers/moviebox.js",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=movie-box.co",
+      "nsfw": false
+    },
+    {
       "id": "animesuge",
       "name": "AnimeSuge",
       "version": "1.0.3",
