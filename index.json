@@ -587,8 +587,8 @@
     },
     {
       "id": "streambeta",
-      "name": "StreamBeta Resolver",
-      "version": "1.0.0",
+      "name": "StreamBeta",
+      "version": "1.0.1",
       "type": "anime",
       "lang": "en",
       "file": "providers/streambeta.js",
