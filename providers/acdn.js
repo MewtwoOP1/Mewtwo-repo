@@ -384,7 +384,7 @@ function getDetail(url, opts) {
   var watchPath = /^https?:\/\//i.test(raw) ? raw : (SITE + '/' + raw.replace(/^\/+/, ''));
   if (!/\/watch\//i.test(watchPath)) watchPath = SITE + '/watch/' + encodeURIComponent(raw.replace(/^.*\//, '')) + '/ep-1';
   return _get(watchPath, SITE + '/').then(function (html) {
-    var animeTitle = _htmlText((html.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1] || '').replace(/^Watch Free!\s*/i, '').replace(/\s+Online in HD.*$/i, '').replace(/\s+-\s+AnimeSalt$/i, '').trim();
+    var animeTitle = _htmlText((html.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1] || '').replace(/^Watch Free!\s*/i, '').replace(/\s+Online in HD.*$/i, '').replace(/\s+-\s+AnimeSalt$/i, '').replace(/\s+(?:Episode|Ep\.?)\s*\d+(?:\.\d+)?\s*$/i, '').trim();
     return _baseGetDetail(url, opts).then(function (d) {
       var season = _seasonFromTitle(animeTitle || d.title, watchPath);
       if (animeTitle) d.title = animeTitle;
@@ -423,13 +423,13 @@ function _srvRank(name) {
 
 
 function _acdnNormalizeTitle(title = "") {
-  return String(title).toLowerCase().replace(/[^\\p{L}\\p{N}\\s-]/gu, "").replace(/\\s+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
+  return String(title).toLowerCase().replace(/[^\p{L}\p{N}\s-]/gu, "").replace(/\s+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
 }
 function _acdnCleanTitle(title = "") {
-  return String(title).replace(/\\s*\\(\\d{4}\\)\\s*$/g, "").replace(/\\s*(Final Season|Season\\s+\\d+|\\d+(st|nd|rd|th)\\s+Season|Cour\\s+\\d+|Part\\s+\\d+)\\s*$/gi, "").replace(/\\s*:\\s*$/, "").trim();
+  return String(title).replace(/\s*\(\d{4}\)\s*$/g, "").replace(/\s*(Final Season|Season\s+\d+|\d+(st|nd|rd|th)\s+Season|Cour\s+\d+|Part\s+\d+)\s*$/gi, "").replace(/\s*:\s*$/, "").replace(/\s+(?:Episode|Ep\.?)\s*\d+(?:\.\d+)?\s*$/i, "").trim();
 }
 function _acdnExtractSeason(title = "") {
-  var m = String(title).match(/\\b(?:Season|Series|Part|Cour)\\s*(\\d+)\\b/i) || String(title).match(/\\b(\\d+)(?:st|nd|rd|th)\\s+Season\\b/i);
+  var m = String(title).match(/\b(?:Season|Series|Part|Cour)\s*(\d+)\b/i) || String(title).match(/\b(\d+)(?:st|nd|rd|th)\s+Season\b/i);
   return m ? Number(m[1]) : 1;
 }
 async function _acdnFetch(url, init = {}) {
