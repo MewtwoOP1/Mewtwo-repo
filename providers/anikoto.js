@@ -36,7 +36,7 @@ var MAPPER = 'https://mapper.nekostream.site/api/mal/';
 
 function getInfo() {
   return { name: 'AniKoto', lang: 'en', baseUrl: SITE,
-    logo: SITE + '/favicon.ico', type: 'anime', version: '1.2.1' };
+    logo: SITE + '/favicon.ico', type: 'anime', version: '1.2.2' };
 }
 
 // MegaPlay/VidWish: getSourcesNew is the endpoint their player hits; both routes
@@ -134,6 +134,61 @@ function search(query, page, opts) {
     }
     return out;
   }).catch(function () { return []; });
+}
+
+// Slice the /home page into its section containers (#hotest / #top-anime /
+// #recent-update), each bounded by the next section so cards don't bleed across.
+function _sections(html) {
+  var ids = ['hotest', 'top-anime', 'recent-update'], marks = [];
+  html = String(html || '');
+  for (var i = 0; i < ids.length; i++) {
+    var k = html.indexOf('id="' + ids[i] + '"');
+    if (k >= 0) marks.push({ id: ids[i], at: k });
+  }
+  marks.sort(function (a, b) { return a.at - b.at; });
+  var res = {};
+  for (var j = 0; j < marks.length; j++) {
+    var end = (j + 1 < marks.length) ? marks[j + 1].at : marks[j].at + 30000;
+    res[marks[j].id] = html.substring(marks[j].at, end);
+  }
+  return res;
+}
+// Spotlight (#hotest) cards carry the title in an <h2 …d-title> + a bg-image.
+function _spotlight(seg) {
+  var out = [], seen = {}, chunks = String(seg || '').split('swiper-slide item');
+  for (var i = 1; i < chunks.length; i++) {
+    var c = chunks[i];
+    var slug = _slugFromWatch((c.match(/href="([^"]*\/watch\/[^"]+)"/) || [])[1]);
+    if (!slug || seen[slug]) continue;
+    var title = (c.match(/class="title d-title"[^>]*>\s*([^<]+?)\s*</) || [])[1]
+      || (c.match(/data-jp="([^"]+)"/) || [])[1];
+    if (!title) continue;
+    var img = (c.match(/background-image:\s*url\(([^)]+)\)/)
+      || c.match(/<img[^>]+data-src="([^"]+)"/) || c.match(/<img[^>]+src="([^"]+)"/) || [])[1];
+    if (img) img = img.replace(/^['"]|['"]$/g, '');
+    seen[slug] = 1;
+    out.push({ id: slug, title: htmlText(title).trim(), url: slug,
+      cover: img || null, type: 'anime', sourceId: SOURCE_ID });
+  }
+  return out;
+}
+// Generic grid (#top-anime a.item, #recent-update div.item) → cards.
+function _gridCards(seg) {
+  var out = [], seen = {}, items = String(seg || '').split('class="item');
+  for (var i = 1; i < items.length; i++) {
+    var c = items[i];
+    var slug = _slugFromWatch((c.match(/href="([^"]*\/watch\/[^"]+)"/) || [])[1]);
+    if (!slug || seen[slug]) continue;
+    var title = (c.match(/class="(?:name|title)[^"]*d-title"[^>]*>\s*([^<]+?)\s*</) || [])[1]
+      || (c.match(/class="name"[^>]*>\s*([^<]+?)\s*</) || [])[1]
+      || (c.match(/data-jp="([^"]+)"/) || [])[1];
+    var poster = (c.match(/<img[^>]+data-src="([^"]+)"/) || c.match(/<img[^>]+src="([^"]+)"/) || [])[1];
+    if (!title) continue;
+    seen[slug] = 1;
+    out.push({ id: slug, title: htmlText(title).trim(), url: slug,
+      cover: poster || null, type: 'anime', sourceId: SOURCE_ID });
+  }
+  return out;
 }
 
 // ── Home: site-scraped spotlight and catalogue sections ─────────────────────
