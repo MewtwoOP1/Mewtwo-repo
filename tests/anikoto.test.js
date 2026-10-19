@@ -64,7 +64,7 @@ const provider = {
 };
 
 async function main() {
-  assert.equal(provider.version, "1.2.1");
+  assert.equal(provider.version, "1.2.2");
   assert.equal(provider.getInfo().name, "AniKoto");
 
   const cardSearch = await provider.search("Jujutsu Kaisen", 1, {});
