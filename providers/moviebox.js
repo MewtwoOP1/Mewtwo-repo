@@ -21,7 +21,7 @@ function _rememberSubject(id, item) {
   const cover = item.cover && item.cover.url ? item.cover.url : null;
   const rating = parseFloat(item.imdbRatingValue);
   const date = String(item.releaseDate || item.release_date || item.first_air_date || "");
-  const yearMatch = /^(\\d{4})/.exec(date);
+  const yearMatch = /^(\d{4})/.exec(date);
   const cached = {
     id: key, url: key, title,
     description: String(item.description || item.overview || ""),
@@ -819,7 +819,7 @@ function getHome(opts) {
 
 // Exposed for tests / the app's loader
 const provider = {
-  id: "moviebox", name: "MovieBox", lang: "hi", version: "1.0.4",
+  id: "moviebox", name: "MovieBox", lang: "hi", version: "1.0.5",
   getInfo, getSettings, getHome, popular, getCategory, search, getDetail, getEpisodes, getVideoSources,
   getStreams: getVideoSources,
   _internals: { md5Bytes, hmacMd5, xTrSignature, canonicalString, xClientToken, toHex, utf8Bytes, _parseEpisodeUrl, _collectStreams, _policyStreamUrl }
