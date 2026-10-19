@@ -22,6 +22,32 @@ async function main() {
     const response = await global.fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' }, timeoutMs: 10000 });
     console.log('[AnimeSalt live] Probe:', JSON.stringify(liveCalls[liveCalls.length - 1]));
   }
+  const filterProbe = await global.fetch('https://animesalt.to/filter?keyword=Naruto&page=1', { headers: { 'User-Agent': 'Mozilla/5.0' }, timeoutMs: 12000 });
+  const watchMarker = '/watch/';
+  const watchIndex = filterProbe.body.indexOf(watchMarker);
+  let liveWatchUrl = '';
+  if (watchIndex >= 0) {
+    const hrefStart = filterProbe.body.lastIndexOf('href="', watchIndex) + 6;
+    const hrefEnd = filterProbe.body.indexOf('"', watchIndex);
+    if (hrefStart >= 6 && hrefEnd > watchIndex) liveWatchUrl = new URL(filterProbe.body.slice(hrefStart, hrefEnd), 'https://animesalt.to').href;
+  }
+  console.log('[AnimeSalt live] Filter probe:', JSON.stringify({status: filterProbe.status, length: filterProbe.body.length, watchUrl: liveWatchUrl, watchCount: filterProbe.body.split('/watch/').length - 1}));
+  if (liveWatchUrl) {
+    const watchPage = await global.fetch(liveWatchUrl, { headers: { 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://animesalt.to/' }, timeoutMs: 12000 });
+    const body = watchPage.body || '';
+    console.log('[AnimeSalt live] Watch-page markers:', JSON.stringify({
+      status: watchPage.status, length: body.length,
+      dataId: body.includes('data-id='),
+      episodeListEndpoint: body.includes('/ajax/episode/list/'),
+      dataIds: body.includes('data-ids='),
+      subFlag: body.includes('data-sub='),
+      dubFlag: body.includes('data-dub='),
+      iframeCount: body.split('<iframe').length - 1,
+      snippets: ['data-id=', '/ajax/episode/list/', 'data-ids=', 'iframe'].map((marker) => {
+        const at = body.indexOf(marker); return at >= 0 ? body.slice(Math.max(0, at - 80), at + 180) : '';
+      })
+    }));
+  }
   console.log('[AnimeSalt live] Checking mirror selection and search...');
   const results = await provider.search('Naruto', 1, {});
   if (!Array.isArray(results) || results.length === 0) {
