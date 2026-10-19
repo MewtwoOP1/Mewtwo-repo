@@ -586,16 +586,6 @@
       "nsfw": false
     },
     {
-      "id": "streambeta",
-      "name": "StreamBeta Resolver",
-      "version": "1.0.1",
-      "type": "anime",
-      "lang": "en",
-      "file": "providers/streambeta.js",
-      "logo": "https://www.google.com/s2/favicons?sz=256&domain=codedew.com",
-      "nsfw": false
-    },
-    {
       "id": "rareanimes-streambeta",
       "name": "RareAnimes • StreamBeta",
       "version": "1.0.0",
