@@ -115,10 +115,10 @@ global.fetch = async (url, options = {}) => {
 };
 
 const provider = require("../providers/serenity-cinestream.js");
-const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "index.json"), "utf8"));
-const manifestProvider = manifest.sources.find((source) => source.id === SETTINGS_ID);
-assert.ok(manifestProvider, "CineStream must be registered in the repository manifest");
-assert.equal(provider.getInfo().version, manifestProvider.version, "CineStream runtime version must match manifest version");
+const versionManifest = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "index.json"), "utf8"));
+const cinestreamManifestEntry = versionManifest.sources.find((source) => source.id === SETTINGS_ID);
+assert.ok(cinestreamManifestEntry, "CineStream must be registered in the repository manifest");
+assert.equal(provider.getInfo().version, cinestreamManifestEntry.version, "CineStream runtime version must match manifest version");
 const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "index.json"), "utf8"));
 const source = manifest.sources.find((item) => item.id === SETTINGS_ID);
 
