@@ -246,20 +246,30 @@ function _resolveAniWaves(media, epNumber, kind) {
       var match = _pickAniWaves(html, titles);
       if (!match) return [];
       return _requestText(match.url, ANI_WAVES + '/', false).then(function (watchHtml) {
-        var animeId = (watchHtml.match(/data-id=["'](\d+)["']/i) || [])[1]
-          || (watchHtml.match(/id=["']watch-main["'][^>]*data-id=["'](\d+)/i) || [])[1];
+        var watchTag = (watchHtml.match(/<[^>]*\bid=["']watch-main["'][^>]*>/i) || [])[0] || '';
+        var animeId = (watchTag.match(/\bdata-id=["'](\d+)["']/i) || [])[1]
+          || (watchHtml.match(/<[^>]*\bdata-id=["'](\d+)["'][^>]*\bid=["']watch-main["'][^>]*>/i) || [])[1];
+        if (!animeId) {
+          var pageSlug = (match.url.match(/\/([^/?#]+)\/?(?:[?#]|$)/) || [])[1] || '';
+          animeId = (pageSlug.match(/-(\d+)$/) || [])[1] || '';
+        }
         if (!animeId) return [];
         return _ajax(ANI_WAVES, '/ajax/episode/list/' + animeId, match.url).then(function (epData) {
           var result = epData && typeof epData.result === 'string' ? epData.result : '';
-          var episodeLinks = [], re = /<a\b([^>]*\bdata-ids=["']([^"']+)["'][^>]*)>/gi, em;
+          var episodeLinks = [], re = /<a\b([^>]*)>/gi, em;
           while ((em = re.exec(result)) !== null) {
             var attrs = em[1], n = parseInt((attrs.match(/data-num=["'](\d+)/i) || [])[1] || '0', 10);
+            if (!n) continue;
             var hasCat = kind === 'dub' ? /data-dub=["']1/i.test(attrs) : /data-sub=["']1/i.test(attrs);
-            if (n === Number(epNumber) && hasCat && em[2]) episodeLinks.push({ ids: em[2].replace(/&amp;/g, '&'), number: n });
+            var ids = (attrs.match(/data-ids=["']([^"']*)["']/i) || [])[1] || '';
+            ids = ids.replace(/&amp;/g, '&').trim();
+            // The upstream provider falls back to animeId&eps=episode when data-ids is blank.
+            if (!ids) ids = animeId + '&eps=' + n;
+            if (n === Number(epNumber) && hasCat && ids) episodeLinks.push({ ids: ids, number: n });
           }
           if (!episodeLinks.length) return [];
           return Promise.all(episodeLinks.map(function (episodeInfo) {
-            return _ajax(ANI_WAVES, '/ajax/server/list?servers=' + encodeURIComponent(episodeInfo.ids), match.url)
+            return _ajax(ANI_WAVES, '/ajax/server/list?servers=' + episodeInfo.ids, match.url)
               .then(function (srvData) {
                 var markup = srvData && typeof srvData.result === 'string' ? srvData.result : '';
                 var sections = [], typeRe = /<([a-z0-9]+)\b([^>]*class=["'][^"']*\btype\b[^"']*["'][^>]*)>([\s\S]*?)(?=<[a-z0-9]+\b[^>]*class=["'][^"']*\btype\b|$)/gi, tm;
