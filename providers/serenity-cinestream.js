@@ -786,7 +786,7 @@ function csStream(raw,source,addon) {
       if (/^https?:\/\//i.test(String(sUrl||''))) subs.push({url:sUrl,lang:languageCode(t.lang||t.language||t.lang_code||'und')||'und',label:t.label||t.title||t.lang||t.language||'Subtitle',format:/\.srt(?:[?#]|$)/i.test(sUrl)?'srt':'vtt'});
     });
   }
-  return {url:url,label:(source||raw.name||'CineStream')+(raw.title?' · '+raw.title:'')+(quality?' · '+quality[1]:''),quality:quality?(quality[1].toLowerCase()==='4k'?'2160p':quality[1]):'Auto',
+  return {url:url,label:(raw.name||source||'CineStream')+(raw.title?' · '+raw.title:'')+(quality?' · '+quality[1]:''),quality:quality?(quality[1].toLowerCase()==='4k'?'2160p':quality[1]):'Auto',
     container:/\.m3u8(?:[?#]|$)/i.test(url)?'hls':/\.(mp4|m4v|mov|webm)(?:[?#]|$)/i.test(url)?'mp4':'unknown',
     kind:/^magnet:/i.test(url)?'torrent':'unknown',audioLang:null,headers:headersOut,subtitles:subs};
 }
