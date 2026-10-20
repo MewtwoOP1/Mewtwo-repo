@@ -124,7 +124,7 @@ const source = manifest.sources.find((item) => item.id === SETTINGS_ID);
 
 async function main() {
   assert.ok(source, "CineStream must remain registered in index.json");
-  assert.equal(source.version, "0.3.0");
+  assert.equal(source.version, "0.3.1");
   assert.equal(provider.version, source.version);
   assert.equal(provider.getInfo().name, source.name);
   assert.equal(provider.getInfo().logo, source.logo);
