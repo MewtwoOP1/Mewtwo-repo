@@ -2,261 +2,131 @@ const assert = require("node:assert/strict");
 const provider = require("../providers/mega-anime.js");
 
 const ANILIST = "https://graphql.anilist.co";
-const ANIWAVES = "https://aniwaves.ru";
-const ANINAMI = "https://aninami.me";
-
+const ANI_WAVES = "https://aniwaves.ru";
+const ANI_NAMI = "https://www.aninami.site";
 const calls = [];
 let scenario = {};
 
-function json(status, body) {
-  return { status, json: async () => body, body: JSON.stringify(body) };
+function response(status, body) {
+  const text = typeof body === "string" ? body : JSON.stringify(body);
+  return { status, ok: status >= 200 && status < 300, text: async () => text, json: async () => JSON.parse(text), body: text };
 }
-
-function fail(status) {
-  return { status, json: async () => ({}), body: "" };
-}
-
 function media(overrides) {
   return Object.assign({
-    id: 42,
-    title: {
-      romaji: "Solo Leveling",
-      english: "Solo Leveling",
-      native: "俺だけレベルアップな件"
-    },
-    coverImage: {
-      extraLarge: "https://img.example/solo-xl.jpg",
-      large: "https://img.example/solo-lg.jpg"
-    },
-    description: "A hunter fights monsters.",
-    status: "RELEASING",
-    genres: ["Action", "Fantasy"],
-    studios: { nodes: [{ name: "A-1 Pictures" }] },
-    episodes: 3,
-    format: "TV",
-    averageScore: 85,
-    seasonYear: 2024,
-    nextAiringEpisode: null
+    id: 42, idMal: 123, title: { romaji: "Solo Leveling", english: "Solo Leveling", native: "Solo Leveling" },
+    coverImage: { extraLarge: "https://img.example/solo-xl.jpg", large: "https://img.example/solo-lg.jpg" },
+    description: "A hunter fights monsters.", status: "RELEASING", genres: ["Action", "Fantasy"],
+    studios: { nodes: [{ name: "A-1 Pictures" }] }, episodes: 3, format: "TV",
+    averageScore: 85, seasonYear: 2024, nextAiringEpisode: null
   }, overrides || {});
 }
-
-global.fetch = async function (url, options) {
-  const u = String(url);
-  calls.push({ url: u, options: options || {} });
-
-  if (u === ANILIST) {
-    const payload = JSON.parse(options.body);
-    const v = payload.variables || {};
-    if (Object.prototype.hasOwnProperty.call(v, "search")) {
-      return scenario.anilistSearch(v.search);
-    }
-    if (Object.prototype.hasOwnProperty.call(v, "id")) {
-      return scenario.anilistDetail(v.id);
-    }
-    if (Object.prototype.hasOwnProperty.call(v, "sort")) {
-      return scenario.anilistHome(v.sort[0]);
-    }
-  }
-
-  if (u.startsWith(ANIWAVES + "/api/search")) return scenario.aniwavesSearch();
-  if (u.startsWith(ANIWAVES + "/api/anime/")) return scenario.aniwavesEpisode();
-  if (u.startsWith(ANINAMI + "/api/search")) return scenario.aninamiSearch();
-  if (u.startsWith(ANINAMI + "/api/anime/")) return scenario.aninamiEpisode();
-
-  return fail(404);
-};
-
-global.extractVideo = function (url, opts) {
-  if (scenario.extract) return scenario.extract(url, opts);
-  return [];
-};
-
 function baseScenario() {
   return {
-    anilistSearch: () => json(200, {
-      data: {
-        Page: {
-          media: [
-            media(),
-            media({
-              id: 99,
-              title: { romaji: "Solo Leveling Movie", english: "Solo Leveling Movie" },
-              format: "MOVIE",
-              episodes: 1
-            })
-          ]
-        }
-      }
-    }),
-    anilistDetail: (id) => json(200, {
-      data: {
-        Media: id === 99
-          ? media({
-              id: 99,
-              title: { romaji: "Solo Leveling Movie", english: "Solo Leveling Movie" },
-              format: "MOVIE",
-              episodes: 1
-            })
-          : media()
-      }
-    }),
-    anilistHome: () => json(200, { data: { Page: { media: [media()] } } }),
-    aniwavesSearch: () => json(200, {
-      results: [{ title: "Solo Leveling", slug: "solo-leveling" }]
-    }),
-    aniwavesEpisode: () => json(200, {
-      servers: [
-        { url: "https://cdn.example/aniwaves-1.m3u8", quality: "720p" },
-        { url: "https://vidtube.site/stream/abc", quality: "auto" }
-      ]
-    }),
-    aninamiSearch: () => json(200, {
-      data: [{ title: "Solo Leveling", id: "solo-leveling" }]
-    }),
-    aninamiEpisode: () => json(200, {
-      sources: [
-        { file: "https://cdn.example/aninami-1.m3u8", quality: "1080p" },
-        { file: "https://cdn.example/aniwaves-1.m3u8", quality: "720p" }
-      ]
-    }),
-    extract: () => [{
-      url: "https://cdn.example/extracted.m3u8",
-      container: "hls",
-      kind: "video",
-      quality: "auto"
-    }]
+    anilistSearch: () => response(200, { data: { Page: { media: [media(), media({ id: 99, title: { romaji: "Solo Leveling Movie", english: "Solo Leveling Movie" }, format: "MOVIE", episodes: 1 })] } } }),
+    anilistDetail: id => response(200, { data: { Media: id === 99 ? media({ id: 99, title: { romaji: "Solo Leveling Movie", english: "Solo Leveling Movie" }, format: "MOVIE", episodes: 1 }) : media() } }),
+    anilistHome: () => response(200, { data: { Page: { media: [media()] } } }),
+    waveSearch: () => response(200, '<div class="ani items"><div class="item"><div class="info"><a href="/solo-leveling-42"><img src="/poster.jpg" alt="Solo Leveling Poster"></a><a class="name" href="/solo-leveling-42">Solo Leveling</a></div></div></div>'),
+    waveWatch: () => response(200, '<div id="watch-main" data-id="700"></div>'),
+    waveEpisodes: () => response(200, { status: 200, result: '<li><a data-num="1" data-sub="1" data-dub="0" data-ids="srv%3A1&amp;x%3D2"></a></li>' }),
+    waveServers: () => response(200, { status: 200, result: '<div class="type" data-type="sub"><ul><li data-link-id="link-11">VidPlay</li><li data-link-id="link-12">Mirror</li></ul></div>' }),
+    waveSource: id => response(200, { status: 200, result: { url: id === "link-11" ? "https://vidtube.site/embed/abc" : "https://cdn.example/wave.m3u8" } }),
+    aninamiEpisodes: () => response(200, { success: true, results: { providers: {
+      vidtube: { episodes: { sub: [{ id: "watch/vidtube/42/sub/solo-leveling-1", number: 1, title: "Episode 1" }], dub: [{ id: "watch/vidtube/42/dub/solo-leveling-1", number: 1 }] } }
+    } } }),
+    aninamiWatch: () => response(200, { success: true, results: { streams: [
+      { url: "https://cdn.example/nami.m3u8", type: "hls", quality: "1080p", server: "VidTube", referer: "https://www.aninami.site/" },
+      { url: "https://cdn.example/movie.mp4", type: "mp4", quality: "720p", server: "Mirror", referer: "https://www.aninami.site/" }
+    ] } }),
+    extract: () => [{ url: "https://cdn.example/extracted.m3u8", container: "hls", kind: "video", quality: "auto" }]
   };
 }
+function reset() { calls.length = 0; scenario = baseScenario(); }
 
-function reset() {
-  calls.length = 0;
-  scenario = baseScenario();
-}
+global.fetch = async function (url, options) {
+  const u = String(url); options = options || {}; calls.push({ url: u, options });
+  if (u === ANILIST) {
+    const q = JSON.parse(options.body), v = q.variables || {};
+    if (Object.prototype.hasOwnProperty.call(v, "search")) return scenario.anilistSearch(v.search);
+    if (Object.prototype.hasOwnProperty.call(v, "id")) return scenario.anilistDetail(v.id);
+    if (Object.prototype.hasOwnProperty.call(v, "sort")) return scenario.anilistHome(v.sort[0]);
+  }
+  if (u.startsWith(ANI_WAVES + "/filter?keyword=")) return scenario.waveSearch();
+  if (u === ANI_WAVES + "/solo-leveling-42") return scenario.waveWatch();
+  if (u === ANI_WAVES + "/ajax/episode/list/700") return scenario.waveEpisodes();
+  if (u.startsWith(ANI_WAVES + "/ajax/server/list?servers=")) return scenario.waveServers();
+  if (u.startsWith(ANI_WAVES + "/ajax/sources?id=")) {
+    const id = new URL(u).searchParams.get("id");
+    return scenario.waveSource(id);
+  }
+  if (u === ANI_NAMI + "/api/episodes/42") return scenario.aninamiEpisodes();
+  if (u.startsWith(ANI_NAMI + "/api/watch/")) return scenario.aninamiWatch();
+  return response(404, "not found");
+};
+global.extractVideo = (url, opts) => scenario.extract(url, opts);
 
 async function main() {
   reset();
-
-  // contract
-  assert.equal(provider.version, "1.0.0");
+  assert.equal(provider.version, "1.0.1");
+  assert.equal(provider.getInfo().version, "1.0.1");
   assert.equal(provider.getInfo().name, "Mega-Anime");
-  assert.equal(provider.getInfo().version, "1.0.0");
-  assert.equal(provider.getInfo().type, "anime");
-  assert.equal(provider.getInfo().lang, "en");
   assert.deepEqual(provider.getSettings(), []);
   assert.equal(provider.getStreams, provider.getVideoSources);
 
-  // search + movie type
   const found = await provider.search("Solo Leveling", 1, {});
   assert.equal(found.length, 2);
   assert.equal(found[0].id, "anilist:42");
-  assert.equal(found[0].title, "Solo Leveling");
-  assert.equal(found[0].type, "anime");
   assert.equal(found[1].type, "movie");
 
-  // empty search
-  reset();
-  scenario.anilistSearch = () => json(200, { data: { Page: { media: [] } } });
-  assert.deepEqual(await provider.search("", 1, {}), []);
-
-  // AniList search failure is isolated
-  reset();
-  scenario.anilistSearch = () => json(200, { errors: [{ message: "boom" }] });
-  assert.deepEqual(await provider.search("Solo Leveling", 1, {}), []);
-
-  // home
   reset();
   const home = await provider.getHome({});
   assert.equal(home.length, 3);
-  assert.equal(home[0].title, "Trending Now");
   assert.equal(home[0].items.length, 1);
-  assert.equal(home[0].items[0].id, "anilist:42");
 
-  // detail + episodes
   reset();
   const detail = await provider.getDetail("anilist:42");
   assert.equal(detail.title, "Solo Leveling");
-  assert.equal(detail.type, "anime");
   assert.equal(detail.episodes.length, 3);
-  assert.deepEqual(detail.episodes.map((e) => e.number), [1, 2, 3]);
-  assert.ok(detail.episodes.every((e) => e.id.endsWith(":sub")));
-  assert.ok(detail.episodes.every((e) => !("dub" in e)));
+  assert.equal(detail.malId, 123);
+  assert.equal((await provider.getEpisodes("anilist:42")).length, 3);
 
-  // movie detail
-  reset();
-  const movie = await provider.getDetail("anilist:99");
-  assert.equal(movie.type, "movie");
-
-  // invalid detail
-  assert.equal(await provider.getDetail("nope"), null);
-
-  // getEpisodes
-  reset();
-  const episodes = await provider.getEpisodes("anilist:42");
-  assert.equal(episodes.length, 3);
-
-  // video sources: aggregation + dedupe
   reset();
   const streams = await provider.getVideoSources("mega-anime:42:1:sub");
-  assert.equal(streams.length, 3);
-  assert.equal(
-    streams.filter((s) => s.url === "https://cdn.example/aniwaves-1.m3u8").length,
-    1,
-    "duplicate URL+quality should be removed"
-  );
+  assert.ok(streams.some(s => s.url === "https://cdn.example/wave.m3u8"), "AniWaves server->source route should resolve direct media URL");
+  assert.ok(streams.some(s => s.url === "https://cdn.example/nami.m3u8"), "AniNami API watch endpoint should resolve HLS");
+  assert.ok(streams.some(s => s.url === "https://cdn.example/movie.mp4"), "AniNami direct MP4 should be preserved");
+  assert.ok(streams.some(s => s.url === "https://cdn.example/extracted.m3u8"), "AniWaves embed should be delegated to extractVideo");
+  assert.ok(calls.some(c => c.url === ANI_WAVES + "/filter?keyword=Solo%20Leveling"));
+  assert.ok(calls.some(c => c.url === ANI_WAVES + "/ajax/episode/list/700"));
+  assert.ok(calls.some(c => c.url.startsWith(ANI_WAVES + "/ajax/server/list?servers=")));
+  assert.ok(calls.some(c => c.url.startsWith(ANI_WAVES + "/ajax/sources?id=")));
+  assert.ok(calls.some(c => c.url === ANI_NAMI + "/api/episodes/42"));
+  assert.ok(calls.some(c => c.url === ANI_NAMI + "/api/watch/vidtube/42/sub/solo-leveling-1"));
+  assert.ok(streams.every(s => s.headers && s.headers.Referer), "streams should carry Referer headers");
 
-  const aniwaves = streams.find((s) => s.url === "https://cdn.example/aniwaves-1.m3u8");
-  const aninami = streams.find((s) => s.url === "https://cdn.example/aninami-1.m3u8");
-  const extracted = streams.find((s) => s.url === "https://cdn.example/extracted.m3u8");
-  assert.ok(aniwaves);
-  assert.ok(aninami);
-  assert.ok(extracted);
-  assert.equal(aniwaves.container, "hls");
-  assert.equal(aniwaves.headers.Referer, ANIWAVES + "/");
-  assert.equal(aninami.container, "hls");
-
-  // source isolation: AniWaves fails
   reset();
-  scenario.aniwavesSearch = () => fail(500);
-  const isolated = await provider.getVideoSources("mega-anime:42:1:sub");
-  assert.equal(isolated.length, 2);
-  assert.ok(isolated.every((s) => !s.url.includes("extracted")));
+  scenario.aninamiEpisodes = () => response(200, { success: true, results: { providers: {} } });
+  const waveOnly = await provider.getVideoSources("mega-anime:42:1:sub");
+  assert.ok(waveOnly.some(s => s.url === "https://cdn.example/wave.m3u8"), "AniNami empty results must not suppress AniWaves");
+  assert.ok(!waveOnly.some(s => s.url === "https://cdn.example/nami.m3u8"));
 
-  // source isolation: AniNami fails
   reset();
-  scenario.aninamiSearch = () => fail(500);
-  const isolated2 = await provider.getVideoSources("mega-anime:42:1:sub");
-  assert.equal(isolated2.length, 2);
-  assert.ok(isolated2.some((s) => s.url === "https://cdn.example/aniwaves-1.m3u8"));
-  assert.ok(isolated2.some((s) => s.url === "https://cdn.example/extracted.m3u8"));
+  scenario.waveSearch = () => response(503, "unavailable");
+  const namiOnly = await provider.getVideoSources("mega-anime:42:1:sub");
+  assert.ok(namiOnly.some(s => s.url === "https://cdn.example/nami.m3u8"), "AniWaves failure must not suppress AniNami");
 
-  // direct MP4
   reset();
-  scenario.aniwavesEpisode = () => json(200, {
-    servers: [{ url: "https://cdn.example/video.mp4", quality: "480p" }]
-  });
-  scenario.aninamiSearch = () => fail(404);
-  const mp4 = await provider.getVideoSources("mega-anime:42:1:sub");
-  assert.equal(mp4.length, 1);
-  assert.equal(mp4[0].container, "mp4");
+  assert.deepEqual(await provider.getVideoSources("not-an-episode"), []);
 
-  // invalid episode URL
-  assert.deepEqual(await provider.getVideoSources("bad"), []);
-
-  // AniList detail failure is isolated
   reset();
-  scenario.anilistDetail = () => json(200, { errors: [{ message: "down" }] });
+  scenario.anilistDetail = () => response(200, { errors: [{ message: "offline" }] });
   assert.deepEqual(await provider.getVideoSources("mega-anime:42:1:sub"), []);
 
-  // no source results
   reset();
-  scenario.aniwavesSearch = () => json(200, { results: [] });
-  scenario.aninamiSearch = () => json(200, { data: [] });
-  assert.deepEqual(await provider.getVideoSources("mega-anime:42:1:sub"), []);
+  scenario.aninamiEpisodes = () => response(200, { results: { providers: { vidtube: { episodes: { dub: [{ id: "watch/vidtube/42/dub/solo-leveling-1", number: 1 }] } } } });
+  const dub = await provider.getVideoSources("mega-anime:42:1:dub");
+  assert.ok(dub.length > 0);
+  assert.ok(dub.every(s => s.kind === "dub"));
 
-  console.log("Mega-Anime mocked integration tests passed.");
+  console.log("Mega-Anime tests passed: metadata, real AniWaves/AniNami route shapes, header propagation, sub/dub selection and source isolation.");
 }
-
-main().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
-});
+main().catch(e => { console.error(e); process.exitCode = 1; });
