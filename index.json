@@ -767,6 +767,102 @@
       "file": "providers/rareanimes.js",
       "logo": "https://www.google.com/s2/favicons?sz=256&domain=rareanimes.mov",
       "nsfw": false
+    },
+    {
+      "id": "mewstream",
+      "name": "Mewstream",
+      "version": "1.0.0",
+      "type": "movie",
+      "lang": "en",
+      "file": "providers/mewstream.js",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=strem.io",
+      "nsfw": false,
+      "settings": [
+        {
+          "key": "tmdbApiKey",
+          "label": "TMDB API Key (optional)",
+          "description": "Optional personal TMDB v3 API key. Leave blank to use Mewstream's built-in key. Sent only to TMDB.",
+          "type": "text",
+          "default": ""
+        },
+        {
+          "key": "showboxToken",
+          "label": "Showbox (Febbox) UI Token",
+          "description": "Showbox needs the UI cookie value from Febbox while logged in. Keep this token private.",
+          "type": "text",
+          "default": ""
+        },
+        {
+          "key": "enableAnikoto",
+          "label": "AniKoto",
+          "description": "Enable the AniKoto anime stream source.",
+          "type": "bool",
+          "default": true
+        },
+        {
+          "key": "enableMegaplay",
+          "label": "MegaPlay",
+          "description": "Enable the MegaPlay anime stream source.",
+          "type": "bool",
+          "default": true
+        },
+        {
+          "key": "enableAnimesalt",
+          "label": "AnimeSalt",
+          "description": "Enable the AnimeSalt anime stream source.",
+          "type": "bool",
+          "default": true
+        },
+        {
+          "key": "enableRareanimes",
+          "label": "RareAnimes",
+          "description": "Enable RareAnimes, which focuses on dubbed anime catalogues.",
+          "type": "bool",
+          "default": true
+        },
+        {
+          "key": "enableShowbox",
+          "label": "Showbox",
+          "description": "Enable Showbox. Requires the Showbox token above.",
+          "type": "bool",
+          "default": true
+        },
+        {
+          "key": "enableVaplayer",
+          "label": "VaPlayer",
+          "description": "Enable VaPlayer movie and TV streams.",
+          "type": "bool",
+          "default": true
+        },
+        {
+          "key": "enableVidrock",
+          "label": "Vidrock",
+          "description": "Enable Vidrock movie and TV streams.",
+          "type": "bool",
+          "default": true
+        },
+        {
+          "key": "enableVidzee",
+          "label": "Vidzee",
+          "description": "Enable Vidzee movie and TV streams.",
+          "type": "bool",
+          "default": true
+        },
+        {
+          "key": "enableVidfast",
+          "label": "Vidfast",
+          "description": "Enable Vidfast movie and TV streams.",
+          "type": "bool",
+          "default": true
+        },
+        {
+          "key": "enableHexa",
+          "label": "Hexa",
+          "description": "Enable Hexa movie and TV streams.",
+          "type": "bool",
+          "default": true
+        }
+      ]
     }
   ]
 }
