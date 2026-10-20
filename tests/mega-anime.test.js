@@ -28,7 +28,7 @@ function baseScenario() {
     waveSearch: () => response(200, '<div class="ani items"><div class="item"><div class="info"><a href="/solo-leveling-42"><img src="/poster.jpg" alt="Solo Leveling Poster"></a><a class="name" href="/solo-leveling-42">Solo Leveling</a></div></div></div>'),
     waveWatch: () => response(200, '<div id="watch-main" data-id="700"></div>'),
     waveEpisodes: () => response(200, { status: 200, result: '<li><a data-num="1" data-sub="1" data-dub="0" data-ids="srv%3A1&amp;x%3D2"></a></li>' }),
-    waveServers: () => response(200, { status: 200, result: '<div class="type" data-type="sub"><ul><li data-link-id="link-11">VidPlay</li><li data-link-id="link-12">Mirror</li></ul></div>' }),
+    waveServers: () => response(200, { status: 200, result: '<section data-type="sub"><ul><li data-link-id="link-11">VidPlay</li><li data-link-id="link-12">Mirror</li></ul></section>' }),
     waveSource: id => response(200, { status: 200, result: { url: id === "link-11" ? "https://vidtube.site/embed/abc" : "https://cdn.example/wave.m3u8" } }),
     aninamiEpisodes: (id = 42) => response(200, { success: true, results: { providers: {
       vidtube: { episodes: { sub: [{ id: "watch/vidtube/" + id + "/sub/solo-leveling-1", number: 1, title: "Episode 1" }], dub: [{ id: "watch/vidtube/" + id + "/dub/solo-leveling-1", number: 1 }] } }
@@ -70,8 +70,8 @@ global.extractVideo = (url, opts) => scenario.extract(url, opts);
 
 async function main() {
   reset();
-  assert.equal(provider.version, "1.0.4");
-  assert.equal(provider.getInfo().version, "1.0.4");
+  assert.equal(provider.version, "1.0.5");
+  assert.equal(provider.getInfo().version, "1.0.5");
   assert.equal(provider.getInfo().name, "Mega-Anime");
   assert.deepEqual(provider.getSettings(), []);
   assert.equal(provider.getStreams, provider.getVideoSources);
