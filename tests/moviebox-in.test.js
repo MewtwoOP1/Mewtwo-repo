@@ -7,8 +7,8 @@ const DEFAULT_KEY = '76iRl07s0xSN9jqmEWAt79EBJZulIQIsV64FZr2O';
 const ALT_KEY = 'Xqn2nnO41/L92o1iuXhSLHTbXvY4Z5ZZ62m8mSLA';
 const calls = [];
 
-function response(status, data) {
-  return { status: status, body: JSON.stringify(data) };
+function response(status, data, headers) {
+  return { status: status, body: JSON.stringify(data), headers: headers || {} };
 }
 
 function canonical(url, method, accept, contentType, body, timestamp) {
@@ -91,8 +91,19 @@ global.fetch = async function (url, options) {
   calls.push({ url: url, options: options, usedKey: usedKey });
   const p = u.pathname;
   const id = u.searchParams.get('subjectId');
+  if (p === API_ROOT + '/tab-operating' && u.searchParams.get('tabId') === '1') {
+    assert.equal(u.searchParams.get('host'), 'api.inmoviebox.com', 'bootstrap includes the API host');
+    assert.equal(u.searchParams.get('pageSize'), '24');
+    assert.equal(headers['x-client-status'], '1', 'guest bootstrap must be anonymous');
+    assert.equal(headers.Authorization, undefined, 'bootstrap must not send a stale bearer token');
+    return response(200, { data: { items: [] } }, {
+      'x-user': JSON.stringify({ token: 'moviebox-test-guest-token', userId: 'test-user' })
+    });
+  }
   if (p === API_ROOT + '/tab-operating') {
     assert.equal(headers['x-play-mode'], '2');
+    assert.equal(headers['x-client-status'], '0', 'normal calls use the captured guest token');
+    assert.equal(headers.Authorization, 'Bearer moviebox-test-guest-token');
     return response(200, { data: { items: [
       { title: 'banner', type: 'BANNER', banner: { banners: [{ subject: item(101, 'Top Movie') }] } },
       { title: 'Popular', type: 'SUBJECTS_MOVIE', subjects: [item(101, 'Top Movie'), item(201, 'Popular Series', 2)] },
@@ -105,6 +116,10 @@ global.fetch = async function (url, options) {
     assert.equal(payload.keyword, 'Space & Time');
     assert.equal(payload.page, 2);
     assert.equal(payload.perPage, 10);
+    assert.match(options.body, /\{"page": 2, "perPage": 10, "keyword": "Space & Time"\}/,
+      'v2 request body whitespace must match the original signed Kotlin request');
+    assert.equal(headers.Authorization, 'Bearer moviebox-test-guest-token');
+    assert.equal(headers['x-client-status'], '0');
     return response(200, { data: { results: [
       { subjects: [item(101, 'Test Movie'), item(201, 'Test Series', 2)] },
       { subjects: [item(101, 'Duplicate Movie')] }
@@ -125,14 +140,17 @@ global.fetch = async function (url, options) {
       return response(403, { code: 403, message: 'invalid signature' });
     }
     if (id === '101' && se === 0 && ep === 0) {
-      return response(200, { data: { streams: [{
-        id: 'stream-movie',
-        url: 'https://cdn.example/movie.m3u8',
-        format: 'HLS',
-        resolutions: '1080P',
-        codecName: 'h264',
-        signCookie: 'session=movie-cookie'
-      }] } });
+      return response(200, { data: {
+        streamList: [{
+          id: 'stream-movie',
+          url: 'https://cdn.example/movie.m3u8',
+          format: 'HLS',
+          resolutions: '1080P',
+          codecName: 'h264',
+          signCookie: 'session=movie-cookie'
+        }],
+        subTitleList: [{ url: 'https://cdn.example/inline-sub.vtt', language: 'Tamil' }]
+      } });
     }
     if (id === '102' && se === 0 && ep === 0) {
       assert.equal(usedKey, ALT_KEY, 'alternate key should be retried after a signature failure');
@@ -173,8 +191,8 @@ const provider = require('../providers/moviebox-in.js');
 
 async function main() {
   assert.equal(provider.getInfo().name, 'MovieBox IN');
-  assert.equal(provider.getInfo().version, '1.0.0');
-  assert.equal(provider.version, '1.0.0');
+  assert.equal(provider.getInfo().version, '1.0.1');
+  assert.equal(provider.version, '1.0.1');
   assert.equal(provider.getInfo().type, 'movie');
   assert.equal(provider.getInfo().lang, 'ta');
   assert.deepEqual(provider.getSettings(), []);
@@ -218,6 +236,8 @@ async function main() {
   assert.equal(movieEpisode[0].kind, 'sub');
   assert.ok(movieEpisode[0].subtitles.some(sub => sub.url === 'https://cdn.example/caption-en.vtt'));
   assert.ok(movieEpisode[0].subtitles.some(sub => sub.url === 'https://cdn.example/caption-hi.vtt'));
+  assert.ok(movieEpisode[0].subtitles.some(sub => sub.url === 'https://cdn.example/inline-sub.vtt'),
+    'inline subTitleList captions should be retained');
   assert.equal(movieEpisode[1].url, 'https://cdn.example/movie-dub.mp4');
   assert.equal(movieEpisode[1].audioLang, 'English');
   assert.equal(movieEpisode[1].kind, 'dub');
@@ -234,6 +254,12 @@ async function main() {
 
   assert.deepEqual(await provider.getVideoSources('not-a-moviebox-url', {}), []);
   assert.ok(calls.every(call => !!call.options.headers['x-client-info']));
+  assert.ok(calls.some(call => call.url.indexOf('/tab-operating?') >= 0 &&
+    new URL(call.url).searchParams.get('tabId') === '1'), 'guest-token bootstrap request should run first');
+  assert.ok(calls.some(call => call.options.headers.Authorization === 'Bearer moviebox-test-guest-token'),
+    'x-user response header should become a bearer token for subsequent requests');
+  assert.ok(calls.every(call => new URL(call.url).searchParams.get('host') === new URL(call.url).host),
+    'each API request must include the matching host query parameter');
   console.log('MovieBox IN mocked home, search, details, seasons, signatures, dubs, subtitles and stream headers passed.');
 }
 

@@ -13,18 +13,44 @@
 
 var SOURCE_ID = 'moviebox-in';
 var API_BASE = 'https://api.inmoviebox.com';
+var API_BASES = [
+  'https://api.inmoviebox.com',
+  'https://apii.inmoviebox.com'
+];
 var API_ROOT = API_BASE + '/wefeed-mobile-bff';
-var UA = 'com.community.mbox.in/50020042 (Linux; U; Android 16; en_IN; sdk_gphone64_x86_64; Build/BP22.250325.006; Cronet/133.0.6876.3)';
-var CLIENT_INFO = '{"package_name":"com.community.mbox.in","version_name":"3.0.03.0529.03","version_code":50020042,"os":"android","os_version":"16","device_id":"da2b99c821e6ea023e4be55b54d5f7d8","install_store":"ps","gaid":"d7578036d13336cc","brand":"google","model":"sdk_gphone64_x86_64","system_language":"en","net":"NETWORK_WIFI","region":"IN","timezone":"Asia/Calcutta","sp_code":""}';
+var APP_VERSION = '3.0.16.0703.03';
+var APP_VERSION_CODE = 50020113;
+var UA = 'com.community.mbox.in/' + APP_VERSION_CODE + ' (Linux; U; Android 16; en_IN; sdk_gphone64_x86_64; Build/BP22.250325.006; Cronet/133.0.6876.3)';
+var CLIENT_INFO = JSON.stringify({
+  package_name: 'com.community.mbox.in',
+  version_name: APP_VERSION,
+  version_code: APP_VERSION_CODE,
+  os: 'android',
+  os_version: '16',
+  device_id: 'da2b99c821e6ea023e4be55b54d5f7d8',
+  install_store: 'ps',
+  gaid: 'd7578036d13336cc',
+  brand: 'Google',
+  model: 'sdk_gphone64_x86_64',
+  system_language: 'en',
+  net: 'NETWORK_WIFI',
+  region: 'IN',
+  timezone: 'Asia/Kolkata',
+  sp_code: ''
+});
 
 /*
- * MovieBox's two public client-signing defaults. The upstream Kotlin source
- * reads these values from build-time secrets, which are not included in its
- * source tree. Keeping them replaceable here lets the alternate key recover
- * from a rotated/region-specific signing key without a separate resolver.
+ * Public MovieBox gateway signing defaults. The upstream Kotlin extension
+ * reads build-time secrets that are not included in its source tree.
  */
 var SECRET_KEY_DEFAULT = '76iRl07s0xSN9jqmEWAt79EBJZulIQIsV64FZr2O';
 var SECRET_KEY_ALT = 'Xqn2nnO41/L92o1iuXhSLHTbXvY4Z5ZZ62m8mSLA';
+
+var _authToken = '';
+var _authUserId = '';
+var _sessionPromise = null;
+var _lastBootstrapAt = 0;
+var _activeAPIBase = API_BASE;
 
 function getInfo() {
   return {
@@ -33,7 +59,7 @@ function getInfo() {
     baseUrl: API_BASE,
     logo: 'https://raw.githubusercontent.com/NivinCNC/CNCVerse-Cloud-Stream-Extension/06aa5b48d49e5ec40c26a689a526f9e2a79bab70/MovieBoxProviderIN/icon.png',
     type: 'movie',
-    version: '1.0.0'
+    version: '1.0.1'
   };
 }
 
@@ -211,13 +237,16 @@ function _canonicalString(method, accept, contentType, url, body, timestamp) {
 }
 
 function _signedHeaders(url, method, body, secret, options) {
+  options = options || {};
   var timestamp = String(Date.now());
   var accept = options.accept !== undefined ? String(options.accept) : 'application/json';
   var contentType = options.contentType !== undefined
     ? String(options.contentType)
-    : (body === null ? 'application/json' : 'application/json; charset=utf-8');
+    : 'application/json;charset=UTF-8';
   var canonical = _canonicalString(method, accept, contentType, url, body, timestamp);
   var tokenHash = _hex(_md5Bytes(_utf8Bytes(timestamp.split('').reverse().join(''))));
+  var parsedUrl;
+  try { parsedUrl = new URL(url); } catch (e) { parsedUrl = null; }
   var headers = {
     'user-agent': UA,
     'accept': accept,
@@ -225,16 +254,67 @@ function _signedHeaders(url, method, body, secret, options) {
     'x-client-token': timestamp + ',' + tokenHash,
     'x-tr-signature': timestamp + '|2|' + _hmacMd5Base64(secret, canonical),
     'x-client-info': CLIENT_INFO,
-    'x-client-status': '0'
+    'x-client-status': options.clientStatus != null
+      ? String(options.clientStatus)
+      : (_authToken && !options.anonymous ? '0' : '1'),
+    'x-sign-version': '2.0',
+    'x-timestamp': timestamp,
+    'region': 'IN',
+    'lang': 'en',
+    'os': 'android',
+    'connection': 'keep-alive',
+    'Referer': (parsedUrl ? parsedUrl.origin : API_BASE) + '/',
+    'Host': parsedUrl ? parsedUrl.host : new URL(API_BASE).host,
+    'x-play-mode': options.playMode === false ? '0' : '2'
   };
-  if (options.playMode) headers['x-play-mode'] = '2';
+  if (_authToken && !options.anonymous) headers.Authorization = 'Bearer ' + _authToken;
   return headers;
+}
+
+function _captureAuthFromHeaders(headers) {
+  if (!headers) return false;
+  var raw = '';
+  try {
+    if (typeof headers.get === 'function') raw = headers.get('x-user') || headers.get('X-User') || '';
+  } catch (e) {}
+  if (!raw && typeof headers === 'object') {
+    var keys = Object.keys(headers);
+    for (var i = 0; i < keys.length; i++) {
+      if (String(keys[i]).toLowerCase() !== 'x-user') continue;
+      raw = headers[keys[i]];
+      if (Array.isArray(raw)) raw = raw.join(', ');
+      break;
+    }
+  }
+  if (!raw) return false;
+  var parsed = null;
+  var rawText = String(raw).trim();
+  try { parsed = JSON.parse(rawText); } catch (e) {}
+  var token = '';
+  var userId = '';
+  if (parsed && typeof parsed === 'object') {
+    token = parsed.token || parsed.accessToken || parsed.access_token ||
+      (parsed.data && (parsed.data.token || parsed.data.accessToken)) || '';
+    userId = parsed.userId || parsed.user_id ||
+      (parsed.data && (parsed.data.userId || parsed.data.user_id)) || '';
+  } else if (typeof parsed === 'string') {
+    token = parsed;
+  } else if (/^Bearer\s+/i.test(rawText) || /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\./.test(rawText)) {
+    token = rawText;
+  }
+  token = String(token || '').replace(/^Bearer\s+/i, '').trim();
+  if (!token) return false;
+  _authToken = token;
+  _authUserId = String(userId || '');
+  return true;
 }
 
 function _decodeResponse(response) {
   if (!response) return Promise.reject(new Error('MovieBox IN: empty HTTP response'));
   var status = Number(response.status);
   if (!isFinite(status) || status <= 0) status = response.ok === false ? 500 : 200;
+  var headers = response.headers || {};
+  _captureAuthFromHeaders(headers);
 
   function parseBody(raw) {
     var data = null;
@@ -247,7 +327,14 @@ function _decodeResponse(response) {
         try { data = JSON.parse(raw); } catch (e) { data = null; }
       }
     }
-    return { status: status, ok: status >= 200 && status < 300, data: data, raw: raw };
+    return {
+      status: status,
+      ok: status >= 200 && status < 300,
+      data: data,
+      raw: raw,
+      headers: headers,
+      url: response.url || ''
+    };
   }
 
   if (typeof response.body === 'string') return Promise.resolve(parseBody(response.body));
@@ -262,42 +349,154 @@ function _decodeResponse(response) {
 
 function _isAuthFailure(result) {
   if (!result) return false;
-  if (result.status === 401 || result.status === 403) return true;
+  if (result.status === 401 || result.status === 403 || result.status === 440) return true;
   var data = result.data || {};
   var code = Number(data.code);
-  if (code === 401 || code === 403) return true;
+  if (code === 401 || code === 403 || code === 440) return true;
   var message = String(data.message || data.msg || data.error || '');
   return /invalid.{0,20}(signature|token)|(?:signature|token).{0,20}(invalid|expired|error)/i.test(message);
 }
 
 function _sendSigned(url, method, body, options, secret) {
+  options = options || {};
   var headers = _signedHeaders(url, method, body, secret, options);
-  var init = { method: method, headers: headers, timeoutMs: 15000 };
+  var init = {
+    method: method,
+    headers: headers,
+    timeoutMs: options.timeoutMs || 8000
+  };
   if (body !== null) init.body = body;
   return Promise.resolve().then(function () {
     return fetch(url, init);
   }).then(_decodeResponse);
 }
 
+function _apiUrl(base, path, withoutPrefix) {
+  var route = String(path || '');
+  if (!route) route = '/';
+  if (route.charAt(0) !== '/') route = '/' + route;
+  var prefix = withoutPrefix ? '' : '/wefeed-mobile-bff';
+  var parsed = new URL(String(base).replace(/\/+$/, '') + prefix + route);
+  if (!parsed.searchParams.has('host')) parsed.searchParams.set('host', parsed.host);
+  return parsed.toString();
+}
+
+function _requestWithSigningFallback(url, method, body, options, allowRefresh) {
+  return _sendSigned(url, method, body, options, SECRET_KEY_DEFAULT).then(function (first) {
+    if (!_isAuthFailure(first)) return first;
+    return _sendSigned(url, method, body, options, SECRET_KEY_ALT).then(function (second) {
+      if (!_isAuthFailure(second) || !allowRefresh || options.anonymous) return second;
+      _authToken = '';
+      _authUserId = '';
+      _sessionPromise = null;
+      return _ensureGuestToken(true).then(function () {
+        return _requestWithSigningFallback(url, method, body, options, false);
+      });
+    });
+  });
+}
+
+function _bootstrapAtBase(base) {
+  var url = _apiUrl(base, '/tab-operating?page=1&pageSize=24&tabId=1');
+  var options = {
+    anonymous: true,
+    clientStatus: '1',
+    playMode: true,
+    timeoutMs: 3500,
+    accept: 'application/json',
+    contentType: 'application/json;charset=UTF-8'
+  };
+  return _sendSigned(url, 'GET', null, options, SECRET_KEY_DEFAULT).then(function (first) {
+    if (_authToken) return true;
+    if (first.ok || _isAuthFailure(first)) {
+      return _sendSigned(url, 'GET', null, options, SECRET_KEY_ALT).then(function () {
+        return !!_authToken;
+      }).catch(function () {
+        return !!_authToken;
+      });
+    }
+    return false;
+  }).catch(function () {
+    return false;
+  });
+}
+
+function _ensureGuestToken(force) {
+  if (_authToken && !force) return Promise.resolve(true);
+  if (force) {
+    _authToken = '';
+    _authUserId = '';
+  }
+  if (_sessionPromise) return _sessionPromise;
+  var now = Date.now();
+  if (!force && _lastBootstrapAt && now - _lastBootstrapAt < 12000) {
+    return Promise.resolve(false);
+  }
+  _lastBootstrapAt = now;
+  var index = 0;
+  function nextBase() {
+    if (_authToken) return Promise.resolve(true);
+    if (index >= Math.min(API_BASES.length, 2)) return Promise.resolve(false);
+    var base = API_BASES[index++];
+    return _bootstrapAtBase(base).then(function (ok) {
+      if (ok || _authToken) return true;
+      return nextBase();
+    });
+  }
+  _sessionPromise = nextBase().then(function (ok) {
+    if (!ok && !_authToken) console.warn('MovieBox IN: guest-token bootstrap did not return x-user; trying anonymous requests');
+    _sessionPromise = null;
+    return !!_authToken;
+  }).catch(function (error) {
+    console.warn('MovieBox IN: guest-token bootstrap failed:', String(error));
+    _sessionPromise = null;
+    return false;
+  });
+  return _sessionPromise;
+}
+
 function _request(path, options) {
   options = options || {};
   var method = String(options.method || 'GET').toUpperCase();
-  var body = options.data === undefined ? null : JSON.stringify(options.data);
-  var url = API_ROOT + path;
-  function check(result) {
+  var body = options.rawBody != null
+    ? String(options.rawBody)
+    : (options.data === undefined ? null : JSON.stringify(options.data));
+
+  function check(result, requestPath) {
+    if (_isAuthFailure(result)) {
+      var info = result && result.data ? (result.data.message || result.data.msg || result.data.error || '') : '';
+      throw new Error('MovieBox IN: authorization/signature rejected at ' + requestPath + (info ? ' (' + info + ')' : ''));
+    }
     if (!result.ok) {
-      throw new Error('MovieBox IN: HTTP ' + result.status + ' at ' + path + ' (' + result.raw.slice(0, 180) + ')');
+      throw new Error('MovieBox IN: HTTP ' + result.status + ' at ' + requestPath + ' (' + String(result.raw || '').slice(0, 180) + ')');
     }
     if (!result.data || typeof result.data !== 'object') {
-      throw new Error('MovieBox IN: invalid JSON at ' + path);
+      throw new Error('MovieBox IN: invalid JSON at ' + requestPath);
     }
     return result.data;
   }
-  return _sendSigned(url, method, body, options, SECRET_KEY_DEFAULT).then(function (first) {
-    if (_isAuthFailure(first)) {
-      return _sendSigned(url, method, body, options, SECRET_KEY_ALT).then(check);
-    }
-    return check(first);
+
+  function requestAtBase(index, withoutPrefix) {
+    var base = API_BASES[index];
+    var url = _apiUrl(base, path, withoutPrefix);
+    return _requestWithSigningFallback(url, method, body, options, true).then(function (result) {
+      if (result.status === 404 && !withoutPrefix) {
+        return requestAtBase(index, true);
+      }
+      if ((result.status === 404 || result.status >= 500 || result.status === 0) && index + 1 < API_BASES.length) {
+        return requestAtBase(index + 1, false);
+      }
+      var value = check(result, path);
+      _activeAPIBase = base;
+      return value;
+    }, function (error) {
+      if (index + 1 < API_BASES.length) return requestAtBase(index + 1, false);
+      throw error;
+    });
+  }
+
+  return _ensureGuestToken(false).then(function () {
+    return requestAtBase(0, false);
   });
 }
 
@@ -332,11 +531,16 @@ function _subjectId(value) {
 }
 
 function _item(subject) {
-  if (!subject || subject.subjectId == null || subject.title == null) return null;
-  var id = String(subject.subjectId);
-  var title = String(subject.title || '').trim();
+  if (!subject) return null;
+  var rawId = subject.subjectId != null ? subject.subjectId : subject.id;
+  var rawTitle = subject.title || subject.name || subject.subjectName;
+  if (rawId == null || rawTitle == null) return null;
+  var id = String(rawId);
+  var title = String(rawTitle || '').trim();
   if (!id || !title) return null;
-  var cover = subject.cover && (subject.cover.url || subject.cover.coverUrl) || subject.coverUrl || null;
+  var cover = subject.cover && (subject.cover.url || subject.cover.coverUrl || subject.cover.posterUrl) ||
+    subject.coverUrl || subject.posterUrl || subject.poster || null;
+  var rawType = subject.subjectType != null ? subject.subjectType : subject.type;
   return {
     id: 'moviebox-in://' + encodeURIComponent(id),
     title: title,
@@ -345,7 +549,7 @@ function _item(subject) {
     type: 'movie',
     sourceId: SOURCE_ID,
     movieBoxSubjectId: id,
-    movieBoxSubjectType: Number(subject.subjectType) || 1
+    movieBoxSubjectType: Number(rawType) || 1
   };
 }
 
@@ -395,24 +599,50 @@ function getHome(opts) {
   });
 }
 
+function _searchSubjects(response) {
+  var data = response && response.data ? response.data : response;
+  if (data && data.data && typeof data.data === 'object') data = data.data;
+  var subjects = [];
+  var results = data && Array.isArray(data.results) ? data.results : [];
+  for (var i = 0; i < results.length; i++) {
+    var row = results[i] || {};
+    if (Array.isArray(row.subjects)) subjects = subjects.concat(row.subjects);
+    else if (row.subjectId != null || row.id != null) subjects.push(row);
+    else if (Array.isArray(row.items)) subjects = subjects.concat(row.items);
+  }
+  if (data && Array.isArray(data.subjects)) subjects = subjects.concat(data.subjects);
+  if (data && Array.isArray(data.items)) subjects = subjects.concat(data.items);
+  if (data && Array.isArray(data.list)) subjects = subjects.concat(data.list);
+  return _items(subjects);
+}
+
+function _searchCurrentEndpoint(query, page) {
+  return _request('/subject-api/search', {
+    method: 'POST',
+    data: { keyword: query, q: query, page: page, pageSize: 20, type: 0 }
+  }).then(function (response) {
+    return _searchSubjects(response);
+  });
+}
+
 function search(query, page, opts) {
   var q = String(query == null ? '' : query).trim();
   if (!q) return Promise.resolve([]);
   var p = Math.max(1, parseInt(page, 10) || 1);
+  var sourceBody = '{"page": ' + p + ', "perPage": 10, "keyword": ' + JSON.stringify(q) + '}';
   return _request('/subject-api/search/v2', {
     method: 'POST',
-    contentType: 'application/json; charset=utf-8',
-    data: { page: p, perPage: 10, keyword: q }
+    rawBody: sourceBody
   }).then(function (response) {
-    var results = response && response.data && Array.isArray(response.data.results) ? response.data.results : [];
-    var subjects = [];
-    for (var i = 0; i < results.length; i++) {
-      if (results[i] && Array.isArray(results[i].subjects)) subjects = subjects.concat(results[i].subjects);
-    }
-    return _items(subjects);
+    var rows = _searchSubjects(response);
+    if (rows.length) return rows;
+    return _searchCurrentEndpoint(q, p);
   }).catch(function (error) {
-    console.warn('MovieBox IN search failed:', String(error));
-    return [];
+    console.warn('MovieBox IN v2 search failed; trying current search endpoint:', String(error));
+    return _searchCurrentEndpoint(q, p).catch(function (fallbackError) {
+      console.warn('MovieBox IN search failed:', String(fallbackError));
+      return [];
+    });
   });
 }
 
@@ -595,7 +825,7 @@ function _absoluteUrl(value) {
   if (!s) return '';
   if (/^(?:https?:|magnet:)/i.test(s)) return s;
   if (s.indexOf('//') === 0) return 'https:' + s;
-  try { return new URL(s, API_BASE + '/').toString(); }
+  try { return new URL(s, (_activeAPIBase || API_BASE) + '/').toString(); }
   catch (e) { return s; }
 }
 
@@ -611,19 +841,34 @@ function _container(url, format) {
 
 function _captionRows(response, language, resolution) {
   var data = response && response.data ? response.data : response;
-  var list = data && (data.extCaptions || data.captions || data.items);
+  if (data && data.data && typeof data.data === 'object') data = data.data;
+  var list = data && (data.extCaptions || data.subTitleList || data.subtitles || data.captions || data.items);
   if (!Array.isArray(list)) return [];
   var out = [];
   for (var i = 0; i < list.length; i++) {
     var caption = list[i] || {};
-    var url = _absoluteUrl(caption.url || caption.src || caption.file);
+    var url = _absoluteUrl(caption.url || caption.src || caption.file || caption.subtitleUrl);
     if (!url) continue;
-    var lang = String(caption.language || caption.lanName || caption.lan || caption.label || 'Unknown');
+    var lang = String(caption.language || caption.lanName || caption.lan || caption.label || caption.name || 'Unknown');
     out.push({
       url: url,
       lang: lang + ' (' + language + (resolution ? ' - ' + resolution : '') + ')',
       language: lang
     });
+  }
+  return out;
+}
+
+function _mergeCaptionRows(first, second) {
+  var out = [], seen = {};
+  var rows = (first || []).concat(second || []);
+  for (var i = 0; i < rows.length; i++) {
+    var row = rows[i] || {};
+    if (!row.url) continue;
+    var key = String(row.url) + '|' + String(row.language || row.lang || '');
+    if (seen[key]) continue;
+    seen[key] = true;
+    out.push(row);
   }
   return out;
 }
@@ -635,18 +880,14 @@ function _loadCaptions(subjectId, streamId, language, resolution) {
     _apiPath('/subject-api/get-ext-captions', { subjectId: subjectId, resourceId: resourceId, episode: 0 })
   ];
   return Promise.all(urls.map(function (path) {
-    return _request(path, { accept: '', contentType: '' }).catch(function () { return null; });
+    return _request(path, { accept: '', contentType: '' }).catch(function (error) {
+      console.warn('MovieBox IN caption request failed:', path, String(error));
+      return null;
+    });
   })).then(function (responses) {
-    var out = [], seen = {};
+    var out = [];
     for (var i = 0; i < responses.length; i++) {
-      var rows = _captionRows(responses[i], language, resolution);
-      for (var j = 0; j < rows.length; j++) {
-        var key = rows[j].url + '|' + rows[j].language;
-        if (!seen[key]) {
-          seen[key] = true;
-          out.push(rows[j]);
-        }
-      }
+      out = _mergeCaptionRows(out, _captionRows(responses[i], language, resolution));
     }
     return out;
   });
@@ -656,56 +897,52 @@ function _resolveStreamsForLanguage(subjectId, season, episode, language, isOrig
   var playPath = _apiPath('/subject-api/play-info', {
     subjectId: subjectId, se: season, ep: episode
   });
-  return _request(playPath, {}).then(function (response) {
+  return _request(playPath, { playMode: true }).then(function (response) {
     var data = response && response.data;
-    var streams = data && Array.isArray(data.streams) ? data.streams : [];
+    if (data && data.data && typeof data.data === 'object') data = data.data;
+    var streams = data && Array.isArray(data.streams) ? data.streams
+      : (data && Array.isArray(data.streamList) ? data.streamList : []);
+    var inlineCaptions = _captionRows({
+      data: { extCaptions: data && (data.subTitleList || data.subtitles || data.extCaptions) || [] }
+    }, language, '');
     return Promise.all(streams.map(function (stream) {
-      var url = _absoluteUrl(stream && stream.url);
+      stream = stream || {};
+      var url = _absoluteUrl(stream.url || stream.sourceUrl || stream.playUrl || stream.src);
       if (!url) return [];
-      var resolution = String(stream.resolutions || '');
-      var streamId = String(stream.id || (subjectId + '|' + season + '|' + episode));
-      return _loadCaptions(subjectId, streamId, language, resolution).then(function (subtitles) {
+      var resolution = String(stream.resolutions || stream.resolution || stream.quality || '');
+      var streamId = String(stream.id || stream.resourceId || stream.postId || (subjectId + '|' + season + '|' + episode));
+      var signCookie = stream.signCookie || stream.sign_cookie || (data && (data.signCookie || data.sign_cookie)) || '';
+      function buildSource(subtitles) {
         var headers = {
           'User-Agent': UA,
-          'Referer': API_BASE + '/'
+          'Referer': (_activeAPIBase || API_BASE) + '/',
+          'Origin': (_activeAPIBase || API_BASE)
         };
-        if (stream.signCookie) headers.Cookie = String(stream.signCookie);
-        return [{
+        if (signCookie) headers.Cookie = String(signCookie);
+        return {
           url: url,
           quality: _quality(resolution),
-          container: _container(url, stream.format),
+          container: _container(url, stream.format || stream.type),
           headers: headers,
           kind: isOriginal ? 'sub' : 'dub',
           audioLang: language === 'Original' ? '' : language,
-          subtitles: subtitles,
+          subtitles: _mergeCaptionRows(subtitles, inlineCaptions),
           label: 'MovieBox IN (' + language + (resolution ? ' - ' + resolution : '') + ')',
           sourceId: SOURCE_ID,
-          codec: stream.codecName || 'h264'
-        }];
-      }).catch(function () {
-        return [{
-          url: url,
-          quality: _quality(resolution),
-          container: _container(url, stream.format),
-          headers: {
-            'User-Agent': UA,
-            'Referer': API_BASE + '/',
-            ...(stream.signCookie ? { Cookie: String(stream.signCookie) } : {})
-          },
-          kind: isOriginal ? 'sub' : 'dub',
-          audioLang: language === 'Original' ? '' : language,
-          subtitles: [],
-          label: 'MovieBox IN (' + language + (resolution ? ' - ' + resolution : '') + ')',
-          sourceId: SOURCE_ID,
-          codec: stream.codecName || 'h264'
-        }];
+          codec: stream.codecName || stream.codec || 'h264'
+        };
+      }
+      return _loadCaptions(subjectId, streamId, language, resolution).then(buildSource).catch(function (error) {
+        console.warn('MovieBox IN caption parsing failed:', String(error));
+        return buildSource([]);
       });
     })).then(function (groups) {
       var out = [];
       for (var i = 0; i < groups.length; i++) out = out.concat(groups[i] || []);
       return out;
     });
-  }).catch(function () {
+  }).catch(function (error) {
+    console.warn('MovieBox IN play-info failed for ' + subjectId + ' S' + season + 'E' + episode + ':', String(error));
     return [];
   });
 }
@@ -757,7 +994,7 @@ function getStreams(url, opts) {
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    version: '1.0.0',
+    version: '1.0.1',
     getInfo: getInfo,
     getSettings: getSettings,
     getHome: getHome,
