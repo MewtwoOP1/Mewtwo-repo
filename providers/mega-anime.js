@@ -5,6 +5,8 @@ var SOURCE_ID = 'mega-anime';
 var ANILIST = 'https://graphql.anilist.co';
 var ANI_WAVES = 'https://aniwaves.ru';
 var ANI_NAMI = 'https://www.aninami.site';
+var MEDIA_CACHE = {};
+var MEDIA_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
 
 var MEDIA_FIELDS = 'id idMal title{romaji english native} coverImage{extraLarge large} bannerImage description(asHtml:false) status genres studios(isMain:true){nodes{name}} episodes format averageScore seasonYear nextAiringEpisode{episode}';
@@ -23,10 +25,30 @@ function _anilist(query, variables) {
     return body;
   });
 }
+function _cacheMedia(m) {
+  if (!m || !(Number(m.id) > 0)) return;
+  MEDIA_CACHE[String(m.id)] = { value: m, at: Date.now() };
+  var keys = Object.keys(MEDIA_CACHE);
+  if (keys.length > 100) {
+    keys.sort(function (a, b) { return MEDIA_CACHE[a].at - MEDIA_CACHE[b].at; });
+    while (keys.length > 100) delete MEDIA_CACHE[keys.shift()];
+  }
+}
+function _cachedMedia(id) {
+  var item = MEDIA_CACHE[String(id)];
+  if (!item) return null;
+  if (!item.at || Date.now() - item.at > MEDIA_CACHE_TTL_MS) {
+    delete MEDIA_CACHE[String(id)];
+    return null;
+  }
+  return item.value || null;
+}
+function _cacheMediaList(list) { (list || []).forEach(_cacheMedia); }
 function _titleOf(m) { return m && m.title ? (m.title.english || m.title.romaji || m.title.native || 'Unknown') : 'Unknown'; }
 function _coverOf(m) { return m && m.coverImage ? (m.coverImage.extraLarge || m.coverImage.large || null) : null; }
 function _typeOf(m) { return m && m.format === 'MOVIE' ? 'movie' : 'anime'; }
 function _mediaToItem(m) {
+  _cacheMedia(m);
   return { id: 'anilist:' + m.id, title: _titleOf(m), url: 'anilist:' + m.id,
     cover: _coverOf(m), type: _typeOf(m), sourceId: SOURCE_ID };
 }
@@ -47,7 +69,8 @@ function _parseId(url) {
   var id = _positiveNumericId(m[1]);
   return id === null ? 0 : id;
 }
-function _episodesFor(media) {
+function _episodesFor(media, opts) {
+  var kind = String(opts && opts.category || 'sub').toLowerCase() === 'dub' ? 'dub' : 'sub';
   var count = Number(media.episodes) || 0;
   if (media.nextAiringEpisode && Number(media.nextAiringEpisode.episode) > 0) {
     var released = Number(media.nextAiringEpisode.episode) - 1;
@@ -57,7 +80,7 @@ function _episodesFor(media) {
   if (count < 1) count = 1;
   var out = [];
   for (var i = 1; i <= count; i++) {
-    var id = 'mega-anime:' + media.id + ':' + i + ':sub';
+    var id = 'mega-anime:' + media.id + ':' + i + ':' + kind;
     out.push({ id: id, title: 'Episode ' + i, number: i, url: id, date: null });
   }
   return out;
@@ -115,7 +138,7 @@ function _titleMatch(a, b) {
 }
 function getInfo() {
   return { name: 'Mega-Anime', lang: 'en', baseUrl: 'https://anilist.co',
-    logo: 'https://anilist.co/favicon.ico', type: 'anime', version: '1.0.2' };
+    logo: 'https://anilist.co/favicon.ico', type: 'anime', version: '1.0.3' };
 }
 function getSettings() { return []; }
 function search(query, page, opts) {
@@ -128,27 +151,29 @@ function getHome(opts) {
   function row(sort, title) {
     return _anilist(HOME_QUERY, { sort: [sort], page: 1, perPage: 20 }).then(function (body) {
       var media = ((body.data || {}).Page || {}).media || [];
+      _cacheMediaList(media);
       return { title: title, items: media.map(_mediaToItem) };
     }).catch(function () { return { title: title, items: [] }; });
   }
   return Promise.all([row('TRENDING_DESC', 'Trending Now'), row('POPULARITY_DESC', 'Popular This Season'),
     row('SCORE_DESC', 'Top Rated')]);
 }
-function getDetail(url) {
+function getDetail(url, opts) {
   var id = _parseId(url);
   if (!id) return Promise.resolve(null);
   return _anilist(DETAIL_QUERY, { id: id }).then(function (body) {
     var m = body.data && body.data.Media;
     if (!m) return null;
+    _cacheMedia(m);
     var studios = [];
     ((m.studios && m.studios.nodes) || []).forEach(function (s) { if (s && s.name) studios.push(s.name); });
     return { id: 'anilist:' + m.id, title: _titleOf(m), url: 'anilist:' + m.id,
       cover: _coverOf(m), description: m.description || '', status: m.status || 'UNKNOWN',
       genres: m.genres || [], studios: studios, type: _typeOf(m), sourceId: SOURCE_ID,
-      episodes: _episodesFor(m), malId: m.idMal || null };
+      episodes: _episodesFor(m, opts), malId: m.idMal || null };
   }).catch(function (e) { console.error('[mega-anime] detail failed: ' + e.message); return null; });
 }
-function getEpisodes(seriesUrl) { return getDetail(seriesUrl).then(function (d) { return d && d.episodes ? d.episodes : []; }); }
+function getEpisodes(seriesUrl, opts) { return getDetail(seriesUrl, opts).then(function (d) { return d && d.episodes ? d.episodes : []; }); }
 
 // -------------------------- AniWaves resolver -------------------------------
 // Actual site chain: /filter?keyword=, /<anime-slug>, /ajax/episode/list/<id>,
@@ -320,7 +345,7 @@ function getVideoSources(episodeUrl, opts) {
 }
 var getStreams = getVideoSources;
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { version: '1.0.2', getInfo: getInfo, getSettings: getSettings,
+  module.exports = { version: '1.0.3', getInfo: getInfo, getSettings: getSettings,
     getHome: getHome, search: search, getDetail: getDetail, getEpisodes: getEpisodes,
     getVideoSources: getVideoSources, getStreams: getStreams };
 }
