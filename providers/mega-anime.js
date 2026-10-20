@@ -395,9 +395,10 @@ function getVideoSources(episodeUrl, opts) {
     return [];
   });
 }
+function __resetForTests() { MEDIA_CACHE = {}; }
 var getStreams = getVideoSources;
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { version: '1.0.3', getInfo: getInfo, getSettings: getSettings,
     getHome: getHome, search: search, getDetail: getDetail, getEpisodes: getEpisodes,
-    getVideoSources: getVideoSources, getStreams: getStreams };
+    getVideoSources: getVideoSources, getStreams: getStreams, __resetForTests: __resetForTests };
 }
