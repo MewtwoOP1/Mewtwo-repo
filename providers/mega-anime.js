@@ -183,7 +183,7 @@ function _titleMatch(a, b) {
 }
 function getInfo() {
   return { name: 'Mega-Anime', lang: 'en', baseUrl: 'https://anilist.co',
-    logo: 'https://anilist.co/favicon.ico', type: 'anime', version: '1.0.4' };
+    logo: 'https://anilist.co/favicon.ico', type: 'anime', version: '1.0.5' };
 }
 function getSettings() { return []; }
 function search(query, page, opts) {
@@ -611,7 +611,7 @@ function getVideoSources(episodeUrl, opts) {
 function __resetForTests() { MEDIA_CACHE = {}; }
 var getStreams = getVideoSources;
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { version: '1.0.4', getInfo: getInfo, getSettings: getSettings,
+  module.exports = { version: '1.0.5', getInfo: getInfo, getSettings: getSettings,
     getHome: getHome, search: search, getDetail: getDetail, getEpisodes: getEpisodes,
     getVideoSources: getVideoSources, getStreams: getStreams, __resetForTests: __resetForTests };
 }
