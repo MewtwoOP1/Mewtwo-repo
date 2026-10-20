@@ -160,6 +160,10 @@ function getInfo() {
   };
 }
 
+function getSettings() {
+  return [];
+}
+
 function search(query, page, opts) {
   return _anilist(SEARCH_QUERY, {
     search: String(query || ''),
@@ -398,4 +402,24 @@ function getVideoSources(episodeUrl) {
     console.error('[mega-anime] sources failed: ' + (e && e.message));
     return [];
   });
+}
+
+var getStreams = getVideoSources;
+
+// ---------------------------------------------------------------------------
+// Zangetsu repo compatibility (exports)
+// ---------------------------------------------------------------------------
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    version: '1.0.0',
+    getInfo: getInfo,
+    getSettings: getSettings,
+    getHome: getHome,
+    search: search,
+    getDetail: getDetail,
+    getEpisodes: getEpisodes,
+    getVideoSources: getVideoSources,
+    getStreams: getStreams
+  };
 }
