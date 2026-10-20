@@ -1,12 +1,13 @@
 // mewstream.js — Mewstream multi-source provider for Zangetsu v2.0.0
-// Fixes: anime/movie cross-contamination via classifier + gate + title guard
-// Adds: MegaPlay-Direct (MAL/AniList), AniZone, VidSrc, VidCore, VidUp, moviesapi, VidNest
+// Anime/movie classifier gate + title-match guard + new sources (MegaPlay-Direct,
+// AniZone, VidSrc, VidCore, VidUp, moviesapi, VidNest).
+// Runtime-safe: no setTimeout, parallel-race orchestration with early exit.
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID) ? String(__SOURCE_ID) : 'mewstream';
 var VERSION = '2.0.0';
 
-// ── Base64 polyfills (needed before anything else) ─────────────────────
+// ── Polyfills (Zangetsu sandbox safety) ────────────────────────────────
 var _b64chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
-var _btoa = (typeof btoa !== 'undefined') ? btoa : function(input) {
+var _btoa = (typeof btoa !== 'undefined') ? btoa : function (input) {
   var str = String(input), output = '';
   for (var block, charCode, idx = 0, map = _b64chars; str.charAt(idx | 0) || (map = '=', idx % 1); output += map.charAt(63 & block >> 8 - idx % 1 * 8)) {
     charCode = str.charCodeAt(idx += 3 / 4);
@@ -15,7 +16,7 @@ var _btoa = (typeof btoa !== 'undefined') ? btoa : function(input) {
   }
   return output;
 };
-var _atob = (typeof atob !== 'undefined') ? atob : function(input) {
+var _atob = (typeof atob !== 'undefined') ? atob : function (input) {
   var str = String(input).replace(/=+$/, '');
   if (str.length % 4 == 1) throw new Error("'atob' failed");
   for (var bc = 0, bs, buffer, idx = 0, output = ''; buffer = str.charAt(idx++); ~buffer && (bs = bc % 4 ? bs * 64 + buffer : buffer, bc++ % 4) ? output += String.fromCharCode(255 & bs >> (-2 * bc & 6)) : 0) {
@@ -23,6 +24,14 @@ var _atob = (typeof atob !== 'undefined') ? atob : function(input) {
   }
   return output;
 };
+if (!String.prototype.padStart) {
+  String.prototype.padStart = function (len, pad) {
+    var s = String(this);
+    pad = pad == null ? ' ' : String(pad);
+    while (s.length < len) s = pad + s;
+    return s.slice(-len);
+  };
+}
 
 // ── Endpoints ──────────────────────────────────────────────────────────
 var CINEMETA = 'https://v3-cinemeta.strem.io';
@@ -118,7 +127,9 @@ async function _fetchText(url, opts) {
   opts = opts || {};
   var h = Object.assign({ 'User-Agent': UA }, opts.headers || {});
   try {
-    var r = await fetch(url, { method: opts.method || 'GET', headers: h, body: opts.body, timeoutMs: opts.timeoutMs || 15000 });
+    var req = { method: opts.method || 'GET', headers: h };
+    if (opts.body != null) req.body = opts.body;
+    var r = await fetch(url, req);
     if (!r) return '';
     var t = r.body;
     return typeof t !== 'string' ? JSON.stringify(t) : t;
@@ -128,15 +139,8 @@ async function _fetchJson(url, opts) {
   var t = await _fetchText(url, opts);
   try { return JSON.parse(t); } catch (e) { return null; }
 }
-function withTimeout(p, ms, fb, label) {
-  var d = false;
-  return Promise.race([
-    Promise.resolve(p).then(function (v) { d = true; return v; }, function (e) { d = true; throw e; }),
-    new Promise(function (r) { setTimeout(function () { if (!d) { if (label) console.log('Mewstream: ' + label + ' timed out'); r(fb || []); } }, ms); })
-  ]);
-}
 
-// ── AES core (CBC + CTR) ───────────────────────────────────────────────
+// ── AES core (CBC) ─────────────────────────────────────────────────────
 function _arr(x) { var a = []; for (var i = 0; i < x.length; i++) a.push(x[i] & 0xff); return a; }
 var _SBOX = [0x63,0x7c,0x77,0x7b,0xf2,0x6b,0x6f,0xc5,0x30,0x01,0x67,0x2b,0xfe,0xd7,0xab,0x76,0xca,0x82,0xc9,0x7d,0xfa,0x59,0x47,0xf0,0xad,0xd4,0xa2,0xaf,0x9c,0xa4,0x72,0xc0,0xb7,0xfd,0x93,0x26,0x36,0x3f,0xf7,0xcc,0x34,0xa5,0xe5,0xf1,0x71,0xd8,0x31,0x15,0x04,0xc7,0x23,0xc3,0x18,0x96,0x05,0x9a,0x07,0x12,0x80,0xe2,0xeb,0x27,0xb2,0x75,0x09,0x83,0x2c,0x1a,0x1b,0x6e,0x5a,0xa0,0x52,0x3b,0xd6,0xb3,0x29,0xe3,0x2f,0x84,0x53,0xd1,0x00,0xed,0x20,0xfc,0xb1,0x5b,0x6a,0xcb,0xbe,0x39,0x4a,0x4c,0x58,0xcf,0xd0,0xef,0xaa,0xfb,0x43,0x4d,0x33,0x85,0x45,0xf9,0x02,0x7f,0x50,0x3c,0x9f,0xa8,0x51,0xa3,0x40,0x8f,0x92,0x9d,0x38,0xf5,0xbc,0xb6,0xda,0x21,0x10,0xff,0xf3,0xd2,0xcd,0x0c,0x13,0xec,0x5f,0x97,0x44,0x17,0xc4,0xa7,0x7e,0x3d,0x64,0x5d,0x19,0x73,0x60,0x81,0x4f,0xdc,0x22,0x2a,0x90,0x88,0x46,0xee,0xb8,0x14,0xde,0x5e,0x0b,0xdb,0xe0,0x32,0x3a,0x0a,0x49,0x06,0x24,0x5c,0xc2,0xd3,0xac,0x62,0x91,0x95,0xe4,0x79,0xe7,0xc8,0x37,0x6d,0x8d,0xd5,0x4e,0xa9,0x6c,0x56,0xf4,0xea,0x65,0x7a,0xae,0x08,0xba,0x78,0x25,0x2e,0x1c,0xa6,0xb4,0xc6,0xe8,0xdd,0x74,0x1f,0x4b,0xbd,0x8b,0x8a,0x70,0x3e,0xb5,0x66,0x48,0x03,0xf6,0x0e,0x61,0x35,0x57,0xb9,0x86,0xc1,0x1d,0x9e,0xe1,0xf8,0x98,0x11,0x69,0xd9,0x8e,0x94,0x9b,0x1e,0x87,0xe9,0xce,0x55,0x28,0xdf,0x8c,0xa1,0x89,0x0d,0xbf,0xe6,0x42,0x68,0x41,0x99,0x2d,0x0f,0xb0,0x54,0xbb,0x16];
 var _ISBOX = [0x52,0x09,0x6a,0xd5,0x30,0x36,0xa5,0x38,0xbf,0x40,0xa3,0x9e,0x81,0xf3,0xd7,0xfb,0x7c,0xe3,0x39,0x82,0x9b,0x2f,0xff,0x87,0x34,0x8e,0x43,0x44,0xc4,0xde,0xe9,0xcb,0x54,0x7b,0x94,0x32,0xa6,0xc2,0x23,0x3d,0xee,0x4c,0x95,0x0b,0x42,0xfa,0xc3,0x4e,0x08,0x2e,0xa1,0x66,0x28,0xd9,0x24,0xb2,0x76,0x5b,0xa2,0x49,0x6d,0x8b,0xd1,0x25,0x72,0xf8,0xf6,0x64,0x86,0x68,0x98,0x16,0xd4,0xa4,0x5c,0xcc,0x5d,0x65,0xb6,0x92,0x6c,0x70,0x48,0x50,0xfd,0xed,0xb9,0xda,0x5e,0x15,0x46,0x57,0xa7,0x8d,0x9d,0x84,0x90,0xd8,0xab,0x00,0x8c,0xbc,0xd3,0x0a,0xf7,0xe4,0x58,0x05,0xb8,0xb3,0x45,0x06,0xd0,0x2c,0x1e,0x8f,0xca,0x3f,0x0f,0x02,0xc1,0xaf,0xbd,0x03,0x01,0x13,0x8a,0x6b,0x3a,0x91,0x11,0x41,0x4f,0x67,0xdc,0xea,0x97,0xf2,0xcf,0xce,0xf0,0xb4,0xe6,0x73,0x96,0xac,0x74,0x22,0xe7,0xad,0x35,0x85,0xe2,0xf9,0x37,0xe8,0x1c,0x75,0xdf,0x6e,0x47,0xf1,0x1a,0x71,0x1d,0x29,0xc5,0x89,0x6f,0xb7,0x62,0x0e,0xaa,0x18,0xbe,0x1b,0xfc,0x56,0x3e,0x4b,0xc6,0xd2,0x79,0x20,0x9a,0xdb,0xc0,0xfe,0x78,0xcd,0x5a,0xf4,0x1f,0xdd,0xa8,0x33,0x88,0x07,0xc7,0x31,0xb1,0x12,0x10,0x59,0x27,0x80,0xec,0x5f,0x60,0x51,0x7f,0xa9,0x19,0xb5,0x4a,0x0d,0x2d,0xe5,0x7a,0x9f,0x93,0xc9,0x9c,0xef,0xa0,0xe0,0x3b,0x4d,0xae,0x2a,0xf5,0xb0,0xc8,0xeb,0xbb,0x3c,0x83,0x53,0x99,0x61,0x17,0x2b,0x04,0x7e,0xba,0x77,0xd6,0x26,0xe1,0x69,0x14,0x63,0x55,0x21,0x0c,0x7d];
@@ -367,77 +371,77 @@ async function getDetail(url, opts) {
       kitsuId: p.id, anilistId: anilist, malId: mal, episodes: eps };
   }
   if (p.kind === 'movie' || p.kind === 'series') {
-    var res = await _fetchText(CINEMETA + '/meta/' + (p.kind === 'series' ? 'series' : 'movie') + '/' + p.id + '.json');
-    if (!res) return null;
-    var meta; try { meta = JSON.parse(res).meta; } catch (e) { return null; }
-    if (!meta) return null;
+    var res2 = await _fetchText(CINEMETA + '/meta/' + (p.kind === 'series' ? 'series' : 'movie') + '/' + p.id + '.json');
+    if (!res2) return null;
+    var meta2; try { meta2 = JSON.parse(res2).meta; } catch (e) { return null; }
+    if (!meta2) return null;
     var isTv = p.kind === 'series';
-    var title = (meta.aliases && meta.aliases[0]) || meta.name || 'Untitled';
-    var imdb = meta.imdb_id || p.id, tmdb = meta.moviedb_id || null;
-    var en = await _enrichTmdb(tmdb, isTv ? 'tv' : 'movie');
-    var genres = en ? en.genres : (meta.genre || meta.genres || []);
+    var title2 = (meta2.aliases && meta2.aliases[0]) || meta2.name || 'Untitled';
+    var imdb2 = meta2.imdb_id || p.id, tmdb2 = meta2.moviedb_id || null;
+    var en = await _enrichTmdb(tmdb2, isTv ? 'tv' : 'movie');
+    var genres = en ? en.genres : (meta2.genre || meta2.genres || []);
     var cls = _classify({
       genres: genres,
       originCountry: en ? en.originCountry : [],
       originalLanguage: en ? en.originalLanguage : '',
       isSeries: isTv
     });
-    var base = { imdb: imdb, tmdb: tmdb, title: title, year: _year(meta), isAnime: cls.isAnime };
-    var eps = isTv
-      ? (meta.videos || []).filter(function (v) { return v.season !== 0; })
+    var base2 = { imdb: imdb2, tmdb: tmdb2, title: title2, year: _year(meta2), isAnime: cls.isAnime };
+    var eps2 = isTv
+      ? (meta2.videos || []).filter(function (v) { return v.season !== 0; })
           .sort(function (a, b) { return (a.season - b.season) || (a.episode - b.episode); })
           .map(function (v) {
-            var o = Object.assign({}, base, { season: v.season, episode: v.episode });
+            var o = Object.assign({}, base2, { season: v.season, episode: v.episode });
             return { id: v.season + 'x' + v.episode,
               title: 'S' + String(v.season).padStart(2, '0') + 'E' + String(v.episode).padStart(2, '0') + ' - ' + (v.name || ''),
               number: v.episode, season: v.season, url: _epUrl(o), thumbnail: v.thumbnail || null };
           })
-      : [{ id: 'movie', title: title, number: 1, url: _epUrl(Object.assign({}, base, { season: 0, episode: 0 })) }];
-    return { id: url, url: url, title: title, cover: meta.poster || null, banner: meta.background || null,
-      description: meta.description || '', type: cls.type, isAnime: cls.isAnime, isSeries: isTv,
+      : [{ id: 'movie', title: title2, number: 1, url: _epUrl(Object.assign({}, base2, { season: 0, episode: 0 })) }];
+    return { id: url, url: url, title: title2, cover: meta2.poster || null, banner: meta2.background || null,
+      description: meta2.description || '', type: cls.type, isAnime: cls.isAnime, isSeries: isTv,
       genres: genres, originCountry: en ? en.originCountry : [], originalLanguage: en ? en.originalLanguage : '',
-      classifyReason: cls.reason, sourceId: SOURCE_ID, year: _year(meta),
-      imdbId: imdb, tmdbId: tmdb, episodes: eps };
+      classifyReason: cls.reason, sourceId: SOURCE_ID, year: _year(meta2),
+      imdbId: imdb2, tmdbId: tmdb2, episodes: eps2 };
   }
   if (p.kind === 'tmdb') {
     var key = _readSetting('tmdbApiKey') || TMDB_KEY;
     var info = await _fetchJson(TMDB_API + '/' + p.type + '/' + p.id + '?api_key=' + key + '&append_to_response=external_ids');
     if (!info || info.status_code) return null;
-    var isTv = p.type === 'tv';
-    var title = info.title || info.name || 'Untitled';
-    var imdb = info.external_ids ? info.external_ids.imdb_id : null;
-    var genres = (info.genres || []).map(function (g) { return g.name; });
-    var cls = _classify({
-      genres: genres,
+    var isTv3 = p.type === 'tv';
+    var title3 = info.title || info.name || 'Untitled';
+    var imdb3 = info.external_ids ? info.external_ids.imdb_id : null;
+    var genres3 = (info.genres || []).map(function (g) { return g.name; });
+    var cls3 = _classify({
+      genres: genres3,
       originCountry: info.origin_country || [],
       originalLanguage: info.original_language || '',
-      isSeries: isTv
+      isSeries: isTv3
     });
-    var base = { imdb: imdb, tmdb: p.id, title: title, year: (info.release_date || info.first_air_date || '').slice(0, 4), isAnime: cls.isAnime };
-    var eps = [];
-    if (isTv && info.seasons) {
+    var base3 = { imdb: imdb3, tmdb: p.id, title: title3, year: (info.release_date || info.first_air_date || '').slice(0, 4), isAnime: cls3.isAnime };
+    var eps3 = [];
+    if (isTv3 && info.seasons) {
       for (var i = 0; i < info.seasons.length; i++) {
         var s = info.seasons[i]; if (s.season_number === 0) continue;
         var ed = await _fetchJson(TMDB_API + '/tv/' + p.id + '/season/' + s.season_number + '?api_key=' + key);
         if (ed && ed.episodes) ed.episodes.forEach(function (ep) {
-          var o = Object.assign({}, base, { season: ep.season_number, episode: ep.episode_number });
-          eps.push({ id: ep.season_number + 'x' + ep.episode_number,
+          var o = Object.assign({}, base3, { season: ep.season_number, episode: ep.episode_number });
+          eps3.push({ id: ep.season_number + 'x' + ep.episode_number,
             title: 'S' + String(ep.season_number).padStart(2, '0') + 'E' + String(ep.episode_number).padStart(2, '0') + ' - ' + (ep.name || ''),
             number: ep.episode_number, season: ep.season_number, url: _epUrl(o),
             thumbnail: ep.still_path ? TMDB_IMG + '/w300' + ep.still_path : null });
         });
       }
-    } else if (!isTv) {
-      eps = [{ id: 'movie', title: title, number: 1, url: _epUrl(Object.assign({}, base, { season: 0, episode: 0 })) }];
+    } else if (!isTv3) {
+      eps3 = [{ id: 'movie', title: title3, number: 1, url: _epUrl(Object.assign({}, base3, { season: 0, episode: 0 })) }];
     }
-    return { id: url, url: url, title: title,
+    return { id: url, url: url, title: title3,
       cover: info.poster_path ? TMDB_IMG + '/w500' + info.poster_path : null,
       banner: info.backdrop_path ? TMDB_IMG + '/w780' + info.backdrop_path : null,
-      description: info.overview || '', type: cls.type, isAnime: cls.isAnime, isSeries: isTv,
-      genres: genres, originCountry: info.origin_country || [], originalLanguage: info.original_language || '',
-      classifyReason: cls.reason, sourceId: SOURCE_ID,
+      description: info.overview || '', type: cls3.type, isAnime: cls3.isAnime, isSeries: isTv3,
+      genres: genres3, originCountry: info.origin_country || [], originalLanguage: info.original_language || '',
+      classifyReason: cls3.reason, sourceId: SOURCE_ID,
       year: (info.release_date || info.first_air_date || '').slice(0, 4) || null,
-      imdbId: imdb, tmdbId: p.id, episodes: eps };
+      imdbId: imdb3, tmdbId: p.id, episodes: eps3 };
   }
   return null;
 }
@@ -629,7 +633,9 @@ async function getMegaplayDirect(malId, anilistId, episode, subCb) {
   var idVal = malId || anilistId;
   if (!kind || !idVal) return [];
   var ep = episode || 1, out = [];
-  for (var lang of ['sub', 'dub']) {
+  var langs = ['sub', 'dub'];
+  for (var li = 0; li < langs.length; li++) {
+    var lang = langs[li];
     for (var bi = 0; bi < MEGAPLAY_BASES.length; bi++) {
       try {
         var r = await _mpDirectOnce(MEGAPLAY_BASES[bi], kind, idVal, ep, lang);
@@ -796,7 +802,7 @@ async function getAnizone(title, season, episode, subCb) {
   } catch (e) { console.log('Mewstream: AniZone failed: ' + (e && e.message || e)); return []; }
 }
 
-// ── AnimeSalt (direct iframe approach — matches working implementation) ─
+// ── AnimeSalt (direct iframe) ──────────────────────────────────────────
 async function getAnimesalt(title, season, episode, subCb) {
   try {
     var slug = _slug(title);
@@ -1410,64 +1416,123 @@ async function getVidnest(tmdbId, season, episode, subCb) {
   return out;
 }
 
-// ── Orchestrator ───────────────────────────────────────────────────────
+// ── Orchestrator (parallel-race, phase-gated, early exit) ─────────────
 async function getVideoSources(episodeUrl, opts) {
   opts = opts || {};
   var p = _parseStreamId(episodeUrl);
   var meta = await _resolveMeta(p);
   var isAnime = meta.isAnime === true;
   var subs = [], subCb = function (s) { if (s && s.url) subs.push(s); };
-  var tasks = [], diag = [];
-  function safe(name, fn) {
-    return withTimeout(fn, 20000, [], name)
-      .then(function (r) { if (!r || !r.length) diag.push(name + ':0'); return r || []; })
-      .catch(function (e) { diag.push(name + ':' + (e && e.message || e)); return []; });
+  var diag = [];
+
+  // Race all sources in the list; resolve with the first non-empty result.
+  // If all return empty/fail, resolve with [].
+  function raceFirstNonEmpty(sources, tag) {
+    if (!sources.length) return Promise.resolve([]);
+    return new Promise(function (resolve) {
+      var pending = sources.length;
+      var resolved = false;
+      function done(result, name) {
+        if (resolved) return;
+        pending--;
+        if (result && result.length) {
+          resolved = true;
+          console.log('Mewstream: ' + tag + ' hit ' + result.length + ' from ' + name);
+          resolve(result);
+          return;
+        }
+        if (pending === 0) {
+          resolved = true;
+          resolve([]);
+        }
+      }
+      sources.forEach(function (s) {
+        Promise.resolve()
+          .then(function () { return s.fn(); })
+          .then(function (r) {
+            if (!r || !r.length) diag.push(s.name + ':0');
+            done(r, s.name);
+          })
+          .catch(function (e) {
+            diag.push(s.name + ':' + (e && e.message || e));
+            done([], s.name);
+          });
+      });
+    });
   }
 
-  // Anime sources — gated by classifier
+  // Anime sources
+  var animeSources = [];
   if (isAnime) {
     if (_bool('enableMegaplayDirect', true) && (meta.malId || meta.anilistId))
-      tasks.push(safe('MegaPlay-Direct', getMegaplayDirect(meta.malId, meta.anilistId, p.episode, subCb)));
+      animeSources.push({ name: 'MegaPlay-Direct', fn: function () { return getMegaplayDirect(meta.malId, meta.anilistId, p.episode, subCb); } });
     if (_bool('enableAnikoto', true) && meta.title)
-      tasks.push(safe('AniKoto', getAnikoto(meta.title, p.season, p.episode, subCb)));
+      animeSources.push({ name: 'AniKoto', fn: function () { return getAnikoto(meta.title, p.season, p.episode, subCb); } });
     if (_bool('enableAnizone', true) && meta.title)
-      tasks.push(safe('AniZone', getAnizone(meta.title, p.season, p.episode, subCb)));
+      animeSources.push({ name: 'AniZone', fn: function () { return getAnizone(meta.title, p.season, p.episode, subCb); } });
     if (_bool('enableAnimesalt', true) && meta.title)
-      tasks.push(safe('AnimeSalt', getAnimesalt(meta.title, p.season, p.episode, subCb)));
+      animeSources.push({ name: 'AnimeSalt', fn: function () { return getAnimesalt(meta.title, p.season, p.episode, subCb); } });
     if (_bool('enableRareanimes', true) && meta.title)
-      tasks.push(safe('RareAnimes', getRareanimes(meta.title, p.season, p.episode, subCb)));
+      animeSources.push({ name: 'RareAnimes', fn: function () { return getRareanimes(meta.title, p.season, p.episode, subCb); } });
   } else {
     diag.push('anime-sources:skipped(' + (meta.classifyReason || 'not-anime') + ')');
   }
 
-  // Movie/TV sources — always safe (ID-based)
-  if (_bool('enableVaplayer', true) && meta.imdbId) tasks.push(safe('VaPlayer', getVaplayer(meta.imdbId, p.season, p.episode, subCb)));
-  if (_bool('enableVidrock', true) && meta.tmdbId) tasks.push(safe('Vidrock', getVidrock(meta.tmdbId, p.season, p.episode, subCb)));
-  if (_bool('enableVidzee', true) && meta.tmdbId) tasks.push(safe('Vidzee', getVidzee(meta.tmdbId, p.season, p.episode, subCb)));
-  if (_bool('enableVidfast', true) && meta.tmdbId) tasks.push(safe('Vidfast', getVidfast(meta.tmdbId, p.season, p.episode, subCb)));
-  if (_bool('enableHexa', true) && meta.tmdbId) tasks.push(safe('Hexa', getHexa(meta.tmdbId, p.season, p.episode, subCb)));
-  if (_bool('enableShowbox', true) && meta.imdbId) tasks.push(safe('Showbox', getShowbox(meta.imdbId, p.season, p.episode, subCb)));
-  if (_bool('enableVidsrc', true) && (meta.tmdbId || meta.imdbId)) tasks.push(safe('VidSrc', getVidsrc(meta.imdbId, meta.tmdbId, p.season, p.episode, subCb)));
+  // Movie / TV sources
+  var movieSources = [];
+  if (_bool('enableVaplayer', true) && meta.imdbId)
+    movieSources.push({ name: 'VaPlayer', fn: function () { return getVaplayer(meta.imdbId, p.season, p.episode, subCb); } });
+  if (_bool('enableVidrock', true) && meta.tmdbId)
+    movieSources.push({ name: 'Vidrock', fn: function () { return getVidrock(meta.tmdbId, p.season, p.episode, subCb); } });
+  if (_bool('enableVidfast', true) && meta.tmdbId)
+    movieSources.push({ name: 'Vidfast', fn: function () { return getVidfast(meta.tmdbId, p.season, p.episode, subCb); } });
+  if (_bool('enableHexa', true) && meta.tmdbId)
+    movieSources.push({ name: 'Hexa', fn: function () { return getHexa(meta.tmdbId, p.season, p.episode, subCb); } });
+  if (_bool('enableVidzee', true) && meta.tmdbId)
+    movieSources.push({ name: 'Vidzee', fn: function () { return getVidzee(meta.tmdbId, p.season, p.episode, subCb); } });
+  if (_bool('enableShowbox', true) && meta.imdbId)
+    movieSources.push({ name: 'Showbox', fn: function () { return getShowbox(meta.imdbId, p.season, p.episode, subCb); } });
+  if (_bool('enableVidsrc', true) && (meta.tmdbId || meta.imdbId))
+    movieSources.push({ name: 'VidSrc', fn: function () { return getVidsrc(meta.imdbId, meta.tmdbId, p.season, p.episode, subCb); } });
   if (_bool('enableVidcore', true) && meta.tmdbId) {
-    tasks.push(safe('VidCore', getVidcore(meta.tmdbId, p.season, p.episode, subCb)));
-    tasks.push(safe('VidUp', getVidup(meta.tmdbId, p.season, p.episode, subCb)));
+    movieSources.push({ name: 'VidCore', fn: function () { return getVidcore(meta.tmdbId, p.season, p.episode, subCb); } });
+    movieSources.push({ name: 'VidUp', fn: function () { return getVidup(meta.tmdbId, p.season, p.episode, subCb); } });
   }
-  if (_bool('enableMoviesapi', true) && meta.tmdbId) tasks.push(safe('moviesapi', getMoviesapi(meta.tmdbId, p.season, p.episode, subCb)));
-  if (_bool('enableVidnest', true) && meta.tmdbId) tasks.push(safe('VidNest', getVidnest(meta.tmdbId, p.season, p.episode, subCb)));
+  if (_bool('enableMoviesapi', true) && meta.tmdbId)
+    movieSources.push({ name: 'moviesapi', fn: function () { return getMoviesapi(meta.tmdbId, p.season, p.episode, subCb); } });
+  if (_bool('enableVidnest', true) && meta.tmdbId)
+    movieSources.push({ name: 'VidNest', fn: function () { return getVidnest(meta.tmdbId, p.season, p.episode, subCb); } });
 
-  var rs = await Promise.all(tasks);
-  var out = [], seen = {};
-  rs.forEach(function (l) {
-    if (!l) return;
-    l.forEach(function (s) { if (s && s.url && !seen[s.url]) { seen[s.url] = 1; out.push(s); } });
+  var out = [];
+
+  // Phase 1: anime sources (only if anime)
+  if (isAnime && animeSources.length) {
+    out = await raceFirstNonEmpty(animeSources, 'anime');
+  }
+
+  // Phase 2: movie/TV sources (only if phase 1 empty)
+  if (!out.length && movieSources.length) {
+    out = await raceFirstNonEmpty(movieSources, 'movie');
+  }
+
+  // dedupe
+  var seen = {}, deduped = [];
+  out.forEach(function (s) {
+    if (s && s.url && !seen[s.url]) { seen[s.url] = 1; deduped.push(s); }
   });
+
   if (typeof opts.onSubtitle === 'function') {
     var ss = {};
     subs.forEach(function (s) { if (!ss[s.url]) { ss[s.url] = 1; opts.onSubtitle(s); } });
   }
-  if (!out.length) console.log('Mewstream: 0 streams | anime=' + isAnime + ' | ' + diag.join(' | '));
-  else console.log('Mewstream DONE: ' + out.length + ' streams | ' + (meta.title || '?') + ' | anime=' + isAnime);
-  return out;
+
+  if (!deduped.length) {
+    console.log('Mewstream: 0 streams | anime=' + isAnime + ' | ' + diag.join(' | '));
+  } else {
+    console.log('Mewstream DONE: ' + deduped.length + ' streams | ' +
+      (meta.title || '?') + ' | anime=' + isAnime);
+  }
+  return deduped;
 }
 function getStreams(id, opts) { return getVideoSources(id, opts); }
 function getLinks(id, opts) { return getVideoSources(id, opts); }
