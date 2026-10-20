@@ -94,6 +94,9 @@ global.fetch = async function (url, options) {
   calls.push({ url: url, options: options, usedKey: usedKey });
   const p = u.pathname;
   const id = u.searchParams.get('subjectId');
+  if (p === API_ROOT + '/tab-operating' && u.hostname === 'api.inmoviebox.com') {
+    return response(403, { code: 403, message: 'Service not available in current region' });
+  }
   if (p === API_ROOT + '/tab-operating') {
     assert.equal(u.searchParams.get('tabId'), '0', 'home request matches the reference provider');
     assert.equal(u.searchParams.has('host'), false, 'reference requests do not add a host query parameter');
@@ -259,6 +262,8 @@ async function main() {
     'reference requests do not depend on an x-user guest-token handshake');
   assert.ok(calls.every(call => !new URL(call.url).searchParams.has('host')),
     'requests must match the reference URL format without an injected host parameter');
+  assert.ok(calls.some(call => new URL(call.url).hostname === 'api6.aoneroom.com'),
+    'regional restriction on the primary API should use the documented fallback domain');
   const searchCall = calls.find(call => call.url.indexOf('/subject-api/search/v2') >= 0);
   assert.ok(searchCall, 'v2 search endpoint should be called');
   assert.equal(searchCall.options.headers['content-type'], 'application/json');

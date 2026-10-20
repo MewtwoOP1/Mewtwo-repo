@@ -13,7 +13,10 @@
 
 var SOURCE_ID = 'moviebox-in';
 var API_BASE = 'https://api.inmoviebox.com';
-var API_BASES = ['https://api.inmoviebox.com'];
+var API_BASES = [
+  'https://api.inmoviebox.com',
+  'https://api6.aoneroom.com'
+];
 var API_ROOT = API_BASE + '/wefeed-mobile-bff';
 var APP_VERSION = '3.0.03.0529.03';
 var APP_VERSION_CODE = 50020042;
@@ -458,6 +461,11 @@ function _request(path, options) {
     return _requestWithSigningFallback(url, method, body, options, true).then(function (result) {
       if (result.status === 404 && !withoutPrefix) {
         return requestAtBase(index, true);
+      }
+      var message = String(result.data && (result.data.message || result.data.msg || result.data.error) || '');
+      if (index + 1 < API_BASES.length &&
+          /service not available in current region/i.test(message)) {
+        return requestAtBase(index + 1, false);
       }
       if ((result.status === 404 || result.status >= 500 || result.status === 0) && index + 1 < API_BASES.length) {
         return requestAtBase(index + 1, false);
