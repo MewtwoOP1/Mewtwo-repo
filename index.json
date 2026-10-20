@@ -767,6 +767,23 @@
       "file": "providers/rareanimes.js",
       "logo": "https://www.google.com/s2/favicons?sz=256&domain=rareanimes.mov",
       "nsfw": false
+    },
+  {
+  "name": "Mewstream",
+  "version": "1.0.0",
+  "providers": [
+    {
+      "id": "mewstream",
+      "name": "Mewstream",
+      "file": "providers/mewstream.js",
+      "type": "movie",
+      "lang": "en",
+      "version": "1.0.0",
+      "baseUrl": "https://www.themoviedb.org",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=strem.io",
+      "sources": [
+        "AniKoto", "MegaPlay", "AnimeSalt", "RareAnimes",
+        "Showbox", "VaPlayer", "Vidrock", "Vidzee", "Vidfast", "Hexa"
+      ]
     }
-  ]
-}
+  
