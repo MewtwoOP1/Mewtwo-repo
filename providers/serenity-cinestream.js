@@ -274,7 +274,7 @@ function getSettings() {
     if (!s.description) s.description = s.label + '.';
     return s;
   });
-}}
+}
 
 function csSetting(key) {
   var saved = {};
