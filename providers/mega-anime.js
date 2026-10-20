@@ -587,7 +587,7 @@ function getVideoSources(episodeUrl, opts) {
   }).catch(function (e) {
     console.error('[mega-anime] sources failed: ' + e.message);
     return [];
-  });
+  }); });
 }
 function __resetForTests() { MEDIA_CACHE = {}; }
 var getStreams = getVideoSources;
