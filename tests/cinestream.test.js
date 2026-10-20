@@ -54,6 +54,7 @@ global.fetch = async (url, options = {}) => {
     body = { meta: {
       id: "tt1111111", type: "movie", name: "Cine Mock",
       description: "Fictional test movie", year: "2024", poster: "https://img.example/cine.jpg",
+      genres: ["Drama"], cast: [{ name: "Mock Cine Actor" }], status: "Released",
       videos: [],
     } };
   } else if (requestUrl.includes("api.themoviedb.org")) {
@@ -150,10 +151,32 @@ async function main() {
   assert.equal(detail.tmdbId, 22);
   assert.equal(detail.tmdbIsTv, true);
   assert.equal(detail.imdbId, "tt2222222");
+  assert.equal(detail.year, "2022", "MediaDetail.year must be serialized as a string");
+  assert.equal(detail.status, "ongoing", "TMDB status must map to Zangetsu MediaStatus");
   assert.equal(detail.episodes.length, 1);
   assert.equal(detail.episodes[0].title, "S1E1 · Pilot");
-  assert.equal(detail.cast[0].name, "Mock Actor");
+  assert.equal(detail.episodes[0].url.startsWith("cinestream://episode?data="), true);
+  assert.deepEqual(detail.cast, ["Mock Actor"], "MediaDetail.cast is a string array, not TMDB cast objects");
+  assert.ok(Array.isArray(detail.tags) && detail.tags.every((tag) => tag && typeof tag === "object" && typeof tag.name === "string"),
+    "MediaDetail.tags must contain MediaTag objects, never plain genre strings");
   assert.equal(detail.trailer, "https://www.youtube.com/watch?v=abc123");
+  const freshEpisodes = await provider.getEpisodes(tmdbItem.url);
+  assert.equal(freshEpisodes.length, 1, "getEpisodes must return episodes independently of getDetail");
+  assert.equal(freshEpisodes[0].title, "S1E1 · Pilot");
+  assert.equal(freshEpisodes.every((ep) => typeof ep.id === "string" && typeof ep.title === "string" && typeof ep.url === "string"),
+    true, "Episode payload must match the Zangetsu Episode wire contract");
+
+  // Exercise the other metadata lane too: previously it also copied genres
+  // into tags and could throw during Zangetsu MediaDetail.fromJson parsing.
+  const cineItem = results.find((item) => item.title === "Cine Mock");
+  assert.ok(cineItem, "Cinemeta search result missing");
+  const cineDetail = await provider.getDetail(cineItem.url);
+  assert.equal(cineDetail.title, "Cine Mock");
+  assert.equal(cineDetail.year, "2024");
+  assert.equal(cineDetail.status, "completed");
+  assert.deepEqual(cineDetail.genres, ["Drama"]);
+  assert.deepEqual(cineDetail.cast, ["Mock Cine Actor"]);
+  assert.ok(cineDetail.tags.every((tag) => tag && typeof tag === "object" && typeof tag.name === "string"));
 
   const streams = await provider.getVideoSources(detail.episodes[0].url);
   assert.ok(streams.some((s) => s.url === "https://cdn.example/vaplayer.mp4"), "VaPlayer stream missing");
