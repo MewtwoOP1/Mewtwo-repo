@@ -107,8 +107,8 @@ function _abs(base, u) {
 function _domainBase(value, fallback) {
   var s = String(value || '').trim();
   if (!s) return fallback;
-  if (!/^https?:\\/\\//i.test(s)) s = 'https://' + s;
-  return s.replace(/\\/+$/, '');
+  if (!/^https?:\/\//i.test(s)) s = 'https://' + s;
+  return s.replace(/\/+$/, '');
 }
 function _refreshDomains() {
   if (DOMAIN_CACHE && Date.now() - DOMAIN_CACHE_AT < DOMAIN_CACHE_TTL_MS) return Promise.resolve(DOMAIN_CACHE);
@@ -140,7 +140,7 @@ function _refreshDomains() {
 function _requestText(url, referer, ajax) {
   var headers = { 'User-Agent': UA, 'Accept': '*/*', 'Referer': referer || url };
   if (ajax) headers['X-Requested-With'] = 'XMLHttpRequest';
-  var origin = ((headers.Referer || '').match(/^(https?:\\/\\/[^/]+)/i) || [])[1];
+  var origin = ((headers.Referer || '').match(/^(https?:\/\/[^/]+)/i) || [])[1];
   if (ajax && origin) headers.Origin = origin;
   return fetch(url, { headers: headers, timeoutMs: 15000 }).then(function (r) {
     if (r.status < 200 || r.status >= 300) throw new Error('HTTP ' + r.status + ' for ' + url);
@@ -343,19 +343,19 @@ function _aesCbcDecrypt(ct,key,iv){
 }
 function _bytesToStr(b){var s='',i=0;while(i<b.length){var c=b[i++];if(c<0x80)s+=String.fromCharCode(c);else if(c<0xE0)s+=String.fromCharCode(((c&0x1f)<<6)|(b[i++]&0x3f));else if(c<0xF0)s+=String.fromCharCode(((c&0x0f)<<12)|((b[i++]&0x3f)<<6)|(b[i++]&0x3f));else{var cp=((c&0x07)<<18)|((b[i++]&0x3f)<<12)|((b[i++]&0x3f)<<6)|(b[i++]&0x3f);cp-=0x10000;s+=String.fromCharCode(0xD800+(cp>>10),0xDC00+(cp&0x3FF));}}return s;}
 function _megaPlayHost(url) {
-  var host = (String(url || '').match(/^https?:\\/\\/([^/:?#]+)/i) || [])[1];
+  var host = (String(url || '').match(/^https?:\/\/([^/:?#]+)/i) || [])[1];
   if (!host) return false;
-  host = host.toLowerCase().replace(/^www\\./, '');
+  host = host.toLowerCase().replace(/^www\./, '');
   return /megaplay|megaplays|vidtube|vidstream/i.test(host);
 }
 function _resolveMegaPlay(embedUrl, referer, kind, serverName) {
-  var origin = (String(embedUrl || '').match(/^https?:\\/\\/[^/]+/i) || [])[0];
+  var origin = (String(embedUrl || '').match(/^https?:\/\/[^/]+/i) || [])[0];
   if (!origin) return Promise.resolve([]);
   return _requestText(embedUrl, referer || origin + '/', false).then(function (html) {
-    var dataId = (html.match(/data-id=[\\\"']([^\\\"']+)[\\\"']/i) || [])[1]
-      || (html.match(/data-realid=[\\\"']([^\\\"']+)[\\\"']/i) || [])[1];
+    var dataId = (html.match(/data-id=[\\"']([^\\"']+)[\\"']/i) || [])[1]
+      || (html.match(/data-realid=[\\"']([^\\"']+)[\\"']/i) || [])[1];
     if (!dataId) throw new Error('player page has no data-id');
-    var scriptUrls = [], re = /<script\\b[^>]+src=[\\\"']([^\\\"']+)[\\\"'][^>]*>/gi, m;
+    var scriptUrls = [], re = /<script\b[^>]+src=[\\"']([^\\"']+)[\\"'][^>]*>/gi, m;
     while ((m = re.exec(html)) !== null) {
       var u = _abs(embedUrl, m[1]);
       if (u && scriptUrls.indexOf(u) < 0) scriptUrls.push(u);
@@ -368,7 +368,7 @@ function _resolveMegaPlay(embedUrl, referer, kind, serverName) {
         for (var i = 0; i < scripts.length; i++) {
           if (/getSources/i.test(scripts[i]) && /AES[- ]?CBC/i.test(scripts[i])) { script = scripts[i]; break; }
         }
-        var routes = [], sr = /[\\\"'](stream\\/getSources[\\w/-]*)[\\\"']/gi, rm;
+        var routes = [], sr = /[\\"'](stream\/getSources[\w/-]*)[\\"']/gi, rm;
         while ((rm = sr.exec(script)) !== null) if (routes.indexOf(rm[1]) < 0) routes.push(rm[1]);
         if (!routes.length) routes = ['stream/getSourcesNew', 'stream/getSources'];
         routes.sort(function (a,b) { return a.length-b.length; });
@@ -380,7 +380,7 @@ function _resolveMegaPlay(embedUrl, referer, kind, serverName) {
             '&id=' + encodeURIComponent(dataId) + '&type=' + encodeURIComponent(kind === 'dub' ? 'dub' : 'sub');
           return _requestJson(endpoint, embedUrl, true).then(function (j) {
             var file = _fileFromSources(j);
-            if (!file || !/^https?:\\/\\//i.test(file)) return null;
+            if (!file || !/^https?:\/\//i.test(file)) return null;
             file = String(file).replace('https://cdn.imgnex.top/anime', 'https://megap.norami.top');
             return { file: file, data: j };
           }).catch(function () { return null; });
@@ -389,7 +389,7 @@ function _resolveMegaPlay(embedUrl, referer, kind, serverName) {
           var found = results[0] || results[1];
           if (!found) throw new Error('source API returned no direct media URL');
           var stream = _video(found.file, 'auto', embedUrl, kind, serverName || 'MegaPlay',
-            /\\.m3u8(?:[?#]|$)/i.test(found.file) ? 'hls' : (/\\.mp4(?:[?#]|$)/i.test(found.file) ? 'mp4' : 'hls'));
+            /\.m3u8(?:[?#]|$)/i.test(found.file) ? 'hls' : (/\.mp4(?:[?#]|$)/i.test(found.file) ? 'mp4' : 'hls'));
           stream.provider = 'MegaPlay';
           stream.embed = false;
           stream.downloadable = false;
@@ -398,7 +398,7 @@ function _resolveMegaPlay(embedUrl, referer, kind, serverName) {
             .map(function (t) {
               return { url: String(t.file).replace('https://cdn.imgnex.top/anime', 'https://megap.norami.top'),
                 lang: t.label || 'Subtitle', label: t.label || 'Subtitle',
-                format: /\\.srt(?:[?#]|$)/i.test(t.file) ? 'srt' : 'vtt', default: !!t.default };
+                format: /\.srt(?:[?#]|$)/i.test(t.file) ? 'srt' : 'vtt', default: !!t.default };
             });
           return [stream];
         });
