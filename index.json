@@ -402,7 +402,7 @@
     {
       "id": "serenity-cinestream",
       "name": "CineStream",
-      "version": "0.2.9",
+      "version": "0.3.0",
       "type": "movie",
       "lang": "en",
       "file": "providers/serenity-cinestream.js",
@@ -411,8 +411,8 @@
       "settings": [
         {
           "key": "audioLanguage",
-          "label": "Audio language override",
-          "description": "Audio language override.",
+          "label": "Audio language (when source does not report it)",
+          "description": "Override or infer audio language for returned streams.",
           "type": "enum",
           "default": "auto",
           "options": [
@@ -463,13 +463,25 @@
             {
               "value": "ar",
               "label": "Arabic"
+            },
+            {
+              "value": "it",
+              "label": "Italian"
+            },
+            {
+              "value": "ta",
+              "label": "Tamil"
+            },
+            {
+              "value": "te",
+              "label": "Telugu"
             }
           ]
         },
         {
           "key": "timeout",
           "label": "Request timeout",
-          "description": "Request timeout.",
+          "description": "Timeout for catalogue and source requests.",
           "type": "enum",
           "default": "12000",
           "options": [
@@ -480,13 +492,219 @@
             {
               "value": "12000",
               "label": "12 seconds"
+            },
+            {
+              "value": "20000",
+              "label": "20 seconds"
             }
           ]
         },
         {
+          "key": "catalog",
+          "label": "Movie and series listings",
+          "description": "Filter movie/series catalogues while retaining anime listings when Both is selected.",
+          "type": "enum",
+          "default": "both",
+          "options": [
+            {
+              "value": "both",
+              "label": "Movies and series"
+            },
+            {
+              "value": "movie",
+              "label": "Movies only"
+            },
+            {
+              "value": "series",
+              "label": "Series only"
+            }
+          ]
+        },
+        {
+          "key": "sameTitle",
+          "label": "When a movie and series share a title",
+          "description": "Preferred type when equally matched results share the same title.",
+          "type": "enum",
+          "default": "series",
+          "options": [
+            {
+              "value": "series",
+              "label": "Prefer series"
+            },
+            {
+              "value": "movie",
+              "label": "Prefer movie"
+            }
+          ]
+        },
+        {
+          "key": "metadataCatalogs",
+          "label": "Metadata and catalogue providers",
+          "description": "Select which CineStream, TMDB and Simkl catalogue families appear on the home screen.",
+          "type": "multiEnum",
+          "default": [
+            "cinemeta",
+            "tmdb",
+            "simkl"
+          ],
+          "options": [
+            {
+              "value": "cinemeta",
+              "label": "CineStream / Cinemeta + Kitsu"
+            },
+            {
+              "value": "tmdb",
+              "label": "CineTmdb / TMDB"
+            },
+            {
+              "value": "simkl",
+              "label": "CineSimkl / Simkl"
+            }
+          ]
+        },
+        {
+          "key": "tmdbApiKey",
+          "label": "TMDB API key (optional)",
+          "description": "Optional personal TMDB v3 key. Blank uses the host application key if available. Sent only to TMDB.",
+          "type": "text",
+          "default": ""
+        },
+        {
+          "key": "simklClientId",
+          "label": "Simkl client ID",
+          "description": "Required for Simkl API-powered catalogues and search. The upstream Cloudstream BuildConfig value is not available to Zangetsu automatically.",
+          "type": "text",
+          "default": ""
+        },
+        {
+          "key": "simklAccessToken",
+          "label": "Simkl access token (optional)",
+          "description": "Optional Simkl OAuth access token for personal-list access where supported. Never share this token.",
+          "type": "text",
+          "default": ""
+        },
+        {
+          "key": "streamSources",
+          "label": "Stream sources",
+          "description": "Choose which stream adapters CineStream queries. Torrent catalogues are optional and may return magnets rather than directly playable media.",
+          "type": "multiEnum",
+          "default": [
+            "vaplayer",
+            "stremio"
+          ],
+          "options": [
+            {
+              "value": "vaplayer",
+              "label": "VaPlayer"
+            },
+            {
+              "value": "stremio",
+              "label": "Configured Stremio add-ons"
+            },
+            {
+              "value": "torrentio",
+              "label": "Torrentio (torrent results)"
+            },
+            {
+              "value": "torrentsdb",
+              "label": "TorrentsDB (torrent results)"
+            }
+          ]
+        },
+        {
+          "key": "addonUrls",
+          "label": "Stremio add-on URLs",
+          "description": "Manifest URLs separated by comma or newline. Query tokens are retained and sent only to the corresponding add-on.",
+          "type": "text",
+          "default": ""
+        },
+        {
+          "key": "maxStreamsPerAddon",
+          "label": "Maximum streams per add-on",
+          "description": "Maximum stream results considered from each configured Stremio add-on.",
+          "type": "enum",
+          "default": "25",
+          "options": [
+            {
+              "value": "5",
+              "label": "5 streams"
+            },
+            {
+              "value": "10",
+              "label": "10 streams"
+            },
+            {
+              "value": "25",
+              "label": "25 streams"
+            },
+            {
+              "value": "50",
+              "label": "50 streams"
+            },
+            {
+              "value": "100",
+              "label": "100 streams"
+            }
+          ]
+        },
+        {
+          "key": "concurrency",
+          "label": "Maximum concurrent source requests",
+          "description": "Limit parallel catalogue and provider requests.",
+          "type": "enum",
+          "default": "10",
+          "options": [
+            {
+              "value": "2",
+              "label": "2 requests"
+            },
+            {
+              "value": "4",
+              "label": "4 requests"
+            },
+            {
+              "value": "6",
+              "label": "6 requests"
+            },
+            {
+              "value": "8",
+              "label": "8 requests"
+            },
+            {
+              "value": "10",
+              "label": "10 requests"
+            },
+            {
+              "value": "12",
+              "label": "12 requests"
+            }
+          ]
+        },
+        {
+          "key": "providerOrder",
+          "label": "Source order",
+          "description": "Optional comma-separated order: vaplayer, stremio, torrentio, torrentsdb. Unlisted enabled sources run afterward.",
+          "type": "text",
+          "default": "vaplayer,stremio,torrentio,torrentsdb"
+        },
+        {
+          "key": "wyzieSubsKey",
+          "label": "Wyzie subtitles API key (optional)",
+          "description": "Optional Wyzie Subs API key. Sent only to sub.wyzie.io.",
+          "type": "text",
+          "default": ""
+        },
+        {
+          "key": "subtitles",
+          "label": "Include subtitle tracks",
+          "description": "Attach available subtitle tracks to returned streams.",
+          "type": "bool",
+          "default": true
+        },
+        {
           "key": "streamServer",
-          "label": "Stream servers",
-          "description": "Stream servers.",
+          "label": "VaPlayer streams",
+          "description": "Limit VaPlayer results to a specific server or include all.",
           "type": "enum",
           "default": "all",
           "options": [
@@ -507,51 +725,6 @@
               "label": "Server 3"
             }
           ]
-        },
-        {
-          "key": "sameTitle",
-          "label": "Same-title preference",
-          "description": "Same-title preference.",
-          "type": "enum",
-          "default": "series",
-          "options": [
-            {
-              "value": "series",
-              "label": "Prefer series"
-            },
-            {
-              "value": "movie",
-              "label": "Prefer movie"
-            }
-          ]
-        },
-        {
-          "key": "catalog",
-          "label": "Browse and search",
-          "description": "Browse and search.",
-          "type": "enum",
-          "default": "both",
-          "options": [
-            {
-              "value": "both",
-              "label": "Movies and series"
-            },
-            {
-              "value": "movie",
-              "label": "Movies"
-            },
-            {
-              "value": "series",
-              "label": "Series"
-            }
-          ]
-        },
-        {
-          "key": "subtitles",
-          "label": "Include subtitle tracks",
-          "description": "Whether to return subtitle tracks when available.",
-          "type": "bool",
-          "default": true
         }
       ]
     },
