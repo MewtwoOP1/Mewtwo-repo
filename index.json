@@ -768,5 +768,15 @@
       "logo": "https://www.google.com/s2/favicons?sz=256&domain=rareanimes.mov",
       "nsfw": false
     }
+    {
+  "id": "mega-anime",
+  "name": "Mega-Anime",
+  "version": "1.0.0",
+  "type": "anime",
+  "lang": "en",
+  "file": "providers/mega-anime.js",
+  "logo": "https://anilist.co/favicon.ico",
+  "nsfw": false
+}
   ]
 }
