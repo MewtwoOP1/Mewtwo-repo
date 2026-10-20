@@ -79,20 +79,22 @@ function _fixUrl(u, base) {
 function _slug(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, ''); }
 function _year(r) { return String(r.release_date || r.first_air_date || r.releaseInfo || r.year || '').slice(0, 4) || null; }
 
+// Normalize Zangetsu's string-body response and the standard Fetch API response.
+async function _responseText(r) {
+  if (!r) return '';
+  if (typeof r.body === 'string') return r.body;
+  if (typeof r.text === 'function') {
+    var t = await r.text();
+    return typeof t === 'string' ? t : '';
+  }
+  return '';
+}
 async function _fetchText(url, opts) {
   opts = opts || {};
   var h = Object.assign({ 'User-Agent': UA }, opts.headers || {});
   try {
     var r = await fetch(url, { method: opts.method || 'GET', headers: h, body: opts.body, timeoutMs: opts.timeoutMs || 15000 });
-    if (!r) return '';
-    // Zangetsu hosts may expose the response body as a string; standard Fetch
-    // implementations expose a ReadableStream and provide response.text().
-    if (typeof r.body === 'string') return r.body;
-    if (typeof r.text === 'function') {
-      var t = await r.text();
-      return typeof t === 'string' ? t : '';
-    }
-    return '';
+    return await _responseText(r);
   } catch (e) { return ''; }
 }
 async function _fetchJson(url, opts) {
@@ -183,7 +185,7 @@ async function _resolveMeta(p){var m={title:p.title||null,year:p.year||null,imdb
 function _parseStreamId(raw){var o=raw&&typeof raw==='object'?raw:null;if(!o){try{o=JSON.parse(String(raw||'{}'));}catch(e){o={};}}var season=parseInt(o.season,10);if(isNaN(season)||season<=0)season=null;return{season:season,episode:parseInt(o.episode,10)||0,imdbId:o.imdbId||null,tmdbId:o.tmdbId||null,kitsuId:o.kitsuId||null,anilistId:o.anilistId||null,malId:o.malId||null,title:o.title||null,year:o.year||null};}
 
 // ── AniKoto ─────────────────────────────────────────────────────────────
-function _anGet(url,ref,xhr){var h={'User-Agent':UA,'Referer':ref||ANIKOTO_SITE+'/'};if(xhr)h['X-Requested-With']='XMLHttpRequest';return fetch(url,{headers:h}).then(function(r){return r&&r.body||'';}).catch(function(){return'';});}
+function _anGet(url,ref,xhr){var h={'User-Agent':UA,'Referer':ref||ANIKOTO_SITE+'/'};if(xhr)h['X-Requested-With']='XMLHttpRequest';return fetch(url,{headers:h}).then(_responseText).catch(function(){return'';});}
 function _anJson(url,ref){return _anGet(url,ref).then(function(b){try{return JSON.parse(b||'null');}catch(e){return null;}});}
 function _anAjax(path){return _anGet(ANIKOTO_SITE+path,ANIKOTO_SITE+'/',true).then(function(b){try{return JSON.parse(b||'null');}catch(e){return null;}}).catch(function(){return null;});}
 function _anParseServers(html){
@@ -216,8 +218,9 @@ function _anExtractPlayer(embed,cat,name){
   var type=(embed.match(/\/(sub|hsub|dub)\/?(?:[?#]|$)/i)||[])[1]||cat;
   return _anGet(embed,ANIKOTO_SITE+'/').then(function(h){
     var id=(h.match(/data-id="(\d+)"/)||[])[1];if(!id)throw new Error('no embed id');
-    return fetch(_anSourcesUrl(base,id,type),{headers:{'User-Agent':UA,'Referer':embed,'X-Requested-With':'XMLHttpRequest'}}).then(function(r){
-      var j;try{j=JSON.parse(r.body||'null');}catch(e){throw new Error('bad getSources');}
+    return fetch(_anSourcesUrl(base,id,type),{headers:{'User-Agent':UA,'Referer':embed,'X-Requested-With':'XMLHttpRequest'}}).then(async function(r){
+      var body=await _responseText(r);
+      var j;try{j=JSON.parse(body||'null');}catch(e){throw new Error('bad getSources');}
       var file=_fileFromSources(j);if(!file)throw new Error('no stream file');
       var subs=[];((j&&j.tracks)||[]).forEach(function(t){if(t&&t.file&&(!t.kind||t.kind==='captions'||t.kind==='subtitles'))subs.push({url:t.file,lang:t.label||'Sub',format:/\.srt(\?|$)/i.test(t.file)?'srt':'vtt'});});
       var hdrs={'User-Agent':UA,'Referer':base+'/','Origin':base};
@@ -288,7 +291,7 @@ async function getAnikoto(title,season,episode,subCb){
 }
 
 // ── MegaPlay (megaplays.se) ─────────────────────────────────────────────
-function _mpGet(url,ref,xhr){var h={'User-Agent':UA,'Referer':ref||ANIKOTO_SITE+'/'};if(xhr)h['X-Requested-With']='XMLHttpRequest';return fetch(url,{headers:h,timeoutMs:20000}).then(function(r){return r&&r.body||'';}).catch(function(){return'';});}
+function _mpGet(url,ref,xhr){var h={'User-Agent':UA,'Referer':ref||ANIKOTO_SITE+'/'};if(xhr)h['X-Requested-With']='XMLHttpRequest';return fetch(url,{headers:h,timeoutMs:20000}).then(_responseText).catch(function(){return'';});}
 function _mpJson(url,ref){return _mpGet(url,ref).then(function(b){try{return JSON.parse(b||'null');}catch(e){return null;}});}
 async function _mpSearchSlug(title){var q=_trim(title);if(!q)return null;var h=await _mpGet(ANIKOTO_SITE+'/filter?keyword='+encodeURIComponent(q),ANIKOTO_SITE+'/');var m=h.match(/href="([^"]*\/watch\/[^"]+)"/);if(!m)return null;var s=m[1].match(/\/watch\/([^/"?#]+)/);return s?s[1]:null;}
 async function _mpEpisodes(slug){
@@ -359,7 +362,7 @@ var _VRF_KEY='ysJhV6U27FVIjjuk',_VRF_SHIFTS=[-3,3,-4,2,-2,5,4,5];
 function _rc4(key,data){var n=[],r=0,u,i,t;for(i=0;i<256;i++)n[i]=i;for(u=0;u<256;u++){r=(r+n[u]+key.charCodeAt(u%key.length))%256;t=n[u];n[u]=n[r];n[r]=t;}u=0;r=0;var o=[];for(i=0;i<data.length;i++){u=(u+1)%256;r=(r+n[u])%256;t=n[u];n[u]=n[r];n[r]=t;o.push(String.fromCharCode((data.charCodeAt(i)&0xff)^n[(n[u]+n[r])%256]));}return o.join('');}
 function _rot13(s){return String(s).replace(/[A-Za-z]/g,function(c){var o=c.charCodeAt(0);if(o>=65&&o<=90)return String.fromCharCode(((o-65+13)%26)+65);return String.fromCharCode(((o-97+13)%26)+97);});}
 function _vrf(id){var b1=_b64Encode(_rc4(_VRF_KEY,String(id))),sh='',i;for(i=0;i<b1.length;i++)sh+=String.fromCharCode(b1.charCodeAt(i)+_VRF_SHIFTS[i%8]);return _rot13(_b64Encode(sh));}
-function _asGet(url,ref,xhr){var h={'User-Agent':UA,'Referer':ref||ANIMESALT_SITE+'/'};if(xhr)h['X-Requested-With']='XMLHttpRequest';return fetch(url,{headers:h}).then(function(r){return r&&r.body||'';}).catch(function(){return'';});}
+function _asGet(url,ref,xhr){var h={'User-Agent':UA,'Referer':ref||ANIMESALT_SITE+'/'};if(xhr)h['X-Requested-With']='XMLHttpRequest';return fetch(url,{headers:h}).then(_responseText).catch(function(){return'';});}
 function _asJson(url,ref){return _asGet(url,ref).then(function(b){try{return JSON.parse(b||'null');}catch(e){return null;}});}
 async function _asSearchSlug(title){var q=_trim(title);if(!q)return null;var h=await _asGet(ANIMESALT_SITE+'/filter?keyword='+encodeURIComponent(q),ANIMESALT_SITE+'/');var m=h.match(/href="([^"]*\/(?:anime|watch)\/[^"]+)"/);if(!m)return null;var s=m[1].match(/\/(?:anime|watch)\/([^/"?#]+)/);return s?s[1]:null;}
 async function _asEpisodes(slug){
