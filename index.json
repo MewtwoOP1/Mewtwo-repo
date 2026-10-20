@@ -771,7 +771,7 @@
     {
       "id": "mega-anime",
       "name": "Mega-Anime",
-      "version": "1.0.4",
+      "version": "1.0.5",
       "type": "anime",
       "lang": "en",
       "file": "providers/mega-anime.js",
