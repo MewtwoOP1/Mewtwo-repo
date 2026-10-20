@@ -622,7 +622,7 @@ function csYearString(value) {
   if (value == null || value === '') return null;
   var s = String(value).trim();
   var match = s.match(/[0-9]{4}/);
-  return match ? match[1] : s;
+  return match ? match[0] : s;
 }
 function csCastNames(value) {
   return csAsArray(value).map(function(person) {
