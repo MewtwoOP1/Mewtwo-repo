@@ -470,16 +470,28 @@ function _resolveAniWaves(media, epNumber, kind) {
             return _ajax(ANI_WAVES, '/ajax/server/list?servers=' + episodeInfo.ids, match.url)
               .then(function (srvData) {
                 var markup = srvData && typeof srvData.result === 'string' ? srvData.result : '';
-                var sections = [], typeRe = /<([a-z0-9]+)\b([^>]*class=["'][^"']*\btype\b[^"']*["'][^>]*)>([\s\S]*?)(?=<[a-z0-9]+\b[^>]*class=["'][^"']*\btype\b|$)/gi, tm;
+                var sections = [], typeRe = /data-type=["']([^"']+)["']([\\s\\S]*?)(?=data-type=["']|$)/gi, tm;
                 while ((tm = typeRe.exec(markup)) !== null) {
-                  var st = String((tm[2].match(/data-type=["']([^"']+)["']/i) || [])[1] || '').toLowerCase();
+                  var st = String(tm[1] || '').toLowerCase();
                   if (kind === 'dub' ? st !== 'dub' : (st !== 'sub' && st !== 'ssub')) continue;
-                  var inner = tm[3], liRe = /<li\b([^>]*)>([\s\S]*?)<\/li>/gi, lm;
+                  var inner = tm[2], liRe = /<li\\b([^>]*)>([\\s\\S]*?)<\\/li>/gi, lm;
                   while ((lm = liRe.exec(inner)) !== null) {
                     var attrs2 = lm[1] + ' ' + lm[2];
                     var linkId = (attrs2.match(/data-link-id=["']([^"']+)["']/i) || [])[1];
                     if (!linkId || sections.some(function (s) { return s.id === linkId; })) continue;
                     sections.push({ id: linkId, name: _text(lm[2]) || 'AniWaves' });
+                  }
+                }
+                // Some site revisions move server IDs outside the old .type wrapper.
+                // If category markup is missing entirely, try every listed server.
+                if (!sections.length && !/data-type=["'](?:sub|ssub|dub)["']/i.test(markup)) {
+                  var allLi = /<li\\b([^>]*)>([\\s\\S]*?)<\\/li>/gi, am;
+                  while ((am = allLi.exec(markup)) !== null) {
+                    var allAttrs = am[1] + ' ' + am[2];
+                    var allId = (allAttrs.match(/data-link-id=["']([^"']+)["']/i) || [])[1];
+                    if (allId && !sections.some(function (s) { return s.id === allId; })) {
+                      sections.push({ id: allId, name: _text(am[2]) || 'AniWaves' });
+                    }
                   }
                 }
                 return Promise.all(sections.map(function (srv) {
