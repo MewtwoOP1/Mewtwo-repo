@@ -122,7 +122,7 @@ async function main() {
   assert.deepEqual(await provider.getVideoSources("mega-anime:42:1:sub"), []);
 
   reset();
-  scenario.aninamiEpisodes = () => response(200, { results: { providers: { vidtube: { episodes: { dub: [{ id: "watch/vidtube/42/dub/solo-leveling-1", number: 1 }] } } } });
+  scenario.aninamiEpisodes = () => response(200, { results: { providers: { vidtube: { episodes: { dub: [{ id: "watch/vidtube/42/dub/solo-leveling-1", number: 1 }] } } } } });
   const dub = await provider.getVideoSources("mega-anime:42:1:dub");
   assert.ok(dub.length > 0);
   assert.ok(dub.every(s => s.kind === "dub"));
