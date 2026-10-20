@@ -409,8 +409,7 @@ function _resolveMegaPlay(embedUrl, referer, kind, serverName) {
   });
 }
 
-function _extractEmbed(url, referer, kind, serverName) {
-  if (_megaPlayHost(url)) return _resolveMegaPlay(url, referer, kind, serverName);
+function _genericExtractEmbed(url, referer, kind, serverName) {
   if (typeof extractVideo !== 'function') return Promise.resolve([]);
   var headers = { 'User-Agent': UA, 'Referer': referer || ANI_NAMI + '/' };
   try {
@@ -418,6 +417,14 @@ function _extractEmbed(url, referer, kind, serverName) {
       return _normalizeExtracted(arr, referer, kind, serverName);
     }).catch(function () { return []; });
   } catch (e) { return Promise.resolve([]); }
+}
+function _extractEmbed(url, referer, kind, serverName) {
+  if (_megaPlayHost(url)) {
+    return _resolveMegaPlay(url, referer, kind, serverName).then(function (arr) {
+      return arr && arr.length ? arr : _genericExtractEmbed(url, referer, kind, serverName);
+    });
+  }
+  return _genericExtractEmbed(url, referer, kind, serverName);
 }
 function _getAniWavesEmbed(url, watchUrl, kind, serverName) {
   return _requestJson(url, watchUrl, true).then(function (j) {
