@@ -30,8 +30,8 @@ function baseScenario() {
     waveEpisodes: () => response(200, { status: 200, result: '<li><a data-num="1" data-sub="1" data-dub="0" data-ids="srv%3A1&amp;x%3D2"></a></li>' }),
     waveServers: () => response(200, { status: 200, result: '<div class="type" data-type="sub"><ul><li data-link-id="link-11">VidPlay</li><li data-link-id="link-12">Mirror</li></ul></div>' }),
     waveSource: id => response(200, { status: 200, result: { url: id === "link-11" ? "https://vidtube.site/embed/abc" : "https://cdn.example/wave.m3u8" } }),
-    aninamiEpisodes: () => response(200, { success: true, results: { providers: {
-      vidtube: { episodes: { sub: [{ id: "watch/vidtube/42/sub/solo-leveling-1", number: 1, title: "Episode 1" }], dub: [{ id: "watch/vidtube/42/dub/solo-leveling-1", number: 1 }] } }
+    aninamiEpisodes: (id = 42) => response(200, { success: true, results: { providers: {
+      vidtube: { episodes: { sub: [{ id: "watch/vidtube/" + id + "/sub/solo-leveling-1", number: 1, title: "Episode 1" }], dub: [{ id: "watch/vidtube/" + id + "/dub/solo-leveling-1", number: 1 }] } }
     } } }),
     aninamiWatch: () => response(200, { success: true, results: { streams: [
       { url: "https://cdn.example/nami.m3u8", type: "hls", quality: "1080p", server: "VidTube", referer: "https://www.aninami.site/" },
@@ -40,7 +40,7 @@ function baseScenario() {
     extract: () => [{ url: "https://cdn.example/extracted.m3u8", container: "hls", kind: "video", quality: "auto" }]
   };
 }
-function reset() { calls.length = 0; scenario = baseScenario(); }
+function reset() { calls.length = 0; scenario = baseScenario(); if (provider.__resetForTests) provider.__resetForTests(); }
 
 global.fetch = async function (url, options) {
   const u = String(url); options = options || {}; calls.push({ url: u, options });
@@ -58,7 +58,7 @@ global.fetch = async function (url, options) {
     const id = new URL(u).searchParams.get("id");
     return scenario.waveSource(id);
   }
-  if (u === ANI_NAMI + "/api/episodes/42") return scenario.aninamiEpisodes();
+  if (u.startsWith(ANI_NAMI + "/api/episodes/")) return scenario.aninamiEpisodes(new URL(u).pathname.split("/").pop());
   if (u.startsWith(ANI_NAMI + "/api/watch/")) return scenario.aninamiWatch();
   return response(404, "not found");
 };
@@ -66,8 +66,8 @@ global.extractVideo = (url, opts) => scenario.extract(url, opts);
 
 async function main() {
   reset();
-  assert.equal(provider.version, "1.0.2");
-  assert.equal(provider.getInfo().version, "1.0.2");
+  assert.equal(provider.version, "1.0.3");
+  assert.equal(provider.getInfo().version, "1.0.3");
   assert.equal(provider.getInfo().name, "Mega-Anime");
   assert.deepEqual(provider.getSettings(), []);
   assert.equal(provider.getStreams, provider.getVideoSources);
@@ -88,6 +88,8 @@ async function main() {
   assert.equal(detail.episodes.length, 3);
   assert.equal(detail.malId, 123);
   assert.equal((await provider.getEpisodes("anilist:42")).length, 3);
+  const dubDetail = await provider.getDetail("anilist:42", { category: "dub" });
+  assert.ok(dubDetail.episodes.every(e => e.url.endsWith(":dub")), "dub category must produce dub episode IDs");
 
   // Never extract arbitrary digits or alter an AniList ID with +/- offsets.
   reset();
@@ -106,6 +108,7 @@ async function main() {
   assert.ok(calls.some(c => c.url === ANI_WAVES + "/filter?keyword=Solo%20Leveling"));
   assert.ok(calls.some(c => c.url === ANI_WAVES + "/ajax/episode/list/700"));
   assert.ok(calls.some(c => c.url.startsWith(ANI_WAVES + "/ajax/server/list?servers=")));
+  assert.ok(calls.some(c => c.url.includes("servers=srv%3A1&x=2")), "composite AniWaves data-ids must preserve raw query separators instead of encoding &");
   assert.ok(calls.some(c => c.url.startsWith(ANI_WAVES + "/ajax/sources?id=")));
   assert.ok(calls.some(c => c.url === ANI_NAMI + "/api/episodes/42"));
   assert.ok(calls.some(c => c.url === ANI_NAMI + "/api/watch/vidtube/42/sub/solo-leveling-1"));
@@ -121,6 +124,30 @@ async function main() {
   scenario.waveSearch = () => response(503, "unavailable");
   const namiOnly = await provider.getVideoSources("mega-anime:42:1:sub");
   assert.ok(namiOnly.some(s => s.url === "https://cdn.example/nami.m3u8"), "AniWaves failure must not suppress AniNami");
+
+  reset();
+  scenario.waveEpisodes = () => response(200, { status: 200, result: '<li><a data-num="1" data-sub="1" data-dub="0" data-ids=""></a></li>' });
+  const fallbackIds = await provider.getVideoSources("mega-anime:42:1:sub");
+  assert.ok(fallbackIds.some(s => s.url === "https://cdn.example/wave.m3u8"));
+  assert.ok(calls.some(c => c.url === ANI_WAVES + "/ajax/server/list?servers=700&eps=1"),
+    "blank data-ids must use upstream-compatible animeId&eps=episode fallback");
+
+  reset();
+  scenario.anilistDetail = () => response(503, "AniList temporarily unavailable");
+  const aniListDownStreams = await provider.getVideoSources("mega-anime:77:1:sub");
+  assert.ok(aniListDownStreams.some(s => s.url === "https://cdn.example/nami.m3u8"),
+    "AniNami playback must still resolve by AniList ID when AniList GraphQL is down");
+  assert.ok(calls.some(c => c.url === ANI_NAMI + "/api/episodes/77"),
+    "AniNami fallback must not require an AniList detail request to succeed");
+
+  reset();
+  scenario.aninamiWatch = () => response(200, { success: true, results: { streams: [
+    { url: "https://embed.example/watch", type: "embed", quality: "auto", server: "EmbedServer", referer: ANI_NAMI + "/" }
+  ] } });
+  scenario.extract = () => Promise.resolve([{ url: "https://cdn.example/nami-embedded.m3u8", container: "hls", quality: "1080p" }]);
+  const asyncEmbed = await provider.getVideoSources("mega-anime:42:1:sub");
+  assert.ok(asyncEmbed.some(s => s.url === "https://cdn.example/nami-embedded.m3u8"),
+    "async Zangetsu extractVideo results must be awaited for AniNami embeds");
 
   reset();
   for (const invalid of [
