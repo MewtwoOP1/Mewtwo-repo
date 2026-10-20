@@ -160,6 +160,11 @@ async function main() {
   assert.ok(Array.isArray(detail.tags) && detail.tags.every((tag) => tag && typeof tag === "object" && typeof tag.name === "string"),
     "MediaDetail.tags must contain MediaTag objects, never plain genre strings");
   assert.equal(detail.trailer, "https://www.youtube.com/watch?v=abc123");
+  const freshEpisodes = await provider.getEpisodes(tmdbItem.url);
+  assert.equal(freshEpisodes.length, 1, "getEpisodes must return episodes independently of getDetail");
+  assert.equal(freshEpisodes[0].title, "S1E1 · Pilot");
+  assert.equal(freshEpisodes.every((ep) => typeof ep.id === "string" && typeof ep.title === "string" && typeof ep.url === "string"),
+    true, "Episode payload must match the Zangetsu Episode wire contract");
 
   // Exercise the other metadata lane too: previously it also copied genres
   // into tags and could throw during Zangetsu MediaDetail.fromJson parsing.
