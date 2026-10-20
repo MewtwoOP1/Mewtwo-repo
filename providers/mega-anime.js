@@ -121,10 +121,12 @@ function _dedupe(list) {
     seen[k] = true; return true;
   });
 }
-function _video(url, quality, referer, kind, server) {
-  var hls = /\.m3u8(?:[?#]|$)/i.test(url);
+function _video(url, quality, referer, kind, server, typeHint) {
+  var hint = String(typeHint || '').toLowerCase();
+  var hls = hint === 'hls' || hint === 'm3u8' || /\.m3u8(?:[?#]|$)/i.test(url);
   var headers = { 'User-Agent': UA, 'Referer': referer || ANI_NAMI + '/' };
-  var origin = (url.match(/^(https?:\/\/[^/]+)/i) || [])[1];
+  // If Origin is needed, it should match the source page, not the media CDN.
+  var origin = ((headers.Referer || '').match(/^(https?:\/\/[^/]+)/i) || [])[1];
   if (origin) headers.Origin = origin;
   return { url: url, quality: quality || 'auto', label: (server || 'Mega-Anime') + ' · ' + (quality || 'auto'),
     container: hls ? 'hls' : 'mp4', hls: hls, kind: kind || 'sub',
@@ -206,26 +208,33 @@ function _pickAniWaves(html, titles) {
   }
   return list.length === 1 ? list[0] : null;
 }
+function _normalizeExtracted(arr, referer, kind, serverName) {
+  return Array.isArray(arr) ? arr.map(function (s) {
+    if (!s || typeof s.url !== 'string' || !/^https?:\/\//i.test(s.url)) return null;
+    var copy = Object.assign({}, s);
+    copy.label = copy.label || (serverName || 'Mega-Anime') + ' · ' + (copy.quality || 'auto');
+    copy.headers = Object.assign({ 'User-Agent': UA, 'Referer': referer || ANI_NAMI + '/' }, s.headers || {});
+    copy.kind = kind || 'sub';
+    copy.audioLang = kind === 'dub' ? 'en' : 'ja';
+    return copy;
+  }).filter(Boolean) : [];
+}
+function _extractEmbed(url, referer, kind, serverName) {
+  if (typeof extractVideo !== 'function') return Promise.resolve([]);
+  var headers = { 'User-Agent': UA, 'Referer': referer || ANI_NAMI + '/' };
+  try {
+    return Promise.resolve(extractVideo(url, { headers: headers })).then(function (arr) {
+      return _normalizeExtracted(arr, referer, kind, serverName);
+    }).catch(function () { return []; });
+  } catch (e) { return Promise.resolve([]); }
+}
 function _getAniWavesEmbed(url, watchUrl, kind, serverName) {
   return _requestJson(url, watchUrl, true).then(function (j) {
     var embed = j && j.result && j.result.url;
     if (!embed || !/^https?:\/\//i.test(embed)) return [];
-    if (/\.(?:m3u8|mp4)(?:[?#]|$)/i.test(embed)) return [_video(embed, 'auto', watchUrl, kind, serverName)];
-    if (typeof extractVideo === 'function') {
-      try {
-        return Promise.resolve(extractVideo(embed, { headers: { 'User-Agent': UA, 'Referer': watchUrl } }))
-          .then(function (arr) {
-            return Array.isArray(arr) ? arr.map(function (s) {
-              var copy = Object.assign({}, s);
-              copy.headers = Object.assign({ 'User-Agent': UA, 'Referer': embed }, s.headers || {});
-              copy.kind = copy.kind || kind;
-              copy.audioLang = copy.audioLang || (kind === 'dub' ? 'en' : 'ja');
-              return copy;
-            }) : [];
-          });
-      } catch (e) { return []; }
-    }
-    return [];
+    var typeHint = /\.m3u8(?:[?#]|$)/i.test(embed) ? 'hls' : (/\.mp4(?:[?#]|$)/i.test(embed) ? 'mp4' : '');
+    if (typeHint) return [_video(embed, 'auto', watchUrl, kind, serverName, typeHint)];
+    return _extractEmbed(embed, watchUrl, kind, serverName);
   }).catch(function () { return []; });
 }
 function _resolveAniWaves(media, epNumber, kind) {
