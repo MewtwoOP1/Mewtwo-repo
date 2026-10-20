@@ -108,7 +108,7 @@ async function main() {
   assert.ok(calls.some(c => c.url === ANI_WAVES + "/filter?keyword=Solo%20Leveling"));
   assert.ok(calls.some(c => c.url === ANI_WAVES + "/ajax/episode/list/700"));
   assert.ok(calls.some(c => c.url.startsWith(ANI_WAVES + "/ajax/server/list?servers=")));
-  assert.ok(calls.some(c => c.url.includes("servers=srv%3A1&x=2")), "composite AniWaves data-ids must preserve raw query separators instead of encoding &");
+  assert.ok(calls.some(c => c.url.includes("servers=srv%3A1&x%3D2")), "composite AniWaves data-ids must preserve raw query separators instead of encoding &");
   assert.ok(calls.some(c => c.url.startsWith(ANI_WAVES + "/ajax/sources?id=")));
   assert.ok(calls.some(c => c.url === ANI_NAMI + "/api/episodes/42"));
   assert.ok(calls.some(c => c.url === ANI_NAMI + "/api/watch/vidtube/42/sub/solo-leveling-1"));
