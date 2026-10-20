@@ -59,7 +59,7 @@ function getInfo() {
     baseUrl: API_BASE,
     logo: 'https://raw.githubusercontent.com/NivinCNC/CNCVerse-Cloud-Stream-Extension/06aa5b48d49e5ec40c26a689a526f9e2a79bab70/MovieBoxProviderIN/icon.png',
     type: 'movie',
-    version: '1.0.2'
+    version: '1.0.3'
   };
 }
 
@@ -528,7 +528,10 @@ function _item(subject) {
     title: title,
     cover: cover,
     url: 'moviebox-in://' + encodeURIComponent(id),
-    type: Number(rawType) === 2 ? 'tv' : 'movie',
+    // Zangetsu's ProviderType enum describes the source family, not whether
+    // an individual title is a movie or series. "tv" is not a valid enum and
+    // makes MediaItem.fromJson fail for the entire home/search response.
+    type: 'movie',
     sourceId: SOURCE_ID,
     movieBoxSubjectId: id,
     movieBoxSubjectType: Number(rawType) || 1
@@ -712,9 +715,11 @@ function getDetail(url, opts) {
     var subjectType = Number(data.subjectType) || 1;
     var cover = data.cover && data.cover.url ? data.cover.url : null;
     var releaseDate = String(data.releaseDate || '');
-    var year = parseInt(releaseDate.slice(0, 4), 10);
-    if (!isFinite(year)) year = Number(data.year) || null;
+    var yearNumber = parseInt(releaseDate.slice(0, 4), 10);
+    if (!isFinite(yearNumber)) yearNumber = parseInt(String(data.year || ''), 10);
+    var year = isFinite(yearNumber) && yearNumber > 1800 ? String(yearNumber) : null;
     var rating = parseFloat(data.imdbRatingValue);
+    var actors = _parseActors(data.staffList);
     var detail = {
       id: 'moviebox-in://' + encodeURIComponent(id),
       title: String(data.title),
@@ -725,12 +730,14 @@ function getDetail(url, opts) {
       status: 'unknown',
       genres: _genres(data.genre),
       studios: [],
-      actors: _parseActors(data.staffList),
-      type: subjectType === 2 ? 'tv' : 'movie',
+      cast: actors.map(function (actor) { return actor.name; }),
+      type: 'movie',
+      format: subjectType === 2 ? 'TV' : 'Movie',
+      tmdbIsTv: subjectType === 2,
       sourceId: SOURCE_ID,
       year: year,
       score: isFinite(rating) ? Math.round(rating * 10) : null,
-      duration: _durationMinutes(data.duration),
+      durationMins: _durationMinutes(data.duration),
       country: data.countryName || null,
       movieBoxSubjectId: id,
       movieBoxSubjectType: subjectType,
@@ -977,7 +984,7 @@ function getStreams(url, opts) {
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    version: '1.0.2',
+    version: '1.0.3',
     getInfo: getInfo,
     getSettings: getSettings,
     getHome: getHome,
