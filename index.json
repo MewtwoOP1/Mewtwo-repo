@@ -15,7 +15,7 @@
         {
           "key": "tmdbApiKey",
           "label": "TMDB API Key (optional; blank uses app default)",
-          "description": "Your personal TMDB v3 API key. Leave blank to use Zangetsu's built-in key. Sent only to TMDB.",
+          "description": "Your personal TMDB v3 API key. Leave blank to use Zangetsu’s built-in key. Sent only to TMDB.",
           "type": "text",
           "default": ""
         },
@@ -33,11 +33,26 @@
           "type": "enum",
           "default": "25",
           "options": [
-            { "value": "5", "label": "5 streams" },
-            { "value": "10", "label": "10 streams" },
-            { "value": "25", "label": "25 streams" },
-            { "value": "50", "label": "50 streams" },
-            { "value": "100", "label": "100 streams" }
+            {
+              "value": "5",
+              "label": "5 streams"
+            },
+            {
+              "value": "10",
+              "label": "10 streams"
+            },
+            {
+              "value": "25",
+              "label": "25 streams"
+            },
+            {
+              "value": "50",
+              "label": "50 streams"
+            },
+            {
+              "value": "100",
+              "label": "100 streams"
+            }
           ]
         }
       ]
@@ -139,18 +154,54 @@
           "type": "enum",
           "default": "auto",
           "options": [
-            { "value": "auto", "label": "Detect automatically" },
-            { "value": "en", "label": "English" },
-            { "value": "ja", "label": "Japanese" },
-            { "value": "zh", "label": "Chinese" },
-            { "value": "ko", "label": "Korean" },
-            { "value": "hi", "label": "Hindi" },
-            { "value": "es", "label": "Spanish" },
-            { "value": "fr", "label": "French" },
-            { "value": "de", "label": "German" },
-            { "value": "pt", "label": "Portuguese" },
-            { "value": "ru", "label": "Russian" },
-            { "value": "ar", "label": "Arabic" }
+            {
+              "value": "auto",
+              "label": "Detect automatically"
+            },
+            {
+              "value": "en",
+              "label": "English"
+            },
+            {
+              "value": "ja",
+              "label": "Japanese"
+            },
+            {
+              "value": "zh",
+              "label": "Chinese"
+            },
+            {
+              "value": "ko",
+              "label": "Korean"
+            },
+            {
+              "value": "hi",
+              "label": "Hindi"
+            },
+            {
+              "value": "es",
+              "label": "Spanish"
+            },
+            {
+              "value": "fr",
+              "label": "French"
+            },
+            {
+              "value": "de",
+              "label": "German"
+            },
+            {
+              "value": "pt",
+              "label": "Portuguese"
+            },
+            {
+              "value": "ru",
+              "label": "Russian"
+            },
+            {
+              "value": "ar",
+              "label": "Arabic"
+            }
           ]
         },
         {
@@ -160,8 +211,14 @@
           "type": "enum",
           "default": "12000",
           "options": [
-            { "value": "8000", "label": "8 seconds" },
-            { "value": "12000", "label": "12 seconds" }
+            {
+              "value": "8000",
+              "label": "8 seconds"
+            },
+            {
+              "value": "12000",
+              "label": "12 seconds"
+            }
           ]
         },
         {
@@ -171,9 +228,18 @@
           "type": "enum",
           "default": "both",
           "options": [
-            { "value": "both", "label": "Sub and dub" },
-            { "value": "sub", "label": "Sub only" },
-            { "value": "dub", "label": "Dub only" }
+            {
+              "value": "both",
+              "label": "Sub and dub"
+            },
+            {
+              "value": "sub",
+              "label": "Sub only"
+            },
+            {
+              "value": "dub",
+              "label": "Dub only"
+            }
           ]
         },
         {
@@ -190,8 +256,14 @@
           "type": "enum",
           "default": "popular",
           "options": [
-            { "value": "popular", "label": "Popular" },
-            { "value": "latest", "label": "Latest updates" }
+            {
+              "value": "popular",
+              "label": "Popular"
+            },
+            {
+              "value": "latest",
+              "label": "Latest updates"
+            }
           ]
         }
       ]
@@ -213,18 +285,54 @@
           "type": "enum",
           "default": "auto",
           "options": [
-            { "value": "auto", "label": "Detect automatically" },
-            { "value": "en", "label": "English" },
-            { "value": "ja", "label": "Japanese" },
-            { "value": "zh", "label": "Chinese" },
-            { "value": "ko", "label": "Korean" },
-            { "value": "hi", "label": "Hindi" },
-            { "value": "es", "label": "Spanish" },
-            { "value": "fr", "label": "French" },
-            { "value": "de", "label": "German" },
-            { "value": "pt", "label": "Portuguese" },
-            { "value": "ru", "label": "Russian" },
-            { "value": "ar", "label": "Arabic" }
+            {
+              "value": "auto",
+              "label": "Detect automatically"
+            },
+            {
+              "value": "en",
+              "label": "English"
+            },
+            {
+              "value": "ja",
+              "label": "Japanese"
+            },
+            {
+              "value": "zh",
+              "label": "Chinese"
+            },
+            {
+              "value": "ko",
+              "label": "Korean"
+            },
+            {
+              "value": "hi",
+              "label": "Hindi"
+            },
+            {
+              "value": "es",
+              "label": "Spanish"
+            },
+            {
+              "value": "fr",
+              "label": "French"
+            },
+            {
+              "value": "de",
+              "label": "German"
+            },
+            {
+              "value": "pt",
+              "label": "Portuguese"
+            },
+            {
+              "value": "ru",
+              "label": "Russian"
+            },
+            {
+              "value": "ar",
+              "label": "Arabic"
+            }
           ]
         },
         {
@@ -234,8 +342,14 @@
           "type": "enum",
           "default": "12000",
           "options": [
-            { "value": "8000", "label": "8 seconds" },
-            { "value": "12000", "label": "12 seconds" }
+            {
+              "value": "8000",
+              "label": "8 seconds"
+            },
+            {
+              "value": "12000",
+              "label": "12 seconds"
+            }
           ]
         },
         {
@@ -245,9 +359,18 @@
           "type": "enum",
           "default": "both",
           "options": [
-            { "value": "both", "label": "Sub and dub" },
-            { "value": "sub", "label": "Sub only" },
-            { "value": "dub", "label": "Dub only" }
+            {
+              "value": "both",
+              "label": "Sub and dub"
+            },
+            {
+              "value": "sub",
+              "label": "Sub only"
+            },
+            {
+              "value": "dub",
+              "label": "Dub only"
+            }
           ]
         },
         {
@@ -264,8 +387,14 @@
           "type": "enum",
           "default": "popular",
           "options": [
-            { "value": "popular", "label": "Popular" },
-            { "value": "latest", "label": "Latest updates" }
+            {
+              "value": "popular",
+              "label": "Popular"
+            },
+            {
+              "value": "latest",
+              "label": "Latest updates"
+            }
           ]
         }
       ]
@@ -287,21 +416,66 @@
           "type": "enum",
           "default": "auto",
           "options": [
-            { "value": "auto", "label": "Detect automatically" },
-            { "value": "en", "label": "English" },
-            { "value": "ja", "label": "Japanese" },
-            { "value": "zh", "label": "Chinese" },
-            { "value": "ko", "label": "Korean" },
-            { "value": "hi", "label": "Hindi" },
-            { "value": "es", "label": "Spanish" },
-            { "value": "fr", "label": "French" },
-            { "value": "de", "label": "German" },
-            { "value": "pt", "label": "Portuguese" },
-            { "value": "ru", "label": "Russian" },
-            { "value": "ar", "label": "Arabic" },
-            { "value": "it", "label": "Italian" },
-            { "value": "ta", "label": "Tamil" },
-            { "value": "te", "label": "Telugu" }
+            {
+              "value": "auto",
+              "label": "Detect automatically"
+            },
+            {
+              "value": "en",
+              "label": "English"
+            },
+            {
+              "value": "ja",
+              "label": "Japanese"
+            },
+            {
+              "value": "zh",
+              "label": "Chinese"
+            },
+            {
+              "value": "ko",
+              "label": "Korean"
+            },
+            {
+              "value": "hi",
+              "label": "Hindi"
+            },
+            {
+              "value": "es",
+              "label": "Spanish"
+            },
+            {
+              "value": "fr",
+              "label": "French"
+            },
+            {
+              "value": "de",
+              "label": "German"
+            },
+            {
+              "value": "pt",
+              "label": "Portuguese"
+            },
+            {
+              "value": "ru",
+              "label": "Russian"
+            },
+            {
+              "value": "ar",
+              "label": "Arabic"
+            },
+            {
+              "value": "it",
+              "label": "Italian"
+            },
+            {
+              "value": "ta",
+              "label": "Tamil"
+            },
+            {
+              "value": "te",
+              "label": "Telugu"
+            }
           ]
         },
         {
@@ -311,9 +485,18 @@
           "type": "enum",
           "default": "12000",
           "options": [
-            { "value": "8000", "label": "8 seconds" },
-            { "value": "12000", "label": "12 seconds" },
-            { "value": "20000", "label": "20 seconds" }
+            {
+              "value": "8000",
+              "label": "8 seconds"
+            },
+            {
+              "value": "12000",
+              "label": "12 seconds"
+            },
+            {
+              "value": "20000",
+              "label": "20 seconds"
+            }
           ]
         },
         {
@@ -323,9 +506,18 @@
           "type": "enum",
           "default": "both",
           "options": [
-            { "value": "both", "label": "Movies and series" },
-            { "value": "movie", "label": "Movies only" },
-            { "value": "series", "label": "Series only" }
+            {
+              "value": "both",
+              "label": "Movies and series"
+            },
+            {
+              "value": "movie",
+              "label": "Movies only"
+            },
+            {
+              "value": "series",
+              "label": "Series only"
+            }
           ]
         },
         {
@@ -335,8 +527,14 @@
           "type": "enum",
           "default": "series",
           "options": [
-            { "value": "series", "label": "Prefer series" },
-            { "value": "movie", "label": "Prefer movie" }
+            {
+              "value": "series",
+              "label": "Prefer series"
+            },
+            {
+              "value": "movie",
+              "label": "Prefer movie"
+            }
           ]
         },
         {
@@ -344,11 +542,24 @@
           "label": "Metadata and catalogue providers",
           "description": "Select which CineStream, TMDB and Simkl catalogue families appear on the home screen.",
           "type": "multiEnum",
-          "default": ["cinemeta", "tmdb", "simkl"],
+          "default": [
+            "cinemeta",
+            "tmdb",
+            "simkl"
+          ],
           "options": [
-            { "value": "cinemeta", "label": "CineStream / Cinemeta + Kitsu" },
-            { "value": "tmdb", "label": "CineTmdb / TMDB" },
-            { "value": "simkl", "label": "CineSimkl / Simkl" }
+            {
+              "value": "cinemeta",
+              "label": "CineStream / Cinemeta + Kitsu"
+            },
+            {
+              "value": "tmdb",
+              "label": "CineTmdb / TMDB"
+            },
+            {
+              "value": "simkl",
+              "label": "CineSimkl / Simkl"
+            }
           ]
         },
         {
@@ -377,12 +588,27 @@
           "label": "Stream sources",
           "description": "Choose which stream adapters CineStream queries. Torrent catalogues are optional and may return magnets rather than directly playable media.",
           "type": "multiEnum",
-          "default": ["vaplayer", "stremio"],
+          "default": [
+            "vaplayer",
+            "stremio"
+          ],
           "options": [
-            { "value": "vaplayer", "label": "VaPlayer" },
-            { "value": "stremio", "label": "Configured Stremio add-ons" },
-            { "value": "torrentio", "label": "Torrentio (torrent results)" },
-            { "value": "torrentsdb", "label": "TorrentsDB (torrent results)" }
+            {
+              "value": "vaplayer",
+              "label": "VaPlayer"
+            },
+            {
+              "value": "stremio",
+              "label": "Configured Stremio add-ons"
+            },
+            {
+              "value": "torrentio",
+              "label": "Torrentio (torrent results)"
+            },
+            {
+              "value": "torrentsdb",
+              "label": "TorrentsDB (torrent results)"
+            }
           ]
         },
         {
@@ -399,11 +625,26 @@
           "type": "enum",
           "default": "25",
           "options": [
-            { "value": "5", "label": "5 streams" },
-            { "value": "10", "label": "10 streams" },
-            { "value": "25", "label": "25 streams" },
-            { "value": "50", "label": "50 streams" },
-            { "value": "100", "label": "100 streams" }
+            {
+              "value": "5",
+              "label": "5 streams"
+            },
+            {
+              "value": "10",
+              "label": "10 streams"
+            },
+            {
+              "value": "25",
+              "label": "25 streams"
+            },
+            {
+              "value": "50",
+              "label": "50 streams"
+            },
+            {
+              "value": "100",
+              "label": "100 streams"
+            }
           ]
         },
         {
@@ -413,12 +654,30 @@
           "type": "enum",
           "default": "10",
           "options": [
-            { "value": "2", "label": "2 requests" },
-            { "value": "4", "label": "4 requests" },
-            { "value": "6", "label": "6 requests" },
-            { "value": "8", "label": "8 requests" },
-            { "value": "10", "label": "10 requests" },
-            { "value": "12", "label": "12 requests" }
+            {
+              "value": "2",
+              "label": "2 requests"
+            },
+            {
+              "value": "4",
+              "label": "4 requests"
+            },
+            {
+              "value": "6",
+              "label": "6 requests"
+            },
+            {
+              "value": "8",
+              "label": "8 requests"
+            },
+            {
+              "value": "10",
+              "label": "10 requests"
+            },
+            {
+              "value": "12",
+              "label": "12 requests"
+            }
           ]
         },
         {
@@ -449,10 +708,22 @@
           "type": "enum",
           "default": "all",
           "options": [
-            { "value": "all", "label": "All available" },
-            { "value": "1", "label": "Server 1" },
-            { "value": "2", "label": "Server 2" },
-            { "value": "3", "label": "Server 3" }
+            {
+              "value": "all",
+              "label": "All available"
+            },
+            {
+              "value": "1",
+              "label": "Server 1"
+            },
+            {
+              "value": "2",
+              "label": "Server 2"
+            },
+            {
+              "value": "3",
+              "label": "Server 3"
+            }
           ]
         }
       ]
@@ -468,100 +739,34 @@
       "nsfw": false
     },
     {
-      "id": "mewstream",
-      "name": "Mewstream",
-      "version": "1.0.0",
-      "type": "movie",
+      "id": "mmani",
+      "name": "MMani",
+      "version": "1.0.2",
+      "type": "anime",
       "lang": "en",
-      "file": "providers/mewstream.js",
-      "logo": "https://www.google.com/s2/favicons?sz=256&domain=strem.io",
-      "nsfw": false,
-      "settings": [
-        {
-          "key": "tmdbApiKey",
-          "label": "TMDB API key (optional)",
-          "description": "Optional personal TMDB v3 key. Blank uses Mewstream's built-in key. Sent only to TMDB.",
-          "type": "text",
-          "default": ""
-        },
-        {
-          "key": "showboxToken",
-          "label": "Showbox (Febbox) UI token",
-          "description": "Required for Showbox. Copy the 'ui' cookie value from febbox.com while logged in.",
-          "type": "text",
-          "default": ""
-        },
-        {
-          "key": "enableAnikoto",
-          "label": "AniKoto",
-          "description": "Enable AniKoto anime source.",
-          "type": "bool",
-          "default": true
-        },
-        {
-          "key": "enableMegaplay",
-          "label": "MegaPlay",
-          "description": "Enable MegaPlay anime source (megaplays.se).",
-          "type": "bool",
-          "default": true
-        },
-        {
-          "key": "enableAnimesalt",
-          "label": "AnimeSalt",
-          "description": "Enable AnimeSalt anime source (animesalt.to).",
-          "type": "bool",
-          "default": true
-        },
-        {
-          "key": "enableRareanimes",
-          "label": "RareAnimes",
-          "description": "Enable RareAnimes (Hindi/Tamil/Telugu dub catalog).",
-          "type": "bool",
-          "default": true
-        },
-        {
-          "key": "enableShowbox",
-          "label": "Showbox",
-          "description": "Enable Showbox. Requires the Showbox token above.",
-          "type": "bool",
-          "default": true
-        },
-        {
-          "key": "enableVaplayer",
-          "label": "VaPlayer",
-          "description": "Enable VaPlayer movie and TV source.",
-          "type": "bool",
-          "default": true
-        },
-        {
-          "key": "enableVidrock",
-          "label": "Vidrock",
-          "description": "Enable Vidrock movie and TV source.",
-          "type": "bool",
-          "default": true
-        },
-        {
-          "key": "enableVidzee",
-          "label": "Vidzee",
-          "description": "Enable Vidzee movie and TV source.",
-          "type": "bool",
-          "default": true
-        },
-        {
-          "key": "enableVidfast",
-          "label": "Vidfast",
-          "description": "Enable Vidfast movie and TV source.",
-          "type": "bool",
-          "default": true
-        },
-        {
-          "key": "enableHexa",
-          "label": "Hexa",
-          "description": "Enable Hexa movie and TV source.",
-          "type": "bool",
-          "default": true
-        }
-      ]
+      "file": "providers/mmani.js",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=mmani.com",
+      "nsfw": false
+    },
+    {
+      "id": "anizone",
+      "name": "AniZone",
+      "version": "1.0.3",
+      "type": "anime",
+      "lang": "en",
+      "file": "providers/anizone.js",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=anizone.to",
+      "nsfw": false
+    },
+    {
+      "id": "rareanimes-streambeta",
+      "name": "RareAnimes",
+      "version": "1.0.5",
+      "type": "anime",
+      "lang": "hi",
+      "file": "providers/rareanimes.js",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=rareanimes.mov",
+      "nsfw": false
     }
   ]
 }
