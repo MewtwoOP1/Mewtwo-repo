@@ -13,13 +13,10 @@
 
 var SOURCE_ID = 'moviebox-in';
 var API_BASE = 'https://api.inmoviebox.com';
-var API_BASES = [
-  'https://api.inmoviebox.com',
-  'https://apii.inmoviebox.com'
-];
+var API_BASES = ['https://api.inmoviebox.com'];
 var API_ROOT = API_BASE + '/wefeed-mobile-bff';
-var APP_VERSION = '3.0.16.0703.03';
-var APP_VERSION_CODE = 50020113;
+var APP_VERSION = '3.0.03.0529.03';
+var APP_VERSION_CODE = 50020042;
 var UA = 'com.community.mbox.in/' + APP_VERSION_CODE + ' (Linux; U; Android 16; en_IN; sdk_gphone64_x86_64; Build/BP22.250325.006; Cronet/133.0.6876.3)';
 var CLIENT_INFO = JSON.stringify({
   package_name: 'com.community.mbox.in',
@@ -30,12 +27,12 @@ var CLIENT_INFO = JSON.stringify({
   device_id: 'da2b99c821e6ea023e4be55b54d5f7d8',
   install_store: 'ps',
   gaid: 'd7578036d13336cc',
-  brand: 'Google',
+  brand: 'google',
   model: 'sdk_gphone64_x86_64',
   system_language: 'en',
   net: 'NETWORK_WIFI',
   region: 'IN',
-  timezone: 'Asia/Kolkata',
+  timezone: 'Asia/Calcutta',
   sp_code: ''
 });
 
@@ -59,7 +56,7 @@ function getInfo() {
     baseUrl: API_BASE,
     logo: 'https://raw.githubusercontent.com/NivinCNC/CNCVerse-Cloud-Stream-Extension/06aa5b48d49e5ec40c26a689a526f9e2a79bab70/MovieBoxProviderIN/icon.png',
     type: 'movie',
-    version: '1.0.1'
+    version: '1.0.2'
   };
 }
 
@@ -240,34 +237,23 @@ function _signedHeaders(url, method, body, secret, options) {
   options = options || {};
   var timestamp = String(Date.now());
   var accept = options.accept !== undefined ? String(options.accept) : 'application/json';
-  var contentType = options.contentType !== undefined
-    ? String(options.contentType)
-    : 'application/json;charset=UTF-8';
-  var canonical = _canonicalString(method, accept, contentType, url, body, timestamp);
+  var contentType = options.contentType !== undefined ? String(options.contentType) : 'application/json';
+  var signatureContentType = options.signatureContentType !== undefined
+    ? String(options.signatureContentType)
+    : contentType;
+  var canonical = _canonicalString(method, accept, signatureContentType, url, body, timestamp);
   var tokenHash = _hex(_md5Bytes(_utf8Bytes(timestamp.split('').reverse().join(''))));
-  var parsedUrl;
-  try { parsedUrl = new URL(url); } catch (e) { parsedUrl = null; }
   var headers = {
     'user-agent': UA,
     'accept': accept,
     'content-type': contentType,
+    'connection': 'keep-alive',
     'x-client-token': timestamp + ',' + tokenHash,
     'x-tr-signature': timestamp + '|2|' + _hmacMd5Base64(secret, canonical),
     'x-client-info': CLIENT_INFO,
-    'x-client-status': options.clientStatus != null
-      ? String(options.clientStatus)
-      : (_authToken && !options.anonymous ? '0' : '1'),
-    'x-sign-version': '2.0',
-    'x-timestamp': timestamp,
-    'region': 'IN',
-    'lang': 'en',
-    'os': 'android',
-    'connection': 'keep-alive',
-    'Referer': (parsedUrl ? parsedUrl.origin : API_BASE) + '/',
-    'Host': parsedUrl ? parsedUrl.host : new URL(API_BASE).host,
-    'x-play-mode': options.playMode === false ? '0' : '2'
+    'x-client-status': options.clientStatus != null ? String(options.clientStatus) : '0'
   };
-  if (_authToken && !options.anonymous) headers.Authorization = 'Bearer ' + _authToken;
+  if (options.playMode === true) headers['x-play-mode'] = '2';
   return headers;
 }
 
@@ -314,7 +300,7 @@ function _decodeResponse(response) {
   var status = Number(response.status);
   if (!isFinite(status) || status <= 0) status = response.ok === false ? 500 : 200;
   var headers = response.headers || {};
-  _captureAuthFromHeaders(headers);
+  // The reference provider does not consume an x-user guest-token handshake.
 
   function parseBody(raw) {
     var data = null;
@@ -376,23 +362,13 @@ function _apiUrl(base, path, withoutPrefix) {
   if (!route) route = '/';
   if (route.charAt(0) !== '/') route = '/' + route;
   var prefix = withoutPrefix ? '' : '/wefeed-mobile-bff';
-  var parsed = new URL(String(base).replace(/\/+$/, '') + prefix + route);
-  if (!parsed.searchParams.has('host')) parsed.searchParams.set('host', parsed.host);
-  return parsed.toString();
+  return String(base).replace(/\/+$/, '') + prefix + route;
 }
 
 function _requestWithSigningFallback(url, method, body, options, allowRefresh) {
   return _sendSigned(url, method, body, options, SECRET_KEY_DEFAULT).then(function (first) {
     if (!_isAuthFailure(first)) return first;
-    return _sendSigned(url, method, body, options, SECRET_KEY_ALT).then(function (second) {
-      if (!_isAuthFailure(second) || !allowRefresh || options.anonymous) return second;
-      _authToken = '';
-      _authUserId = '';
-      _sessionPromise = null;
-      return _ensureGuestToken(true).then(function () {
-        return _requestWithSigningFallback(url, method, body, options, false);
-      });
-    });
+    return _sendSigned(url, method, body, options, SECRET_KEY_ALT);
   });
 }
 
@@ -495,9 +471,7 @@ function _request(path, options) {
     });
   }
 
-  return _ensureGuestToken(false).then(function () {
-    return requestAtBase(0, false);
-  });
+  return requestAtBase(0, false);
 }
 
 function _apiPath(path, values) {
@@ -546,7 +520,7 @@ function _item(subject) {
     title: title,
     cover: cover,
     url: 'moviebox-in://' + encodeURIComponent(id),
-    type: 'movie',
+    type: Number(rawType) === 2 ? 'tv' : 'movie',
     sourceId: SOURCE_ID,
     movieBoxSubjectId: id,
     movieBoxSubjectType: Number(rawType) || 1
@@ -632,7 +606,8 @@ function search(query, page, opts) {
   var sourceBody = '{"page": ' + p + ', "perPage": 10, "keyword": ' + JSON.stringify(q) + '}';
   return _request('/subject-api/search/v2', {
     method: 'POST',
-    rawBody: sourceBody
+    rawBody: sourceBody,
+    signatureContentType: 'application/json; charset=utf-8'
   }).then(function (response) {
     var rows = _searchSubjects(response);
     if (rows.length) return rows;
@@ -743,7 +718,7 @@ function getDetail(url, opts) {
       genres: _genres(data.genre),
       studios: [],
       actors: _parseActors(data.staffList),
-      type: 'movie',
+      type: subjectType === 2 ? 'tv' : 'movie',
       sourceId: SOURCE_ID,
       year: year,
       score: isFinite(rating) ? Math.round(rating * 10) : null,
@@ -897,7 +872,7 @@ function _resolveStreamsForLanguage(subjectId, season, episode, language, isOrig
   var playPath = _apiPath('/subject-api/play-info', {
     subjectId: subjectId, se: season, ep: episode
   });
-  return _request(playPath, { playMode: true }).then(function (response) {
+  return _request(playPath, {}).then(function (response) {
     var data = response && response.data;
     if (data && data.data && typeof data.data === 'object') data = data.data;
     var streams = data && Array.isArray(data.streams) ? data.streams
@@ -994,7 +969,7 @@ function getStreams(url, opts) {
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    version: '1.0.1',
+    version: '1.0.2',
     getInfo: getInfo,
     getSettings: getSettings,
     getHome: getHome,

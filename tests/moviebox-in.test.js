@@ -41,7 +41,10 @@ function signedWith(url, options) {
   assert.equal(signatureParts.length, 3, 'signature should have timestamp|version|base64');
   assert.equal(signatureParts[0], timestamp, 'client token and signature timestamps must match');
   assert.equal(signatureParts[1], '2');
-  const base = canonical(url, options.method, headers.accept, headers['content-type'], options.body, timestamp);
+  const signedContentType = new URL(url).pathname.endsWith('/subject-api/search/v2')
+    ? 'application/json; charset=utf-8'
+    : headers['content-type'];
+  const base = canonical(url, options.method, headers.accept, signedContentType, options.body, timestamp);
   for (const secret of [DEFAULT_KEY, ALT_KEY]) {
     const expected = crypto.createHmac('md5', Buffer.from(secret, 'base64')).update(base, 'utf8').digest('base64');
     if (expected === signatureParts[2]) return secret;
@@ -91,19 +94,12 @@ global.fetch = async function (url, options) {
   calls.push({ url: url, options: options, usedKey: usedKey });
   const p = u.pathname;
   const id = u.searchParams.get('subjectId');
-  if (p === API_ROOT + '/tab-operating' && u.searchParams.get('tabId') === '1') {
-    assert.equal(u.searchParams.get('host'), 'api.inmoviebox.com', 'bootstrap includes the API host');
-    assert.equal(u.searchParams.get('pageSize'), '24');
-    assert.equal(headers['x-client-status'], '1', 'guest bootstrap must be anonymous');
-    assert.equal(headers.Authorization, undefined, 'bootstrap must not send a stale bearer token');
-    return response(200, { data: { items: [] } }, {
-      'x-user': JSON.stringify({ token: 'moviebox-test-guest-token', userId: 'test-user' })
-    });
-  }
   if (p === API_ROOT + '/tab-operating') {
+    assert.equal(u.searchParams.get('tabId'), '0', 'home request matches the reference provider');
+    assert.equal(u.searchParams.has('host'), false, 'reference requests do not add a host query parameter');
     assert.equal(headers['x-play-mode'], '2');
-    assert.equal(headers['x-client-status'], '0', 'normal calls use the captured guest token');
-    assert.equal(headers.Authorization, 'Bearer moviebox-test-guest-token');
+    assert.equal(headers['x-client-status'], '0', 'reference provider uses client status 0');
+    assert.equal(headers.Authorization, undefined);
     return response(200, { data: { items: [
       { title: 'banner', type: 'BANNER', banner: { banners: [{ subject: item(101, 'Top Movie') }] } },
       { title: 'Popular', type: 'SUBJECTS_MOVIE', subjects: [item(101, 'Top Movie'), item(201, 'Popular Series', 2)] },
@@ -118,7 +114,8 @@ global.fetch = async function (url, options) {
     assert.equal(payload.perPage, 10);
     assert.match(options.body, /\{"page": 2, "perPage": 10, "keyword": "Space & Time"\}/,
       'v2 request body whitespace must match the original signed Kotlin request');
-    assert.equal(headers.Authorization, 'Bearer moviebox-test-guest-token');
+    assert.equal(headers.Authorization, undefined);
+    assert.equal(headers['content-type'], 'application/json');
     assert.equal(headers['x-client-status'], '0');
     return response(200, { data: { results: [
       { subjects: [item(101, 'Test Movie'), item(201, 'Test Series', 2)] },
@@ -191,8 +188,8 @@ const provider = require('../providers/moviebox-in.js');
 
 async function main() {
   assert.equal(provider.getInfo().name, 'MovieBox IN');
-  assert.equal(provider.getInfo().version, '1.0.1');
-  assert.equal(provider.version, '1.0.1');
+  assert.equal(provider.getInfo().version, '1.0.2');
+  assert.equal(provider.version, '1.0.2');
   assert.equal(provider.getInfo().type, 'movie');
   assert.equal(provider.getInfo().lang, 'ta');
   assert.deepEqual(provider.getSettings(), []);
@@ -206,6 +203,7 @@ async function main() {
   assert.equal(results.length, 2, 'duplicate subject IDs should be removed');
   assert.equal(results[0].title, 'Test Movie');
   assert.equal(results[1].movieBoxSubjectType, 2);
+  assert.equal(results[1].type, 'tv', 'series search results retain their media type');
   assert.ok(calls.some(call => call.options.method === 'POST' && call.url.indexOf('/subject-api/search/v2') >= 0));
 
   const detail = await provider.getDetail(results[0].url, {});
@@ -220,6 +218,7 @@ async function main() {
 
   const seriesDetail = await provider.getDetail('moviebox-in://201', {});
   assert.equal(seriesDetail.title, 'Test Series');
+  assert.equal(seriesDetail.type, 'tv', 'series detail retains its media type');
   assert.equal(seriesDetail.episodes.length, 3);
   assert.equal(seriesDetail.episodes[0].season, 1);
   assert.equal(seriesDetail.episodes[2].season, 2);
@@ -254,13 +253,16 @@ async function main() {
 
   assert.deepEqual(await provider.getVideoSources('not-a-moviebox-url', {}), []);
   assert.ok(calls.every(call => !!call.options.headers['x-client-info']));
-  assert.ok(calls.some(call => call.url.indexOf('/tab-operating?') >= 0 &&
-    new URL(call.url).searchParams.get('tabId') === '1'), 'guest-token bootstrap request should run first');
-  assert.ok(calls.some(call => call.options.headers.Authorization === 'Bearer moviebox-test-guest-token'),
-    'x-user response header should become a bearer token for subsequent requests');
-  assert.ok(calls.every(call => new URL(call.url).searchParams.get('host') === new URL(call.url).host),
-    'each API request must include the matching host query parameter');
-  console.log('MovieBox IN mocked home, search, details, seasons, signatures, dubs, subtitles and stream headers passed.');
+  assert.ok(calls.every(call => call.options.headers['x-client-status'] === '0'),
+    'requests must use the reference client-status header');
+  assert.ok(calls.every(call => call.options.headers.Authorization === undefined),
+    'reference requests do not depend on an x-user guest-token handshake');
+  assert.ok(calls.every(call => !new URL(call.url).searchParams.has('host')),
+    'requests must match the reference URL format without an injected host parameter');
+  const searchCall = calls.find(call => call.url.indexOf('/subject-api/search/v2') >= 0);
+  assert.ok(searchCall, 'v2 search endpoint should be called');
+  assert.equal(searchCall.options.headers['content-type'], 'application/json');
+  console.log('MovieBox IN reference-compatible signing, home, search, metadata, seasons, dubs, subtitles and stream parsing passed.');
 }
 
 main().catch(error => {
