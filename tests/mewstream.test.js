@@ -46,7 +46,7 @@ group('1. Exports');
 ok('.getInfo() returns name=Mewstream', P.getInfo().name === 'Mewstream');
 ok('.getInfo() returns version=' + P.version, P.getInfo().version === P.version);
 ok('.getSettings() is an array', Array.isArray(P.getSettings()));
-ok('.getSettings() has 11 keys', P.getSettings().length === 11, 'got ' + P.getSettings().length);
+ok('.getSettings() has 12 keys', P.getSettings().length === 12, 'got ' + P.getSettings().length);
 
 var settingsKeys = P.getSettings().map(function (s) { return s.key; });
 ['tmdbApiKey','showboxToken','enableAnikoto','enableMegaplay','enableAnimesalt',
