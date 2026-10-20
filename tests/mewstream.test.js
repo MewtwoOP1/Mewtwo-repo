@@ -19,7 +19,7 @@ function g(t) { console.log('\n\x1b[36m' + t + '\x1b[0m'); }
   ['getInfo','getSettings','getHome','popular','search','getDetail','getEpisodes',
    'getVideoSources','getStreams','getLinks','_parseStreamId','_debug','version']
     .forEach(function (k) { ok('export .' + k, P[k] !== undefined); });
-  ok('version is 2.0.1', P.version === '2.0.1', P.version);
+  ok('version is 2.0.2', P.version === '2.0.2', P.version);
   ok('getSettings() has 17 settings', P.getSettings().length === 17, String(P.getSettings().length));
   ok('getInfo().name = Mewstream', P.getInfo().name === 'Mewstream');
   ok('_debug has 13 probes', Object.keys(P._debug).length === 13, Object.keys(P._debug).join(','));
