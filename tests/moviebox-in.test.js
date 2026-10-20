@@ -191,8 +191,8 @@ const provider = require('../providers/moviebox-in.js');
 
 async function main() {
   assert.equal(provider.getInfo().name, 'MovieBox IN');
-  assert.equal(provider.getInfo().version, '1.0.2');
-  assert.equal(provider.version, '1.0.2');
+  assert.equal(provider.getInfo().version, '1.0.3');
+  assert.equal(provider.version, '1.0.3');
   assert.equal(provider.getInfo().type, 'movie');
   assert.equal(provider.getInfo().lang, 'ta');
   assert.deepEqual(provider.getSettings(), []);
@@ -201,33 +201,56 @@ async function main() {
   assert.deepEqual(home.map(row => row.title), ['Top Picks', 'Popular', 'Originals']);
   assert.equal(home[0].items[0].url, 'moviebox-in://101');
   assert.equal(home[1].items[1].movieBoxSubjectType, 2);
+  assert.equal(home[1].items[1].type, 'movie', 'TV titles must use a valid Zangetsu ProviderType value');
+  for (const row of home) {
+    for (const item of row.items) {
+      assert.ok(['movie', 'anime', 'manga', 'novel'].includes(item.type),
+        'home item has invalid ProviderType enum value: ' + item.type);
+      assert.equal(typeof item.title, 'string');
+      assert.equal(typeof item.url, 'string');
+    }
+  }
 
   const results = await provider.search('Space & Time', 2, {});
   assert.equal(results.length, 2, 'duplicate subject IDs should be removed');
   assert.equal(results[0].title, 'Test Movie');
   assert.equal(results[1].movieBoxSubjectType, 2);
-  assert.equal(results[1].type, 'tv', 'series search results retain their media type');
+  assert.equal(results[1].type, 'movie', 'series search result uses the valid provider-family type');
   assert.ok(calls.some(call => call.options.method === 'POST' && call.url.indexOf('/subject-api/search/v2') >= 0));
 
   const detail = await provider.getDetail(results[0].url, {});
   assert.equal(detail.title, 'Test Movie');
-  assert.equal(detail.year, 2024);
+  assert.equal(detail.year, '2024', 'Zangetsu MediaDetail.year is a string');
+  assert.equal(typeof detail.year, 'string');
+  assert.equal(detail.type, 'movie');
+  assert.equal(detail.format, 'Movie');
   assert.equal(detail.score, 78);
-  assert.equal(detail.duration, 127);
+  assert.equal(detail.durationMins, 127, 'Zangetsu reads durationMins, not duration');
   assert.deepEqual(detail.genres, ['Action', 'Drama']);
-  assert.equal(detail.actors[0].name, 'Sample Actor');
+  assert.deepEqual(detail.cast, ['Sample Actor'], 'Zangetsu reads cast as a list of names');
   assert.equal(detail.episodes.length, 1);
   assert.ok(detail.episodes[0].url.indexOf('moviebox-in-episode://') === 0);
 
   const seriesDetail = await provider.getDetail('moviebox-in://201', {});
   assert.equal(seriesDetail.title, 'Test Series');
-  assert.equal(seriesDetail.type, 'tv', 'series detail retains its media type');
+  assert.equal(seriesDetail.type, 'movie', 'series detail uses valid provider-family type');
+  assert.equal(seriesDetail.format, 'TV');
+  assert.equal(seriesDetail.year, '2022');
   assert.equal(seriesDetail.episodes.length, 3);
   assert.equal(seriesDetail.episodes[0].season, 1);
   assert.equal(seriesDetail.episodes[2].season, 2);
   assert.equal(seriesDetail.episodes[2].episode, 1);
+  for (const episode of seriesDetail.episodes) {
+    assert.equal(typeof episode.id, 'string');
+    assert.equal(typeof episode.title, 'string');
+    assert.equal(typeof episode.number, 'number');
+    assert.equal(typeof episode.url, 'string');
+    assert.ok(episode.url.startsWith('moviebox-in-episode://'));
+  }
   const episodes = await provider.getEpisodes('moviebox-in://201', {});
   assert.equal(episodes.length, 3);
+  assert.ok(episodes.every(ep => ep.title && ep.url && ep.id),
+    'getEpisodes must return the fields required by Episode.fromJson');
 
   const movieEpisode = await provider.getVideoSources(detail.episodes[0].url, {});
   assert.equal(movieEpisode.length, 2, 'original and dubbed streams should both be returned');
