@@ -771,7 +771,7 @@
     {
       "id": "mewstream",
       "name": "Mewstream",
-      "version": "2.0.2",
+      "version": "3.0.0",
       "type": "movie",
       "lang": "en",
       "file": "providers/mewstream.js",
@@ -782,6 +782,13 @@
           "key": "tmdbApiKey",
           "label": "TMDB API key (optional)",
           "description": "Optional personal TMDB v3 key. Blank uses the built-in key.",
+          "type": "text",
+          "default": ""
+        },
+        {
+          "key": "showboxToken",
+          "label": "Showbox (Febbox) UI token",
+          "description": "Required for Showbox. Copy the ui cookie value from febbox.com while logged in.",
           "type": "text",
           "default": ""
         },
@@ -821,6 +828,13 @@
           "default": true
         },
         {
+          "key": "enableShowbox",
+          "label": "Showbox",
+          "description": "Showbox movie and TV source. Requires the token above.",
+          "type": "bool",
+          "default": true
+        },
+        {
           "key": "enableVaplayer",
           "label": "VaPlayer",
           "description": "VaPlayer movie and TV source.",
@@ -852,6 +866,34 @@
           "key": "enableHexa",
           "label": "Hexa",
           "description": "Hexa movie and TV source.",
+          "type": "bool",
+          "default": true
+        },
+        {
+          "key": "enableVidsrc",
+          "label": "VidSrc",
+          "description": "VidSrc (vidsrc.to / vidsrc.cc) movie and TV source.",
+          "type": "bool",
+          "default": true
+        },
+        {
+          "key": "enableVidcore",
+          "label": "VidCore / VidUp",
+          "description": "VidCore and VidUp movie and TV sources.",
+          "type": "bool",
+          "default": true
+        },
+        {
+          "key": "enableMoviesapi",
+          "label": "moviesapi.to",
+          "description": "moviesapi.to movie source.",
+          "type": "bool",
+          "default": true
+        },
+        {
+          "key": "enableVidnest",
+          "label": "VidNest",
+          "description": "VidNest movie, TV and anime source.",
           "type": "bool",
           "default": true
         }
