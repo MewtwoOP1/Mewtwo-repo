@@ -298,8 +298,10 @@ function _resolveAniWaves(media, epNumber, kind) {
 // -------------------------- AniNami resolver --------------------------------
 // API shape taken from RaghavAniNami.kt: /api/episodes/{anilistId}, then
 // /api/watch/{provider}/{anilistId}/{audioType}/{slug}.
-function _resolveAniNami(media, epNumber, kind) {
-  var anilistId = Number(media && media.id) || 0;
+function _resolveAniNami(mediaOrId, epNumber, kind) {
+  // AniNami is keyed by the real AniList ID; this works even if GraphQL is down.
+  var rawId = mediaOrId && typeof mediaOrId === 'object' ? mediaOrId.id : mediaOrId;
+  var anilistId = _positiveNumericId(rawId);
   if (!anilistId) return Promise.resolve([]);
   return _requestJson(ANI_NAMI + '/api/episodes/' + anilistId, ANI_NAMI + '/', false).then(function (body) {
     var providers = body && body.results && body.results.providers || {};
@@ -307,7 +309,9 @@ function _resolveAniNami(media, epNumber, kind) {
     Object.keys(providers).forEach(function (providerName) {
       var categories = providers[providerName] && providers[providerName].episodes || {};
       (categories[kind] || []).forEach(function (item) {
-        if (Number(item && item.number) === Number(epNumber) && item.id) entries.push({ provider: providerName, id: String(item.id) });
+        if (Number(item && item.number) === Number(epNumber) && item.id) {
+          entries.push({ provider: providerName, id: String(item.id) });
+        }
       });
     });
     if (!entries.length) return [];
@@ -319,29 +323,34 @@ function _resolveAniNami(media, epNumber, kind) {
       var watchUrl = ANI_NAMI + '/api/watch/' + provider + '/' + animeId + '/' + audioType + '/' + slug;
       return _requestJson(watchUrl, ANI_NAMI + '/', false).then(function (streamBody) {
         var streams = streamBody && streamBody.results && streamBody.results.streams || [];
-        var videos = [];
+        var videos = [], jobs = [];
         streams.forEach(function (stream) {
           if (!stream || !stream.url || !/^https?:\/\//i.test(stream.url)) return;
-          var st = String(stream.type || '').toLowerCase(), ref = stream.referer || ANI_NAMI + '/';
-          if (st === 'hls' || st === 'mp4' || st === 'video') {
-            videos.push(_video(stream.url, stream.quality || 'auto', ref, kind, stream.server || 'AniNami'));
-          } else if (typeof extractVideo === 'function') {
-            try {
-              var out = extractVideo(stream.url, { headers: { 'User-Agent': UA, 'Referer': ref } });
-              if (Array.isArray(out)) out.forEach(function (s) {
-                var copy = Object.assign({}, s);
-                copy.headers = Object.assign({ 'User-Agent': UA, 'Referer': ref }, s.headers || {});
-                copy.kind = copy.kind || kind;
-                copy.audioLang = copy.audioLang || (kind === 'dub' ? 'en' : 'ja');
-                videos.push(copy);
-              });
-            } catch (e) {}
+          var st = String(stream.type || '').toLowerCase();
+          var ref = stream.referer || ANI_NAMI + '/';
+          var isHls = st === 'hls' || st === 'm3u8' || /\.m3u8(?:[?#]|$)/i.test(stream.url);
+          var isDirectVideo = st === 'mp4' || st === 'video' || /\.mp4(?:[?#]|$)/i.test(stream.url);
+          if (isHls || isDirectVideo) {
+            videos.push(_video(stream.url, stream.quality || 'auto', ref, kind,
+              stream.server || 'AniNami', isHls ? 'hls' : 'mp4'));
+          } else {
+            // extractVideo is asynchronous in Zangetsu. Do not test it as an array
+            // synchronously or all embed-only AniNami servers silently disappear.
+            jobs.push(_extractEmbed(stream.url, ref, kind, stream.server || 'AniNami').then(function (embedded) {
+              videos.push.apply(videos, embedded);
+            }));
           }
         });
-        return videos;
-      }).catch(function () { return []; });
+        return Promise.all(jobs).then(function () { return videos; });
+      }).catch(function (e) {
+        console.warn('[mega-anime] AniNami watch failed: ' + e.message);
+        return [];
+      });
     })).then(function (groups) { return _dedupeVideos([].concat.apply([], groups)); });
-  }).catch(function (e) { console.warn('[mega-anime] AniNami resolver failed: ' + e.message); return []; });
+  }).catch(function (e) {
+    console.warn('[mega-anime] AniNami resolver failed: ' + e.message);
+    return [];
+  });
 }
 function _resolveAll(media, epNumber, kind) {
   return Promise.all([_resolveAniWaves(media, epNumber, kind), _resolveAniNami(media, epNumber, kind)])
@@ -356,11 +365,35 @@ function getVideoSources(episodeUrl, opts) {
   var ep = _positiveNumericId(parsed[2]);
   var kind = String(parsed[3] || 'sub').toLowerCase();
   if (id === null || ep === null || (kind !== 'sub' && kind !== 'dub')) return Promise.resolve([]);
-  return _anilist(DETAIL_QUERY, { id: id }).then(function (body) {
-    var media = body.data && body.data.Media;
-    if (!media) return [];
-    return _resolveAll(media, ep, kind);
-  }).catch(function (e) { console.error('[mega-anime] sources failed: ' + e.message); return []; });
+
+  // Reuse media already fetched for details/search/home. Playback must not depend
+  // on another AniList call if its API is temporarily down or rate-limiting.
+  var cached = _cachedMedia(id);
+  if (cached) return _resolveAll(cached, ep, kind);
+
+  // AniNami only needs the numeric AniList ID and can resolve independently of
+  // the metadata API. In parallel, fetch title metadata for the AniWaves search.
+  return Promise.all([
+    _resolveAniNami(id, ep, kind),
+    _anilist(DETAIL_QUERY, { id: id }).then(function (body) {
+      var media = body.data && body.data.Media;
+      if (media) _cacheMedia(media);
+      return media || null;
+    }).catch(function (e) {
+      console.warn('[mega-anime] AniList unavailable during playback: ' + e.message);
+      return null;
+    })
+  ]).then(function (results) {
+    var nami = results[0] || [];
+    var media = results[1];
+    if (!media) return _dedupeVideos(nami);
+    return _resolveAniWaves(media, ep, kind).then(function (waves) {
+      return _dedupeVideos(waves.concat(nami));
+    });
+  }).catch(function (e) {
+    console.error('[mega-anime] sources failed: ' + e.message);
+    return [];
+  });
 }
 var getStreams = getVideoSources;
 if (typeof module !== 'undefined' && module.exports) {
