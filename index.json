@@ -138,16 +138,6 @@
       "nsfw": false
     },
     {
-      "id": "moviebox-in",
-      "name": "MovieBox IN",
-      "version": "1.0.3",
-      "type": "movie",
-      "lang": "ta",
-      "file": "providers/moviebox-in.js",
-      "logo": "https://raw.githubusercontent.com/NivinCNC/CNCVerse-Cloud-Stream-Extension/06aa5b48d49e5ec40c26a689a526f9e2a79bab70/MovieBoxProviderIN/icon.png",
-      "nsfw": false
-    },
-    {
       "id": "serenity-animekai",
       "name": "AnimeKai (Unoriginal)",
       "version": "0.2.9",
