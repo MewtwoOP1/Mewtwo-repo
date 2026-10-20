@@ -175,3 +175,709 @@ async function getVideoSources(url){
 
 // Zangetsu community-repo export adapter.
 if (typeof module !== 'undefined' && module.exports) module.exports = { version: VERSION, getInfo: getInfo, getSettings: getSettings, getHome: getHome, popular: typeof popular === 'function' ? popular : undefined, search: search, getDetail: getDetail, getEpisodes: getEpisodes, getVideoSources: getVideoSources, getStreams: getVideoSources, getLinks: getVideoSources };
+
+
+// CineStream compatibility port for Zangetsu.
+// Catalogue and settings behavior is adapted from the publicly visible CSX
+// CineStreamProvider, CineSimklProvider, CineTmdbProvider, and ProviderRegistry.
+// Cloudstream-specific extractors are not executable in Zangetsu's JS runtime;
+// the functional stream adapters below are the ones exposed in settings.
+VERSION = '0.3.0';
+var CINESTREAM_VERSION = '0.3.0';
+var CS_CINEMETA_CATALOG = 'https://cinemeta-catalogs.strem.io';
+var CS_CINEMETA_META = 'https://v3-cinemeta.strem.io';
+var CS_KITSU = 'https://anime-kitsu.strem.fun';
+var CS_TMDB_API = 'https://api.themoviedb.org/3';
+var CS_SIMKL_API = 'https://api.simkl.com';
+var CS_SIMKL_DATA = 'https://data.simkl.in';
+var CS_VAPLAYER = 'https://streamdata.vaplayer.ru';
+var CS_TORRENTIO = 'https://torrentio.strem.fun/limit=4';
+var CS_TORRENTSDB = 'https://torrentsdb.com/eyJsaW1pdCI6IjMiLCJkZWJyaWRvcHRpb25zIjpbIm5vZG93bmxvYWRsaW5rcyJdfQ==';
+var CS_WYZIE = 'https://sub.wyzie.io';
+
+function getInfo() {
+  return { name: 'CineStream', lang: 'en', baseUrl: CS_CINEMETA_META,
+    logo: 'https://v3-cinemeta.strem.io/favicon.ico', type: 'movie', version: CINESTREAM_VERSION };
+}
+
+function getSettings() {
+  return [
+    choice('audioLanguage', 'Audio language (when source does not report it)', [
+      ['auto','Detect automatically'],['en','English'],['ja','Japanese'],['zh','Chinese'],
+      ['ko','Korean'],['hi','Hindi'],['es','Spanish'],['fr','French'],['de','German'],
+      ['pt','Portuguese'],['ru','Russian'],['ar','Arabic'],['it','Italian'],['ta','Tamil'],['te','Telugu']
+    ], 'auto'),
+    choice('timeout', 'Request timeout', [['8000','8 seconds'],['12000','12 seconds'],['20000','20 seconds']], '12000'),
+    choice('catalog', 'Movie and series listings', [['both','Movies and series'],['movie','Movies only'],['series','Series only']], 'both'),
+    choice('sameTitle', 'When a movie and series share a title', [['series','Prefer series'],['movie','Prefer movie']], 'series'),
+    {
+      key: 'metadataCatalogs', label: 'Metadata and catalogue providers',
+      description: 'Select which CineStream, TMDB and Simkl catalogue families appear on the home screen.',
+      type: 'multiEnum', default: ['cinemeta','tmdb','simkl'],
+      options: [
+        {value:'cinemeta',label:'CineStream / Cinemeta + Kitsu'},
+        {value:'tmdb',label:'CineTmdb / TMDB'},
+        {value:'simkl',label:'CineSimkl / Simkl'}
+      ]
+    },
+    {
+      key: 'tmdbApiKey', label: 'TMDB API key (optional)',
+      description: 'Optional personal TMDB v3 key. Blank uses the host application key if available. Sent only to TMDB.',
+      type: 'text', default: ''
+    },
+    {
+      key: 'simklClientId', label: 'Simkl client ID',
+      description: 'Required for Simkl API-powered catalogues and search. The upstream Cloudstream BuildConfig value is not available to Zangetsu automatically.',
+      type: 'text', default: ''
+    },
+    {
+      key: 'simklAccessToken', label: 'Simkl access token (optional)',
+      description: 'Optional Simkl OAuth access token for personal-list access where supported. Never share this token.',
+      type: 'text', default: ''
+    },
+    {
+      key: 'streamSources', label: 'Stream sources',
+      description: 'Choose which stream adapters CineStream queries. Torrent catalogues are optional and may return magnets rather than directly playable media.',
+      type: 'multiEnum', default: ['vaplayer','stremio'],
+      options: [
+        {value:'vaplayer',label:'VaPlayer'},
+        {value:'stremio',label:'Configured Stremio add-ons'},
+        {value:'torrentio',label:'Torrentio (torrent results)'},
+        {value:'torrentsdb',label:'TorrentsDB (torrent results)'}
+      ]
+    },
+    {
+      key: 'addonUrls', label: 'Stremio add-on URLs',
+      description: 'Manifest URLs separated by comma or newline. Query tokens are retained and sent only to the corresponding add-on.',
+      type: 'text', default: ''
+    },
+    choice('maxStreamsPerAddon', 'Maximum streams per add-on', [
+      ['5','5 streams'],['10','10 streams'],['25','25 streams'],['50','50 streams'],['100','100 streams']
+    ], '25'),
+    choice('concurrency', 'Maximum concurrent source requests', [
+      ['2','2 requests'],['4','4 requests'],['6','6 requests'],['8','8 requests'],['10','10 requests'],['12','12 requests']
+    ], '10'),
+    {
+      key: 'providerOrder', label: 'Source order',
+      description: 'Optional comma-separated order: vaplayer, stremio, torrentio, torrentsdb. Unlisted enabled sources run afterward.',
+      type: 'text', default: 'vaplayer,stremio,torrentio,torrentsdb'
+    },
+    {
+      key: 'wyzieSubsKey', label: 'Wyzie subtitles API key (optional)',
+      description: 'Optional Wyzie Subs API key. Sent only to sub.wyzie.io.',
+      type: 'text', default: ''
+    },
+    {key:'subtitles',label:'Include subtitle tracks',description:'Attach available subtitle tracks to returned streams.',type:'bool',default:true},
+    choice('streamServer', 'VaPlayer streams', [['all','All available'],['1','Server 1'],['2','Server 2'],['3','Server 3']], 'all')
+  ];
+}
+
+function csSetting(key) {
+  var saved = {};
+  try {
+    var sourceKey = typeof __SOURCE_ID === 'string' ? __SOURCE_ID : SOURCE_ID;
+    saved = (typeof __settings === 'object' && __settings && __settings[sourceKey]) || {};
+  } catch (e) {}
+  var value = saved[key];
+  var schema = getSettings().filter(function(s) { return s.key === key; })[0];
+  if (!schema) return undefined;
+  if (schema.type === 'bool') return typeof value === 'boolean' ? value : schema.default;
+  if (schema.type === 'enum') return schema.options.some(function(o) { return o.value === value; }) ? value : schema.default;
+  if (schema.type === 'multiEnum') return Array.isArray(value) ?
+    value.filter(function(v) { return schema.options.some(function(o) { return o.value === v; }); }) :
+    schema.default.slice();
+  return typeof value === 'string' ? value : schema.default;
+}
+
+function csHas(key, value) {
+  var list = csSetting(key);
+  return Array.isArray(list) && list.indexOf(value) >= 0;
+}
+function csTrim(value) { return String(value == null ? '' : value).trim(); }
+function csAsArray(value) { return Array.isArray(value) ? value : []; }
+function csQuery(path) {
+  var key = csTrim(csSetting('tmdbApiKey'));
+  if (!key) return CS_TMDB_API + path;
+  var base = 'https://api.themoviedb.org./3';
+  return base + path + (path.indexOf('?') >= 0 ? '&' : '?') + 'api_key=' + encodeURIComponent(key);
+}
+async function csJson(url, options) {
+  var opts = Object.assign({headers:{Accept:'application/json'},timeoutMs:Number(csSetting('timeout')) || 12000}, options || {});
+  var response = await fetch(url, opts);
+  if (response && response.status && (response.status < 200 || response.status >= 300))
+    throw new Error('HTTP ' + response.status + ' from ' + origin(url));
+  var body = response && response.body != null ? response.body : (response && typeof response.text === 'function' ? await response.text() : '');
+  if (body && typeof body === 'object') return body;
+  try { return JSON.parse(body || 'null'); }
+  catch (e) { throw new Error('Invalid JSON from ' + origin(url)); }
+}
+async function csTmdbJson(path) {
+  var custom = !!csTrim(csSetting('tmdbApiKey'));
+  var headersValue = {Accept:'application/json'};
+  if (custom) headersValue.Host = 'api.themoviedb.org';
+  return csJson(csQuery(path), {headers:headersValue});
+}
+function csSelectedCatalogs() {
+  var vals = csSetting('metadataCatalogs');
+  return Array.isArray(vals) ? vals : ['cinemeta','tmdb','simkl'];
+}
+function csAllowedKind(kind) {
+  var filter = csSetting('catalog');
+  if (filter === 'movie') return kind === 'movie' || kind === 'anime-movie';
+  if (filter === 'series') return kind === 'series' || kind === 'tv' || kind === 'anime';
+  return true;
+}
+function csMakeItem(data) {
+  var payload = Object.assign({}, data || {});
+  var title = csTrim(payload.title || payload.name || 'Untitled');
+  var serialized = encodeURIComponent(JSON.stringify(payload));
+  var imageUrl = payload.poster || payload.cover || null;
+  var kind = payload.kind || payload.mediaType || payload.type || 'movie';
+  var row = {
+    id: 'cinestream:' + String(payload.engine || 'cinemeta') + ':' + String(payload.type || 'movie') + ':' + String(payload.id || ''),
+    title: title,
+    url: 'cinestream://item?data=' + serialized,
+    cover: imageUrl,
+    poster: imageUrl,
+    coverHeaders: headers(CS_CINEMETA_META + '/'),
+    type: kind === 'anime' || kind === 'anime-movie' ? 'anime' : 'movie',
+    sourceId: SOURCE_ID,
+    tmdbId: Number(payload.tmdbId) || null,
+    imdbId: payload.imdbId || null,
+    tmdbIsTv: kind === 'series' || kind === 'tv',
+    year: payload.year || null,
+    score: payload.score || null
+  };
+  return row;
+}
+function csNormalizedPayload(engine, raw, forcedType) {
+  if (!raw || typeof raw !== 'object') return null;
+  var rawIds = raw.ids || {};
+  var type = String(forcedType || raw.type || raw.media_type || '').toLowerCase();
+  if (type === 'tv' || type === 'show' || type === 'series') type = 'series';
+  else if (type === 'anime') type = 'anime';
+  else if (type === 'movie') type = 'movie';
+  else if (raw.first_air_date) type = 'series';
+  else if (raw.release_date) type = 'movie';
+  else if (engine === 'kitsu') type = 'anime';
+  else type = 'movie';
+  if (!csAllowedKind(type)) return null;
+  var id = raw.id != null ? String(raw.id) : String(rawIds.simkl || rawIds.tmdb || rawIds.imdb || '');
+  if (!id) return null;
+  var imdbId = raw.imdb_id || raw.imdbId || rawIds.imdb || (/^tt\d+$/.test(id) ? id : null);
+  var tmdbId = raw.moviedb_id || raw.tmdb_id || raw.tmdbId || rawIds.tmdb || null;
+  var simklId = rawIds.simkl || raw.simkl_id || null;
+  var kitsuId = raw.kitsu_id || rawIds.kitsu || (id.indexOf('kitsu:') === 0 ? id.slice(6) : null);
+  var title = raw.name || raw.title_en || raw.title || raw.english_title || raw.aliases && raw.aliases[0] || '';
+  var poster = raw.poster || raw.poster_path || raw.poster_url || raw.coverImage || null;
+  if (poster && String(poster).charAt(0) === '/') poster = 'https://image.tmdb.org/t/p/w500' + poster;
+  if (engine === 'simkl' && raw.poster && /^\d+$/.test(String(raw.poster))) poster = 'https://wsrv.nl/?url=https://simkl.in/posters/' + raw.poster + '_m.webp';
+  var url = raw.url || '';
+  var num = String(url).match(/\/(?:movies?|tv|anime)\/(\d+)/i);
+  if (!simklId && num && engine === 'simkl') simklId = num[1];
+  return {
+    engine: engine, id: id, type: type, title: text(title), poster: poster,
+    year: raw.year || raw.releaseInfo || raw.release_date && String(raw.release_date).slice(0,4) ||
+      raw.first_air_date && String(raw.first_air_date).slice(0,4) || null,
+    score: raw.imdbRating || raw.vote_average || raw.ratings && (raw.ratings.mal && raw.ratings.mal.rating || raw.ratings.imdb && raw.ratings.imdb.rating) || null,
+    imdbId: imdbId, tmdbId: tmdbId, simklId: simklId, kitsuId: kitsuId,
+    simklType: type === 'anime' ? 'anime' : type === 'series' ? 'tv' : 'movies',
+    originalUrl: url, name: text(title)
+  };
+}
+function csCinemetaCatalogs(page) {
+  var skip = (pageNum(page) - 1) * 50;
+  var rows = [
+    {title:'Top Movies',engine:'cinemeta',type:'movie',path:'/top/catalog/movie/top/skip=' + skip + '.json'},
+    {title:'Top Series',engine:'cinemeta',type:'series',path:'/top/catalog/series/top/skip=' + skip + '.json'},
+    {title:'Airing Anime',engine:'kitsu',type:'anime',path:'/catalog/anime/kitsu-anime-airing/skip=' + skip + '.json'},
+    {title:'Top Anime',engine:'kitsu',type:'anime',path:'/catalog/anime/kitsu-anime-trending/skip=' + skip + '.json'}
+  ];
+  ['Action','Comedy','Romance','Horror','Thriller','Sci-Fi','Fantasy','Mystery','Crime'].forEach(function(genre) {
+    rows.push({title:'Top ' + genre + ' Movies',engine:'cinemeta',type:'movie',path:'/top/catalog/movie/top/skip=' + skip + '&genre=' + encodeURIComponent(genre) + '.json'});
+    rows.push({title:'Top ' + genre + ' Series',engine:'cinemeta',type:'series',path:'/top/catalog/series/top/skip=' + skip + '&genre=' + encodeURIComponent(genre) + '.json'});
+  });
+  return rows.filter(function(r) {
+    if (r.type === 'movie') return csAllowedKind('movie');
+    if (r.type === 'series') return csAllowedKind('series');
+    return csAllowedKind('anime');
+  });
+}
+function csTmdbCatalogs() {
+  var today = new Date().toISOString().slice(0,10);
+  var future = new Date(Date.now() + 7 * 86400000).toISOString().slice(0,10);
+  var paths = [
+    ['Trending','trending/all/day?region=US','all'],
+    ['Popular Movies','trending/movie/week?region=US','movie'],
+    ['Popular TV Shows','trending/tv/week?region=US','tv'],
+    ['Airing Today Anime','discover/tv?with_keywords=210024%7C222243&sort_by=popularity.desc&air_date.lte=' + today + '&air_date.gte=' + today,'tv'],
+    ['On The Air Anime','discover/tv?with_keywords=210024%7C222243&sort_by=popularity.desc&air_date.lte=' + future + '&air_date.gte=' + today,'tv'],
+    ['Korean Shows','discover/tv?with_original_language=ko','tv'],
+    ['Netflix','discover/tv?with_networks=213','tv'],
+    ['Amazon','discover/tv?with_networks=1024','tv'],
+    ['Disney+','discover/tv?with_networks=2739','tv'],
+    ['JioHotstar','discover/tv?with_watch_providers=2336&watch_region=IN','tv'],
+    ['Hulu','discover/tv?with_networks=453','tv'],
+    ['Apple TV+','discover/tv?with_networks=2552','tv'],
+    ['HBO','discover/tv?with_networks=49','tv'],
+    ['Paramount+','discover/tv?with_networks=4330','tv'],
+    ['Peacock','discover/tv?with_networks=3353','tv'],
+    ['Anime Movies','discover/movie?with_keywords=210024%7C222243','movie'],
+    ['Top Rated TV Shows','tv/top_rated?region=US','tv']
+  ];
+  return paths.filter(function(row) {
+    if (row[2] === 'movie') return csAllowedKind('movie');
+    if (row[2] === 'tv') return csAllowedKind('series');
+    return true;
+  }).map(function(row) { return {title:row[0],engine:'tmdb',path:row[1],type:row[2]}; });
+}
+function csSimklCatalogs() {
+  var staticRows = [
+    ['Trending Movies Today','/discover/trending/movies/today_500.json','movie'],
+    ['Trending Shows Today','/discover/trending/tv/today_500.json','series'],
+    ['Trending Anime Today','/discover/trending/anime/today_500.json','anime'],
+    ['Trending Movie DVD Releases','/discover/dvd/releases_500.json','movie'],
+    ['Trending Movie This Month','/discover/trending/movies/month_500.json','movie'],
+    ['Trending Series This Month','/discover/trending/tv/month_500.json','series'],
+    ['Trending This Month','/discover/trending/month_500.json','all'],
+    ['Trending Anime This Month','/discover/trending/anime/month_500.json','anime']
+  ].map(function(r) { return {title:r[0],engine:'simkl-data',path:r[1],type:r[2]}; });
+  var key = csTrim(csSetting('simklClientId'));
+  if (!key) return staticRows.filter(function(r) { return r.type === 'all' || csAllowedKind(r.type); });
+  var apiRows = [
+    ['Airing Anime Today','/anime/airing?today?sort=rank','anime'],
+    ['Trending Korean Shows','/tv/genres/all/all-types/kr/all-networks/this-year/popular-today?limit=10','series'],
+    ['Top Rated Movies','/movies/genres/all/all-types/all-countries/all-years/rank?limit=10','movie'],
+    ['Top Rated Shows','/tv/genres/all/all-types/all-countries/all-networks/all-years/rank?limit=10','series'],
+    ['Top Rated Anime','/anime/genres/all/all-types/all-countries/all-networks/all-years/rank?limit=10','anime'],
+    ['Top Rated Korean Shows','/tv/genres/all/all-types/kr/all-networks/all-years/rank?limit=10','series'],
+    ['Upcoming Anime','/anime/premieres/soon?type=all&limit=10','anime']
+  ].map(function(r) { return {title:r[0],engine:'simkl',path:r[1],type:r[2]}; });
+  return staticRows.concat(apiRows).filter(function(r) { return r.type === 'all' || csAllowedKind(r.type); });
+}
+async function csFetchCatalog(row, page) {
+  try {
+    var data, list;
+    if (row.engine === 'cinemeta' || row.engine === 'kitsu') {
+      var root = row.engine === 'kitsu' ? CS_KITSU : CS_CINEMETA_CATALOG;
+      data = await csJson(root + row.path);
+      list = csAsArray(data && data.metas).map(function(m) { return csNormalizedPayload(row.engine, m, row.type); }).filter(Boolean);
+    } else if (row.engine === 'tmdb') {
+      var sep = row.path.indexOf('?') >= 0 ? '&' : '?';
+      data = await csTmdbJson('/' + row.path + sep + 'without_keywords=190370%7C13059%7C226161%7C195669&page=' + pageNum(page));
+      list = csAsArray(data && data.results).map(function(m) { return csNormalizedPayload('tmdb', m, row.type === 'all' ? (m.media_type || (m.first_air_date ? 'tv' : 'movie')) : row.type); }).filter(Boolean);
+    } else if (row.engine === 'simkl-data') {
+      data = await csJson(CS_SIMKL_DATA + row.path);
+      list = csAsArray(data).map(function(m) { return csNormalizedPayload('simkl', m, row.type === 'all' ? (m.type || 'movie') : row.type); }).filter(Boolean);
+    } else {
+      var simklUrl = CS_SIMKL_API + row.path + (row.path.indexOf('?') >= 0 ? '&' : '?') +
+        'client_id=' + encodeURIComponent(csTrim(csSetting('simklClientId'))) + '&page=' + pageNum(page);
+      data = await csJson(simklUrl, {headers:{Accept:'application/json','Content-Type':'application/json'}});
+      list = csAsArray(data).map(function(m) { return csNormalizedPayload('simkl', m, row.type); }).filter(Boolean);
+    }
+    return {title:row.title, items:list.map(csMakeItem), hasNext:row.engine === 'cinemeta' ? !!(data && data.hasMore) : row.engine === 'tmdb' ? Number(data && data.page || page) < Number(data && data.total_pages || 1) : true};
+  } catch (e) {
+    return {title:row.title,items:[],hasNext:false,error:String(e && e.message || e)};
+  }
+}
+async function csPool(items, concurrency, worker) {
+  var out = new Array(items.length), next = 0;
+  var count = Math.max(1, Math.min(items.length || 1, Number(concurrency) || 10));
+  await Promise.all(Array.from({length:count}, async function() {
+    while (true) {
+      var i = next++;
+      if (i >= items.length) return;
+      try { out[i] = await worker(items[i], i); }
+      catch (e) { out[i] = null; }
+    }
+  }));
+  return out;
+}
+async function getHome(opts) {
+  var page = pageNum(opts && opts.page || 1);
+  var catalogs = csSelectedCatalogs(), rows = [];
+  if (catalogs.indexOf('cinemeta') >= 0) rows = rows.concat(csCinemetaCatalogs(page));
+  if (catalogs.indexOf('tmdb') >= 0) rows = rows.concat(csTmdbCatalogs());
+  if (catalogs.indexOf('simkl') >= 0) rows = rows.concat(csSimklCatalogs());
+  var result = await csPool(rows, csSetting('concurrency'), function(row) { return csFetchCatalog(row, page); });
+  return result.filter(Boolean);
+}
+async function popular(page) {
+  var rows = await csPool([{title:'Top Movies',engine:'cinemeta',type:'movie',path:'/top/catalog/movie/top/skip=' + ((pageNum(page)-1)*50) + '.json'},
+                           {title:'Top Series',engine:'cinemeta',type:'series',path:'/top/catalog/series/top/skip=' + ((pageNum(page)-1)*50) + '.json'}],
+      csSetting('concurrency'), function(row) { return csFetchCatalog(row,page); });
+  return rows.reduce(function(out, row) { return out.concat(row && row.items || []); }, []);
+}
+
+function csCinemetaSearchUrl(type, query) {
+  return CS_CINEMETA_META + '/catalog/' + type + '/top/search=' + encodeURIComponent(query) + '.json';
+}
+function csTmdbSearchItem(raw) {
+  var forced = raw && raw.media_type === 'tv' ? 'tv' : raw && raw.media_type === 'movie' ? 'movie' : undefined;
+  return csNormalizedPayload('tmdb', raw, forced);
+}
+function csRank(items, query) {
+  var normalizedQuery = String(query || '').toLowerCase().replace(/[^a-z0-9]/g,'');
+  var prefer = csSetting('sameTitle');
+  return items.map(function(v,i) { return {v:v,i:i}; }).sort(function(a,b) {
+    var an = String(a.v.title || '').toLowerCase().replace(/[^a-z0-9]/g,'');
+    var bn = String(b.v.title || '').toLowerCase().replace(/[^a-z0-9]/g,'');
+    if ((an === normalizedQuery) !== (bn === normalizedQuery)) return an === normalizedQuery ? -1 : 1;
+    if (an === bn && a.v.type !== b.v.type) {
+      if (a.v.type === prefer) return -1;
+      if (b.v.type === prefer) return 1;
+    }
+    return a.i-b.i;
+  }).map(function(row) { return csMakeItem(row.v); });
+}
+async function search(query, page) {
+  var q = csTrim(query);
+  if (!q || pageNum(page || 1) > 1) return [];
+  var catalogs = csSelectedCatalogs(), jobs = [];
+  if (catalogs.indexOf('cinemeta') >= 0) {
+    ['movie','series'].forEach(function(type) {
+      if (csAllowedKind(type)) jobs.push(csJson(csCinemetaSearchUrl(type,q)).then(function(d) {
+        return csAsArray(d && d.metas).map(function(m) { return csNormalizedPayload('cinemeta',m,type); }).filter(Boolean);
+      }).catch(function(){return [];}));
+    });
+    jobs.push(csJson(CS_KITSU + '/catalog/anime/kitsu-anime-airing/search=' + encodeURIComponent(q) + '.json').then(function(d) {
+      return csAsArray(d && d.metas).map(function(m) { return csNormalizedPayload('kitsu',m,'anime'); }).filter(Boolean);
+    }).catch(function(){return [];}));
+  }
+  if (catalogs.indexOf('tmdb') >= 0) jobs.push(csTmdbJson('/search/multi?language=en-US&query=' + encodeURIComponent(q) + '&page=1&include_adult=false').then(function(d) {
+    return csAsArray(d && d.results).map(csTmdbSearchItem).filter(Boolean);
+  }).catch(function(){return [];}));
+  if (catalogs.indexOf('simkl') >= 0 && csTrim(csSetting('simklClientId'))) {
+    ['movie','tv','anime'].forEach(function(type) {
+      jobs.push(csJson(CS_SIMKL_API + '/search/' + type + '?q=' + encodeURIComponent(q) + '&page=1&limit=10&extended=full&client_id=' + encodeURIComponent(csTrim(csSetting('simklClientId'))), {headers:{Accept:'application/json','Content-Type':'application/json'}}).then(function(d) {
+        return csAsArray(d).map(function(m) { return csNormalizedPayload('simkl',m,type === 'tv' ? 'series' : type); }).filter(Boolean);
+      }).catch(function(){return [];}));
+    });
+  }
+  var lists = await Promise.all(jobs), combined = [];
+  lists.forEach(function(list) { combined = combined.concat(list || []); });
+  var seen = {};
+  combined = combined.filter(function(p) {
+    var key = (p.imdbId || (p.engine + ':' + p.id) || p.title).toLowerCase();
+    if (seen[key]) return false; seen[key] = true; return true;
+  });
+  return csRank(combined,q);
+}
+
+function csPayloadFromUrl(value) {
+  var url = String(value || '');
+  var match = url.match(/[?&]data=([^&#]+)/);
+  if (match && url.indexOf('cinestream://') === 0) {
+    try { return JSON.parse(decodeURIComponent(match[1])); } catch (e) {}
+  }
+  var oldMarker = url.split('#cine=')[1];
+  if (oldMarker) {
+    try {
+      var old = JSON.parse(decodeURIComponent(oldMarker));
+      return {engine:'cinemeta', id:old.id, type:old.type === 'movie' ? 'movie' : 'series',
+        title:old.title, imdbId:old.id, tmdbId:old.tmdb || old.tmdbId, year:old.year,
+        season:old.season, episode:old.episode, isEpisode:old.season != null};
+    } catch (e) {}
+  }
+  var tmdb = url.match(/^tmdb:\/\/(movie|tv|series)\/(\d+)/i);
+  if (tmdb) return {engine:'tmdb',id:tmdb[2],type:tmdb[1] === 'movie' ? 'movie' : 'series'};
+  var meta = url.match(/\/meta\/(movie|series|anime)\/([^/.]+)\.json/i);
+  if (meta) {
+    var rawId = decodeURIComponent(meta[2]);
+    return {engine:rawId.indexOf('kitsu:')===0 || meta[1]==='anime' ? 'kitsu' : 'cinemeta',
+      id:rawId,type:meta[1] === 'anime' ? 'anime' : meta[1]};
+  }
+  var simkl = url.match(/simkl\.com\/(movies?|tv|anime)\/(\d+)/i);
+  if (simkl) return {engine:'simkl',id:simkl[2],simklId:simkl[2],
+    type:simkl[1].indexOf('movie')===0?'movie':simkl[1]==='anime'?'anime':'series',
+    simklType:simkl[1].indexOf('movie')===0?'movies':simkl[1]==='anime'?'anime':'tv'};
+  return null;
+}
+function csNewEpisode(payload, number, season, title, date, thumbnail) {
+  var ep = Object.assign({},payload,{isEpisode:true,season:season,episode:number,episodeTitle:title || null});
+  var movie = payload.type === 'movie' || payload.type === 'anime-movie';
+  var prefix = movie ? '' : 'S' + String(season == null ? 1 : season) + 'E' + String(number);
+  return {
+    id:String(payload.id || payload.tmdbId || payload.imdbId || 'item') + (movie ? '' : ':' + season + ':' + number),
+    title:movie ? String(payload.title || title || 'Movie') : prefix + ' · ' + String(title || ('Episode ' + number)),
+    number:Number(number) || 1,
+    season:Number(season) || (movie ? null : 1),
+    url:'cinestream://episode?data=' + encodeURIComponent(JSON.stringify(ep)),
+    date:date || null, thumbnail:thumbnail || null
+  };
+}
+function csDetailResult(payload, raw, title, poster, background, description, year, genres, episodes) {
+  var itemPayload = Object.assign({}, payload, {title:title || payload.title,poster:poster || payload.poster,year:year || payload.year});
+  var out = csMakeItem(itemPayload);
+  out.url = 'cinestream://item?data=' + encodeURIComponent(JSON.stringify(itemPayload));
+  out.cover = poster || payload.poster || null;
+  out.poster = out.cover;
+  out.background = background || null;
+  out.backgroundPoster = background || null;
+  out.description = description || '';
+  out.plot = description || '';
+  out.year = year || payload.year || null;
+  out.genres = genres || [];
+  out.tags = out.genres;
+  out.studios = [];
+  out.status = raw && (raw.status || raw.status_name) || 'unknown';
+  out.episodes = episodes || [];
+  out.imdbId = payload.imdbId || raw && (raw.imdb_id || raw.imdbId) || null;
+  out.tmdbId = Number(payload.tmdbId || raw && raw.moviedb_id || raw && raw.id) || null;
+  out.tmdbIsTv = payload.type === 'series' || payload.type === 'tv';
+  out.score = Number(payload.score || raw && (raw.imdbRating || raw.vote_average || raw.rating)) || null;
+  out.cast = raw && raw.cast || raw && raw.actors || [];
+  out.trailer = raw && raw.trailer || null;
+  return out;
+}
+async function csCinemetaDetail(payload) {
+  var engine = payload.engine === 'kitsu' || String(payload.id || '').indexOf('kitsu:') === 0 ? 'kitsu' : 'cinemeta';
+  var type = payload.type === 'movie' ? 'movie' : payload.type === 'anime' ? 'anime' : 'series';
+  var id = String(payload.id || payload.imdbId || '');
+  var encodedId = id.indexOf(':') >= 0 ? id.replace(/:/g,'%3A') : encodeURIComponent(id);
+  var endpoint = (engine === 'kitsu' ? CS_KITSU : CS_CINEMETA_META) + '/meta/' + type + '/' + encodedId + '.json';
+  var data = await csJson(endpoint);
+  var m = data && data.meta || data;
+  if (!m) throw new Error('CineStream: metadata not found for ' + id);
+  var imdbId = m.imdb_id || payload.imdbId || (/^tt\d+$/.test(id) ? id : null);
+  var tmdbId = m.moviedb_id || payload.tmdbId || null;
+  var normalized = Object.assign({},payload,{imdbId:imdbId,tmdbId:tmdbId,title:m.name || m.title || payload.title});
+  var isMovie = type === 'movie' || type === 'anime' && String(m.type || '').toLowerCase().indexOf('movie') >= 0;
+  var videos = csAsArray(m.videos).filter(function(v) {
+    if (isMovie) return false;
+    if (Number(v.season) === 0) return false;
+    if (!Number(v.episode || v.number)) return false;
+    if (v.released && !isNaN(Date.parse(v.released)) && Date.parse(v.released) > Date.now()) return false;
+    return true;
+  });
+  var episodes = isMovie ? [csNewEpisode(normalized,1,null,m.name || payload.title,m.released,m.poster)] :
+    videos.map(function(v) { return csNewEpisode(normalized,Number(v.episode || v.number),Number(v.season || 1),v.title || v.name,v.released,v.thumbnail || v.poster); });
+  return csDetailResult(normalized,m,m.name || m.title || payload.title,m.poster || payload.poster,m.background,
+    m.description || m.overview,m.year || m.releaseInfo,(m.genres || m.genre || []),episodes);
+}
+async function csTmdbDetail(payload) {
+  var type = payload.type === 'movie' ? 'movie' : 'tv';
+  var detailPath = '/' + type + '/' + encodeURIComponent(String(payload.id || payload.tmdbId)) +
+    '?append_to_response=alternative_titles,credits,external_ids,videos,recommendations,content_ratings,release_dates,keywords';
+  var m = await csTmdbJson(detailPath);
+  if (!m || !m.id) throw new Error('CineStream: TMDB metadata not found');
+  var imdbId = m.external_ids && m.external_ids.imdb_id || m.imdb_id || payload.imdbId || null;
+  var normalized = Object.assign({},payload,{engine:'tmdb',id:String(m.id),type:type === 'tv'?'series':'movie',
+    tmdbId:m.id,imdbId:imdbId,title:m.title || m.name,year:String(m.release_date || m.first_air_date || '').slice(0,4),
+    poster:m.poster_path ? 'https://image.tmdb.org/t/p/w500' + m.poster_path : payload.poster});
+  var trailer = null;
+  var videoList = csAsArray(m.videos && m.videos.results);
+  for (var i=videoList.length-1;i>=0;i--) {
+    if (videoList[i].key && videoList[i].site === 'YouTube') { trailer='https://www.youtube.com/watch?v=' + videoList[i].key; if (videoList[i].type === 'Trailer') break; }
+  }
+  var episodes = [];
+  if (type === 'movie') {
+    episodes = [csNewEpisode(normalized,1,null,m.title || m.name,m.release_date,normalized.poster)];
+  } else {
+    var seasons = csAsArray(m.seasons).filter(function(s) { return Number(s.season_number) > 0; });
+    var lists = await csPool(seasons,csSetting('concurrency'),async function(season) {
+      try {
+        var detail = await csTmdbJson('/tv/' + m.id + '/season/' + season.season_number);
+        return csAsArray(detail && detail.episodes).map(function(ep) {
+          return csNewEpisode(normalized,Number(ep.episode_number),Number(ep.season_number || season.season_number),ep.name,ep.air_date,
+            ep.still_path ? 'https://image.tmdb.org/t/p/w500' + ep.still_path : null);
+        });
+      } catch (e) { return []; }
+    });
+    lists.forEach(function(list) { episodes=episodes.concat(list || []); });
+    episodes.sort(function(a,b) { return Number(a.season)-Number(b.season) || Number(a.number)-Number(b.number); });
+  }
+  var genres = csAsArray(m.genres).map(function(g) { return typeof g === 'string' ? g : g.name; }).filter(Boolean);
+  var detailOut = csDetailResult(normalized,m,m.title || m.name,normalized.poster,
+    m.backdrop_path ? 'https://image.tmdb.org/t/p/original' + m.backdrop_path : null,
+    m.overview,normalized.year,genres,episodes);
+  detailOut.cast = csAsArray(m.credits && m.credits.cast).map(function(c) { return {name:c.name,character:c.character,photo:c.profile_path ? 'https://image.tmdb.org/t/p/w185' + c.profile_path : null}; });
+  detailOut.trailer = trailer;
+  detailOut.status = m.status || 'unknown';
+  return detailOut;
+}
+async function csSimklDetail(payload) {
+  var id = payload.simklId || payload.id;
+  if (!id || !csTrim(csSetting('simklClientId'))) {
+    if (payload.tmdbId) return csTmdbDetail(Object.assign({},payload,{engine:'tmdb',id:String(payload.tmdbId),type:payload.type==='movie'?'movie':'series'}));
+    if (payload.imdbId) return csCinemetaDetail(Object.assign({},payload,{engine:'cinemeta',id:payload.imdbId,type:payload.type==='anime'?'anime':payload.type}));
+    var basicEp = [csNewEpisode(payload,1,null,payload.title,payload.year,payload.poster)];
+    return csDetailResult(payload,payload,payload.title,payload.poster,null,'',payload.year,[],basicEp);
+  }
+  var stype = payload.simklType || (payload.type === 'movie' ? 'movies' : payload.type === 'anime' ? 'anime' : 'tv');
+  var data = await csJson(CS_SIMKL_API + '/' + stype + '/' + encodeURIComponent(String(id)) +
+    '?client_id=' + encodeURIComponent(csTrim(csSetting('simklClientId'))) + '&extended=full',
+    {headers:{Accept:'application/json','Content-Type':'application/json'}});
+  var m = data && data.movie || data && data.show || data;
+  var ids = m && m.ids || {};
+  var linked = Object.assign({},payload,{imdbId:ids.imdb || payload.imdbId,tmdbId:ids.tmdb || payload.tmdbId,
+    kitsuId:ids.kitsu || payload.kitsuId,title:m && (m.title_en || m.en_title || m.title) || payload.title,
+    year:m && m.year || payload.year,poster:payload.poster,score:m && m.ratings && (m.ratings.imdb && m.ratings.imdb.rating || m.ratings.mal && m.ratings.mal.rating) || payload.score});
+  if (linked.tmdbId) return csTmdbDetail(Object.assign({},linked,{engine:'tmdb',id:String(linked.tmdbId),type:linked.type==='movie'?'movie':'series'}));
+  if (linked.imdbId) return csCinemetaDetail(Object.assign({},linked,{engine:'cinemeta',id:linked.imdbId,type:linked.type==='anime'?'anime':linked.type}));
+  var title = linked.title || payload.title;
+  var episodes = [];
+  csAsArray(m && m.seasons).forEach(function(season) {
+    csAsArray(season.episodes).forEach(function(ep) { episodes.push(csNewEpisode(linked,ep.number || ep.episode,season.number || season.season,ep.title || ep.name,ep.date,null)); });
+  });
+  if (!episodes.length) episodes=[csNewEpisode(linked,1,null,title, null,linked.poster)];
+  return csDetailResult(linked,m,title,linked.poster,m && m.fanart,m && (m.overview || m.description),linked.year,m && m.genres || [],episodes);
+}
+async function getDetail(url) {
+  var payload = csPayloadFromUrl(url);
+  if (!payload) {
+    var old = cineIdentity(url);
+    return csCinemetaDetail({engine:'cinemeta',id:old.id,type:old.type});
+  }
+  if (payload.isEpisode) throw new Error('CineStream: requested an episode as a title; reopen the series page');
+  if (payload.engine === 'tmdb') return csTmdbDetail(payload);
+  if (payload.engine === 'simkl' || payload.engine === 'simkl-data') return csSimklDetail(payload);
+  return csCinemetaDetail(payload);
+}
+async function getEpisodes(url) {
+  var detail = await getDetail(url);
+  return csAsArray(detail && detail.episodes);
+}
+
+function csAddonUrls(raw) {
+  var values=String(raw || '').split(/[,;\r\n]+/),out=[],seen={};
+  values.forEach(function(value) {
+    value=String(value||'').trim().replace(/^stremio:\/\//i,'https://').replace(/#.*$/,'');
+    if (!/^https?:\/\//i.test(value)) return;
+    var question=value.indexOf('?'),query=question>=0?value.slice(question+1):'';
+    var root=question>=0?value.slice(0,question):value;
+    root=root.replace(/\/manifest\.json$/i,'').replace(/\/+$/,'');
+    var key=root+(query?'?'+query:'');
+    if (!seen[key]) {seen[key]=true;out.push({root:root,query:query});}
+  });
+  return out;
+}
+function csAddonUrl(addon,path) { return addon.root + path + (addon.query ? '?' + addon.query : ''); }
+function csEpisodeIds(ep) {
+  var ids=[],seen={};
+  function add(v) { v=String(v==null?'':v);if(v&&!seen[v]){seen[v]=true;ids.push(v);} }
+  var isSeries=ep.type!=='movie' && (ep.season!=null || ep.episode!=null);
+  var tmdbType=isSeries?'series':'movie';
+  if (ep.id && !/^tt\d+$/.test(String(ep.id))) add(ep.id);
+  if (ep.imdbId) { if(isSeries && Number(ep.season)>0 && Number(ep.episode)>0)add(ep.imdbId+':'+ep.season+':'+ep.episode); add(ep.imdbId); }
+  if (ep.tmdbId) {
+    add(String(ep.tmdbId));
+    add('tmdb:'+tmdbType+':'+ep.tmdbId);
+    if(isSeries && Number(ep.season)>0 && Number(ep.episode)>0)add('tmdb:series:'+ep.tmdbId+':'+ep.season+':'+ep.episode);
+  }
+  if (!isSeries && ep.id) add(ep.id);
+  return {ids:ids,type:isSeries?'series':'movie'};
+}
+function csStream(raw,source,addon) {
+  if (!raw || typeof raw!=='object') return null;
+  var url=typeof raw.url==='string'?raw.url:'';
+  if (!/^https?:\/\//i.test(url) && raw.infoHash) url='magnet:?xt=urn:btih:'+raw.infoHash;
+  if (!/^https?:\/\//i.test(url) && !/^magnet:\?/i.test(url)) return null;
+  var detail=String(raw.name||'')+' '+String(raw.title||'')+' '+String(raw.description||'');
+  var quality=detail.match(/(2160p|4k|1080p|720p|480p|360p)/i);
+  var headersOut=Object.assign({},raw.headers||{});
+  var requestHeaders=raw.behaviorHints && raw.behaviorHints.proxyHeaders && raw.behaviorHints.proxyHeaders.request;
+  if (requestHeaders) Object.keys(requestHeaders).forEach(function(k){if(requestHeaders[k])headersOut[k]=requestHeaders[k];});
+  if (addon && !headersOut.Referer) headersOut.Referer=addon.root+'/';
+  var subs=[];
+  if (csSetting('subtitles')!==false) {
+    csAsArray(raw.subtitles).forEach(function(t) {
+      var sUrl=t.url || t.src;
+      if (/^https?:\/\//i.test(String(sUrl||''))) subs.push({url:sUrl,lang:languageCode(t.lang||t.language||t.lang_code||'und')||'und',label:t.label||t.title||t.lang||t.language||'Subtitle',format:/\.srt(?:[?#]|$)/i.test(sUrl)?'srt':'vtt'});
+    });
+  }
+  return {url:url,label:(source||raw.name||'CineStream')+(raw.title?' · '+raw.title:'')+(quality?' · '+quality[1]:''),quality:quality?(quality[1].toLowerCase()==='4k'?'2160p':quality[1]):'Auto',
+    container:/\.m3u8(?:[?#]|$)/i.test(url)?'hls':/\.(mp4|m4v|mov|webm)(?:[?#]|$)/i.test(url)?'mp4':'unknown',
+    kind:/^magnet:/i.test(url)?'torrent':'unknown',audioLang:null,headers:headersOut,subtitles:subs};
+}
+async function csAddonStreams(ep) {
+  var config=csAddonUrls(csSetting('addonUrls'));
+  if (!config.length) return [];
+  var parsed=csEpisodeIds(ep);
+  var max=parseInt(csSetting('maxStreamsPerAddon'),10)||25;
+  return (await csPool(config,csSetting('concurrency'),async function(addon) {
+    try {
+      var manifest=await csJson(csAddonUrl(addon,'/manifest.json'));
+      var resources=manifest && manifest.resources;
+      if (Array.isArray(resources) && !resources.some(function(r){return r==='stream'||r&&r.name==='stream';}))return [];
+      var perIds=await Promise.all(parsed.ids.map(async function(id) {
+        try {
+          var data=await csJson(csAddonUrl(addon,'/stream/'+parsed.type+'/'+encodeURIComponent(id)+'.json'));
+          return csAsArray(data && data.streams).map(function(s){return csStream(s,manifest.name||'Stremio Add-on',addon);}).filter(Boolean);
+        } catch(e) { return []; }
+      }));
+      var list=[];perIds.forEach(function(x){list=list.concat(x);});
+      return list.slice(0,max);
+    } catch(e) { return []; }
+  })).reduce(function(a,b){return a.concat(b||[]);},[]);
+}
+async function csTorrentStreams(ep, source) {
+  if (!ep.imdbId && !ep.kitsuId && !ep.id) return [];
+  var base=source==='torrentio'?CS_TORRENTIO:CS_TORRENTSDB;
+  var ids=csEpisodeIds(ep), endpoints=[];
+  ids.ids.forEach(function(id) { endpoints.push(base+'/stream/'+ids.type+'/'+encodeURIComponent(id)+'.json'); });
+  var lists=await Promise.all(endpoints.map(function(url){return csJson(url,{timeoutMs:10000}).then(function(d){return csAsArray(d&&d.streams).map(function(s){return csStream(s,source==='torrentio'?'Torrentio':'TorrentsDB');}).filter(Boolean);}).catch(function(){return [];});}));
+  var out=[];lists.forEach(function(list){out=out.concat(list);});return out;
+}
+async function csVaPlayer(ep) {
+  if (!ep.imdbId) return [];
+  var type=ep.type==='movie'?'movie':'tv';
+  var url=CS_VAPLAYER+'/api.php?imdb='+encodeURIComponent(ep.imdbId)+'&type='+type;
+  if(type==='tv')url+='&season='+encodeURIComponent(ep.season||1)+'&episode='+encodeURIComponent(ep.episode||1);
+  var data=await csJson(url,{headers:{Referer:'https://nextgencloudfabric.com/','Accept':'application/json'}});
+  var root=data&&data.data||data||{};
+  var streams=csAsArray(root.stream_urls || root.streamUrls);
+  var subtitles=csAsArray(data&&data.default_subs || root.default_subs).map(function(s){return {url:s.url,lang:s.lang||s.code,label:s.lang||s.code||'Subtitle'};}).filter(function(s){return /^https?:\/\//i.test(String(s.url||''));});
+  return streams.map(function(u,i){return csStream({url:u,name:'VaPlayer '+(i+1),subtitles:subtitles},'VaPlayer');}).filter(Boolean);
+}
+async function csWyzieSubs(ep) {
+  var key=csTrim(csSetting('wyzieSubsKey'));
+  if(!key || !ep.imdbId || csSetting('subtitles')===false) return [];
+  var url=CS_WYZIE+'/search?id='+encodeURIComponent(ep.imdbId)+'&source=all&key='+encodeURIComponent(key);
+  if(ep.season!=null && ep.episode!=null)url+='&season='+encodeURIComponent(ep.season)+'&episode='+encodeURIComponent(ep.episode);
+  var data=await csJson(url,{timeoutMs:10000});
+  return csAsArray(data).map(function(t){return {url:t.url,lang:languageCode(t.language||t.display||'und')||'und',label:t.display||t.language||'Subtitle',format:/\.srt(?:[?#]|$)/i.test(t.url||'')?'srt':'vtt'};}).filter(function(t){return /^https?:\/\//i.test(String(t.url||''));});
+}
+async function getVideoSources(episodeUrl, opts) {
+  var ep=csPayloadFromUrl(episodeUrl);
+  if(!ep) throw new Error('CineStream: invalid episode link; reopen the title page.');
+  if(!ep.isEpisode && (ep.season!=null || ep.episode!=null))ep.isEpisode=true;
+  if(!ep.isEpisode && episodeUrl.indexOf('#cine=')<0) throw new Error('CineStream: expected an episode URL.');
+  ep.imdbId=ep.imdbId || (/^tt\d+$/.test(String(ep.id||''))?ep.id:null);
+  ep.tmdbId=ep.tmdbId || ep.tmdb || null;
+  ep.type=ep.type==='movie'?'movie':ep.type==='anime-movie'?'movie':'series';
+  if (!ep.imdbId && ep.engine==='tmdb' && ep.tmdbId) {
+    try {
+      var ext=await csTmdbJson('/'+(ep.type==='movie'?'movie':'tv')+'/'+encodeURIComponent(String(ep.tmdbId))+'/external_ids');
+      ep.imdbId=ext && ext.imdb_id || null;
+    } catch(e) {}
+  }
+  var selected=csSetting('streamSources');
+  if(!Array.isArray(selected))selected=['vaplayer','stremio'];
+  var ordering=csTrim(csSetting('providerOrder')).split(/[,;\s]+/).filter(Boolean);
+  selected=selected.slice().sort(function(a,b){var ai=ordering.indexOf(a),bi=ordering.indexOf(b);return (ai<0?999:ai)-(bi<0?999:bi);});
+  var jobs=selected.map(function(source) {
+    if(source==='vaplayer')return csVaPlayer(ep).catch(function(){return [];});
+    if(source==='stremio')return csAddonStreams(ep).catch(function(){return [];});
+    if(source==='torrentio'||source==='torrentsdb')return csTorrentStreams(ep,source).catch(function(){return [];});
+    return Promise.resolve([]);
+  });
+  var groups=await Promise.all(jobs),streams=[];
+  groups.forEach(function(group){streams=streams.concat(group||[]);});
+  var seen={};streams=streams.filter(function(s){if(seen[s.url])return false;seen[s.url]=true;return true;});
+  if(csSetting('streamServer')!=='all')streams=streams.filter(function(s){return !/^VaPlayer /.test(s.label)||s.label==='VaPlayer '+csSetting('streamServer');});
+  var captions=[];
+  try { captions=await csWyzieSubs(ep); } catch(e) {}
+  if(captions.length) streams.forEach(function(s){var seenCaptions={};s.subtitles=(s.subtitles||[]).concat(captions).filter(function(t){var k=t.url;if(seenCaptions[k])return false;seenCaptions[k]=true;return true;});});
+  if(csSetting('audioLanguage') && csSetting('audioLanguage')!=='auto')streams.forEach(function(s){s.audioLang=csSetting('audioLanguage');});
+  return audioMetadata(streams);
+}
+function getStreams(url, opts) { return getVideoSources(url,opts); }
+function getLinks(url, opts) { return getVideoSources(url,opts); }
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    version:CINESTREAM_VERSION,getInfo:getInfo,getSettings:getSettings,getHome:getHome,popular:popular,
+    search:search,getDetail:getDetail,getEpisodes:getEpisodes,getVideoSources:getVideoSources,
+    getStreams:getStreams,getLinks:getLinks
+  };
+}
