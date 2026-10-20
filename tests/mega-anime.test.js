@@ -165,7 +165,9 @@ async function main() {
 
   reset();
   scenario.anilistDetail = () => response(200, { errors: [{ message: "offline" }] });
-  assert.deepEqual(await provider.getVideoSources("mega-anime:42:1:sub"), []);
+  const graphqlErrorFallback = await provider.getVideoSources("mega-anime:42:1:sub");
+  assert.ok(graphqlErrorFallback.some(s => s.url === "https://cdn.example/nami.m3u8"),
+    "AniList GraphQL errors must not suppress valid AniNami playback links");
 
   reset();
   scenario.aninamiEpisodes = () => response(200, { results: { providers: { vidtube: { episodes: { dub: [{ id: "watch/vidtube/42/dub/solo-leveling-1", number: 1 }] } } } } });
