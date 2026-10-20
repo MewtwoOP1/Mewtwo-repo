@@ -66,8 +66,8 @@ global.extractVideo = (url, opts) => scenario.extract(url, opts);
 
 async function main() {
   reset();
-  assert.equal(provider.version, "1.0.1");
-  assert.equal(provider.getInfo().version, "1.0.1");
+  assert.equal(provider.version, "1.0.2");
+  assert.equal(provider.getInfo().version, "1.0.2");
   assert.equal(provider.getInfo().name, "Mega-Anime");
   assert.deepEqual(provider.getSettings(), []);
   assert.equal(provider.getStreams, provider.getVideoSources);
@@ -88,6 +88,14 @@ async function main() {
   assert.equal(detail.episodes.length, 3);
   assert.equal(detail.malId, 123);
   assert.equal((await provider.getEpisodes("anilist:42")).length, 3);
+
+  // Never extract arbitrary digits or alter an AniList ID with +/- offsets.
+  reset();
+  assert.equal(await provider.getDetail("anilist:+42"), null);
+  assert.equal(await provider.getDetail("anilist:-42"), null);
+  assert.equal(await provider.getDetail("unrelated-title-42"), null);
+  assert.equal(await provider.getDetail("anilist:0"), null);
+  assert.equal(calls.length, 0, "malformed detail IDs must not be sent to AniList");
 
   reset();
   const streams = await provider.getVideoSources("mega-anime:42:1:sub");
@@ -115,7 +123,18 @@ async function main() {
   assert.ok(namiOnly.some(s => s.url === "https://cdn.example/nami.m3u8"), "AniWaves failure must not suppress AniNami");
 
   reset();
-  assert.deepEqual(await provider.getVideoSources("not-an-episode"), []);
+  for (const invalid of [
+    "not-an-episode",
+    "mega-anime:+42:1:sub",
+    "mega-anime:-42:1:sub",
+    "mega-anime:42:+1:sub",
+    "mega-anime:42:-1:sub",
+    "mega-anime:0:1:sub",
+    "mega-anime:42:1:other"
+  ]) {
+    assert.deepEqual(await provider.getVideoSources(invalid), [], "should reject " + invalid);
+  }
+  assert.equal(calls.length, 0, "signed/invalid IDs must not trigger AniList requests");
 
   reset();
   scenario.anilistDetail = () => response(200, { errors: [{ message: "offline" }] });
