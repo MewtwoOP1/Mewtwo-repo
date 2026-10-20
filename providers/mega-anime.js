@@ -30,7 +30,23 @@ function _mediaToItem(m) {
   return { id: 'anilist:' + m.id, title: _titleOf(m), url: 'anilist:' + m.id,
     cover: _coverOf(m), type: _typeOf(m), sourceId: SOURCE_ID };
 }
-function _parseId(url) { var m = String(url || '').match(/(?:anilist:|mega-anime:)?(\d+)/); return m ? parseInt(m[1], 10) : 0; }
+// IDs are opaque identifiers. Accept only an unsigned, positive numeric ID in a known
+// namespace; never shift IDs with +/- offsets or extract digits from arbitrary text.
+function _positiveNumericId(value) {
+  var s = String(value == null ? '' : value);
+  if (!/^\d+$/.test(s)) return null;
+  var n = Number(s);
+  return isFinite(n) && n > 0 && Math.floor(n) === n ? n : null;
+}
+function _parseId(url) {
+  var s = String(url || '');
+  var m = s.match(/^anilist:(\d+)$/i)
+    || s.match(/^mega-anime:(\d+)$/i)
+    || s.match(/^(\d+)$/);
+  if (!m) return 0;
+  var id = _positiveNumericId(m[1]);
+  return id === null ? 0 : id;
+}
 function _episodesFor(media) {
   var count = Number(media.episodes) || 0;
   if (media.nextAiringEpisode && Number(media.nextAiringEpisode.episode) > 0) {
@@ -99,7 +115,7 @@ function _titleMatch(a, b) {
 }
 function getInfo() {
   return { name: 'Mega-Anime', lang: 'en', baseUrl: 'https://anilist.co',
-    logo: 'https://anilist.co/favicon.ico', type: 'anime', version: '1.0.1' };
+    logo: 'https://anilist.co/favicon.ico', type: 'anime', version: '1.0.2' };
 }
 function getSettings() { return []; }
 function search(query, page, opts) {
@@ -288,11 +304,14 @@ function _resolveAll(media, epNumber, kind) {
     .then(function (groups) { return _dedupeVideos([].concat.apply([], groups)); });
 }
 function getVideoSources(episodeUrl, opts) {
-  // Keep the original episode-id scheme; honor the requested sub/dub mode.
-  var parts = String(episodeUrl || '').replace(/^mega-anime:/i, '').split(':');
-  var id = parseInt(parts[0], 10), ep = parseInt(parts[1], 10) || 1;
-  var kind = String(parts[2] || '').toLowerCase() === 'dub' ? 'dub' : 'sub';
-  if (!id) return Promise.resolve([]);
+  // Episode IDs are <AniList ID>:<episode number>[:sub|dub].
+  // Reject signed, partial or free-text IDs instead of silently changing them.
+  var parsed = String(episodeUrl || '').match(/^(?:mega-anime:)?(\d+):(\d+)(?::(sub|dub))?$/i);
+  if (!parsed) return Promise.resolve([]);
+  var id = _positiveNumericId(parsed[1]);
+  var ep = _positiveNumericId(parsed[2]);
+  var kind = String(parsed[3] || 'sub').toLowerCase();
+  if (id === null || ep === null || (kind !== 'sub' && kind !== 'dub')) return Promise.resolve([]);
   return _anilist(DETAIL_QUERY, { id: id }).then(function (body) {
     var media = body.data && body.data.Media;
     if (!media) return [];
@@ -301,7 +320,7 @@ function getVideoSources(episodeUrl, opts) {
 }
 var getStreams = getVideoSources;
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { version: '1.0.1', getInfo: getInfo, getSettings: getSettings,
+  module.exports = { version: '1.0.2', getInfo: getInfo, getSettings: getSettings,
     getHome: getHome, search: search, getDetail: getDetail, getEpisodes: getEpisodes,
     getVideoSources: getVideoSources, getStreams: getStreams };
 }
