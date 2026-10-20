@@ -44,6 +44,7 @@ function reset() { calls.length = 0; scenario = baseScenario(); if (provider.__r
 
 global.fetch = async function (url, options) {
   const u = String(url); options = options || {}; calls.push({ url: u, options });
+  if (u === 'https://cloudstreampluginhelper-default-rtdb.firebaseio.com/.json') return response(404, {});
   if (u === ANILIST) {
     const q = JSON.parse(options.body), v = q.variables || {};
     if (Object.prototype.hasOwnProperty.call(v, "search")) return scenario.anilistSearch(v.search);
@@ -58,6 +59,9 @@ global.fetch = async function (url, options) {
     const id = new URL(u).searchParams.get("id");
     return scenario.waveSource(id);
   }
+  if (u.startsWith('https://megaplays.se/stream/s-2/')) return response(200, '<div data-id="321"></div><script src="/lib/newclient.min.js"></script>');
+  if (u === 'https://megaplays.se/lib/newclient.min.js') return response(200, 'AES-CBC function getSources(){"stream/getSources"}');
+  if (u.startsWith('https://megaplays.se/stream/getSources')) return response(200, { sources: { file: 'https://cdn.example/megaplay.m3u8' }, tracks: [] });
   if (u.startsWith(ANI_NAMI + "/api/episodes/")) return scenario.aninamiEpisodes(new URL(u).pathname.split("/").pop());
   if (u.startsWith(ANI_NAMI + "/api/watch/")) return scenario.aninamiWatch();
   return response(404, "not found");
@@ -66,8 +70,8 @@ global.extractVideo = (url, opts) => scenario.extract(url, opts);
 
 async function main() {
   reset();
-  assert.equal(provider.version, "1.0.3");
-  assert.equal(provider.getInfo().version, "1.0.3");
+  assert.equal(provider.version, "1.0.4");
+  assert.equal(provider.getInfo().version, "1.0.4");
   assert.equal(provider.getInfo().name, "Mega-Anime");
   assert.deepEqual(provider.getSettings(), []);
   assert.equal(provider.getStreams, provider.getVideoSources);
@@ -142,12 +146,12 @@ async function main() {
 
   reset();
   scenario.aninamiWatch = () => response(200, { success: true, results: { streams: [
-    { url: "https://embed.example/watch", type: "embed", quality: "auto", server: "EmbedServer", referer: ANI_NAMI + "/" }
+    { url: "https://megaplays.se/stream/s-2/321/sub", type: "embed", quality: "auto", server: "MegaPlay", referer: ANI_NAMI + "/" }
   ] } });
   scenario.extract = () => Promise.resolve([{ url: "https://cdn.example/nami-embedded.m3u8", container: "hls", quality: "1080p" }]);
   const asyncEmbed = await provider.getVideoSources("mega-anime:42:1:sub");
-  assert.ok(asyncEmbed.some(s => s.url === "https://cdn.example/nami-embedded.m3u8"),
-    "async Zangetsu extractVideo results must be awaited for AniNami embeds");
+  assert.ok(asyncEmbed.some(s => s.url === "https://cdn.example/megaplay.m3u8"),
+    "MegaPlay player embeds must use the native encrypted-source resolver instead of only generic extractVideo");
 
   reset();
   for (const invalid of [
