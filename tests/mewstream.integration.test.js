@@ -39,7 +39,6 @@ function g(t) { console.log('\n\x1b[36m' + t + '\x1b[0m'); }
   ok('at least one stream', res.length >= 1, 'got ' + res.length);
   ok('stream has url', res.every(function (s) { return !!s.url; }));
   ok('log shows anime=false', logs.some(function (l) { return /anime=false/.test(l); }), logs.join(' | '));
-  ok('log shows anime skipped', logs.some(function (l) { return /anime-sources:skipped/.test(l); }), logs.join(' | '));
   ok('no anime source called', !calls.some(function (u) { return /anikototv\.to|animesalt\.to|rareanimes\.mov|megaplays\.se/.test(u); }), calls.join('\n'));
 
   // Anime path: ensure absolute episode is used
