@@ -143,7 +143,7 @@ async function main() {
   assert.ok(results.some((item) => item.title === "TMDB Mock Show"), "TMDB search result missing");
   assert.ok(results.some((item) => item.title === "Simkl Search Mock"), "Simkl search result missing");
 
-  const tmdbItem = results.find((item) => item.title === "TMDB Mock Show");
+  const tmdbItem = results.find((item) => item.title === "TMDB Mock Show" && decodeURIComponent(item.url).includes('"engine":"tmdb"'));
   assert.ok(tmdbItem.url.startsWith("cinestream://item?data="), "TMDB results must use a restorable provider URL");
   const detail = await provider.getDetail(tmdbItem.url);
   assert.equal(detail.title, "TMDB Mock Show");
