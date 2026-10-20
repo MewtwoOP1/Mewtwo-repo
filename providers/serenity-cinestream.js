@@ -182,8 +182,8 @@ if (typeof module !== 'undefined' && module.exports) module.exports = { version:
 // CineStreamProvider, CineSimklProvider, CineTmdbProvider, and ProviderRegistry.
 // Cloudstream-specific extractors are not executable in Zangetsu's JS runtime;
 // the functional stream adapters below are the ones exposed in settings.
-VERSION = '0.3.0';
-var CINESTREAM_VERSION = '0.3.0';
+VERSION = '0.3.1';
+var CINESTREAM_VERSION = '0.3.1';
 var CS_CINEMETA_CATALOG = 'https://cinemeta-catalogs.strem.io';
 var CS_CINEMETA_META = 'https://v3-cinemeta.strem.io';
 var CS_KITSU = 'https://anime-kitsu.strem.fun';
