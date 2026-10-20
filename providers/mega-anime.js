@@ -470,11 +470,11 @@ function _resolveAniWaves(media, epNumber, kind) {
             return _ajax(ANI_WAVES, '/ajax/server/list?servers=' + episodeInfo.ids, match.url)
               .then(function (srvData) {
                 var markup = srvData && typeof srvData.result === 'string' ? srvData.result : '';
-                var sections = [], typeRe = /data-type=["']([^"']+)["']([\\s\\S]*?)(?=data-type=["']|$)/gi, tm;
+                var sections = [], typeRe = /data-type=["']([^"']+)["']([\s\S]*?)(?=data-type=["']|$)/gi, tm;
                 while ((tm = typeRe.exec(markup)) !== null) {
                   var st = String(tm[1] || '').toLowerCase();
                   if (kind === 'dub' ? st !== 'dub' : (st !== 'sub' && st !== 'ssub')) continue;
-                  var inner = tm[2], liRe = /<li\\b([^>]*)>([\\s\\S]*?)<\\/li>/gi, lm;
+                  var inner = tm[2], liRe = /<li\b([^>]*)>([\s\S]*?)<\/li>/gi, lm;
                   while ((lm = liRe.exec(inner)) !== null) {
                     var attrs2 = lm[1] + ' ' + lm[2];
                     var linkId = (attrs2.match(/data-link-id=["']([^"']+)["']/i) || [])[1];
@@ -485,7 +485,7 @@ function _resolveAniWaves(media, epNumber, kind) {
                 // Some site revisions move server IDs outside the old .type wrapper.
                 // If category markup is missing entirely, try every listed server.
                 if (!sections.length && !/data-type=["'](?:sub|ssub|dub)["']/i.test(markup)) {
-                  var allLi = /<li\\b([^>]*)>([\\s\\S]*?)<\\/li>/gi, am;
+                  var allLi = /<li\b([^>]*)>([\s\S]*?)<\/li>/gi, am;
                   while ((am = allLi.exec(markup)) !== null) {
                     var allAttrs = am[1] + ' ' + am[2];
                     var allId = (allAttrs.match(/data-link-id=["']([^"']+)["']/i) || [])[1];
