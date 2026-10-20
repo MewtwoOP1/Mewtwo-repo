@@ -402,7 +402,7 @@
     {
       "id": "serenity-cinestream",
       "name": "CineStream",
-      "version": "0.3.0",
+      "version": "0.3.1",
       "type": "movie",
       "lang": "en",
       "file": "providers/serenity-cinestream.js",
