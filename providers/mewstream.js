@@ -3,7 +3,7 @@
 // AniZone, VidSrc, VidCore, VidUp, moviesapi, VidNest).
 // Runtime-safe: no setTimeout, parallel-race orchestration with early exit.
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID) ? String(__SOURCE_ID) : 'mewstream';
-var VERSION = '2.0.0';
+var VERSION = '2.0.1';
 
 // ── Polyfills (Zangetsu sandbox safety) ────────────────────────────────
 var _b64chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
