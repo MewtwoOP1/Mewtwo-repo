@@ -201,7 +201,7 @@ function getInfo() {
 }
 
 function getSettings() {
-  return [
+  var definitions = [
     choice('audioLanguage', 'Audio language (when source does not report it)', [
       ['auto','Detect automatically'],['en','English'],['ja','Japanese'],['zh','Chinese'],
       ['ko','Korean'],['hi','Hindi'],['es','Spanish'],['fr','French'],['de','German'],
@@ -270,7 +270,11 @@ function getSettings() {
     {key:'subtitles',label:'Include subtitle tracks',description:'Attach available subtitle tracks to returned streams.',type:'bool',default:true},
     choice('streamServer', 'VaPlayer streams', [['all','All available'],['1','Server 1'],['2','Server 2'],['3','Server 3']], 'all')
   ];
-}
+  return definitions.map(function(s) {
+    if (!s.description) s.description = s.label + '.';
+    return s;
+  });
+}}
 
 function csSetting(key) {
   var saved = {};
