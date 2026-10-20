@@ -85,8 +85,14 @@ async function _fetchText(url, opts) {
   try {
     var r = await fetch(url, { method: opts.method || 'GET', headers: h, body: opts.body, timeoutMs: opts.timeoutMs || 15000 });
     if (!r) return '';
-    var t = r.body;
-    return typeof t !== 'string' ? JSON.stringify(t) : t;
+    // Zangetsu hosts may expose the response body as a string; standard Fetch
+    // implementations expose a ReadableStream and provide response.text().
+    if (typeof r.body === 'string') return r.body;
+    if (typeof r.text === 'function') {
+      var t = await r.text();
+      return typeof t === 'string' ? t : '';
+    }
+    return '';
   } catch (e) { return ''; }
 }
 async function _fetchJson(url, opts) {
