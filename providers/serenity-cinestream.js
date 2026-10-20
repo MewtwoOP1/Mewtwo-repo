@@ -610,8 +610,34 @@ function csNewEpisode(payload, number, season, title, date, thumbnail) {
     date:date || null, thumbnail:thumbnail || null
   };
 }
+function csMediaStatus(value) {
+  var s = String(value || '').trim().toLowerCase().replace(/[_-]+/g, ' ');
+  if (s === 'ongoing' || s === 'returning series' || s === 'in production' || s === 'planned' || s === 'post production' || s === 'upcoming') return 'ongoing';
+  if (s === 'completed' || s === 'ended' || s === 'released' || s === 'finished') return 'completed';
+  if (s === 'hiatus' || s === 'on hiatus') return 'hiatus';
+  if (s === 'cancelled' || s === 'canceled') return 'cancelled';
+  return 'unknown';
+}
+function csYearString(value) {
+  if (value == null || value === '') return null;
+  var s = String(value).trim();
+  var match = s.match(/(?:^|\\D)(\\d{4})(?:\\D|$)/);
+  return match ? match[1] : s;
+}
+function csCastNames(value) {
+  return csAsArray(value).map(function(person) {
+    if (typeof person === 'string') return person.trim();
+    if (!person || typeof person !== 'object') return '';
+    return String(person.name || person.actor || person.title || '').trim();
+  }).filter(Boolean);
+}
 function csDetailResult(payload, raw, title, poster, background, description, year, genres, episodes) {
-  var itemPayload = Object.assign({}, payload, {title:title || payload.title,poster:poster || payload.poster,year:year || payload.year});
+  var normalizedYear = csYearString(year != null ? year : payload.year);
+  var itemPayload = Object.assign({}, payload, {
+    title: title || payload.title,
+    poster: poster || payload.poster,
+    year: normalizedYear
+  });
   var out = csMakeItem(itemPayload);
   out.url = 'cinestream://item?data=' + encodeURIComponent(JSON.stringify(itemPayload));
   out.cover = poster || payload.poster || null;
@@ -620,17 +646,23 @@ function csDetailResult(payload, raw, title, poster, background, description, ye
   out.backgroundPoster = background || null;
   out.description = description || '';
   out.plot = description || '';
-  out.year = year || payload.year || null;
-  out.genres = genres || [];
-  out.tags = out.genres;
+  out.year = normalizedYear;
+  out.genres = csAsArray(genres).map(function(g) {
+    return typeof g === 'string' ? g : g && g.name;
+  }).filter(Boolean);
+  // MediaDetail.tags deserializes as List<MediaTag> objects, not strings.
+  // Genres already have their own field, so don't duplicate them into tags.
+  out.tags = [];
   out.studios = [];
-  out.status = raw && (raw.status || raw.status_name) || 'unknown';
-  out.episodes = episodes || [];
+  out.status = csMediaStatus(raw && (raw.status || raw.status_name));
+  out.episodes = csAsArray(episodes);
   out.imdbId = payload.imdbId || raw && (raw.imdb_id || raw.imdbId) || null;
   out.tmdbId = Number(payload.tmdbId || raw && raw.moviedb_id || raw && raw.id) || null;
   out.tmdbIsTv = payload.type === 'series' || payload.type === 'tv';
   out.score = Number(payload.score || raw && (raw.imdbRating || raw.vote_average || raw.rating)) || null;
-  out.cast = raw && raw.cast || raw && raw.actors || [];
+  // MediaDetail.cast is List<String>. The richer runtime-only castMembers
+  // model isn't JSON-decoded by the provider manager, so expose names here.
+  out.cast = csCastNames(raw && (raw.cast || raw.actors));
   out.trailer = raw && raw.trailer || null;
   return out;
 }
@@ -695,9 +727,9 @@ async function csTmdbDetail(payload) {
   var detailOut = csDetailResult(normalized,m,m.title || m.name,normalized.poster,
     m.backdrop_path ? 'https://image.tmdb.org/t/p/original' + m.backdrop_path : null,
     m.overview,normalized.year,genres,episodes);
-  detailOut.cast = csAsArray(m.credits && m.credits.cast).map(function(c) { return {name:c.name,character:c.character,photo:c.profile_path ? 'https://image.tmdb.org/t/p/w185' + c.profile_path : null}; });
+  detailOut.cast = csCastNames(m.credits && m.credits.cast);
   detailOut.trailer = trailer;
-  detailOut.status = m.status || 'unknown';
+  detailOut.status = csMediaStatus(m.status);
   return detailOut;
 }
 async function csSimklDetail(payload) {
