@@ -786,16 +786,9 @@
           "default": ""
         },
         {
-          "key": "showboxToken",
-          "label": "Showbox (Febbox) UI token",
-          "description": "Required for Showbox. Copy the ui cookie value from febbox.com while logged in.",
-          "type": "text",
-          "default": ""
-        },
-        {
           "key": "enableMegaplayDirect",
           "label": "MegaPlay (MAL/AniList direct)",
-          "description": "Resolve anime streams directly from MAL or AniList ID — no title search.",
+          "description": "Resolve anime streams directly from MAL or AniList ID.",
           "type": "bool",
           "default": true
         },
@@ -809,14 +802,14 @@
         {
           "key": "enableAnizone",
           "label": "AniZone",
-          "description": "AniZone anime source (anizone.to).",
+          "description": "AniZone anime source.",
           "type": "bool",
           "default": true
         },
         {
           "key": "enableAnimesalt",
           "label": "AnimeSalt",
-          "description": "AnimeSalt anime source (animesalt.to).",
+          "description": "AnimeSalt anime source.",
           "type": "bool",
           "default": true
         },
@@ -824,13 +817,6 @@
           "key": "enableRareanimes",
           "label": "RareAnimes",
           "description": "RareAnimes Hindi/Tamil/Telugu dub source.",
-          "type": "bool",
-          "default": true
-        },
-        {
-          "key": "enableShowbox",
-          "label": "Showbox",
-          "description": "Showbox movie and TV source. Requires the token above.",
           "type": "bool",
           "default": true
         },
@@ -863,26 +849,13 @@
           "default": true
         },
         {
-{
-  "id": "mewstream",
-  "name": "Mewstream",
-  "version": "2.0.2",
-  "type": "movie",
-  "lang": "en",
-  "file": "providers/mewstream.js",
-  "logo": "https://www.google.com/s2/favicons?sz=256&domain=strem.io",
-  "nsfw": false,
-  "settings": [
-    { "key": "tmdbApiKey", "label": "TMDB API key (optional)", "description": "Optional personal TMDB v3 key. Blank uses the built-in key.", "type": "text", "default": "" },
-    { "key": "enableMegaplayDirect", "label": "MegaPlay (MAL/AniList direct)", "description": "Resolve anime streams directly from MAL or AniList ID.", "type": "bool", "default": true },
-    { "key": "enableAnikoto", "label": "AniKoto", "description": "AniKoto anime source with title-match guard.", "type": "bool", "default": true },
-    { "key": "enableAnizone", "label": "AniZone", "description": "AniZone anime source.", "type": "bool", "default": true },
-    { "key": "enableAnimesalt", "label": "AnimeSalt", "description": "AnimeSalt anime source.", "type": "bool", "default": true },
-    { "key": "enableRareanimes", "label": "RareAnimes", "description": "RareAnimes Hindi/Tamil/Telugu dub source.", "type": "bool", "default": true },
-    { "key": "enableVaplayer", "label": "VaPlayer", "description": "VaPlayer movie and TV source.", "type": "bool", "default": true },
-    { "key": "enableVidrock", "label": "Vidrock", "description": "Vidrock movie and TV source.", "type": "bool", "default": true },
-    { "key": "enableVidzee", "label": "Vidzee", "description": "Vidzee movie and TV source.", "type": "bool", "default": true },
-    { "key": "enableVidfast", "label": "Vidfast", "description": "Vidfast movie and TV source.", "type": "bool", "default": true },
-    { "key": "enableHexa", "label": "Hexa", "description": "Hexa movie and TV source.", "type": "bool", "default": true }
+          "key": "enableHexa",
+          "label": "Hexa",
+          "description": "Hexa movie and TV source.",
+          "type": "bool",
+          "default": true
+        }
+      ]
+    }
   ]
 }
