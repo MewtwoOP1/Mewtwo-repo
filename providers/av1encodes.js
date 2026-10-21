@@ -9,7 +9,7 @@
 const SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID)
   ? String(__SOURCE_ID)
   : 'av1encodes';
-const VERSION = '1.2.0';
+const VERSION = '1.2.1';
 const DEFAULT_DOMAIN = 'https://av1encodes.com';
 const MIRROR_DOMAINS = [
   'https://animealpha.cc',
@@ -139,6 +139,64 @@ function _pathQuery(url) {
   return value.charAt(0) === '/' ? value.split('#')[0] : '/' + value.split('#')[0];
 }
 
+function _stripTokenParam(url) {
+  const full = _absolute(url, _domain());
+  if (!full) return url;
+  const origin = _origin(full) || _domain();
+  const pathQuery = _pathQuery(full).split('#')[0];
+  const queryAt = pathQuery.indexOf('?');
+  if (queryAt < 0) return origin + pathQuery;
+  const path = pathQuery.slice(0, queryAt);
+  const query = pathQuery.slice(queryAt + 1);
+  const kept = query.split('&').filter(part => {
+    if (!part) return false;
+    const key = _decode(part.split('=')[0]).toLowerCase();
+    return key !== 'token';
+  });
+  return origin + path + (kept.length ? '?' + kept.join('&') : '');
+}
+
+function _appendAccessToken(url, token) {
+  const clean = _stripTokenParam(url);
+  if (!token) return clean;
+  return clean + (clean.indexOf('?') >= 0 ? '&' : '?') + 'token=' + encodeURIComponent(token);
+}
+
+async function _getFreshAccessToken(base, ref) {
+  const requestBase = _origin(base) || _domain();
+  const response = await _fetchSite(
+    requestBase + '/get_token',
+    ref || requestBase + '/',
+    {
+      'Accept': 'application/json, */*;q=0.8',
+      'Referer': requestBase + '/',
+      'Sec-Fetch-Dest': 'empty',
+      'Sec-Fetch-Mode': 'cors',
+      'Sec-Fetch-Site': 'same-origin'
+    }
+  );
+  const body = String(response.body || '').trim();
+  let token = null;
+  if (body) {
+    try {
+      const parsed = JSON.parse(body);
+      const value = parsed && (parsed.token || parsed.access_token || parsed.accessToken);
+      if (typeof value === 'string' && value.trim()) token = value.trim();
+    } catch (e) {}
+    if (!token) {
+      const match = body.match(/["'](?:token|access_token|accessToken)["']\s*:\s*["']([^"']+)["']/i);
+      if (match) token = match[1];
+    }
+  }
+  return { token, base: response.base || requestBase, status: response.status || 0 };
+}
+
+function _isDirectMediaUrl(url) {
+  const value = String(url || '');
+  if (/\/download\//i.test(_pathQuery(value))) return false;
+  return /\.(?:m3u8|mp4|mkv|mpd)(?:[?#]|$)/i.test(value);
+}
+
 function _trustedSiteHost(host) {
   const h = String(host || '').toLowerCase();
   const roots = ['av1encodes.com', 'animealpha.cc', 'av1please.com'];
@@ -255,6 +313,12 @@ async function _fetchSite(url, ref, extraHeaders) {
         // to the next published mirror instead of trying to defeat the challenge.
         if (/Just a moment\\.\\.\\.|cf-chl-|turnstile/i.test(body) &&
             /cloudflare|challenge-platform|captcha/i.test(body)) {
+          break;
+        }
+        // The site can return HTTP 200 with a rendered download-generation
+        // failure. Treat it as unavailable and try the next published mirror.
+        if (/\\/download\\//i.test(path) &&
+            /unable to generate download link|generating download link|oops!?\\s+something went wrong/i.test(body)) {
           break;
         }
         const finalUrl = r.url || target;
@@ -870,40 +934,61 @@ async function _refreshEpisodeUrl(downloadUrl, info, base) {
 }
 
 async function _extractVideoForEpisode(downloadUrl, filename, resolution) {
-  const firstPage = await _fetchSite(downloadUrl, _origin(downloadUrl) + '/');
-  let actualUrl = firstPage.url || downloadUrl;
-  let html = firstPage.body || '';
-  let base = firstPage.base || _origin(actualUrl) || _domain();
-  let info = _downloadInfo(actualUrl);
-  if (!info.filename) info = _downloadInfo(downloadUrl);
-  if (html && !/anime-video-player/i.test(html) && !_findIframe(html) && !TOKEN_RE.test(html)) {
-    const fresh = await _refreshEpisodeUrl(downloadUrl, info, base);
-    if (fresh && fresh !== downloadUrl) {
-      const retry = await _fetchSite(fresh, base + '/');
-      if (retry.body) {
-        actualUrl = retry.url || fresh;
-        html = retry.body;
-        base = retry.base || base;
-        info = _downloadInfo(actualUrl);
-      }
+  // The episode-list page embeds a short-lived ?token= value in each href.
+  // It expires before playback. Always remove it and fetch a fresh token from
+  // /get_token before requesting the download-page HTML.
+  const requestedInfo = _downloadInfo(downloadUrl);
+  const cleanUrl = _stripTokenParam(downloadUrl);
+  let base = _origin(cleanUrl) || _domain();
+  const freshTokenResult = await _getFreshAccessToken(base, base + '/');
+  if (freshTokenResult.base) base = freshTokenResult.base;
+
+  let requestUrl = _appendAccessToken(base + _pathQuery(cleanUrl), freshTokenResult.token);
+  let page = await _fetchSite(requestUrl, base + '/');
+  let actualUrl = page.url || requestUrl;
+  let html = page.body || '';
+  base = page.base || _origin(actualUrl) || base;
+
+  // Always derive the slug/season/filename from the requested route, not the
+  // final HTTP URL. Redirects may land on an HTML error page and lose the
+  // modern /download/{slug}/{season}/{resolution}/{filename} metadata.
+  let info = requestedInfo;
+  if (!info.filename || !info.modern) {
+    const currentInfo = _downloadInfo(actualUrl);
+    if (currentInfo.filename) info = currentInfo;
+  }
+
+  if (!html || (!_findIframe(html) && !TOKEN_RE.test(html))) {
+    const freshEpisodeUrl = await _refreshEpisodeUrl(cleanUrl, info, base);
+    const retryBase = _origin(freshEpisodeUrl) || base;
+    const retryToken = await _getFreshAccessToken(retryBase, retryBase + '/');
+    base = retryToken.base || retryBase;
+    const retryUrl = _appendAccessToken(base + _pathQuery(_stripTokenParam(freshEpisodeUrl || cleanUrl)), retryToken.token);
+    const retry = await _fetchSite(retryUrl, base + '/');
+    if (retry.body && (_findIframe(retry.body) || TOKEN_RE.test(retry.body) || !html)) {
+      page = retry;
+      actualUrl = retry.url || retryUrl;
+      html = retry.body;
+      base = retry.base || base;
     }
   }
 
-  const filenameFromPage = info.filename || filename || _filenameFromUrl(downloadUrl);
+  const filenameFromPage = requestedInfo.filename || info.filename || filename || _filenameFromUrl(cleanUrl);
   const resLabel = _resolutionLabel(resolution || info.resolution, filenameFromPage);
   const audio = (filenameFromPage.match(/\[(Dual|Sub|Dub|English Dub|Tri|Multi)\]/i) || [])[1] || '';
   const label = 'AV1 · ' + resLabel + (audio ? ' [' + audio + ']' : '');
   const size = _text((html.match(/(?:Size|File Size)\s*:?\s*([^<\r\n]{1,40})/i) || [])[1] || '');
   const fullLabel = size && !/generating|checking/i.test(size) ? label + ' · ' + size : label;
 
-  let iframeSrc = _findIframe(html);
-  let iframeUrl = iframeSrc ? _absolute(iframeSrc, base) : null;
-  let resolvedIframe = iframeUrl ? await _resolveLink(iframeUrl, base, actualUrl) : null;
+  const iframeSrc = _findIframe(html);
+  const iframeUrl = iframeSrc ? _absolute(iframeSrc, base) : null;
+  const resolvedIframe = iframeUrl ? await _resolveLink(iframeUrl, base, actualUrl) : null;
 
   let ddl = null;
   const tokenMatch = html.match(TOKEN_RE);
   if (tokenMatch && info.encodedFilename) {
-    const ddlUrl = base + '/get_ddl/' + info.encodedFilename;
+    const ddlBase = base;
+    const ddlUrl = ddlBase + '/get_ddl/' + info.encodedFilename;
     const ddlResponse = await _fetchSite(
       ddlUrl,
       actualUrl,
@@ -930,7 +1015,6 @@ async function _extractVideoForEpisode(downloadUrl, filename, resolution) {
   const streamRaw = _ddlField(ddl, 'stream_link', 'streamLink');
   const dlRaw = _ddlField(ddl, 'download_link', 'downloadLink');
   const torrentRaw = _ddlField(ddl, 'torrent_link', 'torrentLink');
-  const sizeValue = _ddlField(ddl, 'file_size', 'fileSize');
   const resolvedWatch = resolvedIframe ||
     (ddlWatchRaw ? await _resolveLink(ddlWatchRaw, base, actualUrl) : null);
   const resolvedStream = streamRaw ? await _resolveLink(streamRaw, base, actualUrl) : null;
@@ -942,28 +1026,21 @@ async function _extractVideoForEpisode(downloadUrl, filename, resolution) {
   if (dash) {
     streams.push(_stream(dash, fullLabel + ' · DASH', filenameFromPage, base));
   }
-
   if (resolvedStream && resolvedStream !== resolvedWatch) {
     streams.push(_stream(resolvedStream, fullLabel + ' · Stream', filenameFromPage, base));
   }
-
   if (resolvedDownload) {
     streams.push(_stream(resolvedDownload, fullLabel + ' · Direct DL', filenameFromPage, base));
   }
-
   if (resolvedTorrent) {
     streams.push(_stream(resolvedTorrent, fullLabel + ' · Torrent', filenameFromPage, base));
   }
 
-  // On the current site the embedded player can remain usable while the DDL
-  // JSON endpoint is unavailable. Keep the resolved /r/ player URL as a last
-  // playable option rather than discarding it.
-  if (!streams.length && resolvedIframe) {
-    streams.push(_stream(resolvedIframe, fullLabel + ' · Player', filenameFromPage, base));
-  }
-
-  if (!streams.length) {
-    streams.push(_stream(actualUrl || downloadUrl, fullLabel + ' · Direct DL', filenameFromPage, base));
+  // Never report a site HTML download page or /r/ page as if it were a video.
+  // The caller can try the next resolution; an honest empty result beats a
+  // link that will inevitably fail in the player's media parser.
+  if (!streams.length && _isDirectMediaUrl(actualUrl)) {
+    streams.push(_stream(actualUrl, fullLabel + ' · Direct', filenameFromPage, base));
   }
   return streams.filter(Boolean);
 }
@@ -1020,8 +1097,8 @@ async function getVideoSources(episodeUrl) {
     }
   }
 
-  if (!collected.length) {
-    collected.push(_stream(full, 'AV1 · ' + _resolutionLabel(startResolution, filename) + ' · Direct DL', filename, _origin(full) || _domain()));
+  if (!collected.length && _isDirectMediaUrl(full)) {
+    collected.push(_stream(full, 'AV1 · ' + _resolutionLabel(startResolution, filename) + ' · Direct', filename, _origin(full) || _domain()));
   }
   return collected;
 }
