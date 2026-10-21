@@ -194,7 +194,7 @@ function routeEpisodePages() {
     assert.strictEqual(info.name, 'AV1Encodes');
     assert.strictEqual(info.lang, 'en');
     assert.strictEqual(info.type, 'anime');
-    assert.strictEqual(info.version, '1.2.1');
+    assert.strictEqual(info.version, '1.2.2');
     assert.ok(/^https?:\/\//.test(info.baseUrl));
   });
 
