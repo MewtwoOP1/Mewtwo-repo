@@ -18,7 +18,7 @@ function encodeName(name) {
   return encodeURIComponent(name);
 }
 
-const FILENAME = '[E001] One Piece [1080p] [Dual].mkv';
+const FILENAME = '[E001] One Piece 1999 [1080p] [Dual].mkv';
 const ENCODED_FILENAME = encodeName(FILENAME);
 const EP_URL = BASE + '/download/one-piece/1/1920%20x%201080/' +
   ENCODED_FILENAME + '?token=fixture-token';
