@@ -309,6 +309,7 @@ function routeRedirects() {
       '; calls=' + JSON.stringify(calls.map(x => x.url)));
     assert.ok(sources.some(x => /Stream/.test(x.quality) && x.url === 'https://cdn.example.com/one-piece-01.mp4'));
     assert.ok(sources.some(x => /Direct DL/.test(x.quality) && x.url === 'https://cdn.example.com/one-piece-01.mkv'));
+    assert.ok(!sources.some(x => /Torrent/.test(x.quality)), 'torrent URLs stay hidden unless enabled');
     assert.ok(!calls.some(x => /\/get_token(?:\?|$)/.test(x.url)));
     assert.ok(!calls.some(x => /\/get_ddl\//.test(x.url)));
     assert.ok(!calls.some(x => /\/download\/one-piece\/1\//.test(x.url)));
@@ -397,6 +398,67 @@ function routeRedirects() {
       '720p episode list must be attempted after 1080p link generation fails');
     assert.ok(sources.some(source => /DASH/.test(source.quality)),
       'the lower-resolution route should still produce playable stream candidates');
+  });
+
+  await test('search without a query browses the anime index and respects page numbering', async () => {
+    reset();
+    route(/^https:\/\/av1please\.com\/anime\?page=0$/, () => ok(FIXTURES.search));
+    const items = await P.search('', 1, {});
+    assert.strictEqual(items.length, 3);
+    assert.ok(calls.some(call => call.url === BASE + '/anime?page=0'));
+  });
+
+  await test('wrapped episode JSON objects are accepted without losing source labels', async () => {
+    reset();
+    routeDetail('naruto', '<html><body><h1>Naruto</h1><div data-season="1"></div></body></html>');
+    const payload = JSON.stringify({ items: [{
+      num: 7,
+      label: 'Naruto Episode 07',
+      audio: 'sub',
+      href: '/download/naruto/1/1920%20x%201080/%5BS01-E07%5D%20Naruto%20%5B1080p%5D.mkv?token=naruto-seven'
+    }]});
+    route(/^https:\/\/av1please\.com\/episodes\/naruto\/1\/1920%20x%201080$/, () => ok(payload));
+    const episodes = await P.getEpisodes(BASE + '/anime/naruto', {});
+    assert.strictEqual(episodes.length, 1);
+    assert.strictEqual(episodes[0].number, 7);
+    assert.strictEqual(episodes[0].title, 'Naruto Episode 07');
+    assert.ok(episodes[0].url.endsWith('?token=naruto-seven'));
+  });
+
+  await test('empty episode responses are not cached and a later successful retry is visible', async () => {
+    reset();
+    const animeUrl = BASE + '/anime/naruto';
+    routeDetail('naruto', '<html><body><h1>Naruto</h1><div data-season="1"></div></body></html>');
+    route(/^https:\/\/av1please\.com\/episodes\/naruto\/1\//, () => ok(FIXTURES.emptyEpisodes));
+    const first = await P.getEpisodes(animeUrl, {});
+    assert.strictEqual(first.length, 0);
+
+    // Keep the same provider instance and its caches, but simulate the upstream
+    // service recovering between calls.
+    routes.length = 0;
+    calls.length = 0;
+    routeDetail('naruto', '<html><body><h1>Naruto</h1><div data-season="1"></div></body></html>');
+    const payload = JSON.stringify([{
+      num: 1,
+      label: 'Naruto Episode 1',
+      href: '/download/naruto/1/1920%20x%201080/%5BS01-E01%5D%20Naruto%20%5B1080p%5D.mkv?token=recovered'
+    }]);
+    route(/^https:\/\/av1please\.com\/episodes\/naruto\/1\/1920%20x%201080$/, () => ok(payload));
+    const recovered = await P.getEpisodes(animeUrl, {});
+    assert.strictEqual(recovered.length, 1);
+    assert.ok(recovered[0].url.endsWith('?token=recovered'));
+  });
+
+  await test('torrent source is emitted only when the optional setting is enabled', async () => {
+    reset();
+    sandbox.__settings = { av1encodes: { showTorrent: true } };
+    routeDetail('one-piece', '<html><body><h1>One Piece</h1><div data-season="1"></div></body></html>');
+    routeEpisodePage('one-piece', '1', '1920 x 1080', FIXTURES.episodesJson);
+    routeRedirects();
+    const episodes = await P.getEpisodes(BASE + '/anime/one-piece', {});
+    const streams = await P.getVideoSources(episodes.find(ep => ep.number === 1).url);
+    assert.ok(streams.some(source => /Torrent/.test(source.quality) &&
+      source.url === 'magnet:?xt=urn:btih:abcdef'));
   });
 
   await test('container detection keeps MP4 distinct and DASH as unknown', async () => {
