@@ -1,4 +1,4 @@
-// AV1Encodes v1.0.0 regression tests; all network calls are mocked.
+// AV1Encodes v1.0.1 regression tests; all network calls are mocked.
 'use strict';
 const assert = require('assert');
 const fs = require('fs');
@@ -94,15 +94,20 @@ function routeRedirects() {
 }
 
 (async function run() {
-  console.log('\nAV1Encodes v1.0.0 regression tests\n');
+  console.log('\nAV1Encodes v1.0.1 regression tests\n');
 
-  await test('v1.0.0 provider contract and metadata', async () => {
+  await test('v1.0.1 provider contract and metadata', async () => {
     reset();
     assert.strictEqual(P.getInfo().name, 'AV1Encodes');
-    assert.strictEqual(P.getInfo().version, '1.0.0');
+    assert.strictEqual(P.getInfo().version, '1.0.1');
     assert.strictEqual(P.getInfo().type, 'anime');
     assert.strictEqual(P.getInfo().lang, 'en');
     assert.deepStrictEqual(JSON.parse(JSON.stringify(P.getSettings().map(x => x.key))), ['domain','quality','showTorrent']);
+    const domain = P.getSettings().find(x => x.key === 'domain');
+    assert.strictEqual(domain.type, 'enum');
+    assert.strictEqual(domain.default, 'auto');
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(domain.options.map(x => x.value))),
+      ['auto', BASE, ALT, LEGACY]);
   });
 
   await test('search parses anime cards, covers and distinct URLs', async () => {
@@ -168,10 +173,11 @@ function routeRedirects() {
     const items = await P.getEpisodes(BASE + '/anime/one-piece', {});
     assert.strictEqual(items.length, 2);
     assert.deepStrictEqual(JSON.parse(JSON.stringify(items.map(x => x.number))), [1,2]);
-    assert.strictEqual(items[0].title, 'Episode 1');
+    assert.strictEqual(items[0].title, 'Episode 01');
     assert.ok(items[0].url.indexOf('token=old-one') >= 0);
-    assert.ok(items[0].url.indexOf('__av1ddl=') >= 0);
-    assert.ok(items[0].ddl && items[0].ddl.success);
+    assert.ok(!items[0].url.includes('__av1ddl='));
+    assert.ok(!Object.prototype.hasOwnProperty.call(items[0], 'ddl'),
+      'source episode objects should not expose synthetic DDL metadata');
   });
 
   await test('HTML episode links parse S01-E01 names and retain the listing token', async () => {
@@ -183,8 +189,9 @@ function routeRedirects() {
     const items = await P.getEpisodes(BASE + '/anime/one-piece', {});
     assert.strictEqual(items.length, 2);
     assert.deepStrictEqual(JSON.parse(JSON.stringify(items.map(x => x.number))), [1,2]);
-    assert.strictEqual(items[0].title, 'Episode 1');
+    assert.strictEqual(items[0].title, 'Episode 01 Dual');
     assert.ok(items[0].url.endsWith('?token=episode-token'));
+    assert.ok(!items[0].url.includes('__av1ddl='));
   });
 
   await test('episode listing falls back when the preferred resolution has no entries', async () => {

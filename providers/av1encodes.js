@@ -5,7 +5,7 @@
 
 const SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID)
   ? String(__SOURCE_ID) : 'av1encodes';
-const VERSION = '1.0.0';
+const VERSION = '1.0.1';
 const DEFAULT_DOMAIN = 'https://av1please.com';
 const SITE_DOMAINS = [
   'https://av1please.com',
@@ -32,7 +32,8 @@ const EPISODE_PATTERNS = [
   /\b(?:episode|ep\.?)\s*0*(\d{1,4})\b/i,
   /\bE0*(\d{1,4})\b/i
 ];
-const DDL_QUERY_KEY = '__av1ddl';
+const DDL_QUERY_KEY = '__av1ddl'; // Read-only legacy compatibility; new episode URLs never include this marker.
+const DDL_BY_URL = Object.create(null);
 
 // ── Settings and provider contract ────────────────────────────────────────
 
@@ -55,7 +56,12 @@ function _cleanDomain(value) {
 }
 
 function _domain() {
-  return _cleanDomain(_readSetting('domain') || DEFAULT_DOMAIN);
+  const selected = _readSetting('domain');
+  if (!selected || String(selected).trim().toLowerCase() === 'auto') return DEFAULT_DOMAIN;
+  const normalized = _cleanDomain(selected);
+  // This is a chooser for known site domains, not an arbitrary custom-domain
+  // override. Invalid or unknown values safely return to automatic mode.
+  return SITE_DOMAINS.indexOf(normalized) >= 0 ? normalized : DEFAULT_DOMAIN;
 }
 
 function _qualityValue(value) {
@@ -86,10 +92,16 @@ function getSettings() {
   return [
     {
       key: 'domain',
-      label: 'Domain',
-      description: 'Preferred AV1Encodes domain. Known mirrors are tried when catalogue requests fail.',
-      type: 'text',
-      default: DEFAULT_DOMAIN
+      label: 'Optional domain',
+      description: 'Optional preferred mirror. Keep Auto to select the default automatically; only official AV1Encodes domains are supported.',
+      type: 'enum',
+      default: 'auto',
+      options: [
+        { value: 'auto', label: 'Auto (recommended)' },
+        { value: 'https://av1please.com', label: 'av1please.com' },
+        { value: 'https://animealpha.cc', label: 'animealpha.cc' },
+        { value: 'https://av1encodes.com', label: 'av1encodes.com' }
+      ]
     },
     {
       key: 'quality',
@@ -596,22 +608,25 @@ function _filenameFromUrl(url) {
 }
 
 function _episodeLabel(filename, label, number, slug, season) {
+  // Prefer the name AV1Encodes actually returned. The old implementation
+  // rebuilt every title as "Episode N" and discarded the source label, which
+  // made metadata matching less reliable.
+  const sourceLabel = _htmlText(label || '').trim();
+  if (sourceLabel && !/^(?:download|watch|play|open|direct download)$/i.test(sourceLabel)) {
+    return sourceLabel;
+  }
+
   const n = Number(number) || _episodeNumber(filename) || _episodeNumber(label);
-  const nameMatch = String(_decode(filename || '')).replace(/\.(?:mkv|mp4)$/i, '')
-    .match(/\[(?:S\d{1,2}[-_ ]*)?E\d{1,4}\]\s*(.*?)\s*(?=\[|$)/i);
+  const cleanFilename = String(_decode(filename || '')).replace(/\.(?:mkv|mp4)$/i, '');
+  const nameMatch = cleanFilename.match(/\[(?:S\d{1,2}[-_ ]*)?E\d{1,4}\]\s*(.*?)\s*(?=\[|$)/i);
   let title = nameMatch ? _htmlText(nameMatch[1]) : '';
   title = title.replace(/\[(?:\d{3,4}p|dual|sub|dub|english\s*dub|tri|multi)[^\]]*\]/gi, ' ')
     .replace(/\b(?:dual|sub|dub|english\s*dub|tri|multi)\b/gi, ' ')
     .replace(/\s+/g, ' ').trim();
-  const normal = s => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-  const normalizedTitle = normal(title);
-  const normalizedSlug = normal(slug);
-  if (normalizedTitle && normalizedSlug &&
-      (normalizedTitle === normalizedSlug ||
-       normalizedTitle.replace(/(?:19|20)\d{2}$/, '') === normalizedSlug)) title = '';
-  if (n > 0) return 'Episode ' + n + (title ? ' - ' + title : '');
-  const fallback = _htmlText(label || title || filename || '');
-  return fallback || ('Season ' + (season || '1'));
+  if (title) return title;
+  if (n > 0) return 'Episode ' + n;
+  const fallback = _htmlText(label || cleanFilename || filename || '');
+  return fallback || '';
 }
 
 function _episodeKey(url) {
@@ -648,21 +663,24 @@ function _episodeFromLink(rawHref, label, base, season, slug, resolution, number
   const filename = _filenameFromUrl(href || rawHref || '');
   if (!href && filename) href = _makeEpisodeUrl(base, slug, season, resolution, filename);
   if (!href) return null;
-  const n = Number(number) || _episodeNumber(filename + ' ' + label);
-  let url = href;
+
+  // Use AV1Encodes' episode number when supplied. Only parse the filename as
+  // a fallback; never invent episode 1 for an unparseable filename.
+  const n = Number(number) || _episodeNumber(filename + ' ' + label) || null;
   if (ddl && typeof ddl === 'object' && _hasDdlLinks(ddl)) {
-    const packed = JSON.stringify(ddl);
-    // Keep the DDL with the episode so resolution still works if Zangetsu
-    // reloads a provider between episode listing and the play request.
-    if (packed.length <= 10000) url = _setQueryParam(url, DDL_QUERY_KEY, packed);
+    // Cache only against the complete, original URL including its token.
+    // Do not add a synthetic query parameter to the episode URL, because
+    // Zangetsu uses that URL to match the source item to metadata episodes.
+    DDL_BY_URL[href] = ddl;
   }
-  const episode = {
-    id: url, number: n || 1,
-    title: _episodeLabel(filename, label, n, slug, season),
-    url: url, sourceId: SOURCE_ID
+  const nativeLabel = _episodeLabel(filename, label, n, slug, season);
+  return {
+    id: href,
+    number: n,
+    title: nativeLabel,
+    url: href,
+    sourceId: SOURCE_ID
   };
-  if (ddl && typeof ddl === 'object') episode.ddl = ddl;
-  return episode;
 }
 
 function _parseEpisodeJson(body, base, slug, season, resolution) {
@@ -817,9 +835,13 @@ function _parseDdl(body) {
 }
 
 function _getInlineDdl(url) {
-  // Only consume DDL embedded in this exact episode URL. A route-only cache
-  // key can accidentally reuse another episode's payload after stripping the
-  // expiring token, which skips the fresh-token playback flow.
+  // Fast path for an exact URL observed in the upstream episode JSON. The
+  // full URL (including token and filename) is the cache key, so entries
+  // cannot leak across episodes. If the app restarts, fresh-token resolution
+  // remains the fallback. Read old marker URLs for backward compatibility.
+  const exact = String(url || '');
+  const cached = DDL_BY_URL[exact];
+  if (cached && _hasDdlLinks(cached)) return cached;
   const packed = _queryParam(url, DDL_QUERY_KEY);
   if (!packed) return null;
   try {
@@ -1058,7 +1080,7 @@ async function getVideoSources(episodeUrl) {
   info = Object.assign({}, info, { filename: filename });
   const base = _origin(siteUrl) || _domain();
   const context = { warmupUsed: false, tokenCache: Object.create(null) };
-  const embeddedDdl = _getInlineDdl(siteUrl);
+  const embeddedDdl = _getInlineDdl(original) || _getInlineDdl(siteUrl);
   const initialResolution = info.resolution || _qualityValue(_readSetting('quality'));
   const streams = embeddedDdl
     ? await _streamsFromDdl(embeddedDdl, base, info, initialResolution, '', base + '/', context)
