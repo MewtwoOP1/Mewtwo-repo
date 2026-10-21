@@ -251,22 +251,31 @@ async function _resolveLink(raw, base, ref) {
   if (!raw) return null;
   const full = _absolute(raw, base);
   if (!full) return null;
-  const siteHost = _trustedSiteHost(_host(full)) || _host(full) === _host(_domain());
-  if (siteHost) {
-    const r = await _fetchSite(full, ref || (base + '/'));
-    if (r && r.status >= 200 && r.status < 400 && r.url) return r.url;
-    return full;
+  const origin = _origin(full) || base || _domain();
+  const isSite = _trustedSiteHost(_host(full)) || _host(full) === _host(_domain());
+  const candidates = isSite ? _siteBases(full) : [origin];
+  const path = _pathQuery(full);
+
+  for (const candidate of candidates) {
+    const target = candidate + path;
+    try {
+      const r = await fetch(target, {
+        headers: _headers(_adaptReferer(ref, candidate), candidate),
+        redirect: 'follow'
+      });
+      const status = r.status || 0;
+      const finalUrl = r.url || target;
+      // Redirect resolution only needs response headers. Do not read the body:
+      // the final response may be a multi-gigabyte video file.
+      if (r.body && typeof r.body.cancel === 'function') {
+        try { r.body.cancel(); } catch (e) {}
+      }
+      if (r.ok && finalUrl) return finalUrl;
+      if (status >= 400) continue;
+    } catch (e) {}
   }
-  try {
-    const r = await fetch(full, {
-      headers: _headers(ref || (base + '/'), base),
-      redirect: 'follow'
-    });
-    if (r.ok && r.url) return r.url;
-    if (r.body && typeof r.body.cancel === 'function') {
-      try { r.body.cancel(); } catch (e) {}
-    }
-  } catch (e) {}
+  // Keep the original target as a fallback, matching the upstream source's
+  // behavior when a redirect cannot be resolved by the HTTP client.
   return full;
 }
 
@@ -459,11 +468,12 @@ function _parseCards(html, base, mode) {
   const seen = {};
   for (const block of chosen) _addCard(out, seen, block.html, base);
 
-  if (!out.length) {
-    for (const a of _anchorList(source)) {
-      if (!/\/anime\//i.test(a.href)) continue;
-      _addCard(out, seen, a.html, base);
-    }
+  // Also inspect every anime anchor, not only article/li wrappers. The
+  // rebranded site has result cards nested in divs and link-only index rows.
+  // _addCard deduplicates links that were already parsed from a larger card.
+  for (const anchor of _anchorList(source)) {
+    if (!/\/anime\//i.test(anchor.href)) continue;
+    _addCard(out, seen, anchor.html, base);
   }
   return out;
 }
