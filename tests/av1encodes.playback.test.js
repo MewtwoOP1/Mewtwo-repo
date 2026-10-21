@@ -114,7 +114,7 @@ function routeStreamExtraction(host) {
   route(FRESH_EPISODE_RE, () => ok(fixtures.player));
   route(new RegExp('^' + esc(host) + '/get_ddl/'), (url, options) => {
     assert.strictEqual(options.headers['X-Ddl-Token'], 'AAAAA1234567890');
-    assert.ok(options.headers.Referer.includes('token=fresh-token'));
+    assert.ok(options.headers.Referer.includes('token=listing-token'), 'DDL lookup must refer to the signed source href');
     return ok(fixtures.ddl);
   });
   route(new RegExp('^' + esc(host) + '/watch/black-clover-ep-001$'), () =>
