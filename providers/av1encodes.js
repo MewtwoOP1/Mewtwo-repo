@@ -321,6 +321,12 @@ async function _fetchSite(url, ref, extraHeaders) {
             /unable to generate download link|generating download link|oops!?\s+something went wrong/i.test(body)) {
           break;
         }
+        // /get_token must return JSON containing an actual token. An HTTP-200
+        // HTML/interstitial response is not a successful token lookup; try mirrors.
+        if (/\/get_token(?:\?|$)/i.test(path) &&
+            !/["'](?:token|access_token|accessToken)["']\s*:\s*["'][^"']+["']/i.test(body)) {
+          break;
+        }
         const finalUrl = r.url || target;
         const finalBase = _origin(finalUrl);
         return {
