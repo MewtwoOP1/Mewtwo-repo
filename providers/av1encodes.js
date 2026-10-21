@@ -652,7 +652,7 @@ function _episodeFromLink(rawHref, label, base, season, slug, resolution, number
   const cleanKey = _episodeKey(href);
   let url = href;
   if (ddl && typeof ddl === 'object' && _hasDdlLinks(ddl)) {
-    const packed = encodeURIComponent(JSON.stringify(ddl));
+    const packed = JSON.stringify(ddl);
     // Keep the DDL with the episode so resolution still works if Zangetsu
     // reloads a provider between episode listing and the play request.
     if (packed.length <= 10000) url = _setQueryParam(url, DDL_QUERY_KEY, packed);
