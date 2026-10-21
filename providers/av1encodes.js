@@ -342,6 +342,11 @@ function _withSiteCookies(url, headers) {
   return out;
 }
 
+function _isSiteErrorBody(body) {
+  const text = String(body || '');
+  return /unable to generate download link|oops!?[ \t]+something went wrong|your ip has been blocked|access denied|temporarily unavailable/i.test(text);
+}
+
 function _isChallenge(body) {
   const s = String(body || '');
   return (/Just a moment\.{0,3}|cf-chl-|turnstile/i.test(s) &&
@@ -416,16 +421,23 @@ async function _fetchSite(rawUrl, ref, timeoutMs) {
       _requestSiteUrl(target, ref || base + '/', {}, timeoutMs || REQUEST_TIMEOUT_MS,
         { warmupUsed: false })
         .then(response => {
-          if (!resolved && response.ok && response.body) {
+          const terminalPage = response.body && _isSiteErrorBody(response.body);
+          if (!resolved && response.ok && response.body && !terminalPage) {
             resolved = true;
             resolve(response);
             return;
           }
-          failures.push({ index, response });
+          const failedResponse = terminalPage
+            ? Object.assign({}, response, { ok: false, reason: 'upstream-error' })
+            : response;
+          failures.push({ index, response: failedResponse });
           remaining--;
           if (!resolved && remaining === 0) {
             failures.sort((a, b) => a.index - b.index);
-            const last = failures.length ? failures[failures.length - 1].response : null;
+            const semantic = failures.find(item => item.response.reason === 'upstream-error');
+            const last = semantic
+              ? semantic.response
+              : (failures.length ? failures[failures.length - 1].response : null);
             resolve({
               ok: false, status: last ? last.status : 0, body: '', url: rawUrl,
               base: last && last.base ? last.base : selected,
@@ -438,7 +450,10 @@ async function _fetchSite(rawUrl, ref, timeoutMs) {
           remaining--;
           if (!resolved && remaining === 0) {
             failures.sort((a, b) => a.index - b.index);
-            const last = failures.length ? failures[failures.length - 1].response : null;
+            const semantic = failures.find(item => item.response.reason === 'upstream-error');
+            const last = semantic
+              ? semantic.response
+              : (failures.length ? failures[failures.length - 1].response : null);
             resolve({
               ok: false, status: last ? last.status : 0, body: '', url: rawUrl,
               base: last && last.base ? last.base : selected,
@@ -1177,7 +1192,7 @@ async function _resolveDownloadPage(url, info, context) {
   // Current Aniyomi refreshes the episode href from /episodes when the signed
   // download page no longer contains the player. This is the primary refresh
   // path; keep the source's original filename and episode number for matching.
-  if (!hasPlayablePage()) {
+  if (!hasPlayablePage() && page.reason !== 'upstream-error') {
     const preferredResolution = currentInfo.resolution || _qualityValue(_readSetting('quality'));
     const fresh = await _findEpisodeAtResolution(currentInfo, preferredResolution, base);
     const freshUrl = fresh && fresh.url
@@ -1199,7 +1214,7 @@ async function _resolveDownloadPage(url, info, context) {
   // Compatibility fallback only when the signed href could not be refreshed
   // and the page did not show a terminal generator error. Do not use this as
   // the normal playback entry path; recent site versions tie tokens to hrefs.
-  if (!hasPlayablePage() && !generatorFailed()) {
+  if (!hasPlayablePage() && !generatorFailed() && page.reason !== 'upstream-error') {
     const freshToken = await _getFreshToken(base, context);
     const currentToken = _queryParam(downloadUrl, 'token');
     if (freshToken && freshToken !== currentToken) {
