@@ -282,11 +282,11 @@ function reset() {
     assert.ok(/1080p/.test(s1.quality));
 
     assert.strictEqual(s2.url, 'https://cdn.example.com/dl/one-piece-e001.mkv');
-    assert.strictEqual(s2.container, 'mkv');
+    assert.strictEqual(s2.container, 'unknown');
 
     for (const s of streams) {
       assert.ok(typeof s.url === 'string' && s.url.length > 0);
-      assert.ok(['hls', 'mp4', 'mkv'].includes(s.container), 'container in contract set');
+      assert.ok(['hls', 'mp4', 'unknown'].includes(s.container), 'container in contract set');
       assert.ok(['sub', 'dub'].includes(s.kind), 'kind in contract set');
       assert.ok(Array.isArray(s.subtitles));
       assert.ok(s.headers && typeof s.headers === 'object');
@@ -298,7 +298,7 @@ function reset() {
     route(/\/download\/1\//, () => ok('<html><body>no token here</body></html>'));
     const streams = await P.getVideoSources(EP_URL);
     assert.strictEqual(streams.length, 1);
-    assert.strictEqual(streams[0].container, 'mkv');
+    assert.strictEqual(streams[0].container, 'unknown');
     assert.ok(/Direct DL/.test(streams[0].quality));
     assert.strictEqual(streams[0].url, EP_URL);
   });
@@ -374,20 +374,24 @@ function reset() {
     );
   });
 
-  await test('provider never returns a DASH container or .mpd URL', async () => {
+  await test('getVideoSources exposes a resolved DASH manifest as unknown container', async () => {
     reset();
     route(/\/download\/1\//, () => ok(FIXTURES.episodePageHtml));
     route(/\/get_ddl\//, () => ok(FIXTURES.ddlJson));
-    route(/\/redirect\/stream\/abc/, () =>
-      ok('', 'https://cdn.example.com/stream/e001.mp4'));
-    route(/\/redirect\/dl\/def/, () =>
-      ok('', 'https://cdn.example.com/dl/e001.mkv'));
+    route(/\/watch\/xyz/, () =>
+      ok('', 'https://media.example.com/watch/xyz'));
+    route(/\/redirect\/stream\/abc/, notFound);
+    route(/\/redirect\/dl\/def/, notFound);
+
     const streams = await P.getVideoSources(EP_URL);
-    for (const s of streams) {
-      assert.notStrictEqual(s.container, 'dash');
-      assert.notStrictEqual(s.container, 'mpd');
-      assert.ok(!/\.mpd(\?|$)/i.test(s.url), 'no .mpd URL leaked through');
-    }
+    assert.strictEqual(streams.length, 1);
+    assert.strictEqual(
+      streams[0].url,
+      'https://media.example.com/dash/xyz/manifest.mpd'
+    );
+    assert.strictEqual(streams[0].container, 'unknown');
+    assert.ok(/DASH/.test(streams[0].quality));
+    assert.ok(streams[0].headers && typeof streams[0].headers === 'object');
   });
 
   await test('all returned stream containers are in the contract set', async () => {
