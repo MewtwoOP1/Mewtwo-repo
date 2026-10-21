@@ -1140,6 +1140,12 @@ async function getHome(opts) {
   return rows;
 }
 
+// Zangetsu's script-global runtime uses getStreams directly; CommonJS
+// consumers use the same entry point via module.exports below.
+function getStreams(episodeUrl, opts) {
+  return getVideoSources(episodeUrl, opts);
+}
+
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     version: VERSION,
@@ -1150,6 +1156,6 @@ if (typeof module !== 'undefined' && module.exports) {
     getDetail: getDetail,
     getEpisodes: getEpisodes,
     getVideoSources: getVideoSources,
-    getStreams: getVideoSources
+    getStreams: getStreams
   };
 }
