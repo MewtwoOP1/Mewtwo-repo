@@ -258,6 +258,22 @@ function routeStreamExtraction(host) {
       'episode 45 must yield its direct media URL');
   });
 
+  await test('a terminal generator page on one mirror does not mask a healthy mirror', async () => {
+    reset();
+    route(/^https:\/\/av1please\.com\/download\/black-clover\/1\/1920%20x%201080\/.*[?&]token=listing-token(?:&|$)/,
+      () => ok(fixtures.generatorError));
+    route(/^https:\/\/animealpha\.cc\/download\/black-clover\/1\/1920%20x%201080\/.*[?&]token=listing-token(?:&|$)/,
+      () => ok('<html><iframe id="anime-video-player" src="/watch/black-clover-ep-001"></iframe></html>'));
+    route(/^https:\/\/animealpha\.cc\/watch\/black-clover-ep-001$/,
+      () => ok('', ALT + '/watch/black-clover-ep-001'));
+
+    const streams = await P.getVideoSources(BASE + EPISODE_PATH);
+    assert.ok(streams.some(stream => stream.url === ALT + '/dash/black-clover-ep-001/manifest.mpd'),
+      'a healthy mirror must be tried when the first mirror serves the terminal generator error');
+    assert.ok(calls.some(call => call.url.startsWith(ALT + '/download/black-clover/1/')),
+      'the signed episode URL must be tested against AnimeAlpha');
+  });
+
   await test('upstream download-generator error is classified as no streams, never a fake media URL', async () => {
     reset();
     route(/^https:\/\/av1please\.com\/download\/black-clover\/1\/1920%20x%201080\/.*[?&]token=listing-token(?:&|$)/,
