@@ -291,7 +291,10 @@ async function _warmupSite(base) {
 
 async function _fetchSite(url, ref, extraHeaders) {
   const path = _pathQuery(url);
-  const candidates = _siteBases(url).slice(0, 2);
+  // Playback endpoints run inside Zangetsu's per-source timeout; limit their
+  // mirror sweep. Catalogue/search requests keep the complete mirror list.
+  const latencySensitive = /^\/(?:get_token(?:[/?]|$)|download\/|episodes\/|get_ddl\/)/i.test(path);
+  const candidates = latencySensitive ? _siteBases(url).slice(0, 2) : _siteBases(url);
   let lastStatus = 0;
 
   for (const base of candidates) {
