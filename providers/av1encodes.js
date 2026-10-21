@@ -9,12 +9,11 @@
 const SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID)
   ? String(__SOURCE_ID)
   : 'av1encodes';
-const VERSION = '1.2.3';
-const DEFAULT_DOMAIN = 'https://av1encodes.com';
+const VERSION = '1.2.4';
+const DEFAULT_DOMAIN = 'https://av1please.com';
 const MIRROR_DOMAINS = [
-  // av1please.com currently serves the rebranded AnimeAlpha site. Put it
-  // first after the requested/preferred host so bounded playback fallbacks
-  // still reach a working public mirror before spending the source budget.
+  // av1please.com currently serves the rebranded AnimeAlpha site and is the
+  // first mirror candidate for the built-in domains.
   'https://av1please.com',
   'https://animealpha.cc',
   'https://av1encodes.com'
@@ -214,6 +213,13 @@ function _siteBases(url) {
     const origin = _origin(value);
     if (origin && bases.indexOf(origin) < 0) bases.push(origin);
   };
+  const requestedHost = _host(url);
+  const configuredHost = _host(_domain());
+  // The primary av1encodes.com host is currently returning 403 while the
+  // rebranded av1please.com mirror serves catalogue and episode pages. Prefer
+  // that known-live mirror for built-in domains, but keep custom domains first.
+  const isKnownSite = _trustedSiteHost(requestedHost) || _trustedSiteHost(configuredHost);
+  if (isKnownSite) add(MIRROR_DOMAINS[0]);
   add(url);
   add(_domain());
   for (const mirror of MIRROR_DOMAINS) add(mirror);
@@ -296,9 +302,10 @@ async function _fetchSite(url, ref, extraHeaders) {
   const path = _pathQuery(url);
   // Playback endpoints run inside Zangetsu's per-source timeout; limit their
   // mirror sweep. Catalogue/search requests keep the complete mirror list.
-  const latencySensitive = /^\/(?:get_token(?:[/?]|$)|download\/|episodes\/|get_ddl\/)/i.test(path);
+  const latencySensitive = /^\/(?:get_token(?:[/?]|$)|download\/|episodes\/|get_ddl\/|anime\/[^/?]+(?:[/?]|$))/i.test(path);
   const candidates = latencySensitive ? _siteBases(url).slice(0, 3) : _siteBases(url);
   let lastStatus = 0;
+  let lastReason = null;
 
   for (const base of candidates) {
     const target = base + path;
@@ -316,30 +323,35 @@ async function _fetchSite(url, ref, extraHeaders) {
           if (r.body && typeof r.body.cancel === 'function') {
             try { r.body.cancel(); } catch (e) {}
           }
-          if (lastStatus === 403 && !warmed) {
+          if (lastStatus === 403 && !warmed && !latencySensitive) {
             warmed = true;
             await _warmupSite(base);
             continue;
           }
-          break;
+          if (lastStatus === 403 && latencySensitive) lastReason = 'forbidden';
+          break;          break;
         }
         const body = await r.text();
         // Do not treat an interstitial as the site's catalog/player markup. Move
         // to the next published mirror instead of trying to defeat the challenge.
         if (/Just a moment\.\.\.|cf-chl-|turnstile/i.test(body) &&
             /cloudflare|challenge-platform|captcha/i.test(body)) {
+          lastReason = 'challenge';
           break;
         }
-        // A download-page application may render an HTTP-200 error when its
-        // signed download link expired. Treat it as unavailable and try mirrors.
+        // The download page first renders a "Generating download link" placeholder
+        // before JavaScript calls get_ddl. Keep that normal placeholder so its
+        // embedded DDL token can still be resolved. Reject only terminal errors.
         if (/\/download\//i.test(path) &&
-            /unable to generate download link|generating download link|oops!?\s+something went wrong/i.test(body)) {
+            /unable to generate download link|oops!?\s+something went wrong/i.test(body)) {
+          lastReason = 'generation-failed';
           break;
         }
         // /get_token must return JSON containing an actual token. An HTTP-200
         // HTML/interstitial response is not a successful token lookup; try mirrors.
         if (/\/get_token(?:\?|$)/i.test(path) &&
             !/["'](?:token|access_token|accessToken)["']\s*:\s*["'][^"']+["']/i.test(body)) {
+          lastReason = 'invalid-token-response';
           break;
         }
         const finalUrl = r.url || target;
@@ -357,7 +369,7 @@ async function _fetchSite(url, ref, extraHeaders) {
       }
     }
   }
-  return { body: '', url: url, base: _origin(url) || _domain(), status: lastStatus };
+  return { body: '', url: url, base: _origin(url) || _domain(), status: lastStatus, reason: lastReason };
 }
 
 async function _resolveLink(raw, base, ref) {
@@ -1035,6 +1047,14 @@ async function _extractVideoForEpisode(downloadUrl, filename, resolution) {
   let html = page.body || '';
   base = page.base || _origin(actualUrl) || base;
 
+  // A terminal link-generation error is specific to this resolution. Avoid
+  // repeating the same token/download sequence and try the next quality instead.
+  if (page.reason === 'generation-failed') {
+    const empty = [];
+    empty.stopFallback = false;
+    return empty;
+  }
+
   // Stop after a bounded network failure. Retrying the same blocked host for
   // every remaining resolution only repeats the timeout.
   if (!html && _isTransientSiteFailure(page.status)) {
@@ -1068,7 +1088,7 @@ async function _extractVideoForEpisode(downloadUrl, filename, resolution) {
       const empty = [];
       // A missing preferred-resolution route is a normal fallback condition;
       // a blocked request or HTTP-200 generator error is not.
-      empty.stopFallback = retry.status !== 404 && retry.status !== 410;
+      empty.stopFallback = _isTransientSiteFailure(retry.status);
       return empty;
     }
     page = retry;
