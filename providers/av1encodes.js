@@ -5,7 +5,7 @@
 
 const SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID)
   ? String(__SOURCE_ID) : 'av1encodes';
-const VERSION = '1.0.4';
+const VERSION = '1.0.5';
 const DEFAULT_DOMAIN = 'https://av1please.com';
 const SITE_DOMAINS = [
   'https://av1please.com',
@@ -36,6 +36,9 @@ const EPISODE_PATTERNS = [
 const DDL_QUERY_KEY = '__av1ddl'; // Read-only legacy compatibility; new episode URLs never include this marker.
 const DDL_BY_URL = Object.create(null);
 const EPISODE_CACHE = Object.create(null);
+// The native Zangetsu fetch bridge does not retain ordinary Set-Cookie values
+// between JavaScript fetch calls. Keep the small site session cookie set here.
+const SITE_COOKIES = Object.create(null);
 
 // ── Settings and provider contract ────────────────────────────────────────
 
@@ -242,10 +245,15 @@ function _siteBases(preferred) {
     const origin = _origin(value);
     if (origin && out.indexOf(origin) < 0) out.push(origin);
   };
-  // The URL's own origin comes first. If it was produced by a successful mirror
-  // request, immediately switching back to the configured default makes every
-  // subsequent episode request repeat the known-bad host.
   add(preferred || _domain());
+
+  const configured = _readSetting('domain');
+  const explicit = !!configured && String(configured).trim().toLowerCase() !== 'auto';
+  // A manually selected domain is a strict override. Auto mode probes all
+  // official mirrors in parallel, and preserves the origin of whichever one
+  // actually served the title or episode link.
+  if (explicit) return out;
+
   add(_domain());
   SITE_DOMAINS.forEach(add);
   return out;
@@ -283,6 +291,67 @@ function _mergeHeaders(a, b) {
   return out;
 }
 
+function _cookieHeaderValues(headers) {
+  const found = [];
+  Object.keys(headers || {}).forEach(key => {
+    if (String(key).toLowerCase() !== 'set-cookie') return;
+    const raw = headers[key];
+    (Array.isArray(raw) ? raw : [raw]).forEach(value => {
+      if (value != null) {
+        // Set-Cookie can be coalesced by the native bridge. Split only at a
+        // comma followed by another cookie pair, not the comma in Expires.
+        String(value).split(/,(?=\s*[^;,=\s]+=[^;,]*)/).forEach(part => found.push(part.trim()));
+      }
+    });
+  });
+  return found;
+}
+
+function _rememberCookies(url, headers) {
+  const host = _host(url);
+  if (!host) return;
+  const jar = SITE_COOKIES[host] || (SITE_COOKIES[host] = Object.create(null));
+  _cookieHeaderValues(headers).forEach(line => {
+    const first = String(line).split(';')[0].trim();
+    const eq = first.indexOf('=');
+    if (eq <= 0) return;
+    const name = first.slice(0, eq).trim();
+    const value = first.slice(eq + 1).trim();
+    const expired = /;\s*max-age\s*=\s*0(?:\s*;|$)/i.test(String(line)) ||
+      (String(line).match(/;\s*expires\s*=\s*([^;]+)/i) &&
+       Date.parse(String(line).match(/;\s*expires\s*=\s*([^;]+)/i)[1]) < Date.now());
+    if (expired) delete jar[name];
+    else jar[name] = value;
+  });
+  if (!Object.keys(jar).length) delete SITE_COOKIES[host];
+}
+
+function _withSiteCookies(url, headers) {
+  const out = _mergeHeaders(headers, {});
+  const host = _host(url);
+  const jar = (host && SITE_COOKIES[host]) || {};
+  const cookieKey = Object.keys(out).find(key => String(key).toLowerCase() === 'cookie') || 'Cookie';
+  const existing = String(out[cookieKey] || '').trim();
+  const explicit = Object.create(null);
+  existing.split(';').forEach(part => {
+    const eq = part.indexOf('=');
+    if (eq > 0) explicit[part.slice(0, eq).trim()] = part.slice(eq + 1).trim();
+  });
+  const combined = [];
+  Object.keys(jar).forEach(name => {
+    if (!Object.prototype.hasOwnProperty.call(explicit, name)) combined.push(name + '=' + jar[name]);
+  });
+  if (existing) combined.push(existing);
+  if (combined.length) out[cookieKey] = combined.join('; ');
+  else if (out[cookieKey] == null) delete out[cookieKey];
+  return out;
+}
+
+function _isSiteErrorBody(body) {
+  const text = String(body || '');
+  return /unable to generate download link|oops!?[ \t]+something went wrong|your ip has been blocked|access denied|temporarily unavailable/i.test(text);
+}
+
 function _isChallenge(body) {
   const s = String(body || '');
   return (/Just a moment\.{0,3}|cf-chl-|turnstile/i.test(s) &&
@@ -293,20 +362,22 @@ function _isChallenge(body) {
 async function _rawRequest(url, ref, extraHeaders, timeoutMs) {
   const base = _origin(url) || _domain();
   try {
+    const requestHeaders = _withSiteCookies(url,
+      _mergeHeaders(_headers(ref || base + '/', base, 'html'), extraHeaders));
     const response = await fetch(url, {
-      headers: _mergeHeaders(_headers(ref || base + '/', base, 'html'), extraHeaders),
+      headers: requestHeaders,
       redirect: 'follow',
       credentials: 'include',
       timeoutMs: timeoutMs || REQUEST_TIMEOUT_MS
     });
     const status = Number(response && response.status || 0);
-    let body = '';
-    if (response && typeof response.text === 'function') {
-      try { body = String(await response.text() || ''); } catch (e) { body = ''; }
-    } else if (response && typeof response.body === 'string') {
-      body = response.body;
-    }
     const finalUrl = response && response.url ? String(response.url) : url;
+    // Persist only cookies explicitly returned by the site. This is required
+    // because Zangetsu's JS-to-Dio bridge does not provide a browser cookie jar.
+    _rememberCookies(finalUrl, response && response.headers ? response.headers : {});
+    const body = response && typeof response.text === 'function'
+      ? String(await response.text() || '')
+      : (response && typeof response.body === 'string' ? response.body : '');
     const challenge = _isChallenge(body);
     const okay = !!response && response.ok !== false && status < 400 && !challenge;
     return {
@@ -343,33 +414,60 @@ async function _fetchSite(rawUrl, ref, timeoutMs) {
   const firstOrigin = _origin(rawUrl);
   const selected = firstOrigin || _domain();
   const path = _pathQuery(rawUrl);
-  // Always try each known official mirror. Old/pinned anime URLs can start on
-  // av1encodes.com even when that origin is blocked; limiting episode pages to
-  // two hosts skipped animealpha.cc entirely in that case, so every episode
-  // appeared unavailable despite the third mirror being reachable.
-  // Requests are individually bounded, and the shared warm-up is attempted
-  // only once per URL resolution, keeping the full fallback bounded.
   const candidates = _siteBases(selected);
-  let last = { ok: false, status: 0, body: '', url: rawUrl, base: selected, reason: 'unavailable' };
-  const context = { warmupUsed: false };
-  for (const base of candidates) {
-    const target = base + path;
-    const response = await _requestSiteUrl(
-      target, ref || base + '/', {}, timeoutMs || REQUEST_TIMEOUT_MS, context
-    );
-    if (response.ok && response.body) return response;
-    last = response;
-    if (response.status === 403 || response.status === 404 || response.status === 410 ||
-        response.status === 429 || response.status >= 500 || response.status === 0 ||
-        response.reason === 'challenge') {
-      continue;
-    }
-    if (response.ok) return response;
-  }
-  return {
-    ok: false, status: last.status, body: '', url: rawUrl,
-    base: last.base || selected, reason: last.reason || 'unavailable'
-  };
+  const failures = [];
+  let remaining = candidates.length;
+  return new Promise(resolve => {
+    let resolved = false;
+    candidates.forEach((base, index) => {
+      const target = base + path;
+      // Each mirror owns its warm-up state. A 403 from one domain must not
+      // consume the session-cookie retry for the other domains.
+      _requestSiteUrl(target, ref || base + '/', {}, timeoutMs || REQUEST_TIMEOUT_MS,
+        { warmupUsed: false })
+        .then(response => {
+          const terminalPage = response.body && _isSiteErrorBody(response.body);
+          if (!resolved && response.ok && response.body && !terminalPage) {
+            resolved = true;
+            resolve(response);
+            return;
+          }
+          const failedResponse = terminalPage
+            ? Object.assign({}, response, { ok: false, reason: 'upstream-error' })
+            : response;
+          failures.push({ index, response: failedResponse });
+          remaining--;
+          if (!resolved && remaining === 0) {
+            failures.sort((a, b) => a.index - b.index);
+            const semantic = failures.find(item => item.response.reason === 'upstream-error');
+            const last = semantic
+              ? semantic.response
+              : (failures.length ? failures[failures.length - 1].response : null);
+            resolve({
+              ok: false, status: last ? last.status : 0, body: '', url: rawUrl,
+              base: last && last.base ? last.base : selected,
+              reason: last && last.reason ? last.reason : 'unavailable'
+            });
+          }
+        })
+        .catch(() => {
+          failures.push({ index, response: { ok: false, status: 0, body: '', base, reason: 'network' } });
+          remaining--;
+          if (!resolved && remaining === 0) {
+            failures.sort((a, b) => a.index - b.index);
+            const semantic = failures.find(item => item.response.reason === 'upstream-error');
+            const last = semantic
+              ? semantic.response
+              : (failures.length ? failures[failures.length - 1].response : null);
+            resolve({
+              ok: false, status: last ? last.status : 0, body: '', url: rawUrl,
+              base: last && last.base ? last.base : selected,
+              reason: last && last.reason ? last.reason : 'unavailable'
+            });
+          }
+        });
+    });
+  });
 }
 
 function _htmlText(value) {
@@ -1081,23 +1179,73 @@ async function _getFreshToken(base, context) {
 }
 
 async function _resolveDownloadPage(url, info, context) {
-  const base = _origin(url) || _domain();
-  const cleanUrl = _withoutQueryParams(url, ['token', DDL_QUERY_KEY]);
-  const token = await _getFreshToken(base, context);
-  if (!token) return { streams: [], stop: true, status: 0, reason: 'token-unavailable' };
-  const downloadUrl = _appendFreshToken(cleanUrl, token);
-  const page = await _requestSiteUrl(downloadUrl, base + '/', {}, REQUEST_TIMEOUT_MS, context);
-  if (!page.ok || !page.body) {
-    return { streams: [], stop: page.status === 403 || page.status === 429 ||
-      page.status >= 500 || page.reason === 'challenge', status: page.status, reason: page.reason || 'download-failed' };
+  const originalBase = _origin(url) || _domain();
+  // AV1Encodes issues a signed token on each episode href. Match the current
+  // upstream flow by trying that href first, not replacing its token with a
+  // speculative /get_token request before the browser/player page is opened.
+  let downloadUrl = _withoutQueryParams(url, [DDL_QUERY_KEY]);
+  let currentInfo = Object.assign({}, info);
+  let page = await _fetchSite(downloadUrl, originalBase + '/', REQUEST_TIMEOUT_MS);
+  let base = page.base || _origin(page.url) || _origin(downloadUrl) || originalBase;
+  let iframe = page.body ? _findIframe(page.body) : null;
+  let ddlToken = page.body ? _findDdlToken(page.body) : null;
+
+  const hasPlayablePage = () => !!iframe || !!ddlToken;
+  const generatorFailed = () =>
+    /unable to generate download link|oops!?\s+something went wrong/i.test(page.body || '');
+
+  // Current Aniyomi refreshes the episode href from /episodes when the signed
+  // download page no longer contains the player. This is the primary refresh
+  // path; keep the source's original filename and episode number for matching.
+  if (!hasPlayablePage()) {
+    const preferredResolution = currentInfo.resolution || _qualityValue(_readSetting('quality'));
+    const fresh = await _findEpisodeAtResolution(currentInfo, preferredResolution, base);
+    const freshUrl = fresh && fresh.url
+      ? _withoutQueryParams(fresh.url, [DDL_QUERY_KEY])
+      : null;
+    if (freshUrl && freshUrl !== downloadUrl) {
+      downloadUrl = freshUrl;
+      const parsed = _parseDownloadInfo(downloadUrl);
+      currentInfo = Object.assign({}, parsed, {
+        filename: currentInfo.filename || parsed.filename || _filenameFromUrl(downloadUrl)
+      });
+      page = await _fetchSite(downloadUrl, base + '/', REQUEST_TIMEOUT_MS);
+      base = page.base || _origin(page.url) || _origin(downloadUrl) || base;
+      iframe = page.body ? _findIframe(page.body) : null;
+      ddlToken = page.body ? _findDdlToken(page.body) : null;
+    }
   }
 
-  const filename = info.filename || _filenameFromUrl(cleanUrl);
-  const iframe = _findIframe(page.body);
-  const ddlToken = _findDdlToken(page.body);
+  // Compatibility fallback only when the signed href could not be refreshed
+  // and the page did not show a terminal generator error. Do not use this as
+  // the normal playback entry path; recent site versions tie tokens to hrefs.
+  if (!hasPlayablePage() && !generatorFailed() && page.reason !== 'upstream-error') {
+    const freshToken = await _getFreshToken(base, context);
+    const currentToken = _queryParam(downloadUrl, 'token');
+    if (freshToken && freshToken !== currentToken) {
+      const clean = _withoutQueryParams(downloadUrl, ['token', DDL_QUERY_KEY]);
+      downloadUrl = _appendFreshToken(clean, freshToken);
+      page = await _fetchSite(downloadUrl, base + '/', REQUEST_TIMEOUT_MS);
+      base = page.base || _origin(page.url) || _origin(downloadUrl) || base;
+      iframe = page.body ? _findIframe(page.body) : null;
+      ddlToken = page.body ? _findDdlToken(page.body) : null;
+    }
+  }
+
+  if (!page.body) {
+    return {
+      streams: [],
+      stop: page.status === 403 || page.status === 429 || page.status >= 500 ||
+        page.reason === 'challenge',
+      status: page.status,
+      reason: page.reason || 'download-failed'
+    };
+  }
+
+  const filename = currentInfo.filename || _filenameFromUrl(downloadUrl);
   let ddl = null;
-  if (ddlToken && info.encodedFilename) {
-    const ddlUrl = base + '/get_ddl/' + info.encodedFilename;
+  if (ddlToken && currentInfo.encodedFilename) {
+    const ddlUrl = base + '/get_ddl/' + currentInfo.encodedFilename;
     const response = await _requestSiteUrl(ddlUrl, downloadUrl, {
       Accept: 'application/json',
       Referer: downloadUrl,
@@ -1108,24 +1256,22 @@ async function _resolveDownloadPage(url, info, context) {
     }, REQUEST_TIMEOUT_MS, context);
     if (response.ok && response.body) ddl = _parseDdl(response.body);
   }
-  const streams = await _streamsFromDdl(ddl, base,
-    Object.assign({}, info, { filename: filename }), info.resolution,
-    iframe ? '<iframe id="anime-video-player" src="' + iframe + '"></iframe>' : page.body,
-    downloadUrl, context);
+
+  const streams = await _streamsFromDdl(
+    ddl, base, Object.assign({}, currentInfo, { filename: filename }),
+    currentInfo.resolution, page.body, downloadUrl, context
+  );
   if (streams.length) return { streams: streams, stop: false, status: page.status, reason: '' };
 
-  // Never give the player the HTML download page. That was the old source's
-  // most damaging failure mode and caused ExoPlayer to buffer on an HTML file.
-  const hasPlayer = !!iframe || !!ddlToken;
-  const terminalGeneratorError = /unable to generate download link|oops!?\s+something went wrong/i.test(page.body);
+  // Never send the generated HTML error page to the video player as media.
   return {
-    streams: [], stop: page.status === 403 || page.status === 429 || page.status >= 500 ||
+    streams: [],
+    stop: page.status === 403 || page.status === 429 || page.status >= 500 ||
       page.reason === 'challenge',
     status: page.status,
-    reason: terminalGeneratorError ? 'generator-failed' : (hasPlayer ? 'no-playable-url' : 'no-player')
+    reason: generatorFailed() ? 'generator-failed' : (hasPlayablePage() ? 'no-playable-url' : 'no-player')
   };
 }
-
 function _sameEpisode(a, b) {
   const na = _episodeNumber((a && a.filename) || (a && a.url) || '');
   const nb = _episodeNumber((b && b.filename) || (b && b.url) || '');
