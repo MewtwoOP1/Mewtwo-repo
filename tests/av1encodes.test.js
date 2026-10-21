@@ -416,6 +416,20 @@ function routeEpisodePages() {
     assert.strictEqual(streams.length, 0);
   });
 
+  await test('getVideoSources stops checking further resolutions after finding a playable stream', async () => {
+    reset();
+    route(/\/get_token$/, () => ok(JSON.stringify({ token: 'fresh-token-fast' })));
+    route(/^https:\/\/av1encodes\.com\/download\/one-piece\/1\/1920%20x%201080\/.*[?&]token=fresh-token-fast/, () =>
+      ok(FIXTURES.playerNoTokenHtml));
+    route(/\/watch\/xyz/, () => ok('', BASE + '/watch/xyz'));
+    route(/\/episodes\/one-piece\//, () => ok('<html><body>No alternate episodes</body></html>'));
+
+    const streams = await P.getVideoSources(EP_URL);
+    assert.ok(streams.some(stream => /DASH/.test(stream.quality)));
+    assert.ok(!calls.some(call => /\/episodes\/one-piece\/1\/1280%20x%20720/.test(call.url)),
+      'must not scan lower resolutions once a playable stream exists');
+  });
+
   await test('getVideoSources searches other resolutions for the same episode', async () => {
     reset();
     route(/\/episodes\/one-piece\/1\/1280%20x%20720/, () => ok(FIXTURES.lowQualityHtml));
