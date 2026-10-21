@@ -295,7 +295,7 @@ function _cookieHeaderValues(headers) {
       if (value != null) {
         // Set-Cookie can be coalesced by the native bridge. Split only at a
         // comma followed by another cookie pair, not the comma in Expires.
-        String(value).split(/,(?=\\s*[^;,=\\s]+=[^;,]*)/).forEach(part => found.push(part.trim()));
+        String(value).split(/,(?=\s*[^;,=\s]+=[^;,]*)/).forEach(part => found.push(part.trim()));
       }
     });
   });
@@ -312,9 +312,9 @@ function _rememberCookies(url, headers) {
     if (eq <= 0) return;
     const name = first.slice(0, eq).trim();
     const value = first.slice(eq + 1).trim();
-    const expired = /;\\s*max-age\\s*=\\s*0(?:\\s*;|$)/i.test(String(line)) ||
-      (String(line).match(/;\\s*expires\\s*=\\s*([^;]+)/i) &&
-       Date.parse(String(line).match(/;\\s*expires\\s*=\\s*([^;]+)/i)[1]) < Date.now());
+    const expired = /;\s*max-age\s*=\s*0(?:\s*;|$)/i.test(String(line)) ||
+      (String(line).match(/;\s*expires\s*=\s*([^;]+)/i) &&
+       Date.parse(String(line).match(/;\s*expires\s*=\s*([^;]+)/i)[1]) < Date.now());
     if (expired) delete jar[name];
     else jar[name] = value;
   });
@@ -1177,7 +1177,7 @@ async function _resolveDownloadPage(url, info, context) {
   // Current Aniyomi refreshes the episode href from /episodes when the signed
   // download page no longer contains the player. This is the primary refresh
   // path; keep the source's original filename and episode number for matching.
-  if (!hasPlayablePage() && !generatorFailed()) {
+  if (!hasPlayablePage()) {
     const preferredResolution = currentInfo.resolution || _qualityValue(_readSetting('quality'));
     const fresh = await _findEpisodeAtResolution(currentInfo, preferredResolution, base);
     const freshUrl = fresh && fresh.url
