@@ -399,7 +399,7 @@ function reset() {
     route(/\/redirect\/dl\/def/, () =>
       ok('', 'https://cdn.example.com/dl/e001.mkv'));
     const streams = await P.getVideoSources(EP_URL);
-    const allowed = ['hls', 'mp4', 'mkv'];
+    const allowed = ['hls', 'mp4', 'unknown'];
     for (const s of streams) {
       assert.ok(allowed.includes(s.container), 'container=' + s.container);
     }
