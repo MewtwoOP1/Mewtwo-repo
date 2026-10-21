@@ -193,7 +193,7 @@ function routeEpisodePages() {
     assert.strictEqual(info.name, 'AV1Encodes');
     assert.strictEqual(info.lang, 'en');
     assert.strictEqual(info.type, 'anime');
-    assert.strictEqual(info.version, '1.2.0');
+    assert.strictEqual(info.version, '1.2.1');
     assert.ok(/^https?:\/\//.test(info.baseUrl));
   });
 
@@ -320,6 +320,30 @@ function routeEpisodePages() {
     assert.ok(/token=json/.test(episodes[0].url));
   });
 
+  await test('getVideoSources refreshes expired episode token before fetching the download page', async () => {
+    reset();
+    route(/\/get_token$/, () => ok(JSON.stringify({ token: 'fresh-token-123' })));
+    route(/^https:\/\/av1encodes\.com\/download\/one-piece\/1\/.*[?&]token=fresh-token-123/, () =>
+      ok(FIXTURES.playerHtml));
+    route(/\/get_ddl\//, (url, opts) => {
+      assert.strictEqual(opts.headers['X-Ddl-Token'], 'AAAA1234567890');
+      return ok(FIXTURES.ddlJson);
+    });
+    route(/\/watch\/xyz/, () => ok('', BASE + '/watch/xyz'));
+    route(/\/redirect\/stream\/abc/, () =>
+      ok('', 'https://cdn.example.com/stream/one-piece-e001.mp4'));
+    route(/\/redirect\/dl\/def/, () =>
+      ok('', 'https://cdn.example.com/dl/one-piece-e001.mkv'));
+    route(/\/episodes\/one-piece\//, () => ok('<html></html>'));
+
+    const streams = await P.getVideoSources(EP_URL);
+    assert.ok(calls.some(call => /\/get_token$/.test(call.url)));
+    const downloadCalls = calls.filter(call => /\/download\/one-piece\/1\//.test(call.url));
+    assert.ok(downloadCalls.some(call => /[?&]token=fresh-token-123(?:&|$)/.test(call.url)));
+    assert.ok(downloadCalls.every(call => !/[?&]token=fixture-token(?:&|$)/.test(call.url)));
+    assert.ok(streams.some(stream => /DASH/.test(stream.quality) && /\.mpd/.test(stream.url)));
+  });
+
   await test('getVideoSources resolves iframe DASH, stream, and direct download links', async () => {
     reset();
     route(/\/download\/one-piece\/1\//, () => ok(FIXTURES.playerHtml));
@@ -360,14 +384,12 @@ function routeEpisodePages() {
     assert.ok(streams.some(s => s.url === BASE + '/dash/xyz/manifest.mpd'));
   });
 
-  await test('getVideoSources retains a fallback when the download page has no player or token', async () => {
+  await test('getVideoSources does not mislabel an HTML download page as a playable stream', async () => {
     reset();
-    route(/\/download\/one-piece\/1\//, () => ok('<html><body>No player or DDL token</body></html>'));
-    route(/\/episodes\/one-piece\//, () => ok('<html></html>'));
+    route(/\\/download\\/one-piece\\/1\\//, () => ok('<html><body>No player or DDL token</body></html>'));
+    route(/\\/episodes\\/one-piece\\//, () => ok('<html></html>'));
     const streams = await P.getVideoSources(EP_URL);
-    assert.strictEqual(streams.length, 1);
-    assert.strictEqual(streams[0].url, EP_URL);
-    assert.strictEqual(streams[0].container, 'unknown');
+    assert.strictEqual(streams.length, 0);
   });
 
   await test('getVideoSources searches other resolutions for the same episode', async () => {
