@@ -151,6 +151,23 @@ function routeRedirects() {
     assert.ok(detail.episodes.every(ep => ep.url.startsWith(ALT + '/download/')),
       'episode links must stay on the mirror that returned the episode list');
 
+    route(/^https:\/\/animealpha\.cc\/watch\/one-piece-01/, () =>
+      ok('', ALT + '/watch/one-piece-01'));
+    route(/^https:\/\/animealpha\.cc\/redirect\/stream\/one-piece-01/, () =>
+      ok('', 'https://cdn.example.com/one-piece-01.mp4'));
+    route(/^https:\/\/animealpha\.cc\/redirect\/download\/one-piece-01/, () =>
+      ok('', 'https://cdn.example.com/one-piece-01.mkv'));
+
+    // Resolve an episode from the same URLs that were discovered through
+    // search, rather than constructing a synthetic playback URL.
+    const sources = await P.getVideoSources(detail.episodes[0].url);
+    assert.ok(sources.some(source => /DASH/.test(source.quality) &&
+      source.url === ALT + '/dash/one-piece-01/manifest.mpd'));
+    assert.ok(sources.some(source => /Stream/.test(source.quality) &&
+      source.url === 'https://cdn.example.com/one-piece-01.mp4'));
+    assert.ok(!calls.some(call => call.url === BASE + '/get_token'),
+      'inline DDL should work without falling back to the blocked default domain');
+
     // Playback calls getEpisodes again. A successful detail result must be
     // reused, not re-fetched from the known-bad default mirror.
     const before = calls.length;
@@ -351,6 +368,24 @@ function routeRedirects() {
     const items = await P.getEpisodes(ALT + '/anime/one-piece', {});
     assert.ok(items.length > 0);
     assert.ok(calls.some(x => /\/episodes\/one-piece\/1\/1280%20x%20720/.test(x.url)));
+  });
+
+  await test('playback tries the next resolution after upstream fails to generate a link', async () => {
+    reset();
+    route(/\/get_token$/, () => ok(JSON.stringify({ token: 'fresh-token-fallback' })));
+    route(/\/download\/one-piece\/1\/1920%20x%201080\/.*[?&]token=fresh-token-fallback/, () =>
+      ok('<html><body><h1>Oops! Something went wrong</h1><p>Unable to generate download link</p></body></html>'));
+    const low = '<html><a href="/download/one-piece/1/1280%20x%20720/%5BS01-E01%5D%20One%20Piece%20%5B720p%5D%20%5BDual%5D.mkv?token=listing-token">Episode 01 Dual</a></html>';
+    route(/^https:\/\/av1please\.com\/episodes\/one-piece\/1\/1280%20x%20720$/, () => ok(low));
+    route(/\/download\/one-piece\/1\/1280%20x%20720\/.*[?&]token=fresh-token-fallback/, () => ok(FIXTURES.player));
+    route(/\/get_ddl\//, () => ok(FIXTURES.ddl));
+    routeRedirects();
+
+    const sources = await P.getVideoSources(EP_URL);
+    assert.ok(calls.some(call => /\/episodes\/one-piece\/1\/1280%20x%20720/.test(call.url)),
+      '720p episode list must be attempted after 1080p link generation fails');
+    assert.ok(sources.some(source => /DASH/.test(source.quality)),
+      'the lower-resolution route should still produce playable stream candidates');
   });
 
   await test('container detection keeps MP4 distinct and DASH as unknown', async () => {
