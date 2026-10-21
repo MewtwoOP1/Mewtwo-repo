@@ -208,7 +208,9 @@ function routeRedirects() {
     assert.ok(ep);
     calls.length = 0;
     const sources = await P.getVideoSources(ep.url);
-    assert.ok(sources.some(x => /DASH/.test(x.quality) && x.url === BASE + '/dash/one-piece-01/manifest.mpd'));
+    assert.ok(sources.some(x => /DASH/.test(x.quality) && x.url === BASE + '/dash/one-piece-01/manifest.mpd'),
+      'inline DDL did not resolve; episode=' + ep.url + '; sources=' + JSON.stringify(sources) +
+      '; calls=' + JSON.stringify(calls.map(x => x.url)));
     assert.ok(sources.some(x => /Stream/.test(x.quality) && x.url === 'https://cdn.example.com/one-piece-01.mp4'));
     assert.ok(sources.some(x => /Direct DL/.test(x.quality) && x.url === 'https://cdn.example.com/one-piece-01.mkv'));
     assert.ok(!calls.some(x => /\/get_token(?:\?|$)/.test(x.url)));
