@@ -194,7 +194,7 @@ function routeEpisodePages() {
     assert.strictEqual(info.name, 'AV1Encodes');
     assert.strictEqual(info.lang, 'en');
     assert.strictEqual(info.type, 'anime');
-    assert.strictEqual(info.version, '1.2.2');
+    assert.strictEqual(info.version, '1.2.3');
     assert.ok(/^https?:\/\//.test(info.baseUrl));
   });
 
@@ -291,6 +291,13 @@ function routeEpisodePages() {
       assert.ok(episode.url.indexOf('/download/one-piece/') >= 0);
       assert.ok(/\?token=/.test(episode.url));
     }
+    // Zangetsu Mode canonicalizes by list position, so source entries must be
+    // chronological or canonical episode 1 can map to the source's latest file.
+    assert.strictEqual(episodes.map(ep => ep.number).join(','), '1,2,13');
+    assert.strictEqual(episodes[0].title, 'Episode 1');
+    assert.strictEqual(episodes[1].title, 'Episode 2');
+    assert.strictEqual(episodes[2].title, 'Episode 13');
+    assert.ok(episodes.every(ep => !/Season\s+\d|\bDual\b|\bDub\b|\bSub\b/i.test(ep.title)));
   });
 
   await test('getEpisodes tries lower resolutions when the preferred quality has no episodes', async () => {
@@ -428,6 +435,18 @@ function routeEpisodePages() {
     assert.ok(streams.some(stream => /DASH/.test(stream.quality)));
     assert.ok(!calls.some(call => /\/episodes\/one-piece\/1\/1280%20x%20720/.test(call.url)),
       'must not scan lower resolutions once a playable stream exists');
+  });
+
+  await test('getVideoSources applies request timeouts and stops fallback after blocked playback route', async () => {
+    reset();
+    route(/\/get_token$/, () => notFound(503));
+    route(/\/download\/one-piece\/1\//, () => notFound(403));
+    const streams = await P.getVideoSources(EP_URL);
+    assert.strictEqual(streams.length, 0);
+    assert.ok(calls.some(call => /\/get_token$/.test(call.url) && call.opts.timeoutMs === 1500));
+    assert.ok(calls.some(call => /\/download\/one-piece\/1\//.test(call.url) && call.opts.timeoutMs === 1500));
+    assert.ok(!calls.some(call => /\/episodes\/one-piece\//.test(call.url)),
+      'must stop instead of retrying all lower resolutions after a blocked route');
   });
 
   await test('getVideoSources searches other resolutions for the same episode', async () => {
