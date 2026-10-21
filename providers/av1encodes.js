@@ -311,14 +311,14 @@ async function _fetchSite(url, ref, extraHeaders) {
         const body = await r.text();
         // Do not treat an interstitial as the site's catalog/player markup. Move
         // to the next published mirror instead of trying to defeat the challenge.
-        if (/Just a moment\\.\\.\\.|cf-chl-|turnstile/i.test(body) &&
+        if (/Just a moment\.\.\.|cf-chl-|turnstile/i.test(body) &&
             /cloudflare|challenge-platform|captcha/i.test(body)) {
           break;
         }
-        // The site can return HTTP 200 with a rendered download-generation
-        // failure. Treat it as unavailable and try the next published mirror.
-        if (/\\/download\\//i.test(path) &&
-            /unable to generate download link|generating download link|oops!?\\s+something went wrong/i.test(body)) {
+        // A download-page application may render an HTTP-200 error when its
+        // signed download link expired. Treat it as unavailable and try mirrors.
+        if (/\/download\//i.test(path) &&
+            /unable to generate download link|generating download link|oops!?\s+something went wrong/i.test(body)) {
           break;
         }
         const finalUrl = r.url || target;
