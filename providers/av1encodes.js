@@ -2,10 +2,10 @@
 // Ported from the Aniyomi extension AV1Encodes.kt (SOUMYAR10/anime-extensions).
 //
 // The source is a DDL index: each episode page exposes a /get_ddl/ endpoint
-// returning stream_link, download_link and watch_link. The original extension
-// also builds a DASH manifest from watch_link; Zangetsu's stream contract has
-// no DASH container, so this port returns only the direct stream/download
-// links and drops the DASH URL.
+// returning stream_link, download_link and watch_link.
+// The watch_link resolves to a DASH manifest (.mpd).
+// Zangetsu's player sniffs 'unknown' containers by URL extension, so we pass
+// the .mpd URL with container: 'unknown'.
 
 'use strict';
 
@@ -13,7 +13,7 @@ const SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID)
   ? String(__SOURCE_ID)
   : 'av1encodes';
 
-const VERSION = '1.0.0';
+const VERSION = '1.1.0';
 const DEFAULT_DOMAIN = 'https://av1encodes.com';
 const LOGO = 'https://www.google.com/s2/favicons?sz=256&domain=av1encodes.com';
 
@@ -415,6 +415,23 @@ async function _resolveSources(ddl, filename, base) {
 
   const streams = [];
 
+  // 1. Resolve the DASH watch_link
+  if (ddl.watch_link) {
+    const dashUrl = await _resolveDash(ddl.watch_link, base);
+    if (dashUrl) {
+      streams.push({
+        url: dashUrl,
+        quality: label + ' · DASH',
+        container: 'unknown', // Zangetsu sniffs .mpd extension
+        headers: { 'User-Agent': UA, Referer: base + '/' },
+        kind: audio && /dub/i.test(audio) ? 'dub' : 'sub',
+        audioLang: audio && /dub/i.test(audio) ? 'en' : 'ja',
+        subtitles: []
+      });
+    }
+  }
+
+  // 2. Resolve direct stream and download links
   const links = [
     { link: ddl.stream_link, suffix: 'Stream' },
     { link: ddl.download_link, suffix: 'Direct DL' }
@@ -436,6 +453,26 @@ async function _resolveSources(ddl, filename, base) {
 
   if (!streams.length) return _fallback(base + '/download/' + encodeURIComponent(filename), filename);
   return streams;
+}
+
+async function _resolveDash(watchLink, base) {
+  if (!watchLink) return null;
+  const url = /^https?:\/\//i.test(watchLink)
+    ? watchLink
+    : base + (watchLink.charAt(0) === '/' ? '' : '/') + watchLink;
+
+  try {
+    // The original extension converts /watch/ to /dash/ and appends manifest.mpd
+    const dashUrl = url.replace('/watch/', '/dash/') + '/manifest.mpd';
+    const r = await fetch(dashUrl, {
+      headers: { 'User-Agent': UA, Referer: base + '/' },
+      redirect: 'follow'
+    });
+    if (!r.ok) return null;
+    return r.url || dashUrl;
+  } catch (e) {
+    return null;
+  }
 }
 
 async function _resolveRedirect(path, base) {
@@ -482,8 +519,8 @@ function _audioFromFilename(filename) {
 
 function _container(url) {
   if (/\.m3u8(\?|$)/i.test(url)) return 'hls';
-  if (/\.mkv(\?|$)/i.test(url)) return 'mkv';
-  return 'mp4';
+  if (/\.mp4(\?|$)/i.test(url)) return 'mp4';
+  return 'unknown';
 }
 
 // ── Home ──────────────────────────────────────────────────────────────────
@@ -504,9 +541,6 @@ async function getHome(opts) {
 }
 
 // ── Export Environment Guard ──────────────────────────────────────────────
-// Zangetsu evaluates this file directly in a JS engine without Node.js globals.
-// The Node.js CI script (check-and-run.mjs) requires module.exports.
-// We conditionally export only if 'module' actually exists.
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
