@@ -440,7 +440,7 @@ function _siteLink(raw, base) {
   // which actually served the episode page. Only an explicit domain choice
   // overrides these origins.
   if (absoluteHref && !hasExplicitDomain) return full;
-  return (_origin(_domain()) || _origin(base) || _domain()) + _pathQuery(full);
+  return (hasExplicitDomain ? _domain() : (_origin(base) || _domain())) + _pathQuery(full);
 }
 
 // ── Catalogue, search, and detail parsing ──────────────────────────────────
