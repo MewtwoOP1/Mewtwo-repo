@@ -1,84 +1,61 @@
-// AV1Encodes / AnimeAlpha native Zangetsu provider.
-// Ported from the current Yuzono Aniyomi AV1Encodes source:
-// https://github.com/yuzono/anime-extensions
-// Supports the current /episodes/{slug}/{season}/{resolution} and
-// /download/{slug}/{season}/{resolution}/{filename}?token=... routes.
-
+// AV1Encodes native Zangetsu provider, rebuilt from the Yuzuno Aniyomi source.
+// Key compatibility points: /episodes JSON (including embedded ddl), fresh
+// /get_token handling for stale episode links, /get_ddl extraction, and DASH.
 'use strict';
 
 const SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID)
-  ? String(__SOURCE_ID)
-  : 'av1encodes';
-const VERSION = '1.2.4';
+  ? String(__SOURCE_ID) : 'av1encodes';
+const VERSION = '1.0.0';
 const DEFAULT_DOMAIN = 'https://av1please.com';
-const MIRROR_DOMAINS = [
-  // av1please.com currently serves the rebranded AnimeAlpha site and is the
-  // first mirror candidate for the built-in domains.
+const SITE_DOMAINS = [
   'https://av1please.com',
   'https://animealpha.cc',
   'https://av1encodes.com'
 ];
 const LOGO = 'https://www.google.com/s2/favicons?sz=256&domain=av1encodes.com';
-const UA =
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
+const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
   '(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
-const RESOLUTIONS = ['1920 x 1080', '1280 x 720', '854 x 480', '640 x 360'];
-const REQUEST_TIMEOUT_MS = 1500;
-const WARMUP_TIMEOUT_MS = 900;
-const RES_LABELS = {
-  '1920 x 1080': '1080p',
-  '1280 x 720': '720p',
-  '854 x 480': '480p',
-  '640 x 360': '360p'
-};
-const TOKEN_RE = /['"](A{4,}[A-Za-z0-9_\-]{10,})['"]/;
-const EPISODE_RE = /\[(?:S\d{1,2}-)?E(\d{1,4})\]|\bE(\d{1,4})\b/i;
+const REQUEST_TIMEOUT_MS = 1900;
+const REDIRECT_TIMEOUT_MS = 1500;
+const WARMUP_TIMEOUT_MS = 1000;
+const QUALITY_LIST = [
+  { value: '1920 x 1080', label: '1080p' },
+  { value: '1280 x 720', label: '720p' },
+  { value: '854 x 480', label: '480p' },
+  { value: '640 x 360', label: '360p' }
+];
 const FILENAME_RE = /([a-zA-Z0-9_ \-\[\]().%]+?\.(?:mkv|mp4))/gi;
+const DDL_TOKEN_RE = /['"]([A]{4,}[A-Za-z0-9_-]{10,})['"]/;
+const EPISODE_PATTERNS = [
+  /\[(?:S\d{1,2}[-_ ]*)?E0*(\d{1,4})\]/i,
+  /\bS\d{1,2}[-_ ]*E0*(\d{1,4})\b/i,
+  /\b(?:episode|ep\.?)\s*0*(\d{1,4})\b/i,
+  /\bE0*(\d{1,4})\b/i
+];
+const DDL_QUERY_KEY = '__av1ddl';
 
-// ── Settings and runtime info ─────────────────────────────────────────────
-
-function getSettings() {
-  return [
-    {
-      key: 'domain',
-      label: 'Domain',
-      description: 'Preferred AV1Encodes domain. Known mirrors are tried automatically if it is unavailable.',
-      type: 'text',
-      default: DEFAULT_DOMAIN
-    },
-    {
-      key: 'quality',
-      label: 'Preferred quality',
-      description: 'Preferred resolution. The provider falls back to other available resolutions.',
-      type: 'enum',
-      default: '1080p',
-      options: [
-        { value: '1080p', label: '1080p' },
-        { value: '720p', label: '720p' },
-        { value: '480p', label: '480p' },
-        { value: '360p', label: '360p' }
-      ]
-    }
-  ];
-}
+// ── Settings and provider contract ────────────────────────────────────────
 
 function _readSetting(key) {
   try {
-    const s = typeof __settings !== 'undefined' && __settings
-      ? __settings[SOURCE_ID]
-      : null;
-    return s && s[key] != null ? s[key] : null;
+    const settings = typeof __settings !== 'undefined' && __settings
+      ? __settings[SOURCE_ID] : null;
+    return settings && settings[key] != null ? settings[key] : null;
   } catch (e) {
     return null;
   }
 }
 
+function _cleanDomain(value) {
+  let raw = String(value || DEFAULT_DOMAIN).trim();
+  if (!raw) raw = DEFAULT_DOMAIN;
+  if (!/^https?:\/\//i.test(raw)) raw = 'https://' + raw;
+  const m = raw.match(/^(https?:\/\/[^/?#]+)/i);
+  return m ? m[1].replace(/\/+$/, '') : DEFAULT_DOMAIN;
+}
+
 function _domain() {
-  const value = String(_readSetting('domain') || DEFAULT_DOMAIN).trim();
-  if (!value) return DEFAULT_DOMAIN;
-  let clean = value.replace(/\/+$/, '');
-  if (!/^https?:\/\//i.test(clean)) clean = 'https://' + clean;
-  return /^https?:\/\/[^/]+$/i.test(clean) ? clean : DEFAULT_DOMAIN;
+  return _cleanDomain(_readSetting('domain') || DEFAULT_DOMAIN);
 }
 
 function _qualityValue(value) {
@@ -91,18 +68,7 @@ function _qualityValue(value) {
 
 function _qualityCandidates(preferred) {
   const first = _qualityValue(preferred || _readSetting('quality') || '1080p');
-  const output = [first];
-  for (const r of RESOLUTIONS) {
-    if (output.indexOf(r) < 0) output.push(r);
-  }
-  return output;
-}
-
-function _resolutionLabel(value, filename) {
-  const found = String(filename || '').match(/\[(\d{3,4}p)\]/i);
-  if (found) return found[1];
-  const decoded = _decode(value || '');
-  return RES_LABELS[decoded] || (decoded.match(/\d{3,4}p/i) || [])[0] || '1080p';
+  return [first].concat(QUALITY_LIST.map(x => x.value).filter(x => x !== first));
 }
 
 function getInfo() {
@@ -116,313 +82,259 @@ function getInfo() {
   };
 }
 
-// ── URL, text, and request helpers ────────────────────────────────────────
+function getSettings() {
+  return [
+    {
+      key: 'domain',
+      label: 'Domain',
+      description: 'Preferred AV1Encodes domain. Known mirrors are tried when catalogue requests fail.',
+      type: 'text',
+      default: DEFAULT_DOMAIN
+    },
+    {
+      key: 'quality',
+      label: 'Preferred quality',
+      description: 'Preferred resolution. Episode listings fall back to lower resolutions when needed.',
+      type: 'enum',
+      default: '1080p',
+      options: [
+        { value: '1080p', label: '1080p' },
+        { value: '720p', label: '720p' },
+        { value: '480p', label: '480p' },
+        { value: '360p', label: '360p' }
+      ]
+    },
+    {
+      key: 'showTorrent',
+      label: 'Show torrent links',
+      description: 'Include torrent links in the returned sources when AV1Encodes provides one.',
+      type: 'bool',
+      default: false
+    }
+  ];
+}
+
+// ── URL and response helpers ──────────────────────────────────────────────
 
 function _origin(url) {
-  const m = String(url || '').match(/^(https?:\/\/[^/?#]+)/i);
-  return m ? m[1].replace(/\/$/, '') : null;
+  const m = String(url || '').trim().match(/^(https?:\/\/[^/?#]+)/i);
+  return m ? m[1].replace(/\/+$/, '') : null;
 }
 
 function _host(url) {
   const origin = _origin(url);
-  if (!origin) return '';
-  return origin.replace(/^https?:\/\//i, '').split(':')[0].toLowerCase();
+  return origin ? origin.replace(/^https?:\/\//i, '').split(':')[0].toLowerCase() : '';
+}
+
+function _isKnownHost(host) {
+  const h = String(host || '').toLowerCase();
+  return SITE_DOMAINS.some(d => {
+    const root = _host(d);
+    return h === root || h.endsWith('.' + root);
+  }) || (!!_host(_domain()) && h === _host(_domain()));
 }
 
 function _pathQuery(url) {
-  const value = String(url || '').trim();
-  if (/^https?:\/\//i.test(value)) {
-    const m = value.match(/^https?:\/\/[^/?#]+([^#]*)/i);
+  const raw = String(url || '').trim().replace(/&amp;/g, '&');
+  if (/^https?:\/\//i.test(raw)) {
+    const m = raw.match(/^https?:\/\/[^/?#]+([^#]*)/i);
     return m && m[1] ? m[1] : '/';
   }
-  if (value.indexOf('//') === 0) {
-    const m = value.match(/^\/\/[^/?#]+([^#]*)/);
+  if (raw.indexOf('//') === 0) {
+    const m = raw.match(/^\/\/[^/?#]+([^#]*)/);
     return m && m[1] ? m[1] : '/';
   }
-  if (!value) return '/';
-  return value.charAt(0) === '/' ? value.split('#')[0] : '/' + value.split('#')[0];
+  if (!raw) return '/';
+  const noHash = raw.split('#')[0];
+  return noHash.charAt(0) === '/' ? noHash : '/' + noHash;
 }
 
-function _stripTokenParam(url) {
+function _pathOnly(url) {
+  return _pathQuery(url).split('?')[0].split('#')[0] || '/';
+}
+
+function _absolute(raw, base) {
+  if (!raw) return null;
+  const value = String(raw).trim().replace(/&amp;/g, '&');
+  if (/^(?:https?:|magnet:|blob:)/i.test(value)) return value;
+  if (value.indexOf('//') === 0) return 'https:' + value;
+  const origin = _origin(base) || _domain();
+  if (value.charAt(0) === '/') return origin + value;
+  return origin + '/' + value.replace(/^\/+/, '');
+}
+
+function _decode(value) {
+  const raw = String(value || '').replace(/&amp;/g, '&');
+  try { return decodeURIComponent(raw); } catch (e) { return raw; }
+}
+
+function _queryParam(url, name) {
+  const q = _pathQuery(url).split('?')[1] || '';
+  const wanted = String(name).toLowerCase();
+  const pieces = q.split('&');
+  for (const piece of pieces) {
+    if (!piece) continue;
+    const at = piece.indexOf('=');
+    const key = _decode(at < 0 ? piece : piece.slice(0, at)).toLowerCase();
+    if (key === wanted) return _decode(at < 0 ? '' : piece.slice(at + 1));
+  }
+  return null;
+}
+
+function _withoutQueryParams(url, names) {
   const full = _absolute(url, _domain());
   if (!full) return url;
   const origin = _origin(full) || _domain();
-  const pathQuery = _pathQuery(full).split('#')[0];
-  const queryAt = pathQuery.indexOf('?');
-  if (queryAt < 0) return origin + pathQuery;
-  const path = pathQuery.slice(0, queryAt);
-  const query = pathQuery.slice(queryAt + 1);
-  const kept = query.split('&').filter(part => {
+  const pathQuery = _pathQuery(full);
+  const at = pathQuery.indexOf('?');
+  if (at < 0) return origin + pathQuery;
+  const path = pathQuery.slice(0, at);
+  const removed = (names || []).map(x => String(x).toLowerCase());
+  const kept = pathQuery.slice(at + 1).split('&').filter(part => {
     if (!part) return false;
-    const key = _decode(part.split('=')[0]).toLowerCase();
-    return key !== 'token';
+    const eq = part.indexOf('=');
+    const key = _decode(eq < 0 ? part : part.slice(0, eq)).toLowerCase();
+    return removed.indexOf(key) < 0;
   });
   return origin + path + (kept.length ? '?' + kept.join('&') : '');
 }
 
-function _appendAccessToken(url, token) {
-  const clean = _stripTokenParam(url);
-  if (!token) return clean;
-  return clean + (clean.indexOf('?') >= 0 ? '&' : '?') + 'token=' + encodeURIComponent(token);
+function _setQueryParam(url, key, value) {
+  const clean = _withoutQueryParams(url, [key]);
+  return clean + (_pathQuery(clean).indexOf('?') >= 0 ? '&' : '?') +
+    encodeURIComponent(key) + '=' + encodeURIComponent(String(value));
 }
 
-async function _getFreshAccessToken(base, ref) {
-  const requestBase = _origin(base) || _domain();
-  const response = await _fetchSite(
-    requestBase + '/get_token',
-    ref || requestBase + '/',
-    {
-      'Accept': 'application/json, */*;q=0.8',
-      'Referer': requestBase + '/',
-      'Sec-Fetch-Dest': 'empty',
-      'Sec-Fetch-Mode': 'cors',
-      'Sec-Fetch-Site': 'same-origin'
-    }
-  );
-  const body = String(response.body || '').trim();
-  let token = null;
-  if (body) {
-    try {
-      const parsed = JSON.parse(body);
-      const value = parsed && (parsed.token || parsed.access_token || parsed.accessToken);
-      if (typeof value === 'string' && value.trim()) token = value.trim();
-    } catch (e) {}
-    if (!token) {
-      const match = body.match(/["'](?:token|access_token|accessToken)["']\s*:\s*["']([^"']+)["']/i);
-      if (match) token = match[1];
-    }
-  }
-  return { token, base: response.base || requestBase, status: response.status || 0 };
-}
-
-function _isDirectMediaUrl(url) {
-  const value = String(url || '');
-  if (/\/download\//i.test(_pathQuery(value))) return false;
-  return /\.(?:m3u8|mp4|mkv|mpd)(?:[?#]|$)/i.test(value);
-}
-
-function _trustedSiteHost(host) {
-  const h = String(host || '').toLowerCase();
-  const roots = ['av1encodes.com', 'animealpha.cc', 'av1please.com'];
-  return roots.some(root => h === root || h.endsWith('.' + root));
-}
-
-function _siteBases(url) {
-  const bases = [];
-  const add = value => {
-    const origin = _origin(value);
-    if (origin && bases.indexOf(origin) < 0) bases.push(origin);
-  };
-  const requestedHost = _host(url);
-  const configuredHost = _host(_domain());
-  // The primary av1encodes.com host is currently returning 403 while the
-  // rebranded av1please.com mirror serves catalogue and episode pages. Prefer
-  // that known-live mirror for built-in domains, but keep custom domains first.
-  const isKnownSite = _trustedSiteHost(requestedHost) || _trustedSiteHost(configuredHost);
-  if (isKnownSite) add(MIRROR_DOMAINS[0]);
-  add(url);
-  add(_domain());
-  for (const mirror of MIRROR_DOMAINS) add(mirror);
-  return bases;
-}
-
-function _isTransientSiteFailure(status) {
-  const code = Number(status) || 0;
-  return code === 0 || code === 403 || code === 408 || code === 429 || code >= 500;
-}
-
-function _absolute(url, base) {
-  if (!url) return null;
-  const value = String(url).trim().replace(/&amp;/g, '&');
-  if (/^https?:\/\//i.test(value)) return value;
-  if (value.indexOf('//') === 0) return 'https:' + value;
-  const origin = _origin(base) || _domain();
-  if (value.charAt(0) === '/') return origin + value;
-  return origin + '/' + value;
-}
-
-function _siteLink(raw, base) {
-  if (!raw) return null;
-  const full = _absolute(raw, base);
+function _canonicalSiteUrl(url, base) {
+  const full = _absolute(url, base || _domain());
   if (!full) return null;
   const host = _host(full);
-  if (!_trustedSiteHost(host) && host !== _host(_domain())) return null;
-  const origin = _origin(base) || _domain();
-  return origin + _pathQuery(full);
-}
-
-function _headers(ref, base) {
-  return {
-    'User-Agent': UA,
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-    'Accept-Language': 'en-US,en;q=0.9',
-    'Referer': ref || ((base || _domain()) + '/'),
-    'Upgrade-Insecure-Requests': '1',
-    'Sec-Fetch-Dest': 'document',
-    'Sec-Fetch-Mode': 'navigate',
-    'Sec-Fetch-Site': 'same-origin'
-  };
-}
-
-function _mergeHeaders(baseHeaders, extra) {
-  const out = {};
-  Object.keys(baseHeaders || {}).forEach(k => { out[k] = baseHeaders[k]; });
-  Object.keys(extra || {}).forEach(k => { out[k] = extra[k]; });
-  return out;
-}
-
-function _adaptReferer(ref, base) {
-  if (!ref) return base + '/';
-  if (_trustedSiteHost(_host(ref)) || _host(ref) === _host(_domain())) {
-    return base + _pathQuery(ref);
-  }
-  return ref;
-}
-
-async function _warmupSite(base) {
-  // The current upstream extension performs a normal homepage request after
-  // HTTP 403 so the site's av1_client_id/session cookie can be established.
-  // This does not solve or automate a CAPTCHA; it only performs a regular GET.
-  try {
-    const r = await fetch(base + '/', {
-      headers: _headers(base + '/', base),
-      redirect: 'follow',
-      credentials: 'include',
-      timeoutMs: WARMUP_TIMEOUT_MS
-    });
-    if (r.ok && typeof r.text === 'function') {
-      await r.text();
-    } else if (r.body && typeof r.body.cancel === 'function') {
-      try { r.body.cancel(); } catch (e) {}
-    }
-  } catch (e) {}
-}
-
-async function _fetchSite(url, ref, extraHeaders) {
-  const path = _pathQuery(url);
-  // Playback endpoints run inside Zangetsu's per-source timeout; limit their
-  // mirror sweep. Catalogue/search requests keep the complete mirror list.
-  const latencySensitive = /^\/(?:get_token(?:[/?]|$)|download\/|episodes\/|get_ddl\/|anime\/[^/?]+(?:[/?]|$))/i.test(path);
-  const candidates = latencySensitive ? _siteBases(url).slice(0, 3) : _siteBases(url);
-  let lastStatus = 0;
-  let lastReason = null;
-  // Allow one normal homepage warm-up per lookup when a mirror returns 403.
-  // The site's own upstream extension does this to establish its session
-  // cookie. Retrying every mirror adds latency without adding useful signal.
-  let warmupUsed = false;
-
-  for (const base of candidates) {
-    const target = base + path;
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        const r = await fetch(target, {
-          headers: _mergeHeaders(_headers(_adaptReferer(ref, base), base), extraHeaders),
-          redirect: 'follow',
-          credentials: 'include',
-          timeoutMs: REQUEST_TIMEOUT_MS
-        });
-        lastStatus = r.status || 0;
-        if (!r.ok) {
-          if (r.body && typeof r.body.cancel === 'function') {
-            try { r.body.cancel(); } catch (e) {}
-          }
-          if (lastStatus === 403 && !warmupUsed) {
-            warmupUsed = true;
-            await _warmupSite(base);
-            continue;
-          }
-          if (lastStatus === 403) lastReason = 'forbidden';
-          break;
-        }
-        const body = await r.text();
-        // Do not treat an interstitial as the site's catalog/player markup. Move
-        // to the next published mirror instead of trying to defeat the challenge.
-        if (/Just a moment\.\.\.|cf-chl-|turnstile/i.test(body) &&
-            /cloudflare|challenge-platform|captcha/i.test(body)) {
-          lastReason = 'challenge';
-          break;
-        }
-        // The download page first renders a "Generating download link" placeholder
-        // before JavaScript calls get_ddl. Keep that normal placeholder so its
-        // embedded DDL token can still be resolved. Reject only terminal errors.
-        if (/\/download\//i.test(path) &&
-            /unable to generate download link|oops!?\s+something went wrong/i.test(body) &&
-            !_findIframe(body) && !TOKEN_RE.test(body)) {
-          lastReason = 'generation-failed';
-          break;
-        }
-        // /get_token must return JSON containing an actual token. An HTTP-200
-        // HTML/interstitial response is not a successful token lookup; try mirrors.
-        if (/\/get_token(?:\?|$)/i.test(path) &&
-            !/["'](?:token|access_token|accessToken)["']\s*:\s*["'][^"']+["']/i.test(body)) {
-          lastReason = 'invalid-token-response';
-          break;
-        }
-        const finalUrl = r.url || target;
-        const finalBase = _origin(finalUrl);
-        return {
-          body,
-          url: finalUrl,
-          base: finalBase && (_trustedSiteHost(_host(finalUrl)) || _host(finalUrl) === _host(_domain()))
-            ? finalBase
-            : base,
-          status: r.status || 200
-        };
-      } catch (e) {
-        break;
-      }
-    }
-  }
-  return { body: '', url: url, base: _origin(url) || _domain(), status: lastStatus, reason: lastReason };
-}
-
-async function _resolveLink(raw, base, ref) {
-  if (!raw) return null;
-  const full = _absolute(raw, base);
-  if (!full) return null;
-  const origin = _origin(full) || base || _domain();
-  const isSite = _trustedSiteHost(_host(full)) || _host(full) === _host(_domain());
-  const candidates = isSite ? _siteBases(full).slice(0, 3) : [origin];
-  const path = _pathQuery(full);
-
-  for (const candidate of candidates) {
-    const target = candidate + path;
-    let warmed = false;
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        const r = await fetch(target, {
-          headers: _headers(_adaptReferer(ref, candidate), candidate),
-          redirect: 'follow',
-          credentials: 'include',
-          timeoutMs: REQUEST_TIMEOUT_MS
-        });
-        const status = r.status || 0;
-        const finalUrl = r.url || target;
-        if (r.body && typeof r.body.cancel === 'function') {
-          try { r.body.cancel(); } catch (e) {}
-        }
-        if (r.ok && finalUrl) return finalUrl;
-        if (status === 403 && !warmed && isSite) {
-          warmed = true;
-          await _warmupSite(candidate);
-          continue;
-        }
-        break;
-      } catch (e) {
-        break;
-      }
-    }
-  }
+  const targetBase = _origin(base) || _domain();
+  if (_isKnownHost(host)) return targetBase + _pathQuery(full);
   return full;
 }
 
-function _decode(value) {
-  try { return decodeURIComponent(String(value || '').replace(/\+/g, '%2B')); }
-  catch (e) { return String(value || ''); }
+function _siteBases(preferred) {
+  const out = [];
+  const add = value => {
+    const origin = _origin(value);
+    if (origin && out.indexOf(origin) < 0) out.push(origin);
+  };
+  add(preferred || _domain());
+  add(_domain());
+  SITE_DOMAINS.forEach(add);
+  return out;
 }
 
-function _text(html) {
-  return String(html || '')
+function _headers(ref, base, mode) {
+  const site = _origin(base) || _domain();
+  const headers = {
+    'User-Agent': UA,
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Referer': ref || site + '/',
+    'Sec-Fetch-Site': 'same-origin'
+  };
+  if (mode === 'json') {
+    headers.Accept = 'application/json, */*;q=0.8';
+    headers['Sec-Fetch-Dest'] = 'empty';
+    headers['Sec-Fetch-Mode'] = 'cors';
+  } else {
+    headers.Accept = 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8';
+    headers['Upgrade-Insecure-Requests'] = '1';
+    headers['Sec-Fetch-Dest'] = 'document';
+    headers['Sec-Fetch-Mode'] = 'navigate';
+  }
+  return headers;
+}
+
+function _mergeHeaders(a, b) {
+  const out = {};
+  Object.keys(a || {}).forEach(k => { out[k] = a[k]; });
+  Object.keys(b || {}).forEach(k => { out[k] = b[k]; });
+  return out;
+}
+
+function _isChallenge(body) {
+  const s = String(body || '');
+  return (/Just a moment\.{0,3}|cf-chl-|turnstile/i.test(s) &&
+    /cloudflare|challenge-platform|captcha/i.test(s)) ||
+    /your ip has been blocked/i.test(s);
+}
+
+async function _rawRequest(url, ref, extraHeaders, timeoutMs) {
+  const base = _origin(url) || _domain();
+  try {
+    const response = await fetch(url, {
+      headers: _mergeHeaders(_headers(ref || base + '/', base, 'html'), extraHeaders),
+      redirect: 'follow',
+      credentials: 'include',
+      timeoutMs: timeoutMs || REQUEST_TIMEOUT_MS
+    });
+    const status = Number(response && response.status || 0);
+    let body = '';
+    if (response && typeof response.text === 'function') {
+      try { body = String(await response.text() || ''); } catch (e) { body = ''; }
+    } else if (response && typeof response.body === 'string') {
+      body = response.body;
+    }
+    const finalUrl = response && response.url ? String(response.url) : url;
+    const challenge = _isChallenge(body);
+    const okay = !!response && response.ok !== false && status < 400 && !challenge;
+    return {
+      ok: okay, status: status, body: body, url: finalUrl,
+      base: _origin(finalUrl) || base,
+      reason: challenge ? 'challenge' : (status >= 400 ? 'http' : '')
+    };
+  } catch (e) {
+    return { ok: false, status: 0, body: '', url: url, base: base, reason: 'network' };
+  }
+}
+
+async function _warmupSite(base) {
+  const site = _origin(base) || _domain();
+  // Ordinary homepage request only. This establishes a normal session cookie
+  // where the site permits it; it does not solve or bypass a CAPTCHA/IP block.
+  try {
+    await _rawRequest(site + '/', site + '/', {}, WARMUP_TIMEOUT_MS);
+  } catch (e) {}
+}
+
+async function _requestSiteUrl(url, ref, extraHeaders, timeoutMs, context) {
+  const base = _origin(url) || _domain();
+  let result = await _rawRequest(url, ref || base + '/', extraHeaders, timeoutMs);
+  if (result.status === 403 && context && !context.warmupUsed) {
+    context.warmupUsed = true;
+    await _warmupSite(base);
+    result = await _rawRequest(url, ref || base + '/', extraHeaders, timeoutMs);
+  }
+  return result;
+}
+
+async function _fetchSite(rawUrl, ref, timeoutMs) {
+  const firstOrigin = _origin(rawUrl);
+  const selected = firstOrigin && !_isKnownHost(_host(firstOrigin))
+    ? firstOrigin : _domain();
+  const path = _pathQuery(rawUrl);
+  const candidates = _siteBases(selected);
+  let last = { ok: false, status: 0, body: '', url: rawUrl, base: selected, reason: 'unavailable' };
+  const context = { warmupUsed: false };
+  // Catalogue requests may fail over to a mirror. Playback uses exact-host
+  // calls so it never serially scans every mirror inside the resolver timeout.
+  for (const base of candidates) {
+    const target = base + path;
+    const response = await _requestSiteUrl(target, ref || base + '/', {}, timeoutMs || REQUEST_TIMEOUT_MS, context);
+    if (response.ok && response.body) return response;
+    last = response;
+    if (response.status === 403 || response.status === 404 || response.status === 410 ||
+        response.status === 429 || response.status >= 500 || response.status === 0 ||
+        response.reason === 'challenge') continue;
+    if (response.ok) return response;
+  }
+  return { ok: false, status: last.status, body: '', url: rawUrl, base: last.base || selected, reason: last.reason || 'unavailable' };
+}
+
+function _htmlText(value) {
+  return String(value || '')
     .replace(/<!--[\s\S]*?-->/g, ' ')
     .replace(/<(script|style|noscript)\b[^>]*>[\s\S]*?<\/\1>/gi, ' ')
     .replace(/<[^>]*>/g, ' ')
@@ -433,246 +345,160 @@ function _text(html) {
     .replace(/&lt;/gi, '<')
     .replace(/&gt;/gi, '>')
     .replace(/&#(\d+);/g, (all, n) => {
-      const code = parseInt(n, 10);
-      return code > 0 && code <= 0x10ffff ? String.fromCharCode(code) : all;
+      const cp = parseInt(n, 10);
+      return cp > 0 && cp <= 0x10ffff ? String.fromCharCode(cp) : all;
     })
     .replace(/\s+/g, ' ')
     .trim();
 }
 
 function _attr(html, name) {
-  const re = new RegExp('(?:^|\\s)' + name + '\\s*=\\s*([\'"])([\\s\\S]*?)\\1', 'i');
+  const re = new RegExp("(?:^|\\s)" + name + "\\s*=\\s*(['\"])([\\s\\S]*?)\\1", "i");
   const m = String(html || '').match(re);
-  return m ? m[2].replace(/&amp;/g, '&') : null;
+  if (m) return m[2].replace(/&amp;/g, '&');
+  const unquoted = String(html || '').match(new RegExp('(?:^|\\s)' + name + '\\s*=\\s*([^\\s>]+)', 'i'));
+  return unquoted ? unquoted[1].replace(/&amp;/g, '&') : null;
 }
 
-function _innerTag(html, tagPattern) {
+function _tagContents(html, tagPattern) {
   const re = new RegExp('<(' + tagPattern + ')\\b[^>]*>([\\s\\S]*?)<\\/\\1>', 'i');
   const m = String(html || '').match(re);
   return m ? m[2] : '';
 }
 
-function _firstImage(html, base) {
-  const tags = String(html || '').match(/<img\b[^>]*>/gi) || [];
-  if (!tags.length) return null;
-  const tag = tags.find(t => _attr(t, 'data-src')) ||
-    tags.find(t => _attr(t, 'data-lazy-src')) ||
-    tags.find(t => _attr(t, 'src')) || tags[0];
-  const raw = _attr(tag, 'data-src') || _attr(tag, 'data-lazy-src') ||
-    _attr(tag, 'src') || _attr(tag, 'data-original');
-  return raw ? _absolute(raw, base) : null;
-}
-
-function _anchorList(html) {
+function _anchors(html) {
   const out = [];
   const re = /<a\b([^>]*)>([\s\S]*?)<\/a\s*>/gi;
   let m;
   while ((m = re.exec(String(html || ''))) !== null) {
     const href = _attr(m[1], 'href');
-    if (href) out.push({ href, attrs: m[1], inner: m[2], html: m[0] });
+    if (href) out.push({ href: href, attrs: m[1], inner: m[2], html: m[0] });
   }
   return out;
 }
 
-function _episodeNumber(value) {
-  const s = _decode(String(value || ''));
-  const m = s.match(EPISODE_RE) || s.match(/\bEpisode\s*(\d{1,4})\b/i);
-  const n = m ? parseInt(m[1] || m[2], 10) : 0;
-  return Number.isFinite(n) ? n : 0;
+function _imageUrl(html, base) {
+  const images = String(html || '').match(/<img\b[^>]*>/gi) || [];
+  if (!images.length) return null;
+  const tag = images.find(x => _attr(x, 'data-src')) ||
+    images.find(x => _attr(x, 'data-lazy-src')) ||
+    images.find(x => _attr(x, 'data-original')) ||
+    images.find(x => _attr(x, 'src')) || images[0];
+  const raw = _attr(tag, 'data-src') || _attr(tag, 'data-lazy-src') ||
+    _attr(tag, 'data-original') || _attr(tag, 'src');
+  if (!raw || /^(?:data:|about:blank)/i.test(raw)) return null;
+  return _absolute(raw, base);
 }
 
-function _filenameFromUrl(url) {
-  const path = _pathQuery(url).split('?')[0];
-  const last = path.substring(path.lastIndexOf('/') + 1);
-  return _decode(last);
+function _siteLink(raw, base) {
+  if (!raw) return null;
+  const full = _absolute(raw, base);
+  if (!full || !/^https?:\/\//i.test(full)) return null;
+  const host = _host(full);
+  if (!_isKnownHost(host)) return null;
+  // The upstream source canonicalizes known mirrors back to the selected base,
+  // so later token requests and episode pages use one consistent session host.
+  return (_origin(base) || _domain()) + _pathQuery(full);
 }
 
-function _filenameFromHtml(html) {
-  const out = [];
-  const seen = {};
-  FILENAME_RE.lastIndex = 0;
-  let m;
-  while ((m = FILENAME_RE.exec(String(html || ''))) !== null) {
-    const name = _decode(m[1]).trim();
-    if (name && !seen[name]) {
-      seen[name] = true;
-      out.push(name);
-    }
-  }
-  return out;
-}
+// ── Catalogue, search, and detail parsing ──────────────────────────────────
 
-function _normaliseEpisodeTitle(value) {
-  return _text(value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-}
-
-function _episodeTitleRemainder(value, number, slug) {
-  let out = _text(value || '');
-  if (!out) return '';
-  out = out.replace(/^\s*(?:season|s)\s*\d+\s*[-–—:]?\s*/i, '');
-  const prefix = out.match(/^(?:episode|ep\.?|e)\s*0*(\d{1,4})\b/i);
-  if (number > 0 && prefix && parseInt(prefix[1], 10) === number) {
-    out = out.slice(prefix[0].length).replace(/^\s*[-–—:.)]+\s*/, '');
-  }
-  out = out
-    .replace(/\[(?:\d{3,4}p|dual|sub|dub|english\s*dub|tri|multi)[^\]]*\]/gi, ' ')
-    .replace(/\b(?:english\s+dub|dual|sub|dub|tri|multi)\b/gi, ' ')
-    .replace(/\[\d{3,4}p\]/gi, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .replace(/^[-–—:.)]+\s*/, '')
-    .trim();
-  if (!out) return '';
-  const titleKey = _normaliseEpisodeTitle(out);
-  // Episode filenames often repeat the series name and original release year,
-  // e.g. "[S01-E01] JoJo's Bizarre Adventure 2012 [360p] [Dual].mkv".
-  const titleWithoutYear = titleKey.replace(/(?:19|20)\d{2}$/, '');
-  const slugKey = _normaliseEpisodeTitle(slug);
-  if (slugKey && (titleKey === slugKey || titleWithoutYear === slugKey ||
-      (number > 0 && (titleKey === slugKey + 'episode' + number ||
-        titleWithoutYear === slugKey + 'episode' + number)))) {
-    return '';
-  }
-  if (number > 0 && /^(?:episode|ep\.?|e)?\s*0*\d+$/i.test(out)) return '';
-  return out;
-}
-
-function _episodeLabel(filename, season, label, slug, preferredNumber) {
-  const labelText = _text(label || '');
-  const clean = _decode(String(filename || ''))
-    .replace(/\.(mkv|mp4)$/i, '')
-    .trim();
-  const match = clean.match(/\[(?:S\d{1,2}-)?E(\d{1,4})\]\s*(.*?)\s*(?=\[|$)/i);
-  const preferred = parseInt(preferredNumber, 10);
-  const n = preferred > 0
-    ? preferred
-    : (match ? parseInt(match[1], 10) : (_episodeNumber(clean) || _episodeNumber(labelText)));
-  if (n > 0) {
-    const filenameTitle = match ? _episodeTitleRemainder(match[2], n, slug) : '';
-    const labelTitle = _episodeTitleRemainder(labelText, n, slug);
-    const title = filenameTitle || labelTitle;
-    // Zangetsu Mode pairs source rows with catalogue episodes by index. Keep
-    // source-only labels generic so AniList/MAL titles, stills and synopses win.
-    return 'Episode ' + n + (title ? ' - ' + title : '');
-  }
-  const fallback = clean
-    .replace(/\s*\[(?:\d{3,4}p|dual|sub|dub|english\s*dub|tri|multi)[^\]]*\]/gi, '')
-    .replace(/\s*\[\d{3,4}p\].*$/i, '')
-    .trim();
-  const candidate = _episodeTitleRemainder(labelText, 0, slug);
-  return candidate || fallback || labelText || 'Episode';
-}
-
-// ── Catalog / search parsing ───────────────────────────────────────────────
-
-function _addCard(out, seen, block, base) {
-  const anchors = _anchorList(block).filter(a => /\/anime\//i.test(a.href));
+function _cardFromBlock(block, base) {
+  const anchors = _anchors(block);
   for (const a of anchors) {
-    const href = _siteLink(a.href, base);
-    if (!href || !/\/anime\/[^/?#]+/i.test(href) || seen[href]) continue;
-    const titleBlock = _innerTag(block, 'h[1-6]');
-    const classTitle = block.match(/<([a-z][a-z0-9]*)\b[^>]*class=['"][^'"]*(?:spotlight-title|anime-title|card-title|title)[^'"]*['"][^>]*>([\s\S]*?)<\/\1>/i);
-    let title = _text(titleBlock || (classTitle && classTitle[2]) || a.inner);
-    if (!title) title = _text(_attr(block, 'title') || _attr(a.attrs, 'title') || '');
-    if (!title) {
-      const img = (block.match(/<img\b[^>]*>/i) || [''])[0];
-      title = _text(_attr(img, 'alt') || '');
-    }
-    if (!title || /^(watch now|details|view more)$/i.test(title)) continue;
-    seen[href] = true;
-    out.push({
-      id: href,
-      title,
-      englishTitle: title,
-      url: href,
-      cover: _firstImage(block, base),
-      type: 'anime',
-      sourceId: SOURCE_ID
-    });
-    break;
+    if (!/\/anime\/[^/?#]+/i.test(a.href)) continue;
+    const url = _siteLink(a.href, base);
+    if (!url) continue;
+    const header = _tagContents(block, 'h[1-6]');
+    const titleClass = block.match(/<([a-z][a-z0-9]*)\b[^>]*class=["'][^"']*(?:spotlight-title|anime-title|card-title|title)["'][^>]*>([\s\S]*?)<\/\1>/i);
+    const imageTag = (block.match(/<img\b[^>]*>/i) || [''])[0];
+    let title = _htmlText(header || (titleClass && titleClass[2]) || a.inner);
+    if (!title) title = _htmlText(_attr(block, 'title') || _attr(a.attrs, 'title') ||
+      _attr(imageTag, 'alt') || '');
+    if (!title || /^(watch now|details|view more|read more)$/i.test(title)) continue;
+    return {
+      id: url, title: title, englishTitle: title, url: url,
+      cover: _imageUrl(block, base), type: 'anime', sourceId: SOURCE_ID
+    };
   }
+  return null;
 }
 
 function _parseCards(html, base, mode) {
   const source = String(html || '');
   const blocks = [];
-  const articleRe = /<article\b[^>]*>[\s\S]*?<\/article\s*>/gi;
   let m;
+  const articleRe = /<article\b[^>]*>[\s\S]*?<\/article\s*>/gi;
   while ((m = articleRe.exec(source)) !== null) {
     const open = (m[0].match(/^<article\b[^>]*>/i) || [''])[0];
     blocks.push({
-      html: m[0],
-      tag: 'article',
-      attrs: open,
+      html: m[0], attrs: open,
       spotlight: /spotlight-slide/i.test(open),
-      latest: /anime-card|latest|episode|card/i.test(open)
+      latest: /episodeGrid|latest-panel|anime-card|latest|card/i.test(open)
     });
   }
   const liRe = /<li\b[^>]*>[\s\S]*?<\/li\s*>/gi;
   while ((m = liRe.exec(source)) !== null) {
     const open = (m[0].match(/^<li\b[^>]*>/i) || [''])[0];
     blocks.push({
-      html: m[0],
-      tag: 'li',
-      attrs: open,
-      spotlight: /spotlight|latestCompletedList|sidebar-list-panel/i.test(open),
-      latest: /latest|sidebar-list-panel/i.test(open)
+      html: m[0], attrs: open,
+      spotlight: /latestCompletedList|sidebar-list-panel|spotlight/i.test(open),
+      latest: /latest|episode|sidebar-list-panel/i.test(open)
     });
   }
-
-  // Some current layouts use standalone a.anime-link or cards built from divs.
-  // Restrict this generic pass to links that carry a title/image, then dedupe.
-  const standaloneRe = /<a\b[^>]*href\s*=\s*(['"])[^'"]*\/anime\/[^'"]+\1[^>]*>[\s\S]*?<\/a\s*>/gi;
-  while ((m = standaloneRe.exec(source)) !== null) {
-    const cls = _attr((m[0].match(/^<a\b[^>]*>/i) || [''])[0], 'class') || '';
-    if (/anime-link/i.test(cls)) {
-      blocks.push({ html: m[0], tag: 'a', attrs: m[0], spotlight: false, latest: false });
+  const linkRe = /<a\b[^>]*href\s*=\s*(["'])[^"']*\/anime\/[^"']+\1[^>]*>[\s\S]*?<\/a\s*>/gi;
+  while ((m = linkRe.exec(source)) !== null) {
+    const open = (m[0].match(/^<a\b[^>]*>/i) || [''])[0];
+    if (/anime-link/i.test(_attr(open, 'class') || '')) {
+      blocks.push({ html: m[0], attrs: open, spotlight: false, latest: false });
     }
   }
 
   let chosen = blocks;
   if (mode === 'popular') {
-    const preferred = blocks.filter(b => b.spotlight ||
-      /latestCompletedList|sidebar-list-panel/i.test(b.attrs));
+    const preferred = blocks.filter(b => b.spotlight);
     if (preferred.length) chosen = preferred;
   } else if (mode === 'latest') {
-    const preferred = blocks.filter(b => !b.spotlight &&
-      (b.latest || b.tag === 'article' || b.tag === 'li'));
+    const preferred = blocks.filter(b => b.latest && !b.spotlight);
     if (preferred.length) chosen = preferred;
   }
 
   const out = [];
-  const seen = {};
-  for (const block of chosen) _addCard(out, seen, block.html, base);
-
-  // Search/index pages are not consistently wrapped in article/li elements;
-  // inspect all anime anchors there. For home sections, preserve the selected
-  // section when it parsed successfully to avoid mixing Popular and Latest.
-  if (mode === 'all' || !out.length) {
-    for (const anchor of _anchorList(source)) {
-      if (!/\/anime\//i.test(anchor.href)) continue;
-      _addCard(out, seen, anchor.html, base);
+  const seen = Object.create(null);
+  for (const block of chosen) {
+    const card = _cardFromBlock(block.html, base);
+    if (card && !seen[card.url]) {
+      seen[card.url] = true;
+      out.push(card);
+    }
+  }
+  if (!out.length || mode === 'all') {
+    for (const a of _anchors(source)) {
+      if (!/\/anime\/[^/?#]+/i.test(a.href)) continue;
+      const card = _cardFromBlock(a.html, base);
+      if (card && !seen[card.url]) {
+        seen[card.url] = true;
+        out.push(card);
+      }
     }
   }
   return out;
 }
 
 function _parseAnimeIndex(html, base) {
-  let items = _parseCards(html, base, 'all');
-  if (items.length) return items;
+  const cards = _parseCards(html, base, 'all');
+  if (cards.length) return cards;
   const out = [];
-  const seen = {};
-  const anchors = _anchorList(html);
-  for (const a of anchors) {
-    if (!/\/anime\//i.test(a.href)) continue;
-    const href = _siteLink(a.href, base);
-    const title = _text(a.inner);
-    if (!href || !title || seen[href] || /^(home|stats|next|previous|login)$/i.test(title)) continue;
-    seen[href] = true;
-    out.push({
-      id: href, title, englishTitle: title, url: href, cover: null,
-      type: 'anime', sourceId: SOURCE_ID
-    });
+  const seen = Object.create(null);
+  for (const a of _anchors(html)) {
+    if (!/\/anime\/[^/?#]+/i.test(a.href)) continue;
+    const url = _siteLink(a.href, base);
+    const title = _htmlText(a.inner);
+    if (!url || !title || seen[url] ||
+        /^(home|stats|next|previous|login|a-z anime list)$/i.test(title)) continue;
+    seen[url] = true;
+    out.push({ id: url, title: title, englishTitle: title, url: url, cover: null,
+      type: 'anime', sourceId: SOURCE_ID });
   }
   return out;
 }
@@ -686,119 +512,162 @@ async function search(query, page, opts) {
     : base + '/anime?page=' + (p - 1);
   const response = await _fetchSite(url, base + '/');
   if (!response.body) return [];
-  const items = q
-    ? _parseCards(response.body, response.base, 'all')
+  return q ? _parseCards(response.body, response.base, 'all')
     : _parseAnimeIndex(response.body, response.base);
-  return items;
 }
 
-// ── Anime details and episode listing ─────────────────────────────────────
+function _metaContent(html, key, value) {
+  const tags = String(html || '').match(/<meta\b[^>]*>/gi) || [];
+  for (const tag of tags) {
+    if (String(_attr(tag, key) || '').toLowerCase() === String(value).toLowerCase()) {
+      return _attr(tag, 'content');
+    }
+  }
+  return null;
+}
 
-function _seasons(html) {
-  const output = [];
-  const re = /\bdata-season\s*=\s*(['"])([^'"]+)\1/gi;
+function _detailFromHtml(url, html, base) {
+  const title = _htmlText(_tagContents(html, 'h1')) ||
+    _htmlText(_metaContent(html, 'property', 'og:title')) ||
+    _slugFromAnimeUrl(url).replace(/[-_]+/g, ' ');
+  let cover = _imageUrl(html, base) || _absolute(_metaContent(html, 'property', 'og:image'), base);
+  const synopsisMatch = String(html || '').match(/<(?:div|p)[^>]*class=["'][^"']*(?:anime-synopsis|synopsis|description|overview|desc)[^"']*["'][^>]*>[\s\S]*?<\/(?:div|p)>/i);
+  const description = _htmlText(synopsisMatch ? synopsisMatch[0] : '') ||
+    _htmlText(_metaContent(html, 'name', 'description'));
+  const genres = [];
+  const genreRe = /<a\b([^>]*href\s*=\s*(["'])[^"']*\/(?:genre|tag)\/[^"']*\2[^>]*)>([\s\S]*?)<\/a\s*>/gi;
+  let m;
+  while ((m = genreRe.exec(String(html || ''))) !== null) {
+    const name = _htmlText(m[3]);
+    if (name && genres.indexOf(name) < 0) genres.push(name);
+  }
+  const slug = _slugFromAnimeUrl(url);
+  const coverMatch = String(html || '').match(/<[^>]+style=["'][^"']*background[^"']*url\((["']?)(.*?)\1\)[^"']*["'][^>]*>/i);
+  if (!cover && coverMatch) cover = _absolute(coverMatch[2], base);
+  return {
+    id: slug, title: title, englishTitle: title, url: _absolute(url, base),
+    cover: cover || null, description: description || null, genres: genres,
+    status: /class=["'][^"']*(?:airing|ongoing)[^"']*["']/i.test(html) ? 'ongoing' : 'completed',
+    type: 'anime', sourceId: SOURCE_ID, episodes: [], malId: null
+  };
+}
+
+// ── Episode parsing ───────────────────────────────────────────────────────
+
+function _slugFromAnimeUrl(url) {
+  const path = _pathOnly(url).replace(/\/+$/, '');
+  const parts = path.split('/').filter(Boolean);
+  const i = parts.indexOf('anime');
+  if (i >= 0 && parts[i + 1]) return _decode(parts[i + 1]);
+  return _decode(parts[parts.length - 1] || '');
+}
+
+function _seasonList(html) {
+  const seasons = [];
+  const re = /\bdata-season\s*=\s*(["'])([^"']+)\1/gi;
   let m;
   while ((m = re.exec(String(html || ''))) !== null) {
     const value = String(m[2]).trim();
-    if (value && output.indexOf(value) < 0) output.push(value);
+    if (value && seasons.indexOf(value) < 0) seasons.push(value);
   }
-  const routeRe = /\/episodes\/[^"'?#\s]+?\/(\d+)\/(?:\d+%20x%20\d+|\d+\s*x\s*\d+)/gi;
-  while ((m = routeRe.exec(String(html || ''))) !== null) {
-    if (output.indexOf(m[1]) < 0) output.push(m[1]);
+  const route = /\/episodes\/[^"'?#\s]+?\/(\d+)\/(?:\d+%20x%20\d+|\d+\s*x\s*\d+)/gi;
+  while ((m = route.exec(String(html || ''))) !== null) {
+    if (seasons.indexOf(m[1]) < 0) seasons.push(m[1]);
   }
-  if (!output.length) output.push('1');
-  return output.sort((a, b) => (parseInt(a, 10) || 0) - (parseInt(b, 10) || 0));
+  if (!seasons.length) seasons.push('1');
+  return seasons.sort((a, b) => (parseInt(a, 10) || 0) - (parseInt(b, 10) || 0));
 }
 
-function _genres(html) {
-  const out = [];
-  const re = /<a\b([^>]*href\s*=\s*(['"])[^'"]*\/(?:genre|tag)\/[^'"]*\2[^>]*)>([\s\S]*?)<\/a\s*>/gi;
-  let m;
-  while ((m = re.exec(String(html || ''))) !== null) {
-    const genre = _text(m[3]);
-    if (genre && out.indexOf(genre) < 0) out.push(genre);
+function _episodeNumber(value) {
+  const s = _decode(String(value || ''));
+  for (const pattern of EPISODE_PATTERNS) {
+    const m = s.match(pattern);
+    if (m) {
+      const n = parseInt(m[1], 10);
+      if (Number.isFinite(n)) return n;
+    }
   }
-  const clsRe = /<[^>]+class=['"][^'"]*(?:genre-tag|genre)[^'"]*['"][^>]*>([\s\S]*?)<\/[^>]+>/gi;
-  while ((m = clsRe.exec(String(html || ''))) !== null) {
-    const genre = _text(m[1]);
-    if (genre && out.indexOf(genre) < 0) out.push(genre);
-  }
-  return out;
+  return 0;
 }
 
-function _detailFromHTML(url, html, base) {
-  const h1 = _innerTag(html, 'h1');
-  const title = _text(h1) || _text(_attr((String(html).match(/<meta\b[^>]*property=['"]og:title['"][^>]*>/i) || [''])[0], 'content')) ||
-    _filenameFromUrl(url).replace(/-/g, ' ');
-  const imageTag = (String(html).match(/<img\b[^>]*>/i) || [''])[0];
-  const cover = _firstImage(html, base) ||
-    _absolute(_attr((String(html).match(/<meta\b[^>]*property=['"]og:image['"][^>]*>/i) || [''])[0], 'content'), base) ||
-    _absolute(_attr(imageTag, 'src'), base);
-  const descriptionMatch = String(html).match(
-    /<(?:div|p)[^>]*class=['"][^'"]*(?:anime-synopsis|synopsis|description|overview|desc)[^'"]*['"][^>]*>[\s\S]*?<\/(?:div|p)>/i
-  );
-  const description = _text(descriptionMatch ? descriptionMatch[0] : '');
-  const metaDescription = _attr((String(html).match(/<meta\b[^>]*name=['"]description['"][^>]*>/i) || [''])[0], 'content');
-  const genres = _genres(html);
-  const status = /class=['"][^'"]*(?:airing|ongoing)[^'"]*['"]/i.test(html) ? 'ongoing' : 'completed';
-  const full = _absolute(url, base);
-  const slug = _slugFromAnimeUrl(full);
-  return {
-    id: slug,
-    title: title || slug,
-    englishTitle: title || slug,
-    url: full,
-    cover,
-    description: description || _text(metaDescription) || null,
-    genres,
-    status,
-    type: 'anime',
-    sourceId: SOURCE_ID,
-    episodes: [],
-    malId: null
-  };
-}
-
-function _slugFromAnimeUrl(url) {
-  const path = _pathQuery(url).split('?')[0].replace(/\/+$/, '');
+function _filenameFromUrl(url) {
+  const path = _pathOnly(url);
   return _decode(path.substring(path.lastIndexOf('/') + 1));
 }
 
-function _normaliseSeasonResolution(value) {
-  const decoded = _decode(value || '');
-  const resolution = _qualityValue(decoded);
-  return RESOLUTIONS.indexOf(decoded) >= 0 ? decoded : resolution;
+function _episodeLabel(filename, label, number, slug, season) {
+  const n = Number(number) || _episodeNumber(filename) || _episodeNumber(label);
+  const nameMatch = String(_decode(filename || '')).replace(/\.(?:mkv|mp4)$/i, '')
+    .match(/\[(?:S\d{1,2}[-_ ]*)?E\d{1,4}\]\s*(.*?)\s*(?=\[|$)/i);
+  let title = nameMatch ? _htmlText(nameMatch[1]) : '';
+  title = title.replace(/\[(?:\d{3,4}p|dual|sub|dub|english\s*dub|tri|multi)[^\]]*\]/gi, ' ')
+    .replace(/\b(?:dual|sub|dub|english\s*dub|tri|multi)\b/gi, ' ')
+    .replace(/\s+/g, ' ').trim();
+  const normal = s => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const normalizedTitle = normal(title);
+  const normalizedSlug = normal(slug);
+  if (normalizedTitle && normalizedSlug &&
+      (normalizedTitle === normalizedSlug ||
+       normalizedTitle.replace(/(?:19|20)\d{2}$/, '') === normalizedSlug)) title = '';
+  if (n > 0) return 'Episode ' + n + (title ? ' - ' + title : '');
+  const fallback = _htmlText(label || title || filename || '');
+  return fallback || ('Season ' + (season || '1'));
 }
 
-function _episodePageUrl(base, slug, season, resolution) {
-  return base + '/episodes/' + encodeURIComponent(slug) + '/' +
-    encodeURIComponent(String(season)) + '/' + encodeURIComponent(resolution);
+function _episodeKey(url) {
+  return _withoutQueryParams(url, ['token', DDL_QUERY_KEY]);
 }
 
-function _makeEpisodeUrl(base, slug, season, resolution, filename) {
-  return base + '/download/' + encodeURIComponent(slug) + '/' +
-    encodeURIComponent(String(season)) + '/' + encodeURIComponent(resolution) + '/' +
-    encodeURIComponent(filename);
-}
-
-function _episodeFromLink(rawHref, label, base, season, slug, resolution) {
-  let href = _siteLink(rawHref, base);
-  const filename = _filenameFromUrl(href || rawHref);
-  if (!href && filename) href = _makeEpisodeUrl(base, slug, season, resolution, filename);
-  if (!href) return null;
-  const num = _episodeNumber(filename + ' ' + label);
+function _parseDownloadInfo(url) {
+  const clean = _withoutQueryParams(url, [DDL_QUERY_KEY]);
+  const path = _pathOnly(clean);
+  const pieces = path.split('/').filter(Boolean);
+  const idx = pieces.indexOf('download');
+  if (idx < 0 || pieces.length < idx + 5) {
+    return { modern: false, filename: _filenameFromUrl(clean), path: path };
+  }
   return {
-    id: href,
-    number: num || 1,
-    title: _episodeLabel(filename, season, label, slug),
-    url: href,
-    sourceId: SOURCE_ID
+    modern: true,
+    slug: _decode(pieces[idx + 1]),
+    season: _decode(pieces[idx + 2]),
+    resolution: _decode(pieces[idx + 3]),
+    encodedFilename: pieces[pieces.length - 1],
+    filename: _decode(pieces[pieces.length - 1]),
+    path: path
   };
 }
 
-function _parseEpisodeJSON(html, base, slug, season, resolution) {
+function _makeEpisodeUrl(base, slug, season, resolution, filename) {
+  const name = encodeURIComponent(_decode(filename));
+  return (_origin(base) || _domain()) + '/download/' + encodeURIComponent(slug) + '/' +
+    encodeURIComponent(String(season)) + '/' + encodeURIComponent(resolution) + '/' + name;
+}
+
+function _episodeFromLink(rawHref, label, base, season, slug, resolution, number, ddl) {
+  let href = _siteLink(rawHref, base);
+  const filename = _filenameFromUrl(href || rawHref || '');
+  if (!href && filename) href = _makeEpisodeUrl(base, slug, season, resolution, filename);
+  if (!href) return null;
+  const n = Number(number) || _episodeNumber(filename + ' ' + label);
+  let url = href;
+  if (ddl && typeof ddl === 'object' && _hasDdlLinks(ddl)) {
+    const packed = JSON.stringify(ddl);
+    // Keep the DDL with the episode so resolution still works if Zangetsu
+    // reloads a provider between episode listing and the play request.
+    if (packed.length <= 10000) url = _setQueryParam(url, DDL_QUERY_KEY, packed);
+  }
+  const episode = {
+    id: url, number: n || 1,
+    title: _episodeLabel(filename, label, n, slug, season),
+    url: url, sourceId: SOURCE_ID
+  };
+  if (ddl && typeof ddl === 'object') episode.ddl = ddl;
+  return episode;
+}
+
+function _parseEpisodeJson(body, base, slug, season, resolution) {
   let data;
-  try { data = JSON.parse(String(html || '').trim()); } catch (e) { return []; }
+  try { data = JSON.parse(String(body || '').trim()); } catch (e) { return []; }
   if (!Array.isArray(data)) {
     if (data && Array.isArray(data.episodes)) data = data.episodes;
     else if (data && Array.isArray(data.items)) data = data.items;
@@ -808,64 +677,71 @@ function _parseEpisodeJSON(html, base, slug, season, resolution) {
   for (const item of data) {
     if (!item || typeof item !== 'object') continue;
     const href = item.href || item.url || item.path || item.download_url || item.downloadUrl;
-    const filename = item.filename || item.file_name || item.fileName || (href ? _filenameFromUrl(href) : '');
-    const generated = href || (filename ? _makeEpisodeUrl(base, slug, season, resolution, _decode(filename)) : '');
-    if (!generated) continue;
-    const episode = _episodeFromLink(generated, item.label || item.title || item.name || '', base, season, slug, resolution);
-    if (!episode) continue;
+    const filename = item.filename || item.file_name || item.fileName ||
+      (href ? _filenameFromUrl(href) : '');
+    const target = href || (filename ? _makeEpisodeUrl(base, slug, season, resolution, filename) : '');
+    if (!target) continue;
+    const ddl = item.ddl || item.DDL || null;
     const num = Number(item.num || item.number || item.episode || item.episode_number || 0);
-    if (num > 0) {
-      episode.number = num;
-      episode.title = _episodeLabel(filename || _filenameFromUrl(generated), season,
-        item.label || item.title || item.name || '', slug, num);
-    } else if (item.label || item.title || item.name) {
-      episode.title = _episodeLabel(filename || _filenameFromUrl(generated), season,
-        item.label || item.title || item.name, slug);
-    }
-    out.push(episode);
+    const ep = _episodeFromLink(target, item.label || item.title || item.name || '',
+      base, season, slug, resolution, num, ddl);
+    if (!ep) continue;
+    out.push(ep);
   }
-  return out;
+  return _uniqueEpisodes(out);
+}
+
+function _extractFilenames(html) {
+  const names = [];
+  const seen = Object.create(null);
+  const add = raw => {
+    const value = _decode(String(raw || '').trim()).replace(/^["']|["']$/g, '');
+    if (!value || value.indexOf('/') >= 0 || !/\.(?:mkv|mp4)$/i.test(value)) return;
+    if (!seen[value]) { seen[value] = true; names.push(value); }
+  };
+  for (const a of _anchors(html)) {
+    if (/\/download\//i.test(a.href)) add(_filenameFromUrl(a.href));
+  }
+  FILENAME_RE.lastIndex = 0;
+  let m;
+  while ((m = FILENAME_RE.exec(String(html || ''))) !== null) add(m[1]);
+  return names;
 }
 
 function _parseEpisodePage(html, base, slug, season, resolution) {
   const text = String(html || '');
-  const json = _parseEpisodeJSON(text, base, slug, season, resolution);
-  if (json.length) return _uniqueEpisodes(json);
-
+  const fromJson = _parseEpisodeJson(text, base, slug, season, resolution);
+  if (fromJson.length) return fromJson;
   const out = [];
-  const anchors = _anchorList(text).filter(a => /\/download\//i.test(a.href));
-  for (const a of anchors) {
-    const episode = _episodeFromLink(a.href, a.inner, base, season, slug, resolution);
-    if (episode) out.push(episode);
+  for (const a of _anchors(text)) {
+    if (!/\/download\//i.test(a.href)) continue;
+    const ep = _episodeFromLink(a.href, a.inner, base, season, slug, resolution);
+    if (ep) out.push(ep);
   }
   if (out.length) return _uniqueEpisodes(out);
-
-  for (const filename of _filenameFromHtml(text)) {
-    const href = _makeEpisodeUrl(base, slug, season, resolution, filename);
-    const episode = _episodeFromLink(href, '', base, season, slug, resolution);
-    if (episode) out.push(episode);
+  for (const name of _extractFilenames(text)) {
+    const ep = _episodeFromLink(_makeEpisodeUrl(base, slug, season, resolution, name),
+      '', base, season, slug, resolution);
+    if (ep) out.push(ep);
   }
   return _uniqueEpisodes(out);
 }
 
 function _episodeSeason(item) {
-  const path = _pathQuery(item && (item.url || item.id) || '').split('?')[0];
-  const match = path.match(/\/download\/[^/]+\/(\d+)\//i);
-  return match ? (parseInt(match[1], 10) || 1) : 1;
+  const path = _pathOnly(item && (item.url || item.id) || '');
+  const m = path.match(/\/download\/[^/]+\/(\d+)\//i);
+  return m ? (parseInt(m[1], 10) || 1) : 1;
 }
 
 function _uniqueEpisodes(items) {
   const out = [];
-  const seen = {};
-  for (const item of items) {
-    const key = String(item.url || item.id || item.number + ':' + item.title);
-    if (!seen[key]) {
-      seen[key] = true;
-      out.push(item);
-    }
+  const seen = Object.create(null);
+  for (const item of items || []) {
+    const key = _episodeKey(item.url || item.id || '');
+    if (key && !seen[key]) { seen[key] = true; out.push(item); }
   }
-  // Zangetsu Mode maps provider entries to catalogue episodes by list position.
-  // Keep seasons and episodes chronological, never newest-first.
+  // Zangetsu Mode maps source entries to metadata episodes by list position.
+  // Always deliver chronological order (season ascending, episode ascending).
   return out.sort((a, b) => {
     const seasonDiff = _episodeSeason(a) - _episodeSeason(b);
     if (seasonDiff) return seasonDiff;
@@ -875,415 +751,409 @@ function _uniqueEpisodes(items) {
   });
 }
 
-async function _fetchEpisodes(slug, base, animeHTML) {
-  let html = animeHTML || '';
-  let activeBase = base;
-  if (!html) {
-    const detail = await _fetchSite(base + '/anime/' + encodeURIComponent(slug), base + '/');
-    html = detail.body;
-    activeBase = detail.base || base;
-  }
-  if (!html) return [];
-
-  const all = [];
-  const seen = {};
-  const seasons = _seasons(html);
-  const qualities = _qualityCandidates(_readSetting('quality'));
-  for (const season of seasons) {
-    let foundForSeason = [];
-    for (const resolution of qualities) {
-      const epPage = await _fetchSite(_episodePageUrl(activeBase, slug, season, resolution), activeBase + '/');
-      if (!epPage.body) continue;
-      const items = _parseEpisodePage(epPage.body, epPage.base || activeBase, slug, season, resolution);
-      if (items.length) {
-        foundForSeason = items;
-        activeBase = epPage.base || activeBase;
-        break;
-      }
-    }
-    for (const episode of foundForSeason) {
-      const key = episode.url || episode.id;
-      if (!seen[key]) {
-        seen[key] = true;
-        all.push(episode);
-      }
-    }
-  }
-  return _uniqueEpisodes(all);
+function _episodePageUrl(base, slug, season, resolution) {
+  return (_origin(base) || _domain()) + '/episodes/' + encodeURIComponent(slug) + '/' +
+    encodeURIComponent(String(season)) + '/' + encodeURIComponent(resolution);
 }
 
-async function getDetail(url, opts) {
-  const full = _absolute(url, _domain());
-  const page = await _fetchSite(full, _domain() + '/');
-  const base = page.base || _origin(full) || _domain();
-  const detail = _detailFromHTML(page.url || full, page.body, base);
-  detail.episodes = await _fetchEpisodes(_slugFromAnimeUrl(full), base, page.body);
-  return detail;
+async function _fetchSeasonEpisodes(slug, season, base, qualityCandidates) {
+  for (const quality of qualityCandidates) {
+    const response = await _fetchSite(_episodePageUrl(base, slug, season, quality), base + '/');
+    if (!response.body) continue;
+    const episodes = _parseEpisodePage(response.body, response.base || base, slug, season, quality);
+    if (episodes.length) return episodes;
+    if (response.status === 403 || response.status === 429 || response.status >= 500 ||
+        response.reason === 'challenge') return [];
+  }
+  return [];
+}
+
+async function _episodesFromHtml(slug, base, html) {
+  const seasons = _seasonList(html);
+  const qualities = _qualityCandidates(_readSetting('quality'));
+  const results = await Promise.all(seasons.map(season =>
+    _fetchSeasonEpisodes(slug, season, base, qualities)
+  ));
+  return _uniqueEpisodes([].concat.apply([], results));
 }
 
 async function getEpisodes(url, opts) {
-  const full = _absolute(url, _domain());
-  const page = await _fetchSite(full, _domain() + '/');
+  const full = _canonicalSiteUrl(url, _domain()) || _absolute(url, _domain());
   const slug = _slugFromAnimeUrl(full);
-  return _fetchEpisodes(slug, page.base || _origin(full) || _domain(), page.body);
+  const page = await _fetchSite(full, _domain() + '/');
+  if (!page.body) return [];
+  return _episodesFromHtml(slug, page.base || _origin(full) || _domain(), page.body);
 }
 
-// ── Download URLs and stream extraction ───────────────────────────────────
-
-function _downloadInfo(url) {
-  const path = _pathQuery(url).split('?')[0].split('#')[0];
-  const parts = path.split('/').filter(Boolean);
-  const idx = parts.indexOf('download');
-  if (idx < 0) return { modern: false, filename: _filenameFromUrl(url), path };
-  const tail = parts.slice(idx + 1);
-  if (tail.length >= 4) {
-    return {
-      modern: true,
-      slug: _decode(tail[0]),
-      season: _decode(tail[1]),
-      resolution: _decode(tail[2]),
-      encodedFilename: tail[tail.length - 1],
-      filename: _decode(tail[tail.length - 1]),
-      path
-    };
+async function getDetail(url, opts) {
+  const full = _canonicalSiteUrl(url, _domain()) || _absolute(url, _domain());
+  const page = await _fetchSite(full, _domain() + '/');
+  const base = page.base || _origin(full) || _domain();
+  const detail = _detailFromHtml(page.url || full, page.body, base);
+  if (page.body) {
+    detail.episodes = await _episodesFromHtml(_slugFromAnimeUrl(full), base, page.body);
   }
-  return {
-    modern: false,
-    slug: tail.length > 1 ? _decode(tail[0]) : '',
-    season: '1',
-    resolution: '',
-    encodedFilename: tail.length ? tail[tail.length - 1] : '',
-    filename: tail.length ? _decode(tail[tail.length - 1]) : _filenameFromUrl(url),
-    path
-  };
+  return detail;
+}
+
+// ── Playback and DDL extraction ───────────────────────────────────────────
+
+function _hasDdlLinks(ddl) {
+  if (!ddl || typeof ddl !== 'object') return false;
+  return !!(ddl.stream_link || ddl.streamLink || ddl.download_link || ddl.downloadLink ||
+    ddl.watch_link || ddl.watchLink || ddl.torrent_link || ddl.torrentLink);
+}
+
+function _ddlValue(ddl, snake, camel) {
+  return ddl ? (ddl[snake] != null ? ddl[snake] : ddl[camel]) : null;
+}
+
+function _parseDdl(body) {
+  let data;
+  try { data = JSON.parse(String(body || '').trim()); } catch (e) { return null; }
+  if (data && data.data && typeof data.data === 'object') data = data.data;
+  if (data && data.ddl && typeof data.ddl === 'object') data = data.ddl;
+  return data && typeof data === 'object' ? data : null;
+}
+
+function _getInlineDdl(url) {
+  // Only consume DDL embedded in this exact episode URL. A route-only cache
+  // key can accidentally reuse another episode's payload after stripping the
+  // expiring token, which skips the fresh-token playback flow.
+  const packed = _queryParam(url, DDL_QUERY_KEY);
+  if (!packed) return null;
+  try {
+    const ddl = JSON.parse(packed);
+    return _hasDdlLinks(ddl) ? ddl : null;
+  } catch (e) {
+    return null;
+  }
 }
 
 function _findIframe(html) {
-  const frames = String(html || '').match(/<iframe\b[^>]*>/gi) || [];
-  for (const frame of frames) {
-    const id = _attr(frame, 'id') || '';
-    const src = _attr(frame, 'src') || '';
-    if (src && (/anime-video-player/i.test(id) || /\/r\//i.test(src) || /\/watch\//i.test(src))) {
-      return src;
-    }
+  const tags = String(html || '').match(/<iframe\b[^>]*>/gi) || [];
+  for (const tag of tags) {
+    const src = _attr(tag, 'src');
+    const id = _attr(tag, 'id') || '';
+    if (src && (/anime-video-player/i.test(id) || /\/r\/|\/watch\//i.test(src))) return src;
   }
   return null;
 }
 
-function _ddlField(ddl, snake, camel) {
-  return ddl ? (ddl[snake] != null ? ddl[snake] : ddl[camel]) : null;
+function _findDdlToken(html) {
+  const m = String(html || '').match(DDL_TOKEN_RE);
+  return m ? m[1] : null;
 }
 
-function _buildDashUrl(watchUrl) {
-  if (!watchUrl) return null;
-  const origin = _origin(watchUrl);
-  if (!origin) return null;
-  const pathQuery = _pathQuery(watchUrl);
-  const path = pathQuery.split('?')[0].split('#')[0];
-  if (!/\/watch\//i.test(path)) return null;
-  let dashPath = path.replace(/\/watch\//i, '/dash/');
-  dashPath = dashPath.replace(/\/$/, '');
-  return origin + dashPath + '/manifest.mpd';
+function _labelResolution(resolution, filename) {
+  const found = String(filename || '').match(/\[(\d{3,4}p)\]/i);
+  if (found) return found[1];
+  const value = String(resolution || '');
+  for (const q of QUALITY_LIST) if (value === q.value || value.indexOf(q.label) >= 0) return q.label;
+  return (value.match(/\d{3,4}p/i) || [])[0] || '1080p';
 }
 
 function _container(url) {
-  const value = String(url || '');
-  if (/\.m3u8(?:[?#]|$)/i.test(value)) return 'hls';
-  if (/\.mp4(?:[?#]|$)/i.test(value)) return 'mp4';
+  if (/\.m3u8(?:[?#]|$)/i.test(url)) return 'hls';
+  if (/\.mp4(?:[?#]|$)/i.test(url)) return 'mp4';
   return 'unknown';
 }
 
-function _kindFromFilename(filename) {
-  const audio = String(filename || '').match(/\[(Dual|Sub|Dub|English Dub|Tri|Multi)\]/i);
-  const value = audio ? audio[1] : '';
-  return {
-    kind: /dub|dual|tri|multi/i.test(value) ? 'dub' : 'sub',
-    audioLang: /dub|dual|tri|multi/i.test(value) ? 'en' : 'ja'
-  };
+function _mediaKind(filename) {
+  const found = String(filename || '').match(/\[(Dual|Sub|Dub|English Dub|Tri|Multi)\]/i);
+  const audio = found ? found[1] : '';
+  const dubbed = /dub|dual|tri|multi/i.test(audio);
+  return { kind: dubbed ? 'dub' : 'sub', audioLang: dubbed ? 'en' : 'ja' };
 }
 
-function _stream(url, quality, filename, base) {
-  if (!url) return null;
-  const kind = _kindFromFilename(filename);
+function _makeStream(url, label, filename, base) {
+  if (!url || !/^https?:\/\/|^magnet:/i.test(String(url))) return null;
+  const kind = _mediaKind(filename);
   return {
-    url,
-    quality,
-    container: _container(url),
-    headers: { 'User-Agent': UA, Referer: base + '/' },
+    url: String(url),
+    quality: label,
+    container: _container(String(url)),
+    headers: { 'User-Agent': UA, Referer: (_origin(base) || _domain()) + '/' },
     kind: kind.kind,
     audioLang: kind.audioLang,
     subtitles: []
   };
 }
 
-async function _refreshEpisodeUrl(downloadUrl, info, base) {
-  if (!info.modern || !info.slug || !info.season || !info.filename) return downloadUrl;
-  const resolution = info.resolution || _qualityValue(_readSetting('quality'));
-  const page = await _fetchSite(_episodePageUrl(base, info.slug, info.season, resolution), base + '/');
-  if (!page.body) return downloadUrl;
-  const entries = _parseEpisodePage(page.body, page.base || base, info.slug, info.season, resolution);
-  const episodeNo = _episodeNumber(info.filename);
-  let selected = entries.find(ep => episodeNo && _episodeNumber(ep.url + ' ' + ep.title) === episodeNo);
-  if (!selected) {
-    const target = info.filename.toLowerCase().replace(/%20/g, ' ');
-    selected = entries.find(ep => _filenameFromUrl(ep.url).toLowerCase() === target);
-  }
-  return selected ? selected.url : downloadUrl;
+function _buildDashUrl(watchUrl) {
+  if (!watchUrl || !/^https?:\/\//i.test(watchUrl)) return null;
+  const origin = _origin(watchUrl);
+  const path = _pathOnly(watchUrl);
+  const match = path.match(/\/watch\/([^/]+)\/?$/i);
+  if (!origin || !match || !match[1]) return null;
+  return origin + path.replace(/\/watch\/[^/]+\/?$/i, '/dash/' + match[1]) + '/manifest.mpd';
 }
 
-async function _extractVideoForEpisode(downloadUrl, filename, resolution) {
-  // The episode-list page embeds a short-lived ?token= value in each href.
-  // It expires before playback. Always remove it and fetch a fresh token from
-  // /get_token before requesting the download-page HTML.
-  const requestedInfo = _downloadInfo(downloadUrl);
-  const cleanUrl = _stripTokenParam(downloadUrl);
-  let base = _origin(cleanUrl) || _domain();
-  const freshTokenResult = await _getFreshAccessToken(base, base + '/');
-  if (freshTokenResult.base) base = freshTokenResult.base;
+function _shouldFollow(url) {
+  return /\/(?:redirect|r|watch)\//i.test(_pathOnly(url));
+}
 
-  // A token refresh may be blocked while the embedded token is still valid.
-  // Prefer the fresh token, but retain the original URL as a bounded fallback.
-  let requestUrl = freshTokenResult.token
-    ? _appendAccessToken(base + _pathQuery(cleanUrl), freshTokenResult.token)
-    : downloadUrl;
-  let page = await _fetchSite(requestUrl, base + '/');
-  let actualUrl = page.url || requestUrl;
-  let html = page.body || '';
-  base = page.base || _origin(actualUrl) || base;
+async function _resolveLink(raw, base, ref, context) {
+  if (!raw) return null;
+  const full = _absolute(raw, base);
+  if (!full || /^magnet:/i.test(full)) return full;
+  if (!/^https?:\/\//i.test(full)) return null;
+  // Direct media/CDN URLs do not need an extra GET. Only follow site redirect,
+  // player and watch routes, in parallel with the other DDL links.
+  if (!_shouldFollow(full)) return full;
+  const response = await _requestSiteUrl(full, ref || (_origin(base) || _domain()) + '/',
+    {}, REDIRECT_TIMEOUT_MS, context);
+  return response.ok && response.url ? response.url : full;
+}
 
-  // A terminal link-generation error is specific to this resolution. Avoid
-  // repeating the same token/download sequence and try the next quality instead.
-  if (page.reason === 'generation-failed') {
-    const empty = [];
-    empty.stopFallback = false;
-    return empty;
+async function _streamsFromDdl(ddl, base, info, resolution, pageHtml, ref, context) {
+  const iframe = _findIframe(pageHtml || '');
+  const iframeUrl = iframe ? _absolute(iframe, base) : null;
+  const watchRaw = iframeUrl || _ddlValue(ddl, 'watch_link', 'watchLink');
+  const streamRaw = _ddlValue(ddl, 'stream_link', 'streamLink');
+  const downloadRaw = _ddlValue(ddl, 'download_link', 'downloadLink');
+  const torrentRaw = _readSetting('showTorrent') === true || String(_readSetting('showTorrent')).toLowerCase() === 'true'
+    ? _ddlValue(ddl, 'torrent_link', 'torrentLink') : null;
+
+  const jobs = await Promise.all([
+    watchRaw ? _resolveLink(watchRaw, base, ref, context) : Promise.resolve(null),
+    streamRaw ? _resolveLink(streamRaw, base, ref, context) : Promise.resolve(null),
+    downloadRaw ? _resolveLink(downloadRaw, base, ref, context) : Promise.resolve(null),
+    torrentRaw ? _resolveLink(torrentRaw, base, ref, context) : Promise.resolve(null)
+  ]);
+  const watch = jobs[0];
+  const stream = jobs[1];
+  const direct = jobs[2];
+  const torrent = jobs[3];
+  const label = 'AV1 · ' + _labelResolution(resolution || info.resolution, info.filename);
+  const audio = (String(info.filename || '').match(/\[(Dual|Sub|Dub|English Dub|Tri|Multi)\]/i) || [])[1];
+  const audioSuffix = audio ? ' [' + audio + ']' : '';
+  const out = [];
+  const dash = _buildDashUrl(watch);
+  if (dash) out.push(_makeStream(dash, label + audioSuffix + ' · DASH', info.filename, base));
+  if (stream && stream !== watch) out.push(_makeStream(stream, label + audioSuffix + ' · Stream', info.filename, base));
+  if (direct && direct !== watch && direct !== stream) out.push(_makeStream(direct, label + audioSuffix + ' · Direct DL', info.filename, base));
+  if (torrent) out.push(_makeStream(torrent, label + audioSuffix + ' · Torrent', info.filename, base));
+  return out.filter(Boolean);
+}
+
+function _appendFreshToken(cleanUrl, token) {
+  const clean = _withoutQueryParams(cleanUrl, ['token', DDL_QUERY_KEY]);
+  return _setQueryParam(clean, 'token', token);
+}
+
+async function _getFreshToken(base, context) {
+  const site = _origin(base) || _domain();
+  if (context && context.tokenCache && context.tokenCache[site]) {
+    return context.tokenCache[site];
   }
-
-  // Stop after a bounded network failure. Retrying the same blocked host for
-  // every remaining resolution only repeats the timeout.
-  if (!html && _isTransientSiteFailure(page.status)) {
-    const empty = [];
-    empty.stopFallback = true;
-    return empty;
-  }
-
-  // Always derive the slug/season/filename from the requested route, not the
-  // final HTTP URL. Redirects may land on an HTML error page and lose the
-  // modern /download/{slug}/{season}/{resolution}/{filename} metadata.
-  let info = requestedInfo;
-  if (!info.filename || !info.modern) {
-    const currentInfo = _downloadInfo(actualUrl);
-    if (currentInfo.filename) info = currentInfo;
-  }
-
-  if (!html || (!_findIframe(html) && !TOKEN_RE.test(html))) {
-    const freshEpisodeUrl = await _refreshEpisodeUrl(cleanUrl, info, base);
-    const retryBase = _origin(freshEpisodeUrl) || base;
-    const retryToken = await _getFreshAccessToken(retryBase, retryBase + '/');
-    base = retryToken.base || retryBase;
-    const retryUrl = _appendAccessToken(base + _pathQuery(_stripTokenParam(freshEpisodeUrl || cleanUrl)), retryToken.token);
-    const retry = await _fetchSite(retryUrl, base + '/');
-    const retryHasPlayer = !!(retry.body &&
-      (_findIframe(retry.body) || TOKEN_RE.test(retry.body)));
-    // One refreshed episode/token retry is enough. An HTTP-200 page saying
-    // "Unable to generate download link" is still a failed resolve; do not
-    // probe every remaining resolution when the source did not produce a player.
-    if (!retryHasPlayer) {
-      const empty = [];
-      // A missing preferred-resolution route is a normal fallback condition;
-      // a blocked request or HTTP-200 generator error is not.
-      empty.stopFallback = _isTransientSiteFailure(retry.status);
-      return empty;
+  const response = await _requestSiteUrl(site + '/get_token', site + '/', {
+    Accept: 'application/json, */*;q=0.8',
+    Referer: site + '/',
+    'Sec-Fetch-Dest': 'empty',
+    'Sec-Fetch-Mode': 'cors',
+    'Sec-Fetch-Site': 'same-origin'
+  }, REQUEST_TIMEOUT_MS, context);
+  let token = null;
+  if (response.ok && response.body) {
+    try {
+      const data = JSON.parse(response.body);
+      const nested = data && data.data && typeof data.data === 'object' ? data.data : data;
+      const found = nested && (nested.token || nested.access_token || nested.accessToken);
+      if (typeof found === 'string' && found.trim()) token = found.trim();
+    } catch (e) {}
+    if (!token) {
+      const m = response.body.match(/["'](?:token|access_token|accessToken)["']\s*:\s*["']([^"']+)["']/i);
+      if (m) token = m[1];
     }
-    page = retry;
-    actualUrl = retry.url || retryUrl;
-    html = retry.body;
-    base = retry.base || base;
+  }
+  if (context && context.tokenCache) context.tokenCache[site] = token;
+  return token;
+}
+
+async function _resolveDownloadPage(url, info, context) {
+  const base = _origin(url) || _domain();
+  const cleanUrl = _withoutQueryParams(url, ['token', DDL_QUERY_KEY]);
+  const token = await _getFreshToken(base, context);
+  if (!token) return { streams: [], stop: true, status: 0, reason: 'token-unavailable' };
+  const downloadUrl = _appendFreshToken(cleanUrl, token);
+  const page = await _requestSiteUrl(downloadUrl, base + '/', {}, REQUEST_TIMEOUT_MS, context);
+  if (!page.ok || !page.body) {
+    return { streams: [], stop: page.status === 403 || page.status === 429 ||
+      page.status >= 500 || page.reason === 'challenge', status: page.status, reason: page.reason || 'download-failed' };
   }
 
-  const filenameFromPage = requestedInfo.filename || info.filename || filename || _filenameFromUrl(cleanUrl);
-  const resLabel = _resolutionLabel(resolution || info.resolution, filenameFromPage);
-  const audio = (filenameFromPage.match(/\[(Dual|Sub|Dub|English Dub|Tri|Multi)\]/i) || [])[1] || '';
-  const label = 'AV1 · ' + resLabel + (audio ? ' [' + audio + ']' : '');
-  const size = _text((html.match(/(?:Size|File Size)\s*:?\s*([^<\r\n]{1,40})/i) || [])[1] || '');
-  const fullLabel = size && !/generating|checking/i.test(size) ? label + ' · ' + size : label;
-
-  const iframeSrc = _findIframe(html);
-  const iframeUrl = iframeSrc ? _absolute(iframeSrc, base) : null;
-  // Redirect work is independent of get_ddl. Start it now instead of making
-  // the player pay several site/CDN round trips one after another.
-  const resolvedIframePromise = iframeUrl
-    ? _resolveLink(iframeUrl, base, actualUrl)
-    : Promise.resolve(null);
-
+  const filename = info.filename || _filenameFromUrl(cleanUrl);
+  const iframe = _findIframe(page.body);
+  const ddlToken = _findDdlToken(page.body);
   let ddl = null;
-  const tokenMatch = html.match(TOKEN_RE);
-  if (tokenMatch && info.encodedFilename) {
-    const ddlBase = base;
-    const ddlUrl = ddlBase + '/get_ddl/' + info.encodedFilename;
-    const ddlResponse = await _fetchSite(
-      ddlUrl,
-      actualUrl,
-      {
-        'Accept': 'application/json',
-        'Referer': actualUrl,
-        'X-Ddl-Token': tokenMatch[1]
-      }
-    );
-    if (ddlResponse.body) {
-      try {
-        const parsed = JSON.parse(ddlResponse.body);
-        if (parsed && (parsed.success === true || parsed.success === 1 ||
-            parsed.stream_link || parsed.streamLink || parsed.download_link ||
-            parsed.downloadLink || parsed.watch_link || parsed.watchLink)) {
-          ddl = parsed;
-          base = ddlResponse.base || base;
-        }
-      } catch (e) {}
-    }
+  if (ddlToken && info.encodedFilename) {
+    const ddlUrl = base + '/get_ddl/' + info.encodedFilename;
+    const response = await _requestSiteUrl(ddlUrl, downloadUrl, {
+      Accept: 'application/json',
+      Referer: downloadUrl,
+      'X-Ddl-Token': ddlToken,
+      'Sec-Fetch-Dest': 'empty',
+      'Sec-Fetch-Mode': 'cors',
+      'Sec-Fetch-Site': 'same-origin'
+    }, REQUEST_TIMEOUT_MS, context);
+    if (response.ok && response.body) ddl = _parseDdl(response.body);
   }
+  const streams = await _streamsFromDdl(ddl, base,
+    Object.assign({}, info, { filename: filename }), info.resolution,
+    iframe ? '<iframe id="anime-video-player" src="' + iframe + '"></iframe>' : page.body,
+    downloadUrl, context);
+  if (streams.length) return { streams: streams, stop: false, status: page.status, reason: '' };
 
-  const ddlWatchRaw = _ddlField(ddl, 'watch_link', 'watchLink');
-  const streamRaw = _ddlField(ddl, 'stream_link', 'streamLink');
-  const dlRaw = _ddlField(ddl, 'download_link', 'downloadLink');
-  const torrentRaw = _ddlField(ddl, 'torrent_link', 'torrentLink');
-  const [resolvedIframe, resolvedDdlWatch, resolvedStream, resolvedDownload, resolvedTorrent] =
-    await Promise.all([
-      resolvedIframePromise,
-      (!iframeUrl && ddlWatchRaw) ? _resolveLink(ddlWatchRaw, base, actualUrl) : Promise.resolve(null),
-      streamRaw ? _resolveLink(streamRaw, base, actualUrl) : Promise.resolve(null),
-      dlRaw ? _resolveLink(dlRaw, base, actualUrl) : Promise.resolve(null),
-      torrentRaw ? _resolveLink(torrentRaw, base, actualUrl) : Promise.resolve(null)
-    ]);
-  const resolvedWatch = resolvedIframe || resolvedDdlWatch;
-
-  const streams = [];
-  const dash = _buildDashUrl(resolvedWatch);
-  if (dash) {
-    streams.push(_stream(dash, fullLabel + ' · DASH', filenameFromPage, base));
-  }
-  if (resolvedStream && resolvedStream !== resolvedWatch) {
-    streams.push(_stream(resolvedStream, fullLabel + ' · Stream', filenameFromPage, base));
-  }
-  if (resolvedDownload) {
-    streams.push(_stream(resolvedDownload, fullLabel + ' · Direct DL', filenameFromPage, base));
-  }
-  if (resolvedTorrent) {
-    streams.push(_stream(resolvedTorrent, fullLabel + ' · Torrent', filenameFromPage, base));
-  }
-
-  // Never report a site HTML download page or /r/ page as if it were a video.
-  // The caller can try the next resolution; an honest empty result beats a
-  // link that will inevitably fail in the player's media parser.
-  if (!streams.length && _isDirectMediaUrl(actualUrl)) {
-    streams.push(_stream(actualUrl, fullLabel + ' · Direct', filenameFromPage, base));
-  }
-  return streams.filter(Boolean);
+  // Never give the player the HTML download page. That was the old source's
+  // most damaging failure mode and caused ExoPlayer to buffer on an HTML file.
+  const hasPlayer = !!iframe || !!ddlToken;
+  const terminalGeneratorError = /unable to generate download link|oops!?\s+something went wrong/i.test(page.body);
+  return {
+    streams: [], stop: page.status === 403 || page.status === 429 || page.status >= 500 ||
+      page.reason === 'challenge',
+    status: page.status,
+    reason: terminalGeneratorError ? 'generator-failed' : (hasPlayer ? 'no-playable-url' : 'no-player')
+  };
 }
 
-async function _findEpisodeAtResolution(info, resolution, originalUrl, base) {
-  if (resolution === info.resolution) return originalUrl;
+function _sameEpisode(a, b) {
+  const na = _episodeNumber((a && a.filename) || (a && a.url) || '');
+  const nb = _episodeNumber((b && b.filename) || (b && b.url) || '');
+  if (na && nb) return na === nb;
+  const fa = String((a && a.filename) || '').toLowerCase();
+  const fb = String((b && b.filename) || '').toLowerCase();
+  return !!fa && !!fb && fa === fb;
+}
+
+async function _findEpisodeAtResolution(info, resolution, base) {
   if (!info.slug || !info.season) return null;
   const page = await _fetchSite(_episodePageUrl(base, info.slug, info.season, resolution), base + '/');
-  if (!page.body) return _isTransientSiteFailure(page.status) ? false : null;
+  if (!page.body) return null;
   const entries = _parseEpisodePage(page.body, page.base || base, info.slug, info.season, resolution);
-  const targetNum = _episodeNumber(info.filename);
-  if (targetNum) {
-    const match = entries.find(ep => _episodeNumber(ep.url + ' ' + ep.title) === targetNum);
-    if (match) return match.url;
+  const targetNo = _episodeNumber(info.filename);
+  let selected = targetNo
+    ? entries.find(ep => _episodeNumber(ep.url + ' ' + ep.title) === targetNo)
+    : null;
+  if (!selected) {
+    const target = String(info.filename || '').toLowerCase();
+    selected = entries.find(ep => _filenameFromUrl(ep.url).toLowerCase() === target);
   }
-  const targetFilename = info.filename.toLowerCase();
-  const sameName = entries.find(ep => _filenameFromUrl(ep.url).toLowerCase() === targetFilename);
-  return sameName ? sameName.url : null;
+  return selected || null;
 }
 
 async function getVideoSources(episodeUrl) {
-  const full = _absolute(episodeUrl, _domain());
-  const info = _downloadInfo(full);
-  const filename = info.filename || _filenameFromUrl(full);
-  const startResolution = info.modern
-    ? _normaliseSeasonResolution(info.resolution)
-    : _qualityValue(_readSetting('quality'));
-  const qualityCandidates = [startResolution];
-  for (const q of _qualityCandidates(_readSetting('quality'))) {
-    if (qualityCandidates.indexOf(q) < 0) qualityCandidates.push(q);
+  const original = _absolute(episodeUrl, _domain());
+  if (!original) return [];
+  if (_isDirectMediaUrl(original)) {
+    const directName = _filenameFromUrl(original);
+    return [_makeStream(original, 'AV1 · ' + _labelResolution('', directName) + ' · Direct',
+      directName, _origin(original) || _domain())].filter(Boolean);
   }
 
-  const base = _origin(full) || _domain();
-  const collected = [];
-  const seenUrls = {};
+  const siteUrl = _canonicalSiteUrl(original, _domain()) || original;
+  let info = _parseDownloadInfo(siteUrl);
+  const filename = info.filename || _filenameFromUrl(siteUrl);
+  if (!info.modern || !info.slug || !info.season || !info.filename) return [];
+  info = Object.assign({}, info, { filename: filename });
+  const base = _origin(siteUrl) || _domain();
+  const context = { warmupUsed: false, tokenCache: Object.create(null) };
+  const embeddedDdl = _getInlineDdl(siteUrl);
+  const initialResolution = info.resolution || _qualityValue(_readSetting('quality'));
+  const streams = embeddedDdl
+    ? await _streamsFromDdl(embeddedDdl, base, info, initialResolution, '', base + '/', context)
+    : [];
+  if (streams.length) return _dedupeStreams(streams);
 
-  if (info.modern) {
-    // Resolve the episode's listed quality first. Do not walk every resolution
-    // after a playable result has been found: each extra resolution adds an
-    // episode-page request, token lookup, download-page request and redirect
-    // checks, which can exceed Zangetsu's per-source timeout.
-    for (const resolution of qualityCandidates) {
-      const url = await _findEpisodeAtResolution(info, resolution, full, base);
-      if (url === false) break;
-      if (!url) continue;
-      const candidates = await _extractVideoForEpisode(url, filename, resolution);
-      for (const stream of candidates) {
-        if (!stream || !stream.url || seenUrls[stream.url]) continue;
-        seenUrls[stream.url] = true;
-        collected.push(stream);
+  // The first quality is the link selected in the episode list. Only one
+  // alternate quality is attempted per resolve to stay within Zangetsu's
+  // resolver budget. Episode listing itself still checks every quality.
+  const candidates = _qualityCandidates(_readSetting('quality'));
+  const alternate = candidates.find(q => q !== initialResolution);
+  const attempts = [initialResolution];
+  if (alternate) attempts.push(alternate);
+  for (let index = 0; index < attempts.length; index++) {
+    const resolution = attempts[index];
+    let candidateUrl = siteUrl;
+    let candidateInfo = info;
+    if (resolution !== initialResolution) {
+      const entry = await _findEpisodeAtResolution(info, resolution, base);
+      if (!entry) continue;
+      candidateUrl = entry.url;
+      candidateInfo = _parseDownloadInfo(candidateUrl);
+      candidateInfo = Object.assign({}, candidateInfo, { filename: candidateInfo.filename || filename });
+      const data = _getInlineDdl(candidateUrl);
+      if (data) {
+        const fromData = await _streamsFromDdl(data, _origin(candidateUrl) || base,
+          candidateInfo, resolution, '', _origin(candidateUrl) + '/', context);
+        if (fromData.length) return _dedupeStreams(fromData);
+        continue;
       }
-      if (collected.length || candidates.stopFallback) break;
+    } else if (embeddedDdl) {
+      // The embedded payload did not contain usable playable links. Fall
+      // through to the fresh-token page flow below, not to its stale token.
     }
-  } else {
-    const candidates = await _extractVideoForEpisode(full, filename, startResolution);
-    for (const stream of candidates) {
-      if (stream && stream.url && !seenUrls[stream.url]) {
-        seenUrls[stream.url] = true;
-        collected.push(stream);
-      }
-    }
-  }
 
-  // Only return a fallback when the supplied URL is already a media file.
-  // A /download/ page is HTML and must not be advertised as a stream.
-  if (!collected.length && _isDirectMediaUrl(full)) {
-    collected.push(_stream(full, 'AV1 · ' + _resolutionLabel(startResolution, filename) + ' · Direct', filename, _origin(full) || _domain()));
+    const result = await _resolveDownloadPage(candidateUrl, candidateInfo, context);
+    if (result.streams && result.streams.length) return _dedupeStreams(result.streams);
+    if (index === attempts.length - 1 || result.stop) return [];
   }
-  return collected;
+  return [];
+}
+
+function _isDirectMediaUrl(url) {
+  const path = _pathOnly(url);
+  if (/\/download\//i.test(path)) return false;
+  return /\.(?:m3u8|mp4|mkv|mpd)(?:$)/i.test(path);
+}
+
+function _dedupeStreams(items) {
+  const out = [];
+  const seen = Object.create(null);
+  for (const item of items || []) {
+    if (item && item.url && !seen[item.url]) {
+      seen[item.url] = true;
+      out.push(item);
+    }
+  }
+  return out;
 }
 
 // ── Home sections ─────────────────────────────────────────────────────────
 
 async function getHome(opts) {
-  const response = await _fetchSite(_domain() + '/', _domain() + '/');
-  const base = response.base || _domain();
-  let popular = _parseCards(response.body, base, 'popular');
-  let latest = _parseCards(response.body, base, 'latest');
-
-  if (!popular.length) {
-    const fallback = await _fetchSite(base + '/anime?page=0', base + '/');
-    popular = _parseAnimeIndex(fallback.body, fallback.base || base);
+  const base = _domain();
+  const page = await _fetchSite(base + '/', base + '/');
+  let popular = _parseCards(page.body, page.base || base, 'popular');
+  let latest = _parseCards(page.body, page.base || base, 'latest');
+  if (!popular.length || !latest.length) {
+    const list = await _fetchSite(base + '/anime?page=0', base + '/');
+    const all = _parseAnimeIndex(list.body, list.base || base);
+    if (!popular.length) popular = all;
+    if (!latest.length) latest = all;
   }
-  if (!latest.length) latest = _parseCards(response.body, base, 'all');
-  if (!latest.length) {
-    const fallback = await _fetchSite(base + '/anime?page=0', base + '/');
-    latest = _parseAnimeIndex(fallback.body, fallback.base || base);
-  }
-
   const rows = [];
   if (popular.length) rows.push({ title: 'Popular', items: popular });
   if (latest.length) rows.push({ title: 'Latest', items: latest });
   return rows;
 }
 
-// ── CommonJS export guard ────────────────────────────────────────────────
+// Zangetsu's script-global runtime uses getStreams directly; CommonJS
+// consumers use the same entry point via module.exports below.
+function getStreams(episodeUrl, opts) {
+  return getVideoSources(episodeUrl, opts);
+}
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     version: VERSION,
-    getInfo,
-    getSettings,
-    getHome,
-    search,
-    getDetail,
-    getEpisodes,
-    getVideoSources,
-    getStreams: getVideoSources
+    getInfo: getInfo,
+    getSettings: getSettings,
+    getHome: getHome,
+    search: search,
+    getDetail: getDetail,
+    getEpisodes: getEpisodes,
+    getVideoSources: getVideoSources,
+    getStreams: getStreams
   };
 }
