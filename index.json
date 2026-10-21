@@ -902,7 +902,7 @@
     {
       "id": "av1encodes",
       "name": "AV1Encodes",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "type": "anime",
       "lang": "en",
       "file": "providers/av1encodes.js",
@@ -912,14 +912,14 @@
         {
           "key": "domain",
           "label": "Domain",
-          "description": "Base URL for AV1Encodes. Change if the site moves domains.",
+          "description": "Preferred AV1Encodes domain. Known mirrors are tried automatically if it is unavailable.",
           "type": "text",
           "default": "https://av1encodes.com"
         },
         {
           "key": "quality",
           "label": "Preferred quality",
-          "description": "Quality used when constructing episode URLs.",
+          "description": "Preferred resolution. The provider falls back to other available resolutions.",
           "type": "enum",
           "default": "1080p",
           "options": [
@@ -934,6 +934,10 @@
             {
               "value": "480p",
               "label": "480p"
+            },
+            {
+              "value": "360p",
+              "label": "360p"
             }
           ]
         }
