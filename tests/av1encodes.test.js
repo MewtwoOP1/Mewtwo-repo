@@ -185,8 +185,8 @@ function routeRedirects() {
     const episodes = await P.getEpisodes(show.url, {});
     assert.strictEqual(episodes.length, 2);
     assert.strictEqual(calls.length, before, 'non-empty episode cache should avoid a duplicate detail/episode request');
-    assert.ok(!calls.some(call => call.url.startsWith(BASE + '/episodes/')),
-      'episode requests must not switch back to the default host');
+    assert.ok(calls.some(call => call.url.startsWith(ALT + '/episodes/')),
+      'episode listing must continue on the mirror that returned the title');
     assert.strictEqual(episodes[0].url, detail.episodes[0].url);
   });
 
