@@ -1192,7 +1192,7 @@ async function _resolveDownloadPage(url, info, context) {
   // Current Aniyomi refreshes the episode href from /episodes when the signed
   // download page no longer contains the player. This is the primary refresh
   // path; keep the source's original filename and episode number for matching.
-  if (!hasPlayablePage() && page.reason !== 'upstream-error') {
+  if (!hasPlayablePage()) {
     const preferredResolution = currentInfo.resolution || _qualityValue(_readSetting('quality'));
     const fresh = await _findEpisodeAtResolution(currentInfo, preferredResolution, base);
     const freshUrl = fresh && fresh.url
