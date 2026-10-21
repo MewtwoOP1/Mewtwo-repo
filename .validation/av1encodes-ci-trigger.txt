@@ -1,1 +1,0 @@
-Temporary CI trigger for validating the current AV1Encodes v1.2.4 repository state. This file is not intended to be merged.
