@@ -902,7 +902,7 @@
     {
       "id": "av1encodes",
       "name": "AV1Encodes",
-      "version": "1.0.2",
+      "version": "1.0.3",
       "type": "anime",
       "lang": "en",
       "file": "providers/av1encodes.js",
