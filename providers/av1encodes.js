@@ -557,9 +557,10 @@ function _detailFromHTML(url, html, base) {
   const cover = _firstImage(html, base) ||
     _absolute(_attr((String(html).match(/<meta\b[^>]*property=['"]og:image['"][^>]*>/i) || [''])[0], 'content'), base) ||
     _absolute(_attr(imageTag, 'src'), base);
-  const description = _text(
-    (String(html).match(/<(?:div|p)[^>]*class=['"][^'"]*(?:anime-synopsis|synopsis|description|overview|desc)[^'"]*['"][^>]*>[\s\S]*?<\/(?:div|p)>/i) || ['',''])[1] || ''
+  const descriptionMatch = String(html).match(
+    /<(?:div|p)[^>]*class=['"][^'"]*(?:anime-synopsis|synopsis|description|overview|desc)[^'"]*['"][^>]*>[\s\S]*?<\/(?:div|p)>/i
   );
+  const description = _text(descriptionMatch ? descriptionMatch[0] : '');
   const metaDescription = _attr((String(html).match(/<meta\b[^>]*name=['"]description['"][^>]*>/i) || [''])[0], 'content');
   const genres = _genres(html);
   const status = /class=['"][^'"]*(?:airing|ongoing)[^'"]*['"]/i.test(html) ? 'ongoing' : 'completed';
