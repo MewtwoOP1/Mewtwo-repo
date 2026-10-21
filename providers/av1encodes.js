@@ -306,10 +306,13 @@ async function _fetchSite(url, ref, extraHeaders) {
   const candidates = latencySensitive ? _siteBases(url).slice(0, 3) : _siteBases(url);
   let lastStatus = 0;
   let lastReason = null;
+  // Allow one normal homepage warm-up per lookup when a mirror returns 403.
+  // The site's own upstream extension does this to establish its session
+  // cookie. Retrying every mirror adds latency without adding useful signal.
+  let warmupUsed = false;
 
   for (const base of candidates) {
     const target = base + path;
-    let warmed = false;
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
         const r = await fetch(target, {
@@ -323,12 +326,12 @@ async function _fetchSite(url, ref, extraHeaders) {
           if (r.body && typeof r.body.cancel === 'function') {
             try { r.body.cancel(); } catch (e) {}
           }
-          if (lastStatus === 403 && !warmed && !latencySensitive) {
-            warmed = true;
+          if (lastStatus === 403 && !warmupUsed) {
+            warmupUsed = true;
             await _warmupSite(base);
             continue;
           }
-          if (lastStatus === 403 && latencySensitive) lastReason = 'forbidden';
+          if (lastStatus === 403) lastReason = 'forbidden';
           break;
         }
         const body = await r.text();
