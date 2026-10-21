@@ -5,7 +5,7 @@
 
 const SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID)
   ? String(__SOURCE_ID) : 'av1encodes';
-const VERSION = '1.0.3';
+const VERSION = '1.0.4';
 const DEFAULT_DOMAIN = 'https://av1please.com';
 const SITE_DOMAINS = [
   'https://av1please.com',
@@ -643,25 +643,22 @@ function _filenameFromUrl(url) {
 }
 
 function _episodeLabel(filename, label, number, slug, season) {
-  // Prefer the name AV1Encodes actually returned. The old implementation
-  // rebuilt every title as "Episode N" and discarded the source label, which
-  // made metadata matching less reliable.
-  const sourceLabel = _htmlText(label || '').trim();
-  if (sourceLabel && !/^(?:download|watch|play|open|direct download)$/i.test(sourceLabel)) {
-    return sourceLabel;
-  }
-
   const n = Number(number) || _episodeNumber(filename) || _episodeNumber(label);
-  const cleanFilename = String(_decode(filename || '')).replace(/\.(?:mkv|mp4)$/i, '');
-  const nameMatch = cleanFilename.match(/\[(?:S\d{1,2}[-_ ]*)?E\d{1,4}\]\s*(.*?)\s*(?=\[|$)/i);
+  const nameMatch = String(_decode(filename || '')).replace(/\.(?:mkv|mp4)$/i, '')
+    .match(/\[(?:S\d{1,2}[-_ ]*)?E\d{1,4}\]\s*(.*?)\s*(?=\[|$)/i);
   let title = nameMatch ? _htmlText(nameMatch[1]) : '';
   title = title.replace(/\[(?:\d{3,4}p|dual|sub|dub|english\s*dub|tri|multi)[^\]]*\]/gi, ' ')
     .replace(/\b(?:dual|sub|dub|english\s*dub|tri|multi)\b/gi, ' ')
     .replace(/\s+/g, ' ').trim();
-  if (title) return title;
-  if (n > 0) return 'Episode ' + n;
-  const fallback = _htmlText(label || cleanFilename || filename || '');
-  return fallback || '';
+  const normal = s => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const normalizedTitle = normal(title);
+  const normalizedSlug = normal(slug);
+  if (normalizedTitle && normalizedSlug &&
+      (normalizedTitle === normalizedSlug ||
+       normalizedTitle.replace(/(?:19|20)\d{2}$/, '') === normalizedSlug)) title = '';
+  if (n > 0) return 'Episode ' + n + (title ? ' - ' + title : '');
+  const fallback = _htmlText(label || title || filename || '');
+  return fallback || ('Season ' + (season || '1'));
 }
 
 function _episodeKey(url) {
@@ -698,24 +695,21 @@ function _episodeFromLink(rawHref, label, base, season, slug, resolution, number
   const filename = _filenameFromUrl(href || rawHref || '');
   if (!href && filename) href = _makeEpisodeUrl(base, slug, season, resolution, filename);
   if (!href) return null;
-
-  // Use AV1Encodes' episode number when supplied. Only parse the filename as
-  // a fallback; never invent episode 1 for an unparseable filename.
-  const n = Number(number) || _episodeNumber(filename + ' ' + label) || null;
+  const n = Number(number) || _episodeNumber(filename + ' ' + label);
+  let url = href;
   if (ddl && typeof ddl === 'object' && _hasDdlLinks(ddl)) {
-    // Cache only against the complete, original URL including its token.
-    // Do not add a synthetic query parameter to the episode URL, because
-    // Zangetsu uses that URL to match the source item to metadata episodes.
-    DDL_BY_URL[href] = ddl;
+    const packed = JSON.stringify(ddl);
+    // Keep the DDL with the episode so resolution still works if Zangetsu
+    // reloads a provider between episode listing and the play request.
+    if (packed.length <= 10000) url = _setQueryParam(url, DDL_QUERY_KEY, packed);
   }
-  const nativeLabel = _episodeLabel(filename, label, n, slug, season);
-  return {
-    id: href,
-    number: n,
-    title: nativeLabel,
-    url: href,
-    sourceId: SOURCE_ID
+  const episode = {
+    id: url, number: n || 1,
+    title: _episodeLabel(filename, label, n, slug, season),
+    url: url, sourceId: SOURCE_ID
   };
+  if (ddl && typeof ddl === 'object') episode.ddl = ddl;
+  return episode;
 }
 
 function _parseEpisodeJson(body, base, slug, season, resolution) {

@@ -1,4 +1,4 @@
-// AV1Encodes v1.0.3 full integration regression tests; all network calls are mocked.
+// AV1Encodes v1.0.4 full integration regression tests; all network calls are mocked.
 'use strict';
 const assert = require('assert');
 const fs = require('fs');
@@ -105,12 +105,12 @@ function routeRedirects() {
 }
 
 (async function run() {
-  console.log('\nAV1Encodes v1.0.3 full integration regression tests\n');
+  console.log('\nAV1Encodes v1.0.4 full integration regression tests\n');
 
-  await test('v1.0.3 provider contract and metadata', async () => {
+  await test('v1.0.4 provider contract and metadata', async () => {
     reset();
     assert.strictEqual(P.getInfo().name, 'AV1Encodes');
-    assert.strictEqual(P.getInfo().version, '1.0.3');
+    assert.strictEqual(P.getInfo().version, '1.0.4');
     assert.strictEqual(P.getInfo().type, 'anime');
     assert.strictEqual(P.getInfo().lang, 'en');
     assert.deepStrictEqual(JSON.parse(JSON.stringify(P.getSettings().map(x => x.key))), ['domain','quality','showTorrent']);
@@ -247,11 +247,11 @@ function routeRedirects() {
     const items = await P.getEpisodes(BASE + '/anime/one-piece', {});
     assert.strictEqual(items.length, 2);
     assert.deepStrictEqual(JSON.parse(JSON.stringify(items.map(x => x.number))), [1,2]);
-    assert.strictEqual(items[0].title, 'Episode 01');
+    assert.strictEqual(items[0].title, 'Episode 1');
     assert.ok(items[0].url.indexOf('token=old-one') >= 0);
-    assert.ok(!items[0].url.includes('__av1ddl='));
-    assert.ok(!Object.prototype.hasOwnProperty.call(items[0], 'ddl'),
-      'source episode objects should not expose synthetic DDL metadata');
+    assert.ok(items[0].url.includes('__av1ddl='));
+    assert.ok(items[0].ddl && items[0].ddl.success,
+      'legacy metadata exposes the embedded DDL payload as before');
   });
 
   await test('absolute upstream episode href keeps its signed host and token', async () => {
@@ -278,9 +278,8 @@ function routeRedirects() {
     const items = await P.getEpisodes(BASE + '/anime/one-piece', {});
     assert.strictEqual(items.length, 2);
     assert.deepStrictEqual(JSON.parse(JSON.stringify(items.map(x => x.number))), [1,2]);
-    assert.strictEqual(items[0].title, 'Episode 01 Dual');
+    assert.strictEqual(items[0].title, 'Episode 1');
     assert.ok(items[0].url.endsWith('?token=episode-token'));
-    assert.ok(!items[0].url.includes('__av1ddl='));
   });
 
   await test('episode listing falls back when the preferred resolution has no entries', async () => {
@@ -408,7 +407,7 @@ function routeRedirects() {
     assert.ok(calls.some(call => call.url === BASE + '/anime?page=0'));
   });
 
-  await test('wrapped episode JSON objects are accepted without losing source labels', async () => {
+  await test('wrapped episode JSON objects retain legacy generated episode labels', async () => {
     reset();
     routeDetail('naruto', '<html><body><h1>Naruto</h1><div data-season="1"></div></body></html>');
     const payload = JSON.stringify({ items: [{
@@ -421,7 +420,7 @@ function routeRedirects() {
     const episodes = await P.getEpisodes(BASE + '/anime/naruto', {});
     assert.strictEqual(episodes.length, 1);
     assert.strictEqual(episodes[0].number, 7);
-    assert.strictEqual(episodes[0].title, 'Naruto Episode 07');
+    assert.strictEqual(episodes[0].title, 'Episode 7');
     assert.ok(episodes[0].url.endsWith('?token=naruto-seven'));
   });
 
