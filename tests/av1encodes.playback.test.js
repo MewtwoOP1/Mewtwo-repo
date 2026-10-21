@@ -186,6 +186,51 @@ function routeStreamExtraction(host) {
     assert.ok(calls.some(call => call.url === ALT + '/episodes/black-clover/1/1920%20x%201080'));
   });
 
+  await test('legacy metadata keeps Episode 45 addressable and resolves its embedded stream links', async () => {
+    reset();
+    const detail = '<html><body><h1>Long Anime</h1><div data-season="1">Season 1</div></body></html>';
+    route(/^https:\/\/av1please\.com\/anime\/long-anime$/, () => ok(detail));
+
+    const episodeItems = [];
+    for (let n = 1; n <= 50; n++) {
+      const padded = String(n).padStart(3, '0');
+      const item = {
+        num: n,
+        label: 'Episode ' + String(n).padStart(2, '0'),
+        href: '/download/long-anime/1/1920%20x%201080/%5BE' + padded +
+          '%5D%20Long%20Anime%20%5B1080p%5D%20%5BDual%5D.mkv?token=token-' + n
+      };
+      if (n === 45) {
+        item.ddl = {
+          success: true,
+          watch_link: '/watch/episode-45',
+          stream_link: 'https://cdn.example.com/episode-45.m3u8',
+          download_link: 'https://cdn.example.com/episode-45.mp4'
+        };
+      }
+      episodeItems.push(item);
+    }
+    route(/^https:\/\/av1please\.com\/episodes\/long-anime\/1\/1920%20x%201080$/, () =>
+      ok(JSON.stringify(episodeItems)));
+    route(/^https:\/\/av1please\.com\/watch\/episode-45$/, () =>
+      ok('', BASE + '/watch/episode-45'));
+
+    const episodes = await P.getEpisodes(BASE + '/anime/long-anime', {});
+    assert.strictEqual(episodes.length, 50, 'all 50 source episodes must survive parsing');
+    assert.strictEqual(episodes[44].number, 45, 'Zangetsu resolves episode N using the Nth source-list entry');
+    assert.strictEqual(episodes[44].title, 'Episode 45', 'legacy label formatting must be restored');
+    assert.ok(episodes[44].url.includes('__av1ddl='), 'legacy inline DDL must remain attached to the episode URL');
+    assert.ok(episodes[44].url.includes('token=token-45'));
+
+    const streams = await P.getVideoSources(episodes[44].url);
+    assert.ok(streams.some(stream => stream.url === BASE + '/dash/episode-45/manifest.mpd'),
+      'episode 45 must yield a DASH URL');
+    assert.ok(streams.some(stream => stream.url === 'https://cdn.example.com/episode-45.m3u8'),
+      'episode 45 must yield its upstream HLS URL');
+    assert.ok(streams.some(stream => stream.url === 'https://cdn.example.com/episode-45.mp4'),
+      'episode 45 must yield its direct media URL');
+  });
+
   await test('upstream download-generator error is classified as no streams, never a fake media URL', async () => {
     reset();
     route(/^https:\/\/av1please\.com\/get_token$/, () =>
