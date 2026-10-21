@@ -6,12 +6,6 @@
 // also builds a DASH manifest from watch_link; Zangetsu's stream contract has
 // no DASH container, so this port returns only the direct stream/download
 // links and drops the DASH URL.
-//
-// Known external limitations:
-//   - The site may sit behind Cloudflare or an access-protection rule; a 403
-//     cannot be solved inside a Zangetsu provider.
-//   - AV1 and MKV playback depends on the Zangetsu player and the device.
-//   - The /get_ddl/ token and page markup can change without notice.
 
 'use strict';
 
@@ -21,8 +15,7 @@ const SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID)
 
 const VERSION = '1.0.0';
 const DEFAULT_DOMAIN = 'https://av1encodes.com';
-const LOGO =
-  'https://www.google.com/s2/favicons?sz=256&domain=av1encodes.com';
+const LOGO = 'https://www.google.com/s2/favicons?sz=256&domain=av1encodes.com';
 
 const UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
@@ -333,12 +326,7 @@ function _parseEpisodePage(html, base, season) {
     if (!fn || seen[fn]) continue;
     seen[fn] = 1;
     const encoded = encodeURIComponent(fn);
-    const url =
-      base +
-      '/download/' +
-      encodeURIComponent(season) +
-      '/' +
-      encoded;
+    const url = base + '/download/' + encodeURIComponent(season) + '/' + encoded;
     out.push({
       id: url,
       number: _episodeNumber(fn),
@@ -515,16 +503,21 @@ async function getHome(opts) {
   return rows.filter(r => r.items.length > 0);
 }
 
-// ── Exports (required by the Zangetsu checker) ────────────────────────────
+// ── Export Environment Guard ──────────────────────────────────────────────
+// Zangetsu evaluates this file directly in a JS engine without Node.js globals.
+// The Node.js CI script (check-and-run.mjs) requires module.exports.
+// We conditionally export only if 'module' actually exists.
 
-module.exports = {
-  version: VERSION,
-  getInfo,
-  getSettings,
-  getHome,
-  search,
-  getDetail,
-  getEpisodes,
-  getVideoSources,
-  getStreams: getVideoSources
-};
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    version: VERSION,
+    getInfo,
+    getSettings,
+    getHome,
+    search,
+    getDetail,
+    getEpisodes,
+    getVideoSources,
+    getStreams: getVideoSources
+  };
+}
