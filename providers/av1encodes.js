@@ -12,8 +12,11 @@ const SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID)
 const VERSION = '1.2.3';
 const DEFAULT_DOMAIN = 'https://av1encodes.com';
 const MIRROR_DOMAINS = [
-  'https://animealpha.cc',
+  // av1please.com currently serves the rebranded AnimeAlpha site. Put it
+  // first after the requested/preferred host so bounded playback fallbacks
+  // still reach a working public mirror before spending the source budget.
   'https://av1please.com',
+  'https://animealpha.cc',
   'https://av1encodes.com'
 ];
 const LOGO = 'https://www.google.com/s2/favicons?sz=256&domain=av1encodes.com';
