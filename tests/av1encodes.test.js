@@ -248,6 +248,20 @@ function routeEpisodePages() {
     assert.strictEqual(res.length, 0);
   });
 
+  await test('search warms up the site session after 403 and retries the same route', async () => {
+    reset();
+    let attempts = 0;
+    route(/^https:\/\/av1encodes\.com\/search\?q=warmup/, () => {
+      attempts++;
+      return attempts === 1 ? notFound(403) : ok(FIXTURES.searchHtml);
+    });
+    route(/^https:\/\/av1encodes\.com\/$/, () => ok(FIXTURES.popularHtml));
+    const res = await P.search('warmup', 1, {});
+    assert.strictEqual(attempts, 2);
+    assert.strictEqual(res.length, 3);
+    assert.ok(calls.some(call => call.url === BASE + '/'));
+  });
+
   await test('getDetail returns metadata and episodes from dimension-based routes', async () => {
     reset();
     route(/\/anime\/one-piece$/, () => ok(FIXTURES.detailHtml));
