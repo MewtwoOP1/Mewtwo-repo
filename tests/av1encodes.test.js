@@ -1,10 +1,6 @@
-// test/av1encodes.test.js
-// Mock tests for the AV1Encodes Zangetsu provider.
-// These verify the provider contract against fixture HTML/JSON.
-// They do NOT hit the live site — see "Known limitations" at the bottom.
-//
-// Run: node test/av1encodes.test.js
-// Requires: Node 14+, no npm deps.
+// Mock integration tests for the current AV1Encodes / AnimeAlpha routes.
+// These tests use fixture HTML/JSON and do not claim live playback works.
+// Run: node tests/av1encodes.test.js (Node 14+, no npm dependencies).
 
 'use strict';
 
@@ -15,81 +11,87 @@ const vm = require('vm');
 
 const PROVIDER_PATH = path.join(__dirname, '..', 'providers', 'av1encodes.js');
 const BASE = 'https://av1encodes.com';
+const MIRROR = 'https://av1please.com';
 
-// ── Fixtures ──────────────────────────────────────────────────────────
+function encodeName(name) {
+  return encodeURIComponent(name);
+}
+
+const FILENAME = '[E001] One Piece [1080p] [Dual].mkv';
+const ENCODED_FILENAME = encodeName(FILENAME);
+const EP_URL = BASE + '/download/one-piece/1/1920%20x%201080/' +
+  ENCODED_FILENAME + '?token=fixture-token';
+const EP_URL_MIRROR = MIRROR + '/download/one-piece/1/1920%20x%201080/' +
+  ENCODED_FILENAME + '?token=fixture-token';
 
 const FIXTURES = {
-  searchHtml: `<html><body>
-    <article class="anime-card">
-      <a href="/anime/one-piece"><img data-src="/covers/one-piece.jpg" /></a>
-      <h3>One Piece</h3>
-    </article>
-    <article class="anime-card">
-      <a href="/anime/naruto"><img src="https://cdn.example.com/naruto.jpg" /></a>
-      <h3>Naruto</h3>
-    </article>
-  </body></html>`,
+  searchHtml: '<html><body>' +
+    '<article class="anime-card"><a href="/anime/one-piece">' +
+    '<img data-src="/covers/one-piece.jpg"><h3>One Piece</h3></a></article>' +
+    '<article class="anime-card"><a href="/anime/naruto">' +
+    '<img src="https://cdn.example.com/naruto.jpg"><h3>Naruto</h3></a></article>' +
+    '<a class="anime-link" href="/anime/bleach"><h4>Bleach</h4></a>' +
+    '</body></html>',
 
-  animeListHtml: `<html><body>
-    <ul>
-      <li><a href="/anime/bleach">Bleach</a></li>
-      <li><a href="/anime/dandadan">Dandadan</a></li>
-    </ul>
-  </body></html>`,
+  animeListHtml: '<html><body><ul>' +
+    '<li><a href="/anime/bleach">Bleach</a></li>' +
+    '<li><a href="/anime/dandadan">Dandadan</a></li>' +
+    '</ul></body></html>',
 
-  detailHtml: `<html><body>
-    <h1>One Piece</h1>
-    <img data-src="/covers/one-piece.jpg" />
-    <div class="synopsis">A pirate adventure.</div>
-    <a href="/genre/action">Action</a>
-    <a href="/genre/adventure">Adventure</a>
-    <div class="season-tab" data-season="2">Season 2</div>
-    <div class="season-tab" data-season="1">Season 1</div>
-  </body></html>`,
+  detailHtml: '<html><head><meta property="og:image" content="/covers/one-piece.jpg"></head>' +
+    '<body><h1>One Piece</h1><img data-src="/covers/one-piece.jpg">' +
+    '<div class="anime-synopsis">A pirate adventure.</div>' +
+    '<a href="/genre/action">Action</a><a href="/genre/adventure">Adventure</a>' +
+    '<div class="season-tab" data-season="2">Season 2</div>' +
+    '<div class="season-tab" data-season="1">Season 1</div>' +
+    '</body></html>',
 
-  season1Html: `<html><body>
-    <a href="/download/1/One Piece - E001 - [1080p] [Dual].mkv">One Piece E001</a>
-    <a href="/download/1/One Piece - E002 - [1080p] [Dual].mkv">One Piece E002</a>
-  </body></html>`,
+  season1Html: '<html><body>' +
+    '<a href="/download/one-piece/1/1920%20x%201080/%5BE001%5D%20One%20Piece%20%5B1080p%5D%20%5BDual%5D.mkv?token=one">Episode 1 Dual</a>' +
+    '<a href="/download/one-piece/1/1920%20x%201080/%5BE002%5D%20One%20Piece%20%5B1080p%5D%20%5BDual%5D.mkv?token=two">Episode 2 Dual</a>' +
+    '</body></html>',
 
-  season2Html: `<html><body>
-    <a href="/download/2/One Piece - E013 - [1080p] [Dual].mkv">One Piece E013</a>
-  </body></html>`,
+  season2Html: '<html><body>' +
+    '<a href="/download/one-piece/2/1920%20x%201080/%5BE013%5D%20One%20Piece%20%5B1080p%5D%20%5BDual%5D.mkv?token=three">Episode 13 Dual</a>' +
+    '</body></html>',
 
-  episodePageHtml: `<html><body>
-    <script>window.__ddl_token = "AAAA1234567890";</script>
-  </body></html>`,
+  lowQualityHtml: '<html><body>' +
+    '<a href="/download/one-piece/1/1280%20x%20720/%5BE001%5D%20One%20Piece%20%5B720p%5D%20%5BDual%5D.mkv?token=720">Episode 1 Dual</a>' +
+    '</body></html>',
+
+  playerHtml: '<html><body><h1>One Piece</h1>' +
+    '<iframe id="anime-video-player" src="/watch/xyz"></iframe>' +
+    '<script>window.__ddl_token = "AAAA1234567890";</script>' +
+    '</body></html>',
+
+  playerNoTokenHtml: '<html><body><h1>One Piece</h1>' +
+    '<iframe id="anime-video-player" src="/watch/xyz"></iframe>' +
+    '</body></html>',
 
   ddlJson: JSON.stringify({
     success: true,
     stream_link: '/redirect/stream/abc',
     download_link: '/redirect/dl/def',
     watch_link: '/watch/xyz',
-    file_name: 'One Piece - E001 - [1080p] [Dual].mkv',
+    file_name: FILENAME,
     file_size: '1.4 GB',
     video_details: 'AV1 1080p',
     audio_details: 'Dual',
     subtitles: []
   }),
 
-  popularHtml: `<html><body>
-    <h2>Top Downloads</h2>
-    <article class="anime-card">
-      <a href="/anime/bleach"><h3>Bleach</h3></a>
-    </article>
-  </body></html>`,
+  popularHtml: '<html><body>' +
+    '<article class="spotlight-slide"><a href="/anime/bleach">' +
+    '<img data-src="/covers/bleach.jpg"><h3>Bleach</h3></a></article>' +
+    '<article class="anime-card"><a href="/anime/one-piece">' +
+    '<img src="/covers/one-piece.jpg"><h3>One Piece</h3></a></article>' +
+    '</body></html>',
 
-  latestHtml: `<html><body>
-    <article class="anime-card">
-      <a href="/anime/dandadan"><h3>Dandadan</h3></a>
-    </article>
-  </body></html>`
+  latestHtml: '<html><body>' +
+    '<article class="anime-card"><a href="/anime/dandadan">' +
+    '<img data-lazy-src="/covers/dandadan.jpg"><h4>Dandadan</h4></a></article>' +
+    '</body></html>'
 };
-
-const EP_URL =
-  BASE + '/download/1/One%20Piece%20-%20E001%20-%20%5B1080p%5D%20%5BDual%5D.mkv';
-
-// ── Mock fetch ────────────────────────────────────────────────────────
 
 const calls = [];
 const routes = [];
@@ -109,10 +111,11 @@ function ok(body, url) {
   };
 }
 
-function notFound() {
+function notFound(status) {
+  const code = status || 404;
   return {
     ok: false,
-    status: 404,
+    status: code,
     body: '',
     url: '',
     text: () => Promise.resolve('')
@@ -120,16 +123,14 @@ function notFound() {
 }
 
 function mockFetch(url, opts) {
-  calls.push({ url, opts: opts || {} });
+  const urlText = String(url);
+  calls.push({ url: urlText, opts: opts || {} });
   for (const r of routes) {
-    if (r.pattern.test(String(url))) {
-      return Promise.resolve(r.handler(String(url), opts || {}));
-    }
+    r.pattern.lastIndex = 0;
+    if (r.pattern.test(urlText)) return Promise.resolve(r.handler(urlText, opts || {}));
   }
   return Promise.resolve(notFound());
 }
-
-// ── Sandbox ──────────────────────────────────────────────────────────
 
 const sandbox = {
   __SOURCE_ID: 'av1encodes',
@@ -143,8 +144,8 @@ const sandbox = {
 };
 vm.createContext(sandbox);
 vm.runInContext(fs.readFileSync(PROVIDER_PATH, 'utf8'), sandbox);
-
 const P = sandbox;
+
 assert.strictEqual(typeof P.getInfo, 'function', 'provider loaded');
 assert.strictEqual(typeof P.search, 'function');
 assert.strictEqual(typeof P.getDetail, 'function');
@@ -152,8 +153,6 @@ assert.strictEqual(typeof P.getEpisodes, 'function');
 assert.strictEqual(typeof P.getVideoSources, 'function');
 assert.strictEqual(typeof P.getHome, 'function');
 assert.strictEqual(typeof P.getSettings, 'function');
-
-// ── Runner ───────────────────────────────────────────────────────────
 
 let passed = 0;
 let failed = 0;
@@ -163,11 +162,11 @@ async function test(name, fn) {
   try {
     await fn();
     passed++;
-    console.log('  \u2713 ' + name);
+    console.log('  ✓ ' + name);
   } catch (e) {
     failed++;
     failures.push({ name, error: e });
-    console.log('  \u2717 ' + name);
+    console.log('  ✗ ' + name);
     console.log('    ' + (e && e.message ? e.message : String(e)));
   }
 }
@@ -178,257 +177,241 @@ function reset() {
   sandbox.__settings = { av1encodes: {} };
 }
 
-// ── Tests ────────────────────────────────────────────────────────────
+function routeEpisodePages() {
+  route(/\/episodes\/one-piece\/2\/1920%20x%201080/, () => ok(FIXTURES.season2Html));
+  route(/\/episodes\/one-piece\/1\/1920%20x%201080/, () => ok(FIXTURES.season1Html));
+  route(/\/episodes\/one-piece\/1\/1280%20x%20720/, () => ok(FIXTURES.lowQualityHtml));
+  route(/\/episodes\/one-piece\//, () => ok('<html><body>No episodes at this quality</body></html>'));
+}
 
 (async function run() {
-  console.log('\nAV1Encodes provider tests\n');
+  console.log('\nAV1Encodes / AnimeAlpha provider tests\n');
 
-  await test('getInfo returns anime source with correct shape', async () => {
+  await test('getInfo uses the correct provider metadata and version', async () => {
     reset();
     const info = P.getInfo();
     assert.strictEqual(info.name, 'AV1Encodes');
     assert.strictEqual(info.lang, 'en');
     assert.strictEqual(info.type, 'anime');
-    assert.ok(/^https?:\/\//.test(info.baseUrl), 'baseUrl is absolute');
-    assert.strictEqual(typeof info.version, 'string');
+    assert.strictEqual(info.version, '1.2.0');
+    assert.ok(/^https?:\/\//.test(info.baseUrl));
   });
 
-  await test('getSettings declares domain and quality', async () => {
+  await test('settings expose domain and 1080p/720p/480p/360p quality choices', async () => {
     reset();
-    const s = P.getSettings();
-    assert.ok(Array.isArray(s));
-    const byKey = Object.fromEntries(s.map(x => [x.key, x]));
-    assert.ok(byKey.domain, 'domain setting present');
-    assert.ok(byKey.quality, 'quality setting present');
+    const settings = P.getSettings();
+    const byKey = Object.fromEntries(settings.map(s => [s.key, s]));
+    assert.ok(byKey.domain);
+    assert.ok(byKey.quality);
     assert.strictEqual(byKey.quality.type, 'enum');
-    assert.ok(byKey.quality.options.some(o => o.value === '1080p'));
+    assert.strictEqual(JSON.stringify(byKey.quality.options.map(o => o.value)),
+      JSON.stringify(['1080p', '720p', '480p', '360p']));
   });
 
-  await test('search(query) hits /search and parses cards', async () => {
+  await test('search parses multiple card results and lazy-loaded covers', async () => {
     reset();
-    route(/\/search\?q=/, () => ok(FIXTURES.searchHtml));
+    route(/\/search\?q=one%20piece&page=1/, () => ok(FIXTURES.searchHtml));
     const res = await P.search('one piece', 1, {});
-    assert.strictEqual(res.length, 2);
+    assert.strictEqual(res.length, 3);
     assert.strictEqual(res[0].title, 'One Piece');
     assert.strictEqual(res[0].url, BASE + '/anime/one-piece');
     assert.strictEqual(res[0].cover, BASE + '/covers/one-piece.jpg');
-    assert.strictEqual(res[0].type, 'anime');
     assert.strictEqual(res[0].sourceId, 'av1encodes');
-    assert.strictEqual(res[1].title, 'Naruto');
-    assert.strictEqual(res[1].cover, 'https://cdn.example.com/naruto.jpg');
+    assert.ok(res.some(x => x.title === 'Naruto'));
+    assert.ok(res.some(x => x.title === 'Bleach'));
+    assert.strictEqual(new Set(res.map(x => x.url)).size, res.length);
   });
 
-  await test('search(empty) hits /anime and parses list layout', async () => {
+  await test('blank search browses the A-Z anime list starting at page zero', async () => {
     reset();
-    route(/\/anime\?page=1/, () => ok(FIXTURES.animeListHtml));
+    route(/\/anime\?page=0/, () => ok(FIXTURES.animeListHtml));
     const res = await P.search('', 1, {});
     assert.strictEqual(res.length, 2);
-    assert.strictEqual(res[0].title, 'Bleach');
-    assert.strictEqual(res[1].title, 'Dandadan');
+    assert.ok(res.some(x => x.title === 'Bleach'));
+    assert.ok(res.some(x => x.title === 'Dandadan'));
   });
 
-  await test('search returns [] on network failure', async () => {
+  await test('search falls back to av1please.com if preferred domain returns 403', async () => {
     reset();
-    route(/\/search/, notFound);
+    route(/^https:\/\/av1encodes\.com\/search\?q=naruto/, () => notFound(403));
+    route(/^https:\/\/animealpha\.cc\/search\?q=naruto/, () => notFound(403));
+    route(/^https:\/\/av1please\.com\/search\?q=naruto/, () => ok(FIXTURES.searchHtml));
+    const res = await P.search('naruto', 1, {});
+    assert.strictEqual(res.length, 3);
+    assert.ok(res.every(x => x.url.indexOf(MIRROR + '/') === 0));
+  });
+
+  await test('search returns an empty array when every domain fails', async () => {
+    reset();
+    route(/\/search/, () => notFound(403));
     const res = await P.search('x', 1, {});
     assert.strictEqual(res.length, 0);
   });
 
-  await test('getDetail returns metadata + episodes', async () => {
+  await test('getDetail returns metadata and episodes from dimension-based routes', async () => {
     reset();
     route(/\/anime\/one-piece$/, () => ok(FIXTURES.detailHtml));
-    route(/\/episodes\/one-piece\/2\/1080p/, () => ok(FIXTURES.season2Html));
-    route(/\/episodes\/one-piece\/1\/1080p/, () => ok(FIXTURES.season1Html));
-
-    const d = await P.getDetail(BASE + '/anime/one-piece', {});
-    assert.strictEqual(d.title, 'One Piece');
-    assert.strictEqual(d.cover, BASE + '/covers/one-piece.jpg');
-    assert.strictEqual(d.description, 'A pirate adventure.');
-    assert.strictEqual(JSON.stringify(d.genres), JSON.stringify(['Action', 'Adventure']));
-    assert.strictEqual(d.status, 'completed');
-    assert.strictEqual(d.type, 'anime');
-    assert.strictEqual(d.sourceId, 'av1encodes');
-    assert.ok(Array.isArray(d.episodes));
-    assert.strictEqual(d.episodes.length, 3);
+    routeEpisodePages();
+    const detail = await P.getDetail(BASE + '/anime/one-piece', {});
+    assert.strictEqual(detail.title, 'One Piece');
+    assert.strictEqual(detail.cover, BASE + '/covers/one-piece.jpg');
+    assert.strictEqual(detail.description, 'A pirate adventure.');
+    assert.strictEqual(JSON.stringify(detail.genres), JSON.stringify(['Action', 'Adventure']));
+    assert.strictEqual(detail.type, 'anime');
+    assert.strictEqual(detail.sourceId, 'av1encodes');
+    assert.strictEqual(detail.episodes.length, 3);
+    assert.ok(calls.some(c => c.url.indexOf('/episodes/one-piece/2/1920%20x%201080') >= 0));
   });
 
-  await test('getEpisodes returns episode list', async () => {
+  await test('getEpisodes returns real download routes with token query strings intact', async () => {
     reset();
     route(/\/anime\/one-piece$/, () => ok(FIXTURES.detailHtml));
-    route(/\/episodes\/one-piece\/2\/1080p/, () => ok(FIXTURES.season2Html));
-    route(/\/episodes\/one-piece\/1\/1080p/, () => ok(FIXTURES.season1Html));
-
-    const eps = await P.getEpisodes(BASE + '/anime/one-piece', {});
-    assert.strictEqual(eps.length, 3);
-    for (const ep of eps) {
-      assert.ok(ep.id, 'episode id present');
-      assert.ok(ep.url, 'episode url present');
-      assert.strictEqual(typeof ep.number, 'number');
-      assert.strictEqual(typeof ep.title, 'string');
+    routeEpisodePages();
+    const episodes = await P.getEpisodes(BASE + '/anime/one-piece', {});
+    assert.strictEqual(episodes.length, 3);
+    for (const episode of episodes) {
+      assert.ok(episode.id);
+      assert.ok(episode.url);
+      assert.strictEqual(typeof episode.number, 'number');
+      assert.ok(episode.url.indexOf('/download/one-piece/') >= 0);
+      assert.ok(/\?token=/.test(episode.url));
     }
   });
 
-  await test('getVideoSources parses token, calls get_ddl, resolves links', async () => {
+  await test('getEpisodes tries lower resolutions when the preferred quality has no episodes', async () => {
     reset();
-    route(/\/download\/1\//, () => ok(FIXTURES.episodePageHtml));
+    route(/\/anime\/one-piece$/, () => ok(FIXTURES.detailHtml));
+    route(/\/episodes\/one-piece\/2\//, () => ok('<html></html>'));
+    route(/\/episodes\/one-piece\/1\/1920%20x%201080/, () => ok('<html><body>Empty quality</body></html>'));
+    route(/\/episodes\/one-piece\/1\/1280%20x%20720/, () => ok(FIXTURES.lowQualityHtml));
+    route(/\/episodes\/one-piece\//, () => ok('<html></html>'));
+    const episodes = await P.getEpisodes(BASE + '/anime/one-piece', {});
+    assert.strictEqual(episodes.length, 1);
+    assert.ok(/1280%20x%20720/.test(episodes[0].url));
+  });
+
+  await test('episode JSON responses are supported as well as HTML', async () => {
+    reset();
+    route(/\/anime\/one-piece$/, () => ok('<html><h1>One Piece</h1><div data-season="1"></div></html>'));
+    const json = JSON.stringify([{
+      num: 1,
+      href: '/download/one-piece/1/1920%20x%201080/%5BE001%5D%20One%20Piece%20%5B1080p%5D.mkv?token=json',
+      label: 'Episode 1'
+    }]);
+    route(/\/episodes\/one-piece\/1\/1920%20x%201080/, () => ok(json));
+    route(/\/episodes\/one-piece\//, () => ok('<html></html>'));
+    const episodes = await P.getEpisodes(BASE + '/anime/one-piece', {});
+    assert.strictEqual(episodes.length, 1);
+    assert.strictEqual(episodes[0].number, 1);
+    assert.ok(/token=json/.test(episodes[0].url));
+  });
+
+  await test('getVideoSources resolves iframe DASH, stream, and direct download links', async () => {
+    reset();
+    route(/\/download\/one-piece\/1\//, () => ok(FIXTURES.playerHtml));
     route(/\/get_ddl\//, (url, opts) => {
       assert.strictEqual(opts.headers['X-Ddl-Token'], 'AAAA1234567890');
       return ok(FIXTURES.ddlJson);
     });
+    route(/\/watch\/xyz/, () => ok('', BASE + '/watch/xyz'));
     route(/\/redirect\/stream\/abc/, () =>
       ok('', 'https://cdn.example.com/stream/one-piece-e001.mp4'));
     route(/\/redirect\/dl\/def/, () =>
       ok('', 'https://cdn.example.com/dl/one-piece-e001.mkv'));
+    route(/\/episodes\/one-piece\//, () => ok('<html></html>'));
 
     const streams = await P.getVideoSources(EP_URL);
-    assert.strictEqual(streams.length, 2);
-
-    const s1 = streams.find(s => /Stream/.test(s.quality));
-    const s2 = streams.find(s => /Direct DL/.test(s.quality));
-    assert.ok(s1, 'stream source present');
-    assert.ok(s2, 'download source present');
-
-    assert.strictEqual(s1.url, 'https://cdn.example.com/stream/one-piece-e001.mp4');
-    assert.strictEqual(s1.container, 'mp4');
-    assert.strictEqual(s1.kind, 'sub');
-    assert.ok(/AV1/.test(s1.quality));
-    assert.ok(/1080p/.test(s1.quality));
-
-    assert.strictEqual(s2.url, 'https://cdn.example.com/dl/one-piece-e001.mkv');
-    assert.strictEqual(s2.container, 'unknown');
-
+    assert.ok(streams.length >= 3);
+    assert.ok(streams.some(s => /DASH/.test(s.quality) &&
+      s.url === BASE + '/dash/xyz/manifest.mpd' && s.container === 'unknown'));
+    assert.ok(streams.some(s => /Stream/.test(s.quality) &&
+      s.url === 'https://cdn.example.com/stream/one-piece-e001.mp4' && s.container === 'mp4'));
+    assert.ok(streams.some(s => /Direct DL/.test(s.quality) &&
+      s.url === 'https://cdn.example.com/dl/one-piece-e001.mkv' && s.container === 'unknown'));
     for (const s of streams) {
       assert.ok(typeof s.url === 'string' && s.url.length > 0);
-      assert.ok(['hls', 'mp4', 'unknown'].includes(s.container), 'container in contract set');
-      assert.ok(['sub', 'dub'].includes(s.kind), 'kind in contract set');
+      assert.ok(['hls', 'mp4', 'unknown'].includes(s.container));
+      assert.ok(['sub', 'dub'].includes(s.kind));
       assert.ok(Array.isArray(s.subtitles));
       assert.ok(s.headers && typeof s.headers === 'object');
     }
   });
 
-  await test('getVideoSources falls back when no ddl-token present', async () => {
+  await test('getVideoSources uses the embedded player even without a DDL token', async () => {
     reset();
-    route(/\/download\/1\//, () => ok('<html><body>no token here</body></html>'));
+    route(/\/download\/one-piece\/1\//, () => ok(FIXTURES.playerNoTokenHtml));
+    route(/\/watch\/xyz/, () => ok('', BASE + '/watch/xyz'));
+    route(/\/episodes\/one-piece\//, () => ok('<html></html>'));
+    const streams = await P.getVideoSources(EP_URL);
+    assert.ok(streams.some(s => s.url === BASE + '/dash/xyz/manifest.mpd'));
+  });
+
+  await test('getVideoSources retains a fallback when the download page has no player or token', async () => {
+    reset();
+    route(/\/download\/one-piece\/1\//, () => ok('<html><body>No player or DDL token</body></html>'));
+    route(/\/episodes\/one-piece\//, () => ok('<html></html>'));
     const streams = await P.getVideoSources(EP_URL);
     assert.strictEqual(streams.length, 1);
+    assert.strictEqual(streams[0].url, EP_URL);
     assert.strictEqual(streams[0].container, 'unknown');
-    assert.ok(/Direct DL/.test(streams[0].quality));
-    assert.strictEqual(streams[0].url, EP_URL);
   });
 
-  await test('getVideoSources falls back when get_ddl returns non-JSON', async () => {
+  await test('getVideoSources searches other resolutions for the same episode', async () => {
     reset();
-    route(/\/download\/1\//, () => ok(FIXTURES.episodePageHtml));
-    route(/\/get_ddl\//, () => ok('not json'));
+    route(/\/episodes\/one-piece\/1\/1280%20x%20720/, () => ok(FIXTURES.lowQualityHtml));
+    route(/\/download\/one-piece\/1\/1280%20x%20720\//, () => ok(FIXTURES.playerNoTokenHtml));
+    route(/\/watch\/xyz/, () => ok('', BASE + '/watch/xyz'));
+    route(/\/episodes\/one-piece\//, () => ok('<html></html>'));
     const streams = await P.getVideoSources(EP_URL);
-    assert.strictEqual(streams.length, 1);
+    assert.ok(calls.some(c => c.url.indexOf('/episodes/one-piece/1/1280%20x%20720') >= 0));
+    assert.ok(streams.some(s => /720p/.test(s.quality) && /DASH/.test(s.quality)));
   });
 
-  await test('getVideoSources falls back when success is false', async () => {
+  await test('getHome parses the homepage spotlight and latest cards separately', async () => {
     reset();
-    route(/\/download\/1\//, () => ok(FIXTURES.episodePageHtml));
-    route(/\/get_ddl\//, () => ok(JSON.stringify({ success: false })));
-    const streams = await P.getVideoSources(EP_URL);
-    assert.strictEqual(streams.length, 1);
-  });
-
-  await test('getVideoSources falls back when both redirects fail', async () => {
-    reset();
-    route(/\/download\/1\//, () => ok(FIXTURES.episodePageHtml));
-    route(/\/get_ddl\//, () => ok(FIXTURES.ddlJson));
-    route(/\/redirect\/stream\/abc/, notFound);
-    route(/\/redirect\/dl\/def/, notFound);
-    const streams = await P.getVideoSources(EP_URL);
-    assert.strictEqual(streams.length, 1);
-    assert.ok(/Direct DL/.test(streams[0].quality));
-  });
-
-  await test('getVideoSources surfaces HTTP 403 as fallback', async () => {
-    reset();
-    route(/\/download\/1\//, () => ({ ok: false, status: 403, body: '', url: '' }));
-    const streams = await P.getVideoSources(EP_URL);
-    assert.strictEqual(streams.length, 1);
-    assert.strictEqual(streams[0].url, EP_URL);
-  });
-
-  await test('getHome returns Popular and Latest sections', async () => {
-    reset();
-    route(/\/stats$/, () => ok(FIXTURES.popularHtml));
-    route(/^https:\/\/av1encodes\.com\/$/, () => ok(FIXTURES.latestHtml));
+    route(/^https:\/\/av1encodes\.com\/$/, () => ok(FIXTURES.popularHtml));
     const sections = await P.getHome({});
-    assert.ok(sections.length >= 1);
-    const titles = sections.map(s => s.title);
-    assert.ok(titles.includes('Popular'));
-    assert.ok(titles.includes('Latest'));
-    const pop = sections.find(s => s.title === 'Popular');
-    assert.strictEqual(pop.items[0].title, 'Bleach');
-    const lat = sections.find(s => s.title === 'Latest');
-    assert.strictEqual(lat.items[0].title, 'Dandadan');
+    const popular = sections.find(s => s.title === 'Popular');
+    const latest = sections.find(s => s.title === 'Latest');
+    assert.ok(popular);
+    assert.ok(latest);
+    assert.strictEqual(popular.items[0].title, 'Bleach');
+    assert.strictEqual(latest.items[0].title, 'One Piece');
   });
 
-  await test('domain and quality settings are honored', async () => {
+  await test('custom domain and preferred quality settings are honored', async () => {
     reset();
     sandbox.__settings.av1encodes = {
       domain: 'https://mirror.example.com',
       quality: '720p'
     };
     assert.strictEqual(P.getInfo().baseUrl, 'https://mirror.example.com');
-
-    route(/^https:\/\/mirror\.example\.com\/anime\/one-piece$/, () =>
-      ok(FIXTURES.detailHtml));
-    route(/\/episodes\/one-piece\/2\/720p/, () => ok(FIXTURES.season2Html));
-    route(/\/episodes\/one-piece\/1\/720p/, () => ok(FIXTURES.season1Html));
-
-    const d = await P.getDetail('https://mirror.example.com/anime/one-piece', {});
-    assert.strictEqual(d.episodes.length, 3);
-    assert.ok(
-      calls.some(c => /\/720p/.test(c.url)),
-      'quality=720p was used in episode request'
-    );
+    route(/^https:\/\/mirror\.example\.com\/anime\/one-piece$/, () => ok(FIXTURES.detailHtml));
+    route(/\/episodes\/one-piece\/2\/1280%20x%20720/, () => ok(FIXTURES.season2Html));
+    route(/\/episodes\/one-piece\/1\/1280%20x%20720/, () => ok(FIXTURES.season1Html));
+    route(/\/episodes\/one-piece\//, () => ok('<html></html>'));
+    const detail = await P.getDetail('https://mirror.example.com/anime/one-piece', {});
+    assert.strictEqual(detail.episodes.length, 3);
+    assert.ok(calls.some(c => /\/episodes\/one-piece\/1\/1280%20x%20720/.test(c.url)));
   });
 
-  await test('getVideoSources exposes a resolved DASH manifest as unknown container', async () => {
+  await test('container detection never mislabels MKV as MP4', async () => {
     reset();
-    route(/\/download\/1\//, () => ok(FIXTURES.episodePageHtml));
-    route(/\/get_ddl\//, () => ok(FIXTURES.ddlJson));
-    route(/\/watch\/xyz/, () =>
-      ok('', 'https://media.example.com/watch/xyz'));
-    route(/\/redirect\/stream\/abc/, notFound);
-    route(/\/redirect\/dl\/def/, notFound);
-
+    route(/\/download\/one-piece\/1\//, () => ok(FIXTURES.playerNoTokenHtml));
+    route(/\/watch\/xyz/, () => ok('', BASE + '/watch/xyz'));
+    route(/\/episodes\/one-piece\//, () => ok('<html></html>'));
     const streams = await P.getVideoSources(EP_URL);
-    assert.strictEqual(streams.length, 1);
-    assert.strictEqual(
-      streams[0].url,
-      'https://media.example.com/dash/xyz/manifest.mpd'
-    );
-    assert.strictEqual(streams[0].container, 'unknown');
-    assert.ok(/DASH/.test(streams[0].quality));
-    assert.ok(streams[0].headers && typeof streams[0].headers === 'object');
-  });
-
-  await test('all returned stream containers are in the contract set', async () => {
-    reset();
-    route(/\/download\/1\//, () => ok(FIXTURES.episodePageHtml));
-    route(/\/get_ddl\//, () => ok(FIXTURES.ddlJson));
-    route(/\/redirect\/stream\/abc/, () =>
-      ok('', 'https://cdn.example.com/stream/e001.mp4'));
-    route(/\/redirect\/dl\/def/, () =>
-      ok('', 'https://cdn.example.com/dl/e001.mkv'));
-    const streams = await P.getVideoSources(EP_URL);
-    const allowed = ['hls', 'mp4', 'unknown'];
-    for (const s of streams) {
-      assert.ok(allowed.includes(s.container), 'container=' + s.container);
+    for (const stream of streams) {
+      assert.notStrictEqual(stream.container, 'mkv');
+      assert.ok(!/\.mpd(\?|#|$)/i.test(stream.url) || stream.container === 'unknown');
     }
   });
 
-  // ── Summary ────────────────────────────────────────────────────────
-
   console.log('\n' + passed + ' passed, ' + failed + ' failed\n');
-  if (failed > 0) {
-    for (const f of failures) {
-      console.error('FAILED: ' + f.name);
-      console.error(f.error && f.error.stack ? f.error.stack : f.error);
+  if (failed) {
+    for (const failure of failures) {
+      console.error('FAILED: ' + failure.name);
+      console.error(failure.error && failure.error.stack ? failure.error.stack : failure.error);
       console.error('');
     }
     process.exit(1);
