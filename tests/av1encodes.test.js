@@ -99,11 +99,24 @@ function route(pattern, handler) {
 }
 
 function ok(body, url) {
-  return { ok: true, status: 200, body, url: url || '' };
+  const textBody = String(body == null ? '' : body);
+  return {
+    ok: true,
+    status: 200,
+    body: textBody,
+    url: url || '',
+    text: () => Promise.resolve(textBody)
+  };
 }
 
 function notFound() {
-  return { ok: false, status: 404, body: '', url: '' };
+  return {
+    ok: false,
+    status: 404,
+    body: '',
+    url: '',
+    text: () => Promise.resolve('')
+  };
 }
 
 function mockFetch(url, opts) {
@@ -218,7 +231,7 @@ function reset() {
     reset();
     route(/\/search/, notFound);
     const res = await P.search('x', 1, {});
-    assert.deepStrictEqual(res, []);
+    assert.strictEqual(res.length, 0);
   });
 
   await test('getDetail returns metadata + episodes', async () => {
@@ -231,7 +244,7 @@ function reset() {
     assert.strictEqual(d.title, 'One Piece');
     assert.strictEqual(d.cover, BASE + '/covers/one-piece.jpg');
     assert.strictEqual(d.description, 'A pirate adventure.');
-    assert.deepStrictEqual(d.genres, ['Action', 'Adventure']);
+    assert.strictEqual(JSON.stringify(d.genres), JSON.stringify(['Action', 'Adventure']));
     assert.strictEqual(d.status, 'completed');
     assert.strictEqual(d.type, 'anime');
     assert.strictEqual(d.sourceId, 'av1encodes');
