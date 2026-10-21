@@ -1,4 +1,4 @@
-// AV1Encodes v1.0.1 regression tests; all network calls are mocked.
+// AV1Encodes v1.0.2 full integration regression tests; all network calls are mocked.
 'use strict';
 const assert = require('assert');
 const fs = require('fs');
@@ -57,16 +57,23 @@ function mockFetch(url, options) {
   }
   return Promise.resolve(fail(404));
 }
-const sandbox = {
-  __SOURCE_ID: 'av1encodes',
-  __settings: { av1encodes: {} },
-  fetch: mockFetch, console,
-  Promise, JSON, String, Number, Boolean, Object, Array, Math, RegExp, Error,
-  encodeURIComponent, decodeURIComponent, parseInt, parseFloat, isNaN, setTimeout, clearTimeout
-};
-vm.createContext(sandbox);
-vm.runInContext(fs.readFileSync(PROVIDER_PATH, 'utf8'), sandbox);
-const P = sandbox;
+function createProviderSandbox() {
+  const context = {
+    __SOURCE_ID: 'av1encodes',
+    __settings: { av1encodes: {} },
+    fetch: mockFetch, console,
+    Promise, JSON, String, Number, Boolean, Object, Array, Math, RegExp, Error, Date,
+    encodeURIComponent, decodeURIComponent, parseInt, parseFloat, isNaN, setTimeout, clearTimeout
+  };
+  vm.createContext(context);
+  vm.runInContext(fs.readFileSync(PROVIDER_PATH, 'utf8'), context);
+  return context;
+}
+
+// Recreate the JS runtime between tests so module-level episode/DDL caches
+// cannot leak data between otherwise independent cases.
+let sandbox = createProviderSandbox();
+let P = sandbox;
 for (const key of ['getInfo','getSettings','getHome','search','getDetail','getEpisodes','getVideoSources','getStreams']) {
   assert.strictEqual(typeof P[key], 'function', key + ' should be exported');
 }
@@ -77,7 +84,11 @@ async function test(name, fn) {
   catch (e) { failed++; failures.push({ name: name, error: e }); console.log('  ✗ ' + name); console.log('    ' + (e && e.message || String(e))); }
 }
 function reset() {
-  routes.length = 0; calls.length = 0; sandbox.__settings = { av1encodes: {} };
+  routes.length = 0;
+  calls.length = 0;
+  sandbox = createProviderSandbox();
+  P = sandbox;
+  sandbox.__settings = { av1encodes: {} };
 }
 function routeDetail(slug, html) {
   route(new RegExp('/anime/' + slug + '$'), () => ok(html || FIXTURES.detail));
@@ -94,12 +105,12 @@ function routeRedirects() {
 }
 
 (async function run() {
-  console.log('\nAV1Encodes v1.0.1 regression tests\n');
+  console.log('\nAV1Encodes v1.0.2 full integration regression tests\n');
 
-  await test('v1.0.1 provider contract and metadata', async () => {
+  await test('v1.0.2 provider contract and metadata', async () => {
     reset();
     assert.strictEqual(P.getInfo().name, 'AV1Encodes');
-    assert.strictEqual(P.getInfo().version, '1.0.1');
+    assert.strictEqual(P.getInfo().version, '1.0.2');
     assert.strictEqual(P.getInfo().type, 'anime');
     assert.strictEqual(P.getInfo().lang, 'en');
     assert.deepStrictEqual(JSON.parse(JSON.stringify(P.getSettings().map(x => x.key))), ['domain','quality','showTorrent']);
@@ -128,6 +139,69 @@ function routeRedirects() {
     const items = await P.search('naruto', 1, {});
     assert.strictEqual(items.length, 3);
     assert.ok(items.every(x => x.url.indexOf(ALT + '/') === 0));
+  });
+
+  await test('auto mode preserves the successful fallback domain through search, detail, episodes and playback URL', async () => {
+    reset();
+    // The default mirror is blocked; the second mirror serves the same title.
+    route(/^https:\/\/av1please\.com\/search\?q=one%20piece&page=1$/, () => fail(403));
+    route(/^https:\/\/animealpha\.cc\/search\?q=one%20piece&page=1$/, () => ok(FIXTURES.search));
+
+    const results = await P.search('one piece', 1, {});
+    const show = results.find(item => item.title === 'One Piece');
+    assert.ok(show);
+    assert.ok(show.url.startsWith(ALT + '/'));
+
+    const detailHtml = '<html><body><h1>One Piece</h1><div data-season="1">Season 1</div></body></html>';
+    route(/^https:\/\/animealpha\.cc\/anime\/one-piece$/, () => ok(detailHtml));
+    route(/^https:\/\/animealpha\.cc\/episodes\/one-piece\/1\/1920%20x%201080$/, () => ok(FIXTURES.episodesJson));
+
+    const detail = await P.getDetail(show.url, {});
+    assert.strictEqual(detail.title, 'One Piece');
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(detail.episodes.map(ep => ep.number))), [1, 2]);
+    assert.ok(detail.episodes.every(ep => ep.url.startsWith(ALT + '/download/')),
+      'episode links must stay on the mirror that returned the episode list');
+
+    route(/^https:\/\/animealpha\.cc\/watch\/one-piece-01/, () =>
+      ok('', ALT + '/watch/one-piece-01'));
+    route(/^https:\/\/animealpha\.cc\/redirect\/stream\/one-piece-01/, () =>
+      ok('', 'https://cdn.example.com/one-piece-01.mp4'));
+    route(/^https:\/\/animealpha\.cc\/redirect\/download\/one-piece-01/, () =>
+      ok('', 'https://cdn.example.com/one-piece-01.mkv'));
+
+    // Resolve an episode from the same URLs that were discovered through
+    // search, rather than constructing a synthetic playback URL.
+    const sources = await P.getVideoSources(detail.episodes[0].url);
+    assert.ok(sources.some(source => /DASH/.test(source.quality) &&
+      source.url === ALT + '/dash/one-piece-01/manifest.mpd'));
+    assert.ok(sources.some(source => /Stream/.test(source.quality) &&
+      source.url === 'https://cdn.example.com/one-piece-01.mp4'));
+    assert.ok(!calls.some(call => call.url === BASE + '/get_token'),
+      'inline DDL should work without falling back to the blocked default domain');
+
+    // Playback calls getEpisodes again. A successful detail result must be
+    // reused, not re-fetched from the known-bad default mirror.
+    const before = calls.length;
+    const episodes = await P.getEpisodes(show.url, {});
+    assert.strictEqual(episodes.length, 2);
+    assert.strictEqual(calls.length, before, 'non-empty episode cache should avoid a duplicate detail/episode request');
+    assert.ok(!calls.some(call => call.url.startsWith(BASE + '/episodes/')),
+      'episode requests must not switch back to the default host');
+    assert.strictEqual(episodes[0].url, detail.episodes[0].url);
+  });
+
+  await test('explicit optional domain selection intentionally overrides a known absolute anime URL', async () => {
+    reset();
+    sandbox.__settings = { av1encodes: { domain: ALT } };
+    route(/^https:\/\/animealpha\.cc\/anime\/one-piece$/, () =>
+      ok('<html><body><h1>One Piece</h1><div data-season="1"></div></body></html>'));
+    route(/^https:\/\/animealpha\.cc\/episodes\/one-piece\/1\/1280%20x%20720$/, () => ok(FIXTURES.episodesJson));
+
+    const episodes = await P.getEpisodes(BASE + '/anime/one-piece', {});
+    assert.strictEqual(episodes.length, 2);
+    assert.ok(calls.some(call => call.url === ALT + '/anime/one-piece'));
+    assert.ok(calls.some(call => call.url === ALT + '/episodes/one-piece/1/1280%20x%20720'));
+    assert.ok(!calls.some(call => call.url === BASE + '/anime/one-piece'));
   });
 
   await test('403 warm-up retries the original request once', async () => {
@@ -180,6 +254,21 @@ function routeRedirects() {
       'source episode objects should not expose synthetic DDL metadata');
   });
 
+  await test('absolute upstream episode href keeps its signed host and token', async () => {
+    reset();
+    routeDetail('one-piece', '<html><body><h1>One Piece</h1><div data-season="1"></div></body></html>');
+    const absoluteJson = JSON.stringify([{
+      num: 1,
+      label: 'Episode 01',
+      href: 'https://av1encodes.com/download/one-piece/1/1920%20x%201080/%5BS01-E01%5D%20One%20Piece%20%5B1080p%5D.mkv?token=signed-for-legacy-host'
+    }]);
+    routeEpisodePage('one-piece', '1', '1920 x 1080', absoluteJson);
+    const episodes = await P.getEpisodes(BASE + '/anime/one-piece', {});
+    assert.strictEqual(episodes.length, 1);
+    assert.ok(episodes[0].url.startsWith(LEGACY + '/download/'));
+    assert.ok(episodes[0].url.endsWith('?token=signed-for-legacy-host'));
+  });
+
   await test('HTML episode links parse S01-E01 names and retain the listing token', async () => {
     reset();
     routeDetail('one-piece');
@@ -220,6 +309,7 @@ function routeRedirects() {
       '; calls=' + JSON.stringify(calls.map(x => x.url)));
     assert.ok(sources.some(x => /Stream/.test(x.quality) && x.url === 'https://cdn.example.com/one-piece-01.mp4'));
     assert.ok(sources.some(x => /Direct DL/.test(x.quality) && x.url === 'https://cdn.example.com/one-piece-01.mkv'));
+    assert.ok(!sources.some(x => /Torrent/.test(x.quality)), 'torrent URLs stay hidden unless enabled');
     assert.ok(!calls.some(x => /\/get_token(?:\?|$)/.test(x.url)));
     assert.ok(!calls.some(x => /\/get_ddl\//.test(x.url)));
     assert.ok(!calls.some(x => /\/download\/one-piece\/1\//.test(x.url)));
@@ -290,6 +380,85 @@ function routeRedirects() {
     const items = await P.getEpisodes(ALT + '/anime/one-piece', {});
     assert.ok(items.length > 0);
     assert.ok(calls.some(x => /\/episodes\/one-piece\/1\/1280%20x%20720/.test(x.url)));
+  });
+
+  await test('playback tries the next resolution after upstream fails to generate a link', async () => {
+    reset();
+    route(/\/get_token$/, () => ok(JSON.stringify({ token: 'fresh-token-fallback' })));
+    route(/\/download\/one-piece\/1\/1920%20x%201080\/.*[?&]token=fresh-token-fallback/, () =>
+      ok('<html><body><h1>Oops! Something went wrong</h1><p>Unable to generate download link</p></body></html>'));
+    const low = '<html><a href="/download/one-piece/1/1280%20x%20720/%5BS01-E01%5D%20One%20Piece%20%5B720p%5D%20%5BDual%5D.mkv?token=listing-token">Episode 01 Dual</a></html>';
+    route(/^https:\/\/av1please\.com\/episodes\/one-piece\/1\/1280%20x%20720$/, () => ok(low));
+    route(/\/download\/one-piece\/1\/1280%20x%20720\/.*[?&]token=fresh-token-fallback/, () => ok(FIXTURES.player));
+    route(/\/get_ddl\//, () => ok(FIXTURES.ddl));
+    routeRedirects();
+
+    const sources = await P.getVideoSources(EP_URL);
+    assert.ok(calls.some(call => /\/episodes\/one-piece\/1\/1280%20x%20720/.test(call.url)),
+      '720p episode list must be attempted after 1080p link generation fails');
+    assert.ok(sources.some(source => /DASH/.test(source.quality)),
+      'the lower-resolution route should still produce playable stream candidates');
+  });
+
+  await test('search without a query browses the anime index and respects page numbering', async () => {
+    reset();
+    route(/^https:\/\/av1please\.com\/anime\?page=0$/, () => ok(FIXTURES.search));
+    const items = await P.search('', 1, {});
+    assert.strictEqual(items.length, 3);
+    assert.ok(calls.some(call => call.url === BASE + '/anime?page=0'));
+  });
+
+  await test('wrapped episode JSON objects are accepted without losing source labels', async () => {
+    reset();
+    routeDetail('naruto', '<html><body><h1>Naruto</h1><div data-season="1"></div></body></html>');
+    const payload = JSON.stringify({ items: [{
+      num: 7,
+      label: 'Naruto Episode 07',
+      audio: 'sub',
+      href: '/download/naruto/1/1920%20x%201080/%5BS01-E07%5D%20Naruto%20%5B1080p%5D.mkv?token=naruto-seven'
+    }]});
+    route(/^https:\/\/av1please\.com\/episodes\/naruto\/1\/1920%20x%201080$/, () => ok(payload));
+    const episodes = await P.getEpisodes(BASE + '/anime/naruto', {});
+    assert.strictEqual(episodes.length, 1);
+    assert.strictEqual(episodes[0].number, 7);
+    assert.strictEqual(episodes[0].title, 'Naruto Episode 07');
+    assert.ok(episodes[0].url.endsWith('?token=naruto-seven'));
+  });
+
+  await test('empty episode responses are not cached and a later successful retry is visible', async () => {
+    reset();
+    const animeUrl = BASE + '/anime/naruto';
+    routeDetail('naruto', '<html><body><h1>Naruto</h1><div data-season="1"></div></body></html>');
+    route(/^https:\/\/av1please\.com\/episodes\/naruto\/1\//, () => ok(FIXTURES.emptyEpisodes));
+    const first = await P.getEpisodes(animeUrl, {});
+    assert.strictEqual(first.length, 0);
+
+    // Keep the same provider instance and its caches, but simulate the upstream
+    // service recovering between calls.
+    routes.length = 0;
+    calls.length = 0;
+    routeDetail('naruto', '<html><body><h1>Naruto</h1><div data-season="1"></div></body></html>');
+    const payload = JSON.stringify([{
+      num: 1,
+      label: 'Naruto Episode 1',
+      href: '/download/naruto/1/1920%20x%201080/%5BS01-E01%5D%20Naruto%20%5B1080p%5D.mkv?token=recovered'
+    }]);
+    route(/^https:\/\/av1please\.com\/episodes\/naruto\/1\/1920%20x%201080$/, () => ok(payload));
+    const recovered = await P.getEpisodes(animeUrl, {});
+    assert.strictEqual(recovered.length, 1);
+    assert.ok(recovered[0].url.endsWith('?token=recovered'));
+  });
+
+  await test('torrent source is emitted only when the optional setting is enabled', async () => {
+    reset();
+    sandbox.__settings = { av1encodes: { showTorrent: true } };
+    routeDetail('one-piece', '<html><body><h1>One Piece</h1><div data-season="1"></div></body></html>');
+    routeEpisodePage('one-piece', '1', '1920 x 1080', FIXTURES.episodesJson);
+    routeRedirects();
+    const episodes = await P.getEpisodes(BASE + '/anime/one-piece', {});
+    const streams = await P.getVideoSources(episodes.find(ep => ep.number === 1).url);
+    assert.ok(streams.some(source => /Torrent/.test(source.quality) &&
+      source.url === 'magnet:?xt=urn:btih:abcdef'));
   });
 
   await test('container detection keeps MP4 distinct and DASH as unknown', async () => {

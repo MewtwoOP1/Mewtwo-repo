@@ -5,7 +5,7 @@
 
 const SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID)
   ? String(__SOURCE_ID) : 'av1encodes';
-const VERSION = '1.0.1';
+const VERSION = '1.0.2';
 const DEFAULT_DOMAIN = 'https://av1please.com';
 const SITE_DOMAINS = [
   'https://av1please.com',
@@ -15,9 +15,10 @@ const SITE_DOMAINS = [
 const LOGO = 'https://www.google.com/s2/favicons?sz=256&domain=av1encodes.com';
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
   '(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
-const REQUEST_TIMEOUT_MS = 1900;
-const REDIRECT_TIMEOUT_MS = 1500;
-const WARMUP_TIMEOUT_MS = 1000;
+const REQUEST_TIMEOUT_MS = 3200;
+const REDIRECT_TIMEOUT_MS = 1800;
+const WARMUP_TIMEOUT_MS = 900;
+const EPISODE_CACHE_TTL_MS = 120000;
 const QUALITY_LIST = [
   { value: '1920 x 1080', label: '1080p' },
   { value: '1280 x 720', label: '720p' },
@@ -34,6 +35,7 @@ const EPISODE_PATTERNS = [
 ];
 const DDL_QUERY_KEY = '__av1ddl'; // Read-only legacy compatibility; new episode URLs never include this marker.
 const DDL_BY_URL = Object.create(null);
+const EPISODE_CACHE = Object.create(null);
 
 // ── Settings and provider contract ────────────────────────────────────────
 
@@ -218,12 +220,20 @@ function _setQueryParam(url, key, value) {
 }
 
 function _canonicalSiteUrl(url, base) {
-  const full = _absolute(url, base || _domain());
+  const raw = String(url || '').trim();
+  const full = _absolute(raw, base || _domain());
   if (!full) return null;
   const host = _host(full);
-  const targetBase = _origin(base) || _domain();
-  if (_isKnownHost(host)) return targetBase + _pathQuery(full);
-  return full;
+  if (!_isKnownHost(host)) return full;
+
+  const explicit = _readSetting('domain');
+  const hasExplicitDomain = !!explicit && String(explicit).trim().toLowerCase() !== 'auto';
+  // A URL returned by a successful mirror is evidence of which host actually
+  // served the title. In Auto mode preserve that origin across detail, episode
+  // and playback calls. Only an explicit user-selected domain may rewrite it.
+  const wasAbsolute = /^https?:\/\//i.test(raw) || raw.indexOf('//') === 0;
+  if (wasAbsolute && !hasExplicitDomain) return full;
+  return (_origin(_domain()) || _domain()) + _pathQuery(full);
 }
 
 function _siteBases(preferred) {
@@ -232,6 +242,9 @@ function _siteBases(preferred) {
     const origin = _origin(value);
     if (origin && out.indexOf(origin) < 0) out.push(origin);
   };
+  // The URL's own origin comes first. If it was produced by a successful mirror
+  // request, immediately switching back to the configured default makes every
+  // subsequent episode request repeat the known-bad host.
   add(preferred || _domain());
   add(_domain());
   SITE_DOMAINS.forEach(add);
@@ -244,6 +257,9 @@ function _headers(ref, base, mode) {
     'User-Agent': UA,
     'Accept-Language': 'en-US,en;q=0.9',
     'Referer': ref || site + '/',
+    'Sec-Ch-Ua': '"Chromium";v="131", "Not_A Brand";v="24", "Google Chrome";v="131"',
+    'Sec-Ch-Ua-Mobile': '?0',
+    'Sec-Ch-Ua-Platform': '"Windows"',
     'Sec-Fetch-Site': 'same-origin'
   };
   if (mode === 'json') {
@@ -255,6 +271,7 @@ function _headers(ref, base, mode) {
     headers['Upgrade-Insecure-Requests'] = '1';
     headers['Sec-Fetch-Dest'] = 'document';
     headers['Sec-Fetch-Mode'] = 'navigate';
+    headers['Sec-Fetch-User'] = '?1';
   }
   return headers;
 }
@@ -324,25 +341,34 @@ async function _requestSiteUrl(url, ref, extraHeaders, timeoutMs, context) {
 
 async function _fetchSite(rawUrl, ref, timeoutMs) {
   const firstOrigin = _origin(rawUrl);
-  const selected = firstOrigin && !_isKnownHost(_host(firstOrigin))
-    ? firstOrigin : _domain();
+  const selected = firstOrigin || _domain();
   const path = _pathQuery(rawUrl);
-  const candidates = _siteBases(selected);
+  const isEpisodeList = /^\/episodes\//i.test(_pathOnly(rawUrl));
+  // Episode lists are fetched once per season/quality and may be retried at
+  // lower resolutions by the caller. Don't multiply each such request across
+  // every mirror: selected host + one fallback is enough to protect against a
+  // domain outage without exhausting Zangetsu's per-source call budget.
+  const candidates = _siteBases(selected).slice(0, isEpisodeList ? 2 : SITE_DOMAINS.length);
   let last = { ok: false, status: 0, body: '', url: rawUrl, base: selected, reason: 'unavailable' };
   const context = { warmupUsed: false };
-  // Catalogue requests may fail over to a mirror. Playback uses exact-host
-  // calls so it never serially scans every mirror inside the resolver timeout.
   for (const base of candidates) {
     const target = base + path;
-    const response = await _requestSiteUrl(target, ref || base + '/', {}, timeoutMs || REQUEST_TIMEOUT_MS, context);
+    const response = await _requestSiteUrl(
+      target, ref || base + '/', {}, timeoutMs || REQUEST_TIMEOUT_MS, context
+    );
     if (response.ok && response.body) return response;
     last = response;
     if (response.status === 403 || response.status === 404 || response.status === 410 ||
         response.status === 429 || response.status >= 500 || response.status === 0 ||
-        response.reason === 'challenge') continue;
+        response.reason === 'challenge') {
+      continue;
+    }
     if (response.ok) return response;
   }
-  return { ok: false, status: last.status, body: '', url: rawUrl, base: last.base || selected, reason: last.reason || 'unavailable' };
+  return {
+    ok: false, status: last.status, body: '', url: rawUrl,
+    base: last.base || selected, reason: last.reason || 'unavailable'
+  };
 }
 
 function _htmlText(value) {
@@ -404,13 +430,21 @@ function _imageUrl(html, base) {
 
 function _siteLink(raw, base) {
   if (!raw) return null;
-  const full = _absolute(raw, base);
+  const rawValue = String(raw).trim().replace(/&amp;/g, '&');
+  const full = _absolute(rawValue, base);
   if (!full || !/^https?:\/\//i.test(full)) return null;
   const host = _host(full);
   if (!_isKnownHost(host)) return null;
-  // The upstream source canonicalizes known mirrors back to the selected base,
-  // so later token requests and episode pages use one consistent session host.
-  return (_origin(base) || _domain()) + _pathQuery(full);
+
+  const explicit = _readSetting('domain');
+  const hasExplicitDomain = !!explicit && String(explicit).trim().toLowerCase() !== 'auto';
+  const absoluteHref = /^https?:\/\//i.test(rawValue) || rawValue.indexOf('//') === 0;
+  // Keep absolute upstream URLs intact: its episode token may be scoped to the
+  // host that issued the link. Relative hrefs are resolved against the host
+  // which actually served the episode page. Only an explicit domain choice
+  // overrides these origins.
+  if (absoluteHref && !hasExplicitDomain) return full;
+  return (hasExplicitDomain ? _domain() : (_origin(base) || _domain())) + _pathQuery(full);
 }
 
 // ── Catalogue, search, and detail parsing ──────────────────────────────────
@@ -776,8 +810,15 @@ function _episodePageUrl(base, slug, season, resolution) {
 
 async function _fetchSeasonEpisodes(slug, season, base, qualityCandidates) {
   for (const quality of qualityCandidates) {
-    const response = await _fetchSite(_episodePageUrl(base, slug, season, quality), base + '/');
-    if (!response.body) continue;
+    const pageUrl = _episodePageUrl(base, slug, season, quality);
+    const response = await _fetchSite(pageUrl, base + '/', REQUEST_TIMEOUT_MS);
+    if (!response.body) {
+      // A network timeout or access challenge affects every resolution on this
+      // host. Retrying four quality variants would multiply the same failure.
+      if (response.status === 0 || response.status === 403 || response.status === 429 ||
+          response.status >= 500 || response.reason === 'challenge') return [];
+      continue;
+    }
     const episodes = _parseEpisodePage(response.body, response.base || base, slug, season, quality);
     if (episodes.length) return episodes;
     if (response.status === 403 || response.status === 429 || response.status >= 500 ||
@@ -795,12 +836,48 @@ async function _episodesFromHtml(slug, base, html) {
   return _uniqueEpisodes([].concat.apply([], results));
 }
 
+function _episodeCacheKey(url) {
+  return String(url || '') + '|q=' + _qualityValue(_readSetting('quality')) +
+    '|domain=' + _domain();
+}
+
+function _copyEpisodes(items) {
+  return (items || []).map(item => Object.assign({}, item));
+}
+
+function _readEpisodeCache(url) {
+  const key = _episodeCacheKey(url);
+  const hit = EPISODE_CACHE[key];
+  if (!hit) return null;
+  if (Date.now() - hit.at > EPISODE_CACHE_TTL_MS) {
+    delete EPISODE_CACHE[key];
+    return null;
+  }
+  return _copyEpisodes(hit.episodes);
+}
+
+function _writeEpisodeCache(url, episodes) {
+  if (!Array.isArray(episodes) || episodes.length === 0) return;
+  EPISODE_CACHE[_episodeCacheKey(url)] = {
+    at: Date.now(),
+    episodes: _copyEpisodes(episodes)
+  };
+}
+
 async function getEpisodes(url, opts) {
   const full = _canonicalSiteUrl(url, _domain()) || _absolute(url, _domain());
+  const cached = _readEpisodeCache(full);
+  if (cached) return cached;
   const slug = _slugFromAnimeUrl(full);
   const page = await _fetchSite(full, _domain() + '/');
   if (!page.body) return [];
-  return _episodesFromHtml(slug, page.base || _origin(full) || _domain(), page.body);
+  const episodes = await _episodesFromHtml(slug, page.base || _origin(full) || _domain(), page.body);
+  _writeEpisodeCache(full, episodes);
+  if (!episodes.length && typeof console !== 'undefined' && console.warn) {
+    console.warn('[AV1Encodes] no episodes parsed for ' + full +
+      ' (page host=' + (page.base || _origin(full) || 'unknown') + ')');
+  }
+  return episodes;
 }
 
 async function getDetail(url, opts) {
@@ -810,6 +887,11 @@ async function getDetail(url, opts) {
   const detail = _detailFromHtml(page.url || full, page.body, base);
   if (page.body) {
     detail.episodes = await _episodesFromHtml(_slugFromAnimeUrl(full), base, page.body);
+    _writeEpisodeCache(full, detail.episodes);
+    if (!detail.episodes.length && typeof console !== 'undefined' && console.warn) {
+      console.warn('[AV1Encodes] detail loaded but no episodes parsed for ' + full +
+        ' (served by ' + base + ')');
+    }
   }
   return detail;
 }
