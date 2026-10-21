@@ -320,6 +320,29 @@ function routeEpisodePages() {
     assert.ok(/token=json/.test(episodes[0].url));
   });
 
+  await test('fresh-token lookup skips non-JSON primary response and falls back to AnimeAlpha', async () => {
+    reset();
+    route(/^https:\/\/av1encodes\.com\/get_token$/, () => ok('<html><body>not a token response</body></html>'));
+    route(/^https:\/\/animealpha\.cc\/get_token$/, () => ok(JSON.stringify({ token: 'mirror-token-456' })));
+    route(/^https:\/\/animealpha\.cc\/download\/one-piece\/1\/.*[?&]token=mirror-token-456/, () =>
+      ok(FIXTURES.playerHtml));
+    route(/\/get_ddl\//, () => ok(FIXTURES.ddlJson));
+    route(/\/watch\/xyz/, () => ok('', 'https://animealpha.cc/watch/xyz'));
+    route(/\/redirect\/stream\/abc/, () =>
+      ok('', 'https://cdn.example.com/stream/one-piece-e001.mp4'));
+    route(/\/redirect\/dl\/def/, () =>
+      ok('', 'https://cdn.example.com/dl/one-piece-e001.mkv'));
+    route(/\/episodes\/one-piece\//, () => ok('<html></html>'));
+
+    const streams = await P.getVideoSources(EP_URL);
+    assert.ok(calls.some(call => call.url === BASE + '/get_token'));
+    assert.ok(calls.some(call => call.url === MIRROR + '/get_token'));
+    assert.ok(calls.some(call => call.url.indexOf(MIRROR + '/download/one-piece/1/') === 0 &&
+      /[?&]token=mirror-token-456(?:&|$)/.test(call.url)));
+    assert.ok(streams.some(stream => /DASH/.test(stream.quality) &&
+      stream.url === MIRROR + '/dash/xyz/manifest.mpd'));
+  });
+
   await test('getVideoSources refreshes expired episode token before fetching the download page', async () => {
     reset();
     route(/\/get_token$/, () => ok(JSON.stringify({ token: 'fresh-token-123' })));
