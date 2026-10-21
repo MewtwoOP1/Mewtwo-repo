@@ -33,7 +33,6 @@ const EPISODE_PATTERNS = [
   /\bE0*(\d{1,4})\b/i
 ];
 const DDL_QUERY_KEY = '__av1ddl';
-const DDL_CACHE = Object.create(null);
 
 // ── Settings and provider contract ────────────────────────────────────────
 
@@ -651,7 +650,6 @@ function _episodeFromLink(rawHref, label, base, season, slug, resolution, number
   if (!href) return null;
   const n = Number(number) || _episodeNumber(filename + ' ' + label);
   const cleanKey = _episodeKey(href);
-  if (ddl && typeof ddl === 'object') DDL_CACHE[cleanKey] = ddl;
   let url = href;
   if (ddl && typeof ddl === 'object' && _hasDdlLinks(ddl)) {
     const packed = encodeURIComponent(JSON.stringify(ddl));
@@ -820,8 +818,9 @@ function _parseDdl(body) {
 }
 
 function _getInlineDdl(url) {
-  let ddl = DDL_CACHE[_episodeKey(url)] || null;
-  if (ddl) return ddl;
+  // Only consume DDL embedded in this exact episode URL. A route-only cache
+  // key can accidentally reuse another episode's payload after stripping the
+  // expiring token, which skips the fresh-token playback flow.
   const packed = _queryParam(url, DDL_QUERY_KEY);
   if (!packed) return null;
   try {
