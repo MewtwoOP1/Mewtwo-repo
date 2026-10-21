@@ -1159,23 +1159,73 @@ async function _getFreshToken(base, context) {
 }
 
 async function _resolveDownloadPage(url, info, context) {
-  const base = _origin(url) || _domain();
-  const cleanUrl = _withoutQueryParams(url, ['token', DDL_QUERY_KEY]);
-  const token = await _getFreshToken(base, context);
-  if (!token) return { streams: [], stop: true, status: 0, reason: 'token-unavailable' };
-  const downloadUrl = _appendFreshToken(cleanUrl, token);
-  const page = await _requestSiteUrl(downloadUrl, base + '/', {}, REQUEST_TIMEOUT_MS, context);
-  if (!page.ok || !page.body) {
-    return { streams: [], stop: page.status === 403 || page.status === 429 ||
-      page.status >= 500 || page.reason === 'challenge', status: page.status, reason: page.reason || 'download-failed' };
+  const originalBase = _origin(url) || _domain();
+  // AV1Encodes issues a signed token on each episode href. Match the current
+  // upstream flow by trying that href first, not replacing its token with a
+  // speculative /get_token request before the browser/player page is opened.
+  let downloadUrl = _withoutQueryParams(url, [DDL_QUERY_KEY]);
+  let currentInfo = Object.assign({}, info);
+  let page = await _fetchSite(downloadUrl, originalBase + '/', REQUEST_TIMEOUT_MS);
+  let base = page.base || _origin(page.url) || _origin(downloadUrl) || originalBase;
+  let iframe = page.body ? _findIframe(page.body) : null;
+  let ddlToken = page.body ? _findDdlToken(page.body) : null;
+
+  const hasPlayablePage = () => !!iframe || !!ddlToken;
+  const generatorFailed = () =>
+    /unable to generate download link|oops!?\s+something went wrong/i.test(page.body || '');
+
+  // Current Aniyomi refreshes the episode href from /episodes when the signed
+  // download page no longer contains the player. This is the primary refresh
+  // path; keep the source's original filename and episode number for matching.
+  if (!hasPlayablePage() && !generatorFailed()) {
+    const preferredResolution = currentInfo.resolution || _qualityValue(_readSetting('quality'));
+    const fresh = await _findEpisodeAtResolution(currentInfo, preferredResolution, base);
+    const freshUrl = fresh && fresh.url
+      ? _withoutQueryParams(fresh.url, [DDL_QUERY_KEY])
+      : null;
+    if (freshUrl && freshUrl !== downloadUrl) {
+      downloadUrl = freshUrl;
+      const parsed = _parseDownloadInfo(downloadUrl);
+      currentInfo = Object.assign({}, parsed, {
+        filename: currentInfo.filename || parsed.filename || _filenameFromUrl(downloadUrl)
+      });
+      page = await _fetchSite(downloadUrl, base + '/', REQUEST_TIMEOUT_MS);
+      base = page.base || _origin(page.url) || _origin(downloadUrl) || base;
+      iframe = page.body ? _findIframe(page.body) : null;
+      ddlToken = page.body ? _findDdlToken(page.body) : null;
+    }
   }
 
-  const filename = info.filename || _filenameFromUrl(cleanUrl);
-  const iframe = _findIframe(page.body);
-  const ddlToken = _findDdlToken(page.body);
+  // Compatibility fallback only when the signed href could not be refreshed
+  // and the page did not show a terminal generator error. Do not use this as
+  // the normal playback entry path; recent site versions tie tokens to hrefs.
+  if (!hasPlayablePage() && !generatorFailed()) {
+    const freshToken = await _getFreshToken(base, context);
+    const currentToken = _queryParam(downloadUrl, 'token');
+    if (freshToken && freshToken !== currentToken) {
+      const clean = _withoutQueryParams(downloadUrl, ['token', DDL_QUERY_KEY]);
+      downloadUrl = _appendFreshToken(clean, freshToken);
+      page = await _fetchSite(downloadUrl, base + '/', REQUEST_TIMEOUT_MS);
+      base = page.base || _origin(page.url) || _origin(downloadUrl) || base;
+      iframe = page.body ? _findIframe(page.body) : null;
+      ddlToken = page.body ? _findDdlToken(page.body) : null;
+    }
+  }
+
+  if (!page.body) {
+    return {
+      streams: [],
+      stop: page.status === 403 || page.status === 429 || page.status >= 500 ||
+        page.reason === 'challenge',
+      status: page.status,
+      reason: page.reason || 'download-failed'
+    };
+  }
+
+  const filename = currentInfo.filename || _filenameFromUrl(downloadUrl);
   let ddl = null;
-  if (ddlToken && info.encodedFilename) {
-    const ddlUrl = base + '/get_ddl/' + info.encodedFilename;
+  if (ddlToken && currentInfo.encodedFilename) {
+    const ddlUrl = base + '/get_ddl/' + currentInfo.encodedFilename;
     const response = await _requestSiteUrl(ddlUrl, downloadUrl, {
       Accept: 'application/json',
       Referer: downloadUrl,
@@ -1186,24 +1236,22 @@ async function _resolveDownloadPage(url, info, context) {
     }, REQUEST_TIMEOUT_MS, context);
     if (response.ok && response.body) ddl = _parseDdl(response.body);
   }
-  const streams = await _streamsFromDdl(ddl, base,
-    Object.assign({}, info, { filename: filename }), info.resolution,
-    iframe ? '<iframe id="anime-video-player" src="' + iframe + '"></iframe>' : page.body,
-    downloadUrl, context);
+
+  const streams = await _streamsFromDdl(
+    ddl, base, Object.assign({}, currentInfo, { filename: filename }),
+    currentInfo.resolution, page.body, downloadUrl, context
+  );
   if (streams.length) return { streams: streams, stop: false, status: page.status, reason: '' };
 
-  // Never give the player the HTML download page. That was the old source's
-  // most damaging failure mode and caused ExoPlayer to buffer on an HTML file.
-  const hasPlayer = !!iframe || !!ddlToken;
-  const terminalGeneratorError = /unable to generate download link|oops!?\s+something went wrong/i.test(page.body);
+  // Never send the generated HTML error page to the video player as media.
   return {
-    streams: [], stop: page.status === 403 || page.status === 429 || page.status >= 500 ||
+    streams: [],
+    stop: page.status === 403 || page.status === 429 || page.status >= 500 ||
       page.reason === 'challenge',
     status: page.status,
-    reason: terminalGeneratorError ? 'generator-failed' : (hasPlayer ? 'no-playable-url' : 'no-player')
+    reason: generatorFailed() ? 'generator-failed' : (hasPlayablePage() ? 'no-playable-url' : 'no-player')
   };
 }
-
 function _sameEpisode(a, b) {
   const na = _episodeNumber((a && a.filename) || (a && a.url) || '');
   const nb = _episodeNumber((b && b.filename) || (b && b.url) || '');
