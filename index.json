@@ -902,7 +902,7 @@
     {
       "id": "av1encodes",
       "name": "AV1Encodes",
-      "version": "1.2.3",
+      "version": "1.2.4",
       "type": "anime",
       "lang": "en",
       "file": "providers/av1encodes.js",
@@ -914,7 +914,7 @@
           "label": "Domain",
           "description": "Preferred AV1Encodes domain. Known mirrors are tried automatically if it is unavailable.",
           "type": "text",
-          "default": "https://av1encodes.com"
+          "default": "https://av1please.com"
         },
         {
           "key": "quality",
