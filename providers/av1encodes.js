@@ -24,7 +24,7 @@ const QUALITY_LIST = [
   { value: '854 x 480', label: '480p' },
   { value: '640 x 360', label: '360p' }
 ];
-const FILENAME_RE = /([a-zA-Z0-9_ .%()[\]'!,&-]+?\.(?:mkv|mp4))/gi;
+const FILENAME_RE = /([a-zA-Z0-9_ \-\[\]().%]+?\.(?:mkv|mp4))/gi;
 const DDL_TOKEN_RE = /['"]([A]{4,}[A-Za-z0-9_-]{10,})['"]/;
 const EPISODE_PATTERNS = [
   /\[(?:S\d{1,2}[-_ ]*)?E0*(\d{1,4})\]/i,
@@ -354,7 +354,7 @@ function _htmlText(value) {
 }
 
 function _attr(html, name) {
-  const re = new RegExp('(?:^|\\s)' + name + '\\s*=\\s*(["\\'])([\\s\\S]*?)\\1', 'i');
+  const re = new RegExp("(?:^|\\s)" + name + "\\s*=\\s*(['\"])([\\s\\S]*?)\\1", "i");
   const m = String(html || '').match(re);
   if (m) return m[2].replace(/&amp;/g, '&');
   const unquoted = String(html || '').match(new RegExp('(?:^|\\s)' + name + '\\s*=\\s*([^\\s>]+)', 'i'));
@@ -994,7 +994,10 @@ async function _resolveDownloadPage(url, info, context) {
     const response = await _requestSiteUrl(ddlUrl, downloadUrl, {
       Accept: 'application/json',
       Referer: downloadUrl,
-      'X-Ddl-Token': ddlToken
+      'X-Ddl-Token': ddlToken,
+      'Sec-Fetch-Dest': 'empty',
+      'Sec-Fetch-Mode': 'cors',
+      'Sec-Fetch-Site': 'same-origin'
     }, REQUEST_TIMEOUT_MS, context);
     if (response.ok && response.body) ddl = _parseDdl(response.body);
   }
