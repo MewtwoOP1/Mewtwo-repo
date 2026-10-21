@@ -468,12 +468,14 @@ function _parseCards(html, base, mode) {
   const seen = {};
   for (const block of chosen) _addCard(out, seen, block.html, base);
 
-  // Also inspect every anime anchor, not only article/li wrappers. The
-  // rebranded site has result cards nested in divs and link-only index rows.
-  // _addCard deduplicates links that were already parsed from a larger card.
-  for (const anchor of _anchorList(source)) {
-    if (!/\/anime\//i.test(anchor.href)) continue;
-    _addCard(out, seen, anchor.html, base);
+  // Search/index pages are not consistently wrapped in article/li elements;
+  // inspect all anime anchors there. For home sections, preserve the selected
+  // section when it parsed successfully to avoid mixing Popular and Latest.
+  if (mode === 'all' || !out.length) {
+    for (const anchor of _anchorList(source)) {
+      if (!/\/anime\//i.test(anchor.href)) continue;
+      _addCard(out, seen, anchor.html, base);
+    }
   }
   return out;
 }
