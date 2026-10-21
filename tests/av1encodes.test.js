@@ -386,8 +386,8 @@ function routeEpisodePages() {
 
   await test('getVideoSources does not mislabel an HTML download page as a playable stream', async () => {
     reset();
-    route(/\\/download\\/one-piece\\/1\\//, () => ok('<html><body>No player or DDL token</body></html>'));
-    route(/\\/episodes\\/one-piece\\//, () => ok('<html></html>'));
+    route(/\/download\/one-piece\/1\//, () => ok('<html><body>No player or DDL token</body></html>'));
+    route(/\/episodes\/one-piece\//, () => ok('<html></html>'));
     const streams = await P.getVideoSources(EP_URL);
     assert.strictEqual(streams.length, 0);
   });
