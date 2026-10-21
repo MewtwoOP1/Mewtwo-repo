@@ -5,7 +5,7 @@
 
 const SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID)
   ? String(__SOURCE_ID) : 'av1encodes';
-const VERSION = '1.0.0';
+const VERSION = '1.0.1';
 const DEFAULT_DOMAIN = 'https://av1please.com';
 const SITE_DOMAINS = [
   'https://av1please.com',
@@ -1080,7 +1080,7 @@ async function getVideoSources(episodeUrl) {
   info = Object.assign({}, info, { filename: filename });
   const base = _origin(siteUrl) || _domain();
   const context = { warmupUsed: false, tokenCache: Object.create(null) };
-  const embeddedDdl = _getInlineDdl(siteUrl);
+  const embeddedDdl = _getInlineDdl(original) || _getInlineDdl(siteUrl);
   const initialResolution = info.resolution || _qualityValue(_readSetting('quality'));
   const streams = embeddedDdl
     ? await _streamsFromDdl(embeddedDdl, base, info, initialResolution, '', base + '/', context)
