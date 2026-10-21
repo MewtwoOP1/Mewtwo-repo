@@ -10,8 +10,9 @@ const path = require('path');
 const vm = require('vm');
 
 const PROVIDER_PATH = path.join(__dirname, '..', 'providers', 'av1encodes.js');
-const BASE = 'https://av1encodes.com';
-const MIRROR = 'https://av1please.com';
+const BASE = 'https://av1please.com';
+const LEGACY_BASE = 'https://av1encodes.com';
+const MIRROR = BASE;
 const ANIMEALPHA = 'https://animealpha.cc';
 
 function encodeName(name) {
@@ -60,7 +61,7 @@ const FIXTURES = {
     '<a href="/download/one-piece/1/1280%20x%20720/%5BE001%5D%20One%20Piece%20%5B720p%5D%20%5BDual%5D.mkv?token=720">Episode 1 Dual</a>' +
     '</body></html>',
 
-  playerHtml: '<html><body><h1>One Piece</h1>' +
+  playerHtml: '<html><body><h1>One Piece</h1><p>Generating download link...</p>' +
     '<iframe id="anime-video-player" src="/watch/xyz"></iframe>' +
     '<script>window.__ddl_token = "AAAA1234567890";</script>' +
     '</body></html>',
@@ -194,7 +195,7 @@ function routeEpisodePages() {
     assert.strictEqual(info.name, 'AV1Encodes');
     assert.strictEqual(info.lang, 'en');
     assert.strictEqual(info.type, 'anime');
-    assert.strictEqual(info.version, '1.2.3');
+    assert.strictEqual(info.version, '1.2.4');
     assert.ok(/^https?:\/\//.test(info.baseUrl));
   });
 
@@ -232,14 +233,14 @@ function routeEpisodePages() {
     assert.ok(res.some(x => x.title === 'Dandadan'));
   });
 
-  await test('search falls back to av1please.com if preferred domain returns 403', async () => {
+  await test('search fails over to another official mirror when av1please.com returns 403', async () => {
     reset();
+    route(/^https:\/\/av1please\.com\/search\?q=naruto/, () => notFound(403));
+    route(/^https:\/\/animealpha\.cc\/search\?q=naruto/, () => ok(FIXTURES.searchHtml));
     route(/^https:\/\/av1encodes\.com\/search\?q=naruto/, () => notFound(403));
-    route(/^https:\/\/animealpha\.cc\/search\?q=naruto/, () => notFound(403));
-    route(/^https:\/\/av1please\.com\/search\?q=naruto/, () => ok(FIXTURES.searchHtml));
     const res = await P.search('naruto', 1, {});
     assert.strictEqual(res.length, 3);
-    assert.ok(res.every(x => x.url.indexOf(MIRROR + '/') === 0));
+    assert.ok(res.every(x => x.url.indexOf(ANIMEALPHA + '/') === 0));
   });
 
   await test('search returns an empty array when every domain fails', async () => {
@@ -251,16 +252,17 @@ function routeEpisodePages() {
 
   await test('search warms up the site session after 403 and retries the same route', async () => {
     reset();
+    sandbox.__settings = { av1encodes: { domain: LEGACY_BASE } };
     let attempts = 0;
     route(/^https:\/\/av1encodes\.com\/search\?q=warmup/, () => {
       attempts++;
       return attempts === 1 ? notFound(403) : ok(FIXTURES.searchHtml);
     });
-    route(/^https:\/\/av1encodes\.com\/$/, () => ok(FIXTURES.popularHtml));
+    route(/^https:\/\/av1please\.com\/$/, () => ok(FIXTURES.popularHtml));
     const res = await P.search('warmup', 1, {});
     assert.strictEqual(attempts, 2);
     assert.strictEqual(res.length, 3);
-    assert.ok(calls.some(call => call.url === BASE + '/'));
+    assert.ok(calls.some(call => call.url === LEGACY_BASE + '/'));
   });
 
   await test('getDetail returns metadata and episodes from dimension-based routes', async () => {
@@ -328,9 +330,8 @@ function routeEpisodePages() {
     assert.ok(/token=json/.test(episodes[0].url));
   });
 
-  await test('fresh-token lookup skips non-JSON primary response and falls back to av1please.com', async () => {
+  await test('fresh-token lookup succeeds on the active av1please.com mirror', async () => {
     reset();
-    route(/^https:\/\/av1encodes\.com\/get_token$/, () => ok('<html><body>not a token response</body></html>'));
     route(/^https:\/\/av1please\.com\/get_token$/, () => ok(JSON.stringify({ token: 'mirror-token-456' })));
     route(/^https:\/\/av1please\.com\/download\/one-piece\/1\/.*[?&]token=mirror-token-456/, () =>
       ok(FIXTURES.playerHtml));
@@ -344,8 +345,7 @@ function routeEpisodePages() {
 
     const streams = await P.getVideoSources(EP_URL);
     assert.ok(calls.some(call => call.url === BASE + '/get_token'));
-    assert.ok(calls.some(call => call.url === MIRROR + '/get_token'));
-    assert.ok(calls.some(call => call.url.indexOf(MIRROR + '/download/one-piece/1/') === 0 &&
+    assert.ok(calls.some(call => call.url.indexOf(BASE + '/download/one-piece/1/') === 0 &&
       /[?&]token=mirror-token-456(?:&|$)/.test(call.url)));
     assert.ok(streams.some(stream => /DASH/.test(stream.quality) &&
       stream.url === ANIMEALPHA + '/dash/xyz/manifest.mpd'));
@@ -354,7 +354,7 @@ function routeEpisodePages() {
   await test('getVideoSources refreshes expired episode token before fetching the download page', async () => {
     reset();
     route(/\/get_token$/, () => ok(JSON.stringify({ token: 'fresh-token-123' })));
-    route(/^https:\/\/av1encodes\.com\/download\/one-piece\/1\/.*[?&]token=fresh-token-123/, () =>
+    route(/\/download\/one-piece\/1\/.*[?&]token=fresh-token-123/, () =>
       ok(FIXTURES.playerHtml));
     route(/\/get_ddl\//, (url, opts) => {
       assert.strictEqual(opts.headers['X-Ddl-Token'], 'AAAA1234567890');
@@ -426,7 +426,7 @@ function routeEpisodePages() {
   await test('getVideoSources stops checking further resolutions after finding a playable stream', async () => {
     reset();
     route(/\/get_token$/, () => ok(JSON.stringify({ token: 'fresh-token-fast' })));
-    route(/^https:\/\/av1encodes\.com\/download\/one-piece\/1\/1920%20x%201080\/.*[?&]token=fresh-token-fast/, () =>
+    route(/\/download\/one-piece\/1\/1920%20x%201080\/.*[?&]token=fresh-token-fast/, () =>
       ok(FIXTURES.playerNoTokenHtml));
     route(/\/watch\/xyz/, () => ok('', BASE + '/watch/xyz'));
     route(/\/episodes\/one-piece\//, () => ok('<html><body>No alternate episodes</body></html>'));
@@ -449,18 +449,21 @@ function routeEpisodePages() {
       'must stop instead of retrying all lower resolutions after a blocked route');
   });
 
-  await test('getVideoSources stops after one retry when the site cannot generate a download link', async () => {
+  await test('getVideoSources falls back to 720p when the 1080p link generator fails', async () => {
     reset();
-    route(/\/get_token$/, () => notFound(503));
-    route(/\/download\/one-piece\/1\//, () =>
+    route(/\/get_token$/, () => ok(JSON.stringify({ token: 'fresh-fallback-token' })));
+    route(/\/download\/one-piece\/1\/1920%20x%201080\/.*[?&]token=fresh-fallback-token/, () =>
       ok('<html><body><h1>Oops! Something went wrong</h1><p>Unable to generate download link</p></body></html>'));
-    route(/\/episodes\/one-piece\//, () => ok('<html><body>No alternate link</body></html>'));
+    route(/\/episodes\/one-piece\/1\/1280%20x%20720/, () => ok(FIXTURES.lowQualityHtml));
+    route(/\/download\/one-piece\/1\/1280%20x%20720\/.*[?&]token=fresh-fallback-token/, () =>
+      ok(FIXTURES.playerNoTokenHtml));
+    route(/\/watch\/xyz/, () => ok('', BASE + '/watch/xyz'));
     const streams = await P.getVideoSources(EP_URL);
-    assert.strictEqual(streams.length, 0);
-    assert.ok(calls.some(call => /\/episodes\/one-piece\/1\/1920%20x%201080/.test(call.url)),
-      'should try refreshing the episode URL once');
-    assert.ok(!calls.some(call => /\/episodes\/one-piece\/1\/1280%20x%20720/.test(call.url)),
-      'must not scan lower resolutions after the refreshed link also fails');
+    assert.ok(calls.some(call => /\/episodes\/one-piece\/1\/1280%20x%20720/.test(call.url)),
+      'must attempt the next quality after link generation fails');
+    assert.ok(streams.some(stream => /720p/.test(stream.quality) && /DASH/.test(stream.quality)));
+    assert.ok(!calls.some(call => /\/episodes\/one-piece\/1\/854%20x%20480/.test(call.url)),
+      'must stop checking qualities after finding a playable stream');
   });
 
   await test('getVideoSources searches other resolutions for the same episode', async () => {
@@ -476,7 +479,7 @@ function routeEpisodePages() {
 
   await test('getHome parses the homepage spotlight and latest cards separately', async () => {
     reset();
-    route(/^https:\/\/av1encodes\.com\/$/, () => ok(FIXTURES.popularHtml));
+    route(/^https:\/\/av1please\.com\/$/, () => ok(FIXTURES.popularHtml));
     const sections = await P.getHome({});
     const popular = sections.find(s => s.title === 'Popular');
     const latest = sections.find(s => s.title === 'Latest');
