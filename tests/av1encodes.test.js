@@ -1,4 +1,4 @@
-// AV1Encodes v1.0.4 full integration regression tests; all network calls are mocked.
+// AV1Encodes v1.0.5 full integration regression tests; all network calls are mocked.
 'use strict';
 const assert = require('assert');
 const fs = require('fs');
@@ -105,12 +105,12 @@ function routeRedirects() {
 }
 
 (async function run() {
-  console.log('\nAV1Encodes v1.0.4 full integration regression tests\n');
+  console.log('\nAV1Encodes v1.0.5 full integration regression tests\n');
 
-  await test('v1.0.4 provider contract and metadata', async () => {
+  await test('v1.0.5 provider contract and metadata', async () => {
     reset();
     assert.strictEqual(P.getInfo().name, 'AV1Encodes');
-    assert.strictEqual(P.getInfo().version, '1.0.4');
+    assert.strictEqual(P.getInfo().version, '1.0.5');
     assert.strictEqual(P.getInfo().type, 'anime');
     assert.strictEqual(P.getInfo().lang, 'en');
     assert.deepStrictEqual(JSON.parse(JSON.stringify(P.getSettings().map(x => x.key))), ['domain','quality','showTorrent']);
@@ -328,8 +328,11 @@ function routeRedirects() {
     assert.ok(sources.some(x => /DASH/.test(x.quality)));
     const downloads = calls.filter(x => /\/download\/one-piece\/1\//.test(x.url));
     assert.ok(downloads.length > 0);
-    assert.ok(downloads.every(x => /[?&]token=fresh-token-123(?:&|$)/.test(x.url)));
-    assert.ok(downloads.every(x => !/[?&]token=expired-token(?:&|$)/.test(x.url)));
+    const firstDownload = downloads[0].url;
+    assert.ok(/[?&]token=expired-token(?:&|$)/.test(firstDownload),
+      'the original signed URL must be tried before requesting a replacement token');
+    assert.ok(downloads.some(x => /[?&]token=fresh-token-123(?:&|$)/.test(x.url)),
+      'fresh-token fallback should be used only after the original URL has no player');
   });
 
   await test('iframe can produce DASH when the page has no DDL token', async () => {
@@ -347,7 +350,10 @@ function routeRedirects() {
     route(/\/get_token$/, () => fail(503));
     const sources = await P.getVideoSources(EP_URL);
     assert.deepStrictEqual(JSON.parse(JSON.stringify(sources)), []);
-    assert.ok(!calls.some(x => /\/download\/one-piece\/1\//.test(x.url)));
+    assert.ok(calls.some(x => /\/download\/one-piece\/1\//.test(x.url)),
+      'the signed original URL is attempted before token refresh');
+    assert.ok(!calls.some(x => /\/download\/one-piece\/1\/.*[?&]token=fresh-token(?:&|$)/.test(x.url)),
+      'a failed token refresh must not create a fake or stale playable URL');
   });
 
   await test('terminal HTML error is not returned as a media URL', async () => {
