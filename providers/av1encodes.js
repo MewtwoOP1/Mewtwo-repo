@@ -649,7 +649,6 @@ function _episodeFromLink(rawHref, label, base, season, slug, resolution, number
   if (!href && filename) href = _makeEpisodeUrl(base, slug, season, resolution, filename);
   if (!href) return null;
   const n = Number(number) || _episodeNumber(filename + ' ' + label);
-  const cleanKey = _episodeKey(href);
   let url = href;
   if (ddl && typeof ddl === 'object' && _hasDdlLinks(ddl)) {
     const packed = JSON.stringify(ddl);
@@ -824,7 +823,7 @@ function _getInlineDdl(url) {
   const packed = _queryParam(url, DDL_QUERY_KEY);
   if (!packed) return null;
   try {
-    ddl = JSON.parse(packed);
+    const ddl = JSON.parse(packed);
     return _hasDdlLinks(ddl) ? ddl : null;
   } catch (e) {
     return null;
