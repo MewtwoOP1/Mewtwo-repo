@@ -205,43 +205,71 @@ function _adaptReferer(ref, base) {
   return ref;
 }
 
+async function _warmupSite(base) {
+  // The current upstream extension performs a normal homepage request after
+  // HTTP 403 so the site's av1_client_id/session cookie can be established.
+  // This does not solve or automate a CAPTCHA; it only performs a regular GET.
+  try {
+    const r = await fetch(base + '/', {
+      headers: _headers(base + '/', base),
+      redirect: 'follow',
+      credentials: 'include'
+    });
+    if (r.ok && typeof r.text === 'function') {
+      await r.text();
+    } else if (r.body && typeof r.body.cancel === 'function') {
+      try { r.body.cancel(); } catch (e) {}
+    }
+  } catch (e) {}
+}
+
 async function _fetchSite(url, ref, extraHeaders) {
   const path = _pathQuery(url);
   const candidates = _siteBases(url);
   let lastStatus = 0;
+
   for (const base of candidates) {
     const target = base + path;
-    try {
-      const r = await fetch(target, {
-        headers: _mergeHeaders(_headers(_adaptReferer(ref, base), base), extraHeaders),
-        redirect: 'follow'
-      });
-      lastStatus = r.status || 0;
-      if (!r.ok) {
-        if (r.body && typeof r.body.cancel === 'function') {
-          try { r.body.cancel(); } catch (e) {}
+    let warmed = false;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const r = await fetch(target, {
+          headers: _mergeHeaders(_headers(_adaptReferer(ref, base), base), extraHeaders),
+          redirect: 'follow',
+          credentials: 'include'
+        });
+        lastStatus = r.status || 0;
+        if (!r.ok) {
+          if (r.body && typeof r.body.cancel === 'function') {
+            try { r.body.cancel(); } catch (e) {}
+          }
+          if (lastStatus === 403 && !warmed) {
+            warmed = true;
+            await _warmupSite(base);
+            continue;
+          }
+          break;
         }
-        continue;
+        const body = await r.text();
+        // Do not treat an interstitial as the site's catalog/player markup. Move
+        // to the next published mirror instead of trying to defeat the challenge.
+        if (/Just a moment\\.\\.\\.|cf-chl-|turnstile/i.test(body) &&
+            /cloudflare|challenge-platform|captcha/i.test(body)) {
+          break;
+        }
+        const finalUrl = r.url || target;
+        const finalBase = _origin(finalUrl);
+        return {
+          body,
+          url: finalUrl,
+          base: finalBase && (_trustedSiteHost(_host(finalUrl)) || _host(finalUrl) === _host(_domain()))
+            ? finalBase
+            : base,
+          status: r.status || 200
+        };
+      } catch (e) {
+        break;
       }
-      const body = await r.text();
-      // Do not treat an interstitial as the site's catalog/player markup. Move
-      // to the next published mirror instead of trying to defeat the challenge.
-      if (/Just a moment\.\.\.|cf-chl-|turnstile/i.test(body) &&
-          /cloudflare|challenge-platform|captcha/i.test(body)) {
-        continue;
-      }
-      const finalUrl = r.url || target;
-      const finalBase = _origin(finalUrl);
-      return {
-        body,
-        url: finalUrl,
-        base: finalBase && (_trustedSiteHost(_host(finalUrl)) || _host(finalUrl) === _host(_domain()))
-          ? finalBase
-          : base,
-        status: r.status || 200
-      };
-    } catch (e) {
-      // Continue to the next known site domain.
     }
   }
   return { body: '', url: url, base: _origin(url) || _domain(), status: lastStatus };
@@ -258,24 +286,31 @@ async function _resolveLink(raw, base, ref) {
 
   for (const candidate of candidates) {
     const target = candidate + path;
-    try {
-      const r = await fetch(target, {
-        headers: _headers(_adaptReferer(ref, candidate), candidate),
-        redirect: 'follow'
-      });
-      const status = r.status || 0;
-      const finalUrl = r.url || target;
-      // Redirect resolution only needs response headers. Do not read the body:
-      // the final response may be a multi-gigabyte video file.
-      if (r.body && typeof r.body.cancel === 'function') {
-        try { r.body.cancel(); } catch (e) {}
+    let warmed = false;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const r = await fetch(target, {
+          headers: _headers(_adaptReferer(ref, candidate), candidate),
+          redirect: 'follow',
+          credentials: 'include'
+        });
+        const status = r.status || 0;
+        const finalUrl = r.url || target;
+        if (r.body && typeof r.body.cancel === 'function') {
+          try { r.body.cancel(); } catch (e) {}
+        }
+        if (r.ok && finalUrl) return finalUrl;
+        if (status === 403 && !warmed && isSite) {
+          warmed = true;
+          await _warmupSite(candidate);
+          continue;
+        }
+        break;
+      } catch (e) {
+        break;
       }
-      if (r.ok && finalUrl) return finalUrl;
-      if (status >= 400) continue;
-    } catch (e) {}
+    }
   }
-  // Keep the original target as a fallback, matching the upstream source's
-  // behavior when a redirect cannot be resolved by the HTTP client.
   return full;
 }
 
