@@ -329,7 +329,7 @@ async function _fetchSite(url, ref, extraHeaders) {
             continue;
           }
           if (lastStatus === 403 && latencySensitive) lastReason = 'forbidden';
-          break;          break;
+          break;
         }
         const body = await r.text();
         // Do not treat an interstitial as the site's catalog/player markup. Move
