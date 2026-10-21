@@ -314,6 +314,23 @@ function routeEpisodePages() {
     assert.ok(/1280%20x%20720/.test(episodes[0].url));
   });
 
+  await test('episode lookup warms the session once after a 403 and retries the episode page', async () => {
+    reset();
+    let attempts = 0;
+    route(/^https:\/\/av1please\.com\/anime\/one-piece$/, () =>
+      ok('<html><h1>One Piece</h1><div data-season="1"></div></html>'));
+    route(/^https:\/\/av1please\.com\/episodes\/one-piece\/1\/1920%20x%201080/, () => {
+      attempts++;
+      return attempts === 1 ? notFound(403) : ok(FIXTURES.season1Html);
+    });
+    route(/^https:\/\/av1please\.com\/$/, () => ok(FIXTURES.popularHtml));
+
+    const episodes = await P.getEpisodes(BASE + '/anime/one-piece', {});
+    assert.strictEqual(attempts, 2);
+    assert.strictEqual(episodes.length, 2);
+    assert.ok(calls.some(call => call.url === BASE + '/'));
+  });
+
   await test('episode JSON responses are supported as well as HTML', async () => {
     reset();
     route(/\/anime\/one-piece$/, () => ok('<html><h1>One Piece</h1><div data-season="1"></div></html>'));
