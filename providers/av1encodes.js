@@ -1079,10 +1079,15 @@ async function getVideoSources(episodeUrl) {
     if (qualityCandidates.indexOf(q) < 0) qualityCandidates.push(q);
   }
 
+  const base = _origin(full) || _domain();
   const collected = [];
   const seenUrls = {};
+
   if (info.modern) {
-    const base = _origin(full) || _domain();
+    // Resolve the episode's listed quality first. Do not walk every resolution
+    // after a playable result has been found: each extra resolution adds an
+    // episode-page request, token lookup, download-page request and redirect
+    // checks, which can exceed Zangetsu's per-source timeout.
     for (const resolution of qualityCandidates) {
       const url = await _findEpisodeAtResolution(info, resolution, full, base);
       if (!url) continue;
@@ -1092,6 +1097,7 @@ async function getVideoSources(episodeUrl) {
         seenUrls[stream.url] = true;
         collected.push(stream);
       }
+      if (collected.length) break;
     }
   } else {
     const candidates = await _extractVideoForEpisode(full, filename, startResolution);
@@ -1103,6 +1109,8 @@ async function getVideoSources(episodeUrl) {
     }
   }
 
+  // Only return a fallback when the supplied URL is already a media file.
+  // A /download/ page is HTML and must not be advertised as a stream.
   if (!collected.length && _isDirectMediaUrl(full)) {
     collected.push(_stream(full, 'AV1 · ' + _resolutionLabel(startResolution, filename) + ' · Direct', filename, _origin(full) || _domain()));
   }
