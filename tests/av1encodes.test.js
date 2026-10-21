@@ -302,6 +302,19 @@ function routeEpisodePages() {
     assert.ok(episodes.every(ep => !/Season\s+\d|\bDual\b|\bDub\b|\bSub\b/i.test(ep.title)));
   });
 
+  await test('parses current S01-E01 filenames and preserves the episode token', async () => {
+    reset();
+    route(/^https:\/\/av1please\.com\/anime\/jojo-s-bizarre-adventure$/, () =>
+      ok('<html><h1>JoJo\'s Bizarre Adventure</h1><div data-season="1"></div></html>'));
+    route(/^https:\/\/av1please\.com\/episodes\/jojo-s-bizarre-adventure\/1\/1920%20x%201080/, () =>
+      ok('<html><a href="/download/jojo-s-bizarre-adventure/1/1920%20x%201080/%5BS01-E01%5D%20JoJo%27s%20Bizarre%20Adventure%202012%20%5B1080p%5D%20%5BDual%5D.mkv?token=episode-token">Episode 01 Dual</a></html>'));
+    const episodes = await P.getEpisodes(BASE + '/anime/jojo-s-bizarre-adventure', {});
+    assert.strictEqual(episodes.length, 1);
+    assert.strictEqual(episodes[0].number, 1);
+    assert.strictEqual(episodes[0].title, 'Episode 1');
+    assert.ok(/\?token=episode-token$/.test(episodes[0].url));
+  });
+
   await test('getEpisodes tries lower resolutions when the preferred quality has no episodes', async () => {
     reset();
     route(/\/anime\/one-piece$/, () => ok(FIXTURES.detailHtml));
