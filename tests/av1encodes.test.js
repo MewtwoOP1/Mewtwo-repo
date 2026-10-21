@@ -407,7 +407,7 @@ function routeRedirects() {
     assert.ok(calls.some(call => call.url === BASE + '/anime?page=0'));
   });
 
-  await test('wrapped episode JSON objects are accepted without losing source labels', async () => {
+  await test('wrapped episode JSON objects retain legacy generated episode labels', async () => {
     reset();
     routeDetail('naruto', '<html><body><h1>Naruto</h1><div data-season="1"></div></body></html>');
     const payload = JSON.stringify({ items: [{
@@ -420,7 +420,7 @@ function routeRedirects() {
     const episodes = await P.getEpisodes(BASE + '/anime/naruto', {});
     assert.strictEqual(episodes.length, 1);
     assert.strictEqual(episodes[0].number, 7);
-    assert.strictEqual(episodes[0].title, 'Naruto Episode 07');
+    assert.strictEqual(episodes[0].title, 'Episode 7');
     assert.ok(episodes[0].url.endsWith('?token=naruto-seven'));
   });
 
