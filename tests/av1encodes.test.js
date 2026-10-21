@@ -12,6 +12,7 @@ const vm = require('vm');
 const PROVIDER_PATH = path.join(__dirname, '..', 'providers', 'av1encodes.js');
 const BASE = 'https://av1encodes.com';
 const MIRROR = 'https://av1please.com';
+const ANIMEALPHA = 'https://animealpha.cc';
 
 function encodeName(name) {
   return encodeURIComponent(name);
@@ -336,11 +337,11 @@ function routeEpisodePages() {
 
     const streams = await P.getVideoSources(EP_URL);
     assert.ok(calls.some(call => call.url === BASE + '/get_token'));
-    assert.ok(calls.some(call => call.url === MIRROR + '/get_token'));
-    assert.ok(calls.some(call => call.url.indexOf(MIRROR + '/download/one-piece/1/') === 0 &&
+    assert.ok(calls.some(call => call.url === ANIMEALPHA + '/get_token'));
+    assert.ok(calls.some(call => call.url.indexOf(ANIMEALPHA + '/download/one-piece/1/') === 0 &&
       /[?&]token=mirror-token-456(?:&|$)/.test(call.url)));
     assert.ok(streams.some(stream => /DASH/.test(stream.quality) &&
-      stream.url === MIRROR + '/dash/xyz/manifest.mpd'));
+      stream.url === ANIMEALPHA + '/dash/xyz/manifest.mpd'));
   });
 
   await test('getVideoSources refreshes expired episode token before fetching the download page', async () => {
