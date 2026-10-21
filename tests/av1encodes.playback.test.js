@@ -49,13 +49,13 @@ const fixtures = {
 const routes = [];
 const calls = [];
 function route(pattern, handler) { routes.push({ pattern, handler }); }
-function ok(body, url) {
+function ok(body, url, headers) {
   const text = String(body == null ? '' : body);
-  return { ok: true, status: 200, body: text, url: url || '', text: () => Promise.resolve(text) };
+  return { ok: true, status: 200, body: text, url: url || '', headers: headers || {}, text: () => Promise.resolve(text) };
 }
-function fail(status, body) {
+function fail(status, body, headers) {
   const text = String(body || '');
-  return { ok: false, status: status || 404, body: text, url: '', text: () => Promise.resolve(text) };
+  return { ok: false, status: status || 404, body: text, url: '', headers: headers || {}, text: () => Promise.resolve(text) };
 }
 function mockFetch(url, options) {
   const target = String(url);
@@ -107,7 +107,9 @@ function routeResolutionPages(host, slug) {
 }
 function routeStreamExtraction(host) {
   const esc = value => String(value).replace(/\./g, '\\.');
-  route(new RegExp('^' + esc(host) + '/get_token$'), () =>
+  route(new RegExp('^' + esc(host) + '/download/black-clover/1/1920%20x%201080/.*[?&]token=listing-token(?:&|$)'), () =>
+    ok(fixtures.player));
+  route(/^https:\/\/av1please\.com\/get_token$/, () =>
     ok(JSON.stringify({ token: 'fresh-token' })));
   route(FRESH_EPISODE_RE, () => ok(fixtures.player));
   route(new RegExp('^' + esc(host) + '/get_ddl/'), (url, options) => {
@@ -124,7 +126,7 @@ function routeStreamExtraction(host) {
 }
 
 (async function run() {
-  console.log('\nAV1Encodes realistic episode + stream integration tests\n');
+  console.log('\nAV1Encodes AnimeAlpha session + signed playback integration tests\n');
 
   await test('search discovers Black Clover from an anime-card page', async () => {
     reset();
@@ -133,6 +135,29 @@ function routeStreamExtraction(host) {
     assert.ok(items.some(item => item.title === 'Black Clover'));
     const result = items.find(item => item.title === 'Black Clover');
     assert.strictEqual(result.url, BASE + '/anime/' + SLUG);
+  });
+
+  await test('session cookie from a 403 is sent on the retry and subsequent page requests', async () => {
+    reset();
+    let searchAttempts = 0;
+    route(/^https:\/\/av1please\.com\/$/, () => ok('<html>Home</html>'));
+    route(/^https:\/\/av1please\.com\/search\?q=black%20clover&page=1$/, (url, options) => {
+      searchAttempts++;
+      const cookie = String(options.headers.Cookie || options.headers.cookie || '');
+      if (cookie.includes('av1_client_id=client-123')) return ok(fixtures.search);
+      return fail(403, 'Forbidden', {
+        'Set-Cookie': 'av1_client_id=client-123; Path=/; Max-Age=600; HttpOnly; Secure'
+      });
+    });
+
+    const items = await P.search('black clover', 1, {});
+    assert.ok(items.some(item => item.title === 'Black Clover'),
+      'source should recover when the server issues a normal session cookie');
+    assert.ok(searchAttempts >= 2, 'the blocked request must be retried');
+    assert.ok(calls.some(call =>
+      call.url.indexOf('/search?') >= 0 &&
+      String(call.options.headers.Cookie || call.options.headers.cookie || '').includes('av1_client_id=client-123')),
+      'the cookie from Set-Cookie must persist across separate JS fetch calls');
   });
 
   await test('full path: search -> detail -> episode 1 -> extracted playable stream URLs', async () => {
@@ -168,6 +193,8 @@ function routeStreamExtraction(host) {
       'download link must resolve to a direct media URL');
     assert.ok(!streams.some(source => /\/download\//.test(source.url)),
       'HTML download pages must never be exposed as media streams');
+    assert.ok(!calls.some(call => /\/get_token(?:\?|$)/.test(call.url)),
+      'a valid signed episode URL with a player must not need a speculative token request');
   });
 
   await test('episode lookup tries the third official mirror after the pinned host and default fail', async () => {
@@ -233,13 +260,14 @@ function routeStreamExtraction(host) {
 
   await test('upstream download-generator error is classified as no streams, never a fake media URL', async () => {
     reset();
-    route(/^https:\/\/av1please\.com\/get_token$/, () =>
-      ok(JSON.stringify({ token: 'fresh-token' })));
-    route(FRESH_EPISODE_RE, () => ok(fixtures.generatorError));
+    route(/^https:\/\/av1please\.com\/download\/black-clover\/1\/1920%20x%201080\/.*[?&]token=listing-token(?:&|$)/,
+      () => ok(fixtures.generatorError));
     const episodeUrl = BASE + EPISODE_PATH;
     const streams = await P.getVideoSources(episodeUrl);
     assert.deepStrictEqual(JSON.parse(JSON.stringify(streams)), []);
     assert.ok(!streams.some(source => /\/download\//.test(source.url)));
+    assert.ok(!calls.some(call => /\/get_token(?:\?|$)/.test(call.url)),
+      'the provider must not preflight /get_token when the signed page has a terminal generator error');
   });
 
   console.log('\n' + passed + ' passed, ' + failed + ' failed\n');
