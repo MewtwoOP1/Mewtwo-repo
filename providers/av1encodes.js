@@ -9,7 +9,7 @@
 const SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID)
   ? String(__SOURCE_ID)
   : 'av1encodes';
-const VERSION = '1.2.1';
+const VERSION = '1.2.2';
 const DEFAULT_DOMAIN = 'https://av1encodes.com';
 const MIRROR_DOMAINS = [
   'https://animealpha.cc',
