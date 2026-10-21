@@ -346,7 +346,8 @@ async function _fetchSite(url, ref, extraHeaders) {
         // before JavaScript calls get_ddl. Keep that normal placeholder so its
         // embedded DDL token can still be resolved. Reject only terminal errors.
         if (/\/download\//i.test(path) &&
-            /unable to generate download link|oops!?\s+something went wrong/i.test(body)) {
+            /unable to generate download link|oops!?\s+something went wrong/i.test(body) &&
+            !_findIframe(body) && !TOKEN_RE.test(body)) {
           lastReason = 'generation-failed';
           break;
         }
