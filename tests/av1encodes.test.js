@@ -57,16 +57,23 @@ function mockFetch(url, options) {
   }
   return Promise.resolve(fail(404));
 }
-const sandbox = {
-  __SOURCE_ID: 'av1encodes',
-  __settings: { av1encodes: {} },
-  fetch: mockFetch, console,
-  Promise, JSON, String, Number, Boolean, Object, Array, Math, RegExp, Error,
-  encodeURIComponent, decodeURIComponent, parseInt, parseFloat, isNaN, setTimeout, clearTimeout
-};
-vm.createContext(sandbox);
-vm.runInContext(fs.readFileSync(PROVIDER_PATH, 'utf8'), sandbox);
-const P = sandbox;
+function createProviderSandbox() {
+  const context = {
+    __SOURCE_ID: 'av1encodes',
+    __settings: { av1encodes: {} },
+    fetch: mockFetch, console,
+    Promise, JSON, String, Number, Boolean, Object, Array, Math, RegExp, Error, Date,
+    encodeURIComponent, decodeURIComponent, parseInt, parseFloat, isNaN, setTimeout, clearTimeout
+  };
+  vm.createContext(context);
+  vm.runInContext(fs.readFileSync(PROVIDER_PATH, 'utf8'), context);
+  return context;
+}
+
+// Recreate the JS runtime between tests so module-level episode/DDL caches
+// cannot leak data between otherwise independent cases.
+let sandbox = createProviderSandbox();
+let P = sandbox;
 for (const key of ['getInfo','getSettings','getHome','search','getDetail','getEpisodes','getVideoSources','getStreams']) {
   assert.strictEqual(typeof P[key], 'function', key + ' should be exported');
 }
@@ -77,7 +84,11 @@ async function test(name, fn) {
   catch (e) { failed++; failures.push({ name: name, error: e }); console.log('  ✗ ' + name); console.log('    ' + (e && e.message || String(e))); }
 }
 function reset() {
-  routes.length = 0; calls.length = 0; sandbox.__settings = { av1encodes: {} };
+  routes.length = 0;
+  calls.length = 0;
+  sandbox = createProviderSandbox();
+  P = sandbox;
+  sandbox.__settings = { av1encodes: {} };
 }
 function routeDetail(slug, html) {
   route(new RegExp('/anime/' + slug + '$'), () => ok(html || FIXTURES.detail));
