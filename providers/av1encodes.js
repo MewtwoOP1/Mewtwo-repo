@@ -5,7 +5,7 @@
 
 const SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID)
   ? String(__SOURCE_ID) : 'av1encodes';
-const VERSION = '1.0.2';
+const VERSION = '1.0.3';
 const DEFAULT_DOMAIN = 'https://av1please.com';
 const SITE_DOMAINS = [
   'https://av1please.com',
@@ -15,8 +15,8 @@ const SITE_DOMAINS = [
 const LOGO = 'https://www.google.com/s2/favicons?sz=256&domain=av1encodes.com';
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
   '(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
-const REQUEST_TIMEOUT_MS = 3200;
-const REDIRECT_TIMEOUT_MS = 1800;
+const REQUEST_TIMEOUT_MS = 4500;
+const REDIRECT_TIMEOUT_MS = 2500;
 const WARMUP_TIMEOUT_MS = 900;
 const EPISODE_CACHE_TTL_MS = 120000;
 const QUALITY_LIST = [
@@ -343,12 +343,13 @@ async function _fetchSite(rawUrl, ref, timeoutMs) {
   const firstOrigin = _origin(rawUrl);
   const selected = firstOrigin || _domain();
   const path = _pathQuery(rawUrl);
-  const isEpisodeList = /^\/episodes\//i.test(_pathOnly(rawUrl));
-  // Episode lists are fetched once per season/quality and may be retried at
-  // lower resolutions by the caller. Don't multiply each such request across
-  // every mirror: selected host + one fallback is enough to protect against a
-  // domain outage without exhausting Zangetsu's per-source call budget.
-  const candidates = _siteBases(selected).slice(0, isEpisodeList ? 2 : SITE_DOMAINS.length);
+  // Always try each known official mirror. Old/pinned anime URLs can start on
+  // av1encodes.com even when that origin is blocked; limiting episode pages to
+  // two hosts skipped animealpha.cc entirely in that case, so every episode
+  // appeared unavailable despite the third mirror being reachable.
+  // Requests are individually bounded, and the shared warm-up is attempted
+  // only once per URL resolution, keeping the full fallback bounded.
+  const candidates = _siteBases(selected);
   let last = { ok: false, status: 0, body: '', url: rawUrl, base: selected, reason: 'unavailable' };
   const context = { warmupUsed: false };
   for (const base of candidates) {
@@ -870,7 +871,13 @@ async function getEpisodes(url, opts) {
   if (cached) return cached;
   const slug = _slugFromAnimeUrl(full);
   const page = await _fetchSite(full, _domain() + '/');
-  if (!page.body) return [];
+  if (!page.body) {
+    if (typeof console !== 'undefined' && console.warn) {
+      console.warn('[AV1Encodes] anime page unavailable status=' + page.status +
+        ' reason=' + (page.reason || 'unknown') + ' url=' + full);
+    }
+    return [];
+  }
   const episodes = await _episodesFromHtml(slug, page.base || _origin(full) || _domain(), page.body);
   _writeEpisodeCache(full, episodes);
   if (!episodes.length && typeof console !== 'undefined' && console.warn) {
@@ -884,6 +891,10 @@ async function getDetail(url, opts) {
   const full = _canonicalSiteUrl(url, _domain()) || _absolute(url, _domain());
   const page = await _fetchSite(full, _domain() + '/');
   const base = page.base || _origin(full) || _domain();
+  if (!page.body && typeof console !== 'undefined' && console.warn) {
+    console.warn('[AV1Encodes] detail page unavailable status=' + page.status +
+      ' reason=' + (page.reason || 'unknown') + ' url=' + full);
+  }
   const detail = _detailFromHtml(page.url || full, page.body, base);
   if (page.body) {
     detail.episodes = await _episodesFromHtml(_slugFromAnimeUrl(full), base, page.body);
