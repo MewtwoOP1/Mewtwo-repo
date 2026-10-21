@@ -1,4 +1,4 @@
-// AV1Encodes v1.0.2 full integration regression tests; all network calls are mocked.
+// AV1Encodes v1.0.3 full integration regression tests; all network calls are mocked.
 'use strict';
 const assert = require('assert');
 const fs = require('fs');
@@ -105,12 +105,12 @@ function routeRedirects() {
 }
 
 (async function run() {
-  console.log('\nAV1Encodes v1.0.2 full integration regression tests\n');
+  console.log('\nAV1Encodes v1.0.3 full integration regression tests\n');
 
-  await test('v1.0.2 provider contract and metadata', async () => {
+  await test('v1.0.3 provider contract and metadata', async () => {
     reset();
     assert.strictEqual(P.getInfo().name, 'AV1Encodes');
-    assert.strictEqual(P.getInfo().version, '1.0.2');
+    assert.strictEqual(P.getInfo().version, '1.0.3');
     assert.strictEqual(P.getInfo().type, 'anime');
     assert.strictEqual(P.getInfo().lang, 'en');
     assert.deepStrictEqual(JSON.parse(JSON.stringify(P.getSettings().map(x => x.key))), ['domain','quality','showTorrent']);
