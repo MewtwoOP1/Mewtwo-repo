@@ -257,6 +257,9 @@ function _headers(ref, base, mode) {
     'User-Agent': UA,
     'Accept-Language': 'en-US,en;q=0.9',
     'Referer': ref || site + '/',
+    'Sec-Ch-Ua': '"Chromium";v="131", "Not_A Brand";v="24", "Google Chrome";v="131"',
+    'Sec-Ch-Ua-Mobile': '?0',
+    'Sec-Ch-Ua-Platform': '"Windows"',
     'Sec-Fetch-Site': 'same-origin'
   };
   if (mode === 'json') {
@@ -268,6 +271,7 @@ function _headers(ref, base, mode) {
     headers['Upgrade-Insecure-Requests'] = '1';
     headers['Sec-Fetch-Dest'] = 'document';
     headers['Sec-Fetch-Mode'] = 'navigate';
+    headers['Sec-Fetch-User'] = '?1';
   }
   return headers;
 }
