@@ -245,10 +245,15 @@ function _siteBases(preferred) {
     const origin = _origin(value);
     if (origin && out.indexOf(origin) < 0) out.push(origin);
   };
-  // The URL's own origin comes first. If it was produced by a successful mirror
-  // request, immediately switching back to the configured default makes every
-  // subsequent episode request repeat the known-bad host.
   add(preferred || _domain());
+
+  const configured = _readSetting('domain');
+  const explicit = !!configured && String(configured).trim().toLowerCase() !== 'auto';
+  // A manually selected domain is a strict override. Auto mode probes all
+  // official mirrors in parallel, and preserves the origin of whichever one
+  // actually served the title or episode link.
+  if (explicit) return out;
+
   add(_domain());
   SITE_DOMAINS.forEach(add);
   return out;
