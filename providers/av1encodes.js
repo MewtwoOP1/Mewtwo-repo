@@ -508,9 +508,13 @@ function _episodeTitleRemainder(value, number, slug) {
     .trim();
   if (!out) return '';
   const titleKey = _normaliseEpisodeTitle(out);
+  // Episode filenames often repeat the series name and original release year,
+  // e.g. "[S01-E01] JoJo's Bizarre Adventure 2012 [360p] [Dual].mkv".
+  const titleWithoutYear = titleKey.replace(/(?:19|20)\d{2}$/, '');
   const slugKey = _normaliseEpisodeTitle(slug);
-  if (slugKey && (titleKey === slugKey ||
-      (number > 0 && titleKey === slugKey + 'episode' + number))) {
+  if (slugKey && (titleKey === slugKey || titleWithoutYear === slugKey ||
+      (number > 0 && (titleKey === slugKey + 'episode' + number ||
+        titleWithoutYear === slugKey + 'episode' + number)))) {
     return '';
   }
   if (number > 0 && /^(?:episode|ep\.?|e)?\s*0*\d+$/i.test(out)) return '';
@@ -1062,7 +1066,9 @@ async function _extractVideoForEpisode(downloadUrl, filename, resolution) {
     // probe every remaining resolution when the source did not produce a player.
     if (!retryHasPlayer) {
       const empty = [];
-      empty.stopFallback = true;
+      // A missing preferred-resolution route is a normal fallback condition;
+      // a blocked request or HTTP-200 generator error is not.
+      empty.stopFallback = retry.status !== 404 && retry.status !== 410;
       return empty;
     }
     page = retry;
