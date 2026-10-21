@@ -297,7 +297,7 @@ async function _fetchSite(url, ref, extraHeaders) {
   // Playback endpoints run inside Zangetsu's per-source timeout; limit their
   // mirror sweep. Catalogue/search requests keep the complete mirror list.
   const latencySensitive = /^\/(?:get_token(?:[/?]|$)|download\/|episodes\/|get_ddl\/)/i.test(path);
-  const candidates = latencySensitive ? _siteBases(url).slice(0, 2) : _siteBases(url);
+  const candidates = latencySensitive ? _siteBases(url).slice(0, 3) : _siteBases(url);
   let lastStatus = 0;
 
   for (const base of candidates) {
@@ -366,7 +366,7 @@ async function _resolveLink(raw, base, ref) {
   if (!full) return null;
   const origin = _origin(full) || base || _domain();
   const isSite = _trustedSiteHost(_host(full)) || _host(full) === _host(_domain());
-  const candidates = isSite ? _siteBases(full).slice(0, 2) : [origin];
+  const candidates = isSite ? _siteBases(full).slice(0, 3) : [origin];
   const path = _pathQuery(full);
 
   for (const candidate of candidates) {
@@ -1055,17 +1055,20 @@ async function _extractVideoForEpisode(downloadUrl, filename, resolution) {
     base = retryToken.base || retryBase;
     const retryUrl = _appendAccessToken(base + _pathQuery(_stripTokenParam(freshEpisodeUrl || cleanUrl)), retryToken.token);
     const retry = await _fetchSite(retryUrl, base + '/');
-    if (!retry.body && _isTransientSiteFailure(retry.status)) {
+    const retryHasPlayer = !!(retry.body &&
+      (_findIframe(retry.body) || TOKEN_RE.test(retry.body)));
+    // One refreshed episode/token retry is enough. An HTTP-200 page saying
+    // "Unable to generate download link" is still a failed resolve; do not
+    // probe every remaining resolution when the source did not produce a player.
+    if (!retryHasPlayer) {
       const empty = [];
       empty.stopFallback = true;
       return empty;
     }
-    if (retry.body && (_findIframe(retry.body) || TOKEN_RE.test(retry.body) || !html)) {
-      page = retry;
-      actualUrl = retry.url || retryUrl;
-      html = retry.body;
-      base = retry.base || base;
-    }
+    page = retry;
+    actualUrl = retry.url || retryUrl;
+    html = retry.body;
+    base = retry.base || base;
   }
 
   const filenameFromPage = requestedInfo.filename || info.filename || filename || _filenameFromUrl(cleanUrl);
