@@ -449,6 +449,20 @@ function routeEpisodePages() {
       'must stop instead of retrying all lower resolutions after a blocked route');
   });
 
+  await test('getVideoSources stops after one retry when the site cannot generate a download link', async () => {
+    reset();
+    route(/\/get_token$/, () => notFound(503));
+    route(/\/download\/one-piece\/1\//, () =>
+      ok('<html><body><h1>Oops! Something went wrong</h1><p>Unable to generate download link</p></body></html>'));
+    route(/\/episodes\/one-piece\//, () => ok('<html><body>No alternate link</body></html>'));
+    const streams = await P.getVideoSources(EP_URL);
+    assert.strictEqual(streams.length, 0);
+    assert.ok(calls.some(call => /\/episodes\/one-piece\/1\/1920%20x%201080/.test(call.url)),
+      'should try refreshing the episode URL once');
+    assert.ok(!calls.some(call => /\/episodes\/one-piece\/1\/1280%20x%20720/.test(call.url)),
+      'must not scan lower resolutions after the refreshed link also fails');
+  });
+
   await test('getVideoSources searches other resolutions for the same episode', async () => {
     reset();
     route(/\/episodes\/one-piece\/1\/1280%20x%20720/, () => ok(FIXTURES.lowQualityHtml));
