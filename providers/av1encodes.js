@@ -405,45 +405,32 @@ async function getVideoSources(episodeUrl) {
   }
   if (!ddl || !ddl.success) return _fallback(url, filename);
 
-  return _resolveSources(ddl, filename, base);
+  return _resolveSources(ddl, filename, base, url);
 }
 
-async function _resolveSources(ddl, filename, base) {
+async function _resolveSources(ddl, filename, base, episodeUrl) {
   const quality = _qualityFromFilename(filename);
   const audio = _audioFromFilename(filename);
-  const label = 'AV1 · ' + quality + (audio ? ' [' + audio + ']' : '');
+  const fileSize = ddl.file_size || ddl.fileSize || '';
+  const sizeLabel = String(fileSize).trim() ? ' · ' + String(fileSize).trim() : '';
+  const label =
+    'AV1 · ' + quality + (audio ? ' [' + audio + ']' : '') + sizeLabel;
 
   const streams = [];
 
-  // 1. Resolve the DASH watch_link
-  if (ddl.watch_link) {
-    const dashUrl = await _resolveDash(ddl.watch_link, base);
-    if (dashUrl) {
-      streams.push({
-        url: dashUrl,
-        quality: label + ' · DASH',
-        container: 'unknown', // Zangetsu sniffs .mpd extension
-        headers: { 'User-Agent': UA, Referer: base + '/' },
-        kind: audio && /dub/i.test(audio) ? 'dub' : 'sub',
-        audioLang: audio && /dub/i.test(audio) ? 'en' : 'ja',
-        subtitles: []
-      });
-    }
-  }
-
-  // 2. Resolve direct stream and download links
-  const links = [
-    { link: ddl.stream_link, suffix: 'Stream' },
-    { link: ddl.download_link, suffix: 'Direct DL' }
-  ];
-
-  for (const item of links) {
-    const finalUrl = await _resolveRedirect(item.link, base);
-    if (!finalUrl) continue;
+  // Match the original extension: resolve the watch redirect first, then
+  // derive the DASH manifest URL from the final /watch/ URL. Do not fetch the
+  // manifest here; the player should request it with the returned headers.
+  const watchUrl = await _resolveRedirect(ddl.watch_link, base);
+  if (watchUrl && watchUrl.indexOf('/watch/') !== -1) {
+    const dashBase = watchUrl.replace('/watch/', '/dash/');
+    const dashUrl = dashBase.endsWith('/')
+      ? dashBase + 'manifest.mpd'
+      : dashBase + '/manifest.mpd';
     streams.push({
-      url: finalUrl,
-      quality: label + ' · ' + item.suffix,
-      container: _container(finalUrl),
+      url: dashUrl,
+      quality: label + ' · DASH',
+      container: 'unknown',
       headers: { 'User-Agent': UA, Referer: base + '/' },
       kind: audio && /dub/i.test(audio) ? 'dub' : 'sub',
       audioLang: audio && /dub/i.test(audio) ? 'en' : 'ja',
@@ -451,28 +438,39 @@ async function _resolveSources(ddl, filename, base) {
     });
   }
 
-  if (!streams.length) return _fallback(base + '/download/' + encodeURIComponent(filename), filename);
-  return streams;
-}
-
-async function _resolveDash(watchLink, base) {
-  if (!watchLink) return null;
-  const url = /^https?:\/\//i.test(watchLink)
-    ? watchLink
-    : base + (watchLink.charAt(0) === '/' ? '' : '/') + watchLink;
-
-  try {
-    // The original extension converts /watch/ to /dash/ and appends manifest.mpd
-    const dashUrl = url.replace('/watch/', '/dash/') + '/manifest.mpd';
-    const r = await fetch(dashUrl, {
+  const streamUrl = await _resolveRedirect(ddl.stream_link, base);
+  if (streamUrl && streamUrl !== watchUrl) {
+    streams.push({
+      url: streamUrl,
+      quality: label + ' · Stream',
+      container: _container(streamUrl),
       headers: { 'User-Agent': UA, Referer: base + '/' },
-      redirect: 'follow'
+      kind: audio && /dub/i.test(audio) ? 'dub' : 'sub',
+      audioLang: audio && /dub/i.test(audio) ? 'en' : 'ja',
+      subtitles: []
     });
-    if (!r.ok) return null;
-    return r.url || dashUrl;
-  } catch (e) {
-    return null;
   }
+
+  const downloadUrl = await _resolveRedirect(ddl.download_link, base);
+  if (downloadUrl) {
+    streams.push({
+      url: downloadUrl,
+      quality: label + ' · Direct DL',
+      container: _container(downloadUrl),
+      headers: { 'User-Agent': UA, Referer: base + '/' },
+      kind: audio && /dub/i.test(audio) ? 'dub' : 'sub',
+      audioLang: audio && /dub/i.test(audio) ? 'en' : 'ja',
+      subtitles: []
+    });
+  }
+
+  if (!streams.length) {
+    return _fallback(
+      episodeUrl || base + '/download/' + encodeURIComponent(filename),
+      filename
+    );
+  }
+  return streams;
 }
 
 async function _resolveRedirect(path, base) {
