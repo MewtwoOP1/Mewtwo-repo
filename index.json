@@ -22,14 +22,7 @@
         {
           "key": "addonUrls",
           "label": "Stremio Add-on URLs (manifest URLs; comma/newline separated)",
-          "description": "Optional Stremio-compatible add-on manifest URLs. These add-ons provide streams.",
-          "type": "text",
-          "default": ""
-        },
-        {
-          "key": "pencariMovieServerUrl",
-          "label": "Private PencariMovie Server (optional)",
-          "description": "Your self-hosted PencariMovie server URL, with its server token, optionally ending in /manifest.json. Leave blank to disable. This URL is not preconfigured or published.",
+          "description": "One or more Stremio-compatible add-on manifest URLs. The add-ons provide streams; this repo does not host video.",
           "type": "text",
           "default": ""
         },
@@ -37,6 +30,61 @@
           "key": "maxStreamsPerAddon",
           "label": "Max streams per add-on (limit results from each add-on)",
           "description": "Maximum number of streams considered per configured add-on.",
+          "type": "enum",
+          "default": "25",
+          "options": [
+            {
+              "value": "5",
+              "label": "5 streams"
+            },
+            {
+              "value": "10",
+              "label": "10 streams"
+            },
+            {
+              "value": "25",
+              "label": "25 streams"
+            },
+            {
+              "value": "50",
+              "label": "50 streams"
+            },
+            {
+              "value": "100",
+              "label": "100 streams"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "tmdb-pencari",
+      "name": "TMDB + PencariMovie",
+      "version": "1.0.0",
+      "type": "movie",
+      "lang": "en",
+      "file": "providers/tmdb-pencari.js",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=pencarimovie.com",
+      "nsfw": false,
+      "settings": [
+        {
+          "key": "tmdbApiKey",
+          "label": "TMDB API Key (optional; blank uses app default)",
+          "description": "Your personal TMDB v3 API key. Leave blank to use Zangetsu’s built-in key. Sent only to TMDB.",
+          "type": "text",
+          "default": ""
+        },
+        {
+          "key": "pencariMovieServerUrl",
+          "label": "PencariMovie server manifest URL",
+          "description": "Defaults to the public PencariMovie server. You can replace it with your own tokenized /manifest.json URL.",
+          "type": "text",
+          "default": "https://stream.pencarimovie.com/66ff097863dedb7ccd8401d5ffe616f3/manifest.json"
+        },
+        {
+          "key": "maxStreamsPerAddon",
+          "label": "Max streams per add-on (limit results from each add-on)",
+          "description": "Maximum number of streams considered per configured PencariMovie server.",
           "type": "enum",
           "default": "25",
           "options": [
