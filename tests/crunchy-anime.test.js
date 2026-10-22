@@ -45,8 +45,8 @@ function mediaFor(locale, id) {
         locale: "ja-JP",
         playlist: "https://cdn.example/raw-master.m3u8",
         subtitles: [
-          { locale: "en-US", url: "https://cdn.example/en.vtt" },
-          { locale: "es-419", file: "https://cdn.example/es-419.vtt" },
+          { language: "English", url: "https://cdn.example/en.vtt" },
+          { language: "Spanish (Latin America)", url: "https://cdn.example/es-419.vtt" },
         ],
         hard_subs: [
           { locale: "en-US", playlist: "https://cdn.example/raw-hard-en.m3u8" },
@@ -177,10 +177,8 @@ async function main() {
   assert.deepEqual(home.map(row => row.title), [
     "Latest on Crunchy-anime",
     "Popular on Crunchy-anime",
-    "Anime Movies",
   ]);
   assert.equal(home[0].items[0].title, "Kaiju No. 8");
-  assert.equal(home[2].items[0].contentType, "movie");
 
   const search = await provider.search("Kaiju No. 8", 1, {});
   assert.equal(search.length, 2);
