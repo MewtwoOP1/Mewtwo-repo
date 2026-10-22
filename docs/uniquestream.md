@@ -1,27 +1,26 @@
 # Uniquestream provider
 
-This provider adapts publicly exposed catalogue and metadata from https://anime.uniquestream.net to Zangetsu.
+This provider uses the public JSON API exposed by https://anime.uniquestream.net, with HTML parsing retained as a fallback.
 
 ## Implemented
 
-- Search uses the public JSON endpoint `/api/v1/search?query=…&t=all&limit=…&page=…` first, with the alternate `q` parameter and HTML search/A–Z parsing as fallbacks.
-- Home/catalogue uses the public JSON endpoints `/api/v1/videos/popular` and `/api/v1/videos/new` before falling back to HTML catalogue pages.
-- JSON result cards map content IDs, titles, types, and poster URLs into Zangetsu's provider result format.
-- Detail metadata uses `/api/v1/series/<content_id>` (or `/api/v1/movie/<content_id>` for movies) first, with HTML parsing as a fallback.
-- Series episodes are loaded from the public `/api/v1/season/<season_id>/episodes` endpoint. Requests are paginated and capped per season.
-- Playback extraction still checks public watch-page markup for direct HTTPS media links. It does not yet implement the site's special media-key transformation, so a returned HLS URL is not a guarantee that every episode is playable.
+- Search uses `/api/v1/search` with the documented `query`, `page`, `t`, and `limit` parameters. The response's `series` and `movies` arrays are mapped into Zangetsu result items.
+- Catalogue/home uses `/api/v1/videos/popular` and `/api/v1/videos/new`.
+- Detail metadata uses `/api/v1/series/<content_id>` or `/api/v1/movie/<content_id>`.
+- Episodes are loaded from `/api/v1/season/<season_id>/episodes`, with pagination.
+- URL normalization deliberately avoids the browser `URL` constructor. Zangetsu's QuickJS runtime supplies `absUrl`, but does not guarantee `URL`; using `new URL()` caused API result mapping to throw and search/home to silently fall back to empty arrays.
+- Playback extraction still supports direct media URLs exposed in watch-page HTML. The site's current API media contract is more involved than HTML scraping and may require additional player/media handling.
 
 ## Setup and tests
 
-The provider is registered as `uniquestream` in `index.json`. In Zangetsu, refresh the repository source list and install **Uniquestream**.
+The provider is registered as `uniquestream` in `index.json`. Refresh the source repository in Zangetsu and install/update **Uniquestream**.
 
 Run with Node.js 22+:
 
 ```sh
 node tests/uniquestream.test.js
+node tests/uniquestream.live-smoke.mjs
 node scripts/check-and-run.mjs
 ```
 
-## Validation
-
-Mocked tests cover API search, catalogue mapping, detail metadata, paginated episode mapping, HTML fallback, and failure handling. They verify parsing and provider contracts; they do not prove that live search, all episode pages, or playback are reachable from every device/network.
+The live smoke test verifies the current search, popular, detail, and episode API routes, then calls the provider's actual search/home/detail methods. Unit tests also set `global.URL` to `undefined` to reproduce QuickJS runtime conditions.
