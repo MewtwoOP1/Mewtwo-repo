@@ -3,7 +3,7 @@ var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID) ? String(__S
 var SITE = 'https://anime.uniquestream.net';
 var MEDIA = 'https://media.uniquestream.net';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36';
-var VERSION = '0.3.0';
+var VERSION = '0.4.0';
 
 function getInfo() { return { name:'Uniquestream', lang:'en', baseUrl:SITE, logo:'https://www.google.com/s2/favicons?sz=256&domain=anime.uniquestream.net', type:'anime', version:VERSION }; }
 function getSettings() { return []; }
