@@ -296,7 +296,7 @@ function routeStreamExtraction(host) {
 
   await test('current upstream settings and provider version are exposed', async () => {
     reset();
-    assert.strictEqual(P.getInfo().version, '1.1.3');
+    assert.strictEqual(P.getInfo().version, '1.1.4');
     const settings = P.getSettings();
     assert.strictEqual(settings.map(item => item.key).join(','), [
       'preferred_domain', 'preferred_quality', 'preferred_link_type', 'show_torrent'
@@ -378,6 +378,35 @@ function routeStreamExtraction(host) {
     route(/^https:\/\/av1please\.com\/anime\/meta-genre$/, () => ok(detail));
     const result = await P.getDetail(BASE + '/anime/meta-genre', {});
     assert.deepStrictEqual(JSON.parse(JSON.stringify(result.genres)), ['Action', 'Adventure']);
+  });
+
+  await test('detail metadata supports all upstream selector families and preserves selector order', async () => {
+    reset();
+    const detail = '<html><head><meta property="og:image" content="/fallback-cover.jpg"></head><body>' +
+      '<section class="page-detail"><h1>Native Detail Title</h1></section>' +
+      '<main><img src="/main-cover.jpg"></main>' +
+      '<section class="episode-overview">Native overview synopsis.</section>' +
+      '<div class="custom-genre-taxonomy"><a href="/category/fantasy">Fantasy</a></div>' +
+      '<span class="producer-studio-info">Native Studio</span>' +
+      '<span class="AIRING-badge">Uppercase class must not match the case-sensitive CSS selector</span>' +
+      '</body></html>';
+    route(/^https:\/\/av1please\.com\/anime\/selector-metadata$/, () => ok(detail));
+    const result = await P.getDetail(BASE + '/anime/selector-metadata', {});
+    assert.strictEqual(result.title, 'Native Detail Title');
+    assert.strictEqual(result.cover, BASE + '/main-cover.jpg');
+    assert.strictEqual(result.description, 'Native overview synopsis.');
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(result.genres)), ['Fantasy']);
+    assert.strictEqual(result.author, 'Native Studio');
+    assert.strictEqual(result.status, 'completed');
+  });
+
+  await test('anime-meta fallback matches Kotlin substringAfter behavior when Genre is absent', async () => {
+    reset();
+    const detail = '<html><body><h1>Metadata Fallback</h1>' +
+      '<p class="anime-meta">Type: TV | Adventure | Complete</p></body></html>';
+    route(/^https:\/\/av1please\.com\/anime\/missing-genre-label$/, () => ok(detail));
+    const result = await P.getDetail(BASE + '/anime/missing-genre-label', {});
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(result.genres)), ['Type: TV']);
   });
 
   await test('episode JSON href stays unchanged and filename labels match upstream format', async () => {
