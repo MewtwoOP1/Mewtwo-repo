@@ -148,7 +148,7 @@ function _apiCard(item,kind) {
   var title=_trim(item.title||item.name||'');
   if(!id||!title)return null;
   var type=(kind==='movie'||String(item.type||'').toLowerCase()==='movie')?'movie':'anime';
-  var path=type==='movie'?('/content/'+encodeURIComponent(id)):('/series/'+encodeURIComponent(id)+'/'+_slug(title));
+  var path=type==='movie'?('/movie/'+encodeURIComponent(id)):('/series/'+encodeURIComponent(id)+'/'+_slug(title));
   var url=SITE+path;
   var cover=item.image||item.image_tall||item.poster||item.cover||null;
   if(cover)cover=_abs(cover,SITE+'/');
@@ -225,7 +225,7 @@ function search(query,page,opts) {
   // Match the official Aniyomi request contract exactly. The API documents
   // "query", not "q"; a concurrent q fallback only adds load and can race
   // through the single shared QuickJS fetch bridge.
-  var apiUrl=SITE+'/api/v1/search?page='+p+'&query='+enc+'&t=all&limit=24';
+  var apiUrl=SITE+'/api/v1/search?page='+p+'&query='+enc+'&t=all&limit=20';
   return _fetchApiCards([apiUrl]).then(function(items) {
     if(items.length)return items.slice(0,30);
     return _htmlSearch(q,p).then(function(fallback) {
@@ -263,7 +263,7 @@ function _seriesUrl(value) {
   if(raw.indexOf('uniquestream://series/')===0)raw=raw.slice('uniquestream://series/'.length);
   var u=_siteUrl(raw,SITE+'/');
   if(!u)return '';
-  return /^\/(?:series|film|title|content)\//i.test(_pathname(u))?u:'';
+  return /^\/(?:series|movie|film|title|content)\//i.test(_pathname(u))?u:'';
 }
 function _metaValue(html,property) {
   var tags=String(html||'').match(/<meta\b[^>]*>/gi)||[];
@@ -369,7 +369,7 @@ function _apiSeasonEpisodes(seasons) {
     var collected=[];
     function fetchPage(page) {
       if(page>10)return Promise.resolve(collected);
-      var url=SITE+'/api/v1/season/'+encodeURIComponent(seasonId)+'/episodes?page='+page+'&limit=20&order_by=asc';
+      var url=SITE+'/api/v1/season/'+encodeURIComponent(seasonId)+'/episodes?page='+page+'&limit=20';
       return _json(url).then(function(payload) {
         var batch=_apiArray(payload);
         for(var i=0;i<batch.length;i++)if(batch[i]&&batch[i].content_id)collected.push(batch[i]);
@@ -435,8 +435,8 @@ function getDetail(url,opts) {
   var page=_seriesUrl(url);
   if(!page)return Promise.reject(new Error('Uniquestream: invalid or non-public series URL'));
   var path=_pathname(page);
-  var movie=/^\/(?:content|film)\//i.test(path);
-  var match=path.match(/^\/(?:series|film|title|content)\/([^/]+)/i);
+  var movie=/^\/(?:movie|content|film)\//i.test(path);
+  var match=path.match(/^\/(?:series|movie|film|title|content)\/([^/]+)/i);
   var contentId=match?decodeURIComponent(match[1]):'';
   if(!contentId)return _request(page).then(function(html){return _metadata(html,page);});
   var endpoint=SITE+'/api/v1/'+(movie?'movie':'series')+'/'+encodeURIComponent(contentId);
