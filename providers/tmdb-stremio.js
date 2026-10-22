@@ -30,7 +30,14 @@ function getSettings() {
     {
       key: 'addonUrls',
       label: 'Stremio Add-on URLs (manifest URLs; comma/newline separated)',
-      description: 'One or more Stremio-compatible add-on manifest URLs. The add-ons provide streams; this repo does not host video.',
+      description: 'Optional Stremio-compatible add-on manifest URLs. These add-ons provide streams.',
+      type: 'text',
+      default: ''
+    },
+    {
+      key: 'pencariMovieServerUrl',
+      label: 'Private PencariMovie Server (optional)',
+      description: 'Your self-hosted PencariMovie server manifest URL, for example https://your-host/<server-token>/manifest.json. Leave blank to disable it. This URL is used only on this client and is not published as a default.',
       type: 'text',
       default: ''
     },
@@ -62,9 +69,27 @@ function _combinedSettings() {
   var max = parseInt(_readSetting('maxStreamsPerAddon'), 10);
   if (!max || max < 1) max = 25;
   if (max > 100) max = 100;
+  var urls = _parseAddonUrls(_readSetting('addonUrls'));
+  var privatePencari = _trim(_readSetting('pencariMovieServerUrl'));
+  if (privatePencari) {
+    // PencariMovie exposes a Stremio-compatible manifest at
+    // /<server-token>/manifest.json. Accept either the manifest URL or its
+    // tokenized base URL, and only add it when the user explicitly configures it.
+    if (/^https?:\/\//i.test(privatePencari)) {
+      if (/\/manifest\.json(?:\?.*)?$/i.test(privatePencari)) {
+        urls.push(privatePencari.replace(/\/manifest\.json(\?.*)?$/i, '$1'));
+      } else {
+        urls.push(privatePencari);
+      }
+    }
+  }
+  var uniqueUrls = [], seenUrls = {};
+  urls.forEach(function (url) {
+    if (url && !seenUrls[url]) { seenUrls[url] = true; uniqueUrls.push(url); }
+  });
   return {
     tmdbApiKey: _trim(_readSetting('tmdbApiKey')),
-    urls: _parseAddonUrls(_readSetting('addonUrls')),
+    urls: uniqueUrls,
     max: max
   };
 }
