@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import provider from "../providers/uniquestream.js";
 
 const BASE = "https://anime.uniquestream.net";
 const TIMEOUT_MS = 15000;
@@ -86,6 +87,36 @@ async function main() {
       }));
     }
   }
+  // Exercise the actual Zangetsu provider adapter too, not only raw API URLs.
+  const providerResults = await provider.search("Solo Leveling", 1);
+  console.log("PROVIDER SEARCH", JSON.stringify({
+    version: provider.version,
+    count: providerResults.length,
+    sample: providerResults[0]?.title || null,
+    url: providerResults[0]?.url || null,
+  }));
+  assert.ok(providerResults.length > 0,
+    "Zangetsu provider.search returned no results despite a working live search API");
+
+  const home = await provider.getHome();
+  console.log("PROVIDER HOME", JSON.stringify({
+    sections: home.length,
+    count: home.reduce((n, section) => n + (Array.isArray(section.items) ? section.items.length : 0), 0),
+    first: home[0]?.items?.[0]?.title || null,
+  }));
+  assert.ok(home.some((section) => Array.isArray(section.items) && section.items.length > 0),
+    "Zangetsu provider.getHome returned no catalogue cards despite a working live popular API");
+
+  const detail = await provider.getDetail(providerResults[0].url);
+  console.log("PROVIDER DETAIL", JSON.stringify({
+    title: detail.title,
+    cover: Boolean(detail.cover),
+    seasons: detail.seasons,
+    episodeCount: detail.episodeCount,
+    parsedEpisodes: detail.episodes?.length || 0,
+  }));
+  assert.ok(detail.title, "Zangetsu provider.getDetail returned no title");
+
   console.log("Uniquestream live API smoke passed.");
 }
 
