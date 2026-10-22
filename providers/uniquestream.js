@@ -3,7 +3,8 @@ var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID) ? String(__S
 var SITE = 'https://anime.uniquestream.net';
 var MEDIA = 'https://media.uniquestream.net';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36';
-var VERSION = '0.6.0';
+var VERSION = '0.7.0';
+var LOCAL_PROXY = 'http://127.0.0.1:8787';
 
 function getInfo() { return { name:'Uniquestream', lang:'en', baseUrl:SITE, logo:'https://www.google.com/s2/favicons?sz=256&domain=anime.uniquestream.net', type:'anime', version:VERSION }; }
 function getSettings() { return []; }
@@ -382,7 +383,7 @@ function _apiSeasonEpisodes(seasons) {
         var episodeId=String(item.content_id||''),title=_trim(item.title||'');
         var epNumber=Number(item.episode_number||item.episode||index+1);
         var locales=Array.isArray(item.audio_locales)?item.audio_locales:[];
-        var locale=locales.indexOf('ja-JP')>=0?'ja-JP':(locales[0]||'ja-JP');
+        var locale=locales[0]||'ja-JP';
         var media=SITE+'/api/v1/episode/'+encodeURIComponent(episodeId)+'/media/hls/'+encodeURIComponent(locale);
         return {
           id:'uniquestream://episode/'+encodeURIComponent(media),
@@ -462,29 +463,75 @@ function _apiMediaSources(payload,page) {
     (payload&&payload.result&&typeof payload.result==='object'?payload.result:payload);
   if(!data||typeof data!=='object')throw new Error('Uniquestream: media API returned no media data');
   var mediaId=String(data.media_id||data.mediaId||'');
+  if(!mediaId)throw new Error('Uniquestream: media API omitted media_id');
   var out=[],seen={};
-  function add(entry,label,locale) {
+  function subtitlesFor(entry) {
+    var list=entry&&Array.isArray(entry.subtitles)?entry.subtitles:[];
+    return list.map(function(track) {
+      if(!track||typeof track!=='object')return null;
+      var raw=String(track.url||track.file||'');
+      var url=_abs(raw,page);
+      if(!url||!/^https:\/\//i.test(url))return null;
+      var lang=String(track.language||track.locale||track.lang||track.label||'und');
+      return {url:url,lang:lang,label:String(track.label||track.language||track.locale||'Subtitle'),
+        format:/\.srt(?:$|[?#])/i.test(url)?'srt':(/\.ass(?:$|[?#])/i.test(url)?'ass':'vtt'),
+        default:!!(track.default||track.is_default)};
+    }).filter(function(track){return !!track;});
+  }
+  function add(entry,label,locale,kind) {
     if(!entry||typeof entry!=='object')return;
-    var url=String(entry.playlist||entry.url||'');
-    if(!/^https:\/\//i.test(url)||!/\.(?:m3u8|mpd)(?:$|[?#])/i.test(url)||seen[url])return;
-    seen[url]=true;
-    var headers={'User-Agent':UA,'Referer':SITE+'/','Origin':SITE};
-    if(mediaId)headers['x-am-media-id']=mediaId;
-    out.push({url:url,quality:'Auto',label:label,container:/\.mpd/i.test(url)?'dash':'hls',headers:headers,kind:/raw/i.test(label)?'raw':'sub',audioLang:locale||'ja'});
+    var raw=String(entry.playlist||entry.url||'');
+    // The official DTO defines these as HLS playlists. Some CDN URLs are signed
+    // opaque paths without a .m3u8 suffix, so extension-based filtering dropped
+    // valid dub/hard-sub hosters and produced only a single result in Zangetsu.
+    var url=_abs(raw,page);
+    if(!url||!/^https:\/\//i.test(url))return;
+    var key=url;
+    if(seen[key])return;
+    seen[key]=true;
+    var headers={'User-Agent':UA,'Referer':SITE+'/','Origin':SITE,'x-am-media-id':mediaId};
+    out.push({url:url,quality:'Auto',label:label,container:'hls',headers:headers,
+      kind:kind||'sub',audioLang:locale||'ja',subtitles:subtitlesFor(entry)});
   }
   var hls=data.hls||{};
-  add(hls,'Uniquestream Raw ('+(hls.locale||'original')+')',hls.locale);
-  var hard=Array.isArray(hls.hard_subs)?hls.hard_subs:[];
-  for(var i=0;i<hard.length;i++)add(hard[i],'Uniquestream Sub ('+(hard[i].locale||'unknown')+')',hard[i].locale);
+  if(Array.isArray(hls)) {
+    for(var a=0;a<hls.length;a++)add(hls[a],'Uniquestream ('+(hls[a].locale||'unknown')+')',hls[a].locale,'raw');
+  } else {
+    add(hls,(hls.locale||'Raw')+' (Raw)',hls.locale,'raw');
+    var hard=Array.isArray(hls.hard_subs)?hls.hard_subs:(Array.isArray(hls.hardSubs)?hls.hardSubs:[]);
+    for(var i=0;i<hard.length;i++)add(hard[i],(hard[i].locale||'unknown')+' Hard Sub',hard[i].locale,'sub');
+  }
   var versions=data.versions&&Array.isArray(data.versions.hls)?data.versions.hls:[];
   for(var j=0;j<versions.length;j++){
-    var v=versions[j]||{};
-    add(v,'Uniquestream Dub ('+(v.locale||'unknown')+')',v.locale);
-    var subs=Array.isArray(v.hard_subs)?v.hard_subs:[];
-    for(var k=0;k<subs.length;k++)add(subs[k],'Uniquestream Dub + Sub ('+(subs[k].locale||'unknown')+')',v.locale);
+    var v=versions[j]||[];
+    add(v,(v.locale||'unknown')+' (Dub)',v.locale,'dub');
+    var subs=Array.isArray(v.hard_subs)?v.hard_subs:(Array.isArray(v.hardSubs)?v.hardSubs:[]);
+    for(var k=0;k<subs.length;k++)add(subs[k],(v.locale||'unknown')+' Dub ('+(subs[k].locale||'unknown')+' Sub)',v.locale,'dub');
   }
-  if(!out.length)throw new Error('Uniquestream: media API returned no direct HLS/DASH playlist');
+  if(!out.length)throw new Error('Uniquestream: media API returned no HTTPS HLS playlist');
   return out;
+}
+function _localProxyAvailable() {
+  return Promise.resolve().then(function() {
+    return fetch(LOCAL_PROXY+'/health',{headers:{'Accept':'text/plain'},timeoutMs:1200});
+  }).then(function(r) {
+    if(!r||Number(r.status||0)!==200)return false;
+    var body=typeof r.body==='string'?r.body:(typeof r.text==='function'?r.text():'');
+    return Promise.resolve(body).then(function(s){return String(s||'').indexOf('uniquestream-proxy-ok')>=0;});
+  }).catch(function(){return false;});
+}
+function _useLocalProxy(streams) {
+  return _localProxyAvailable().then(function(available) {
+    if(!available)return streams;
+    return streams.map(function(stream) {
+      if(stream.container!=='hls')return stream;
+      var mediaId=String(stream.headers&&stream.headers['x-am-media-id']||'');
+      if(!mediaId)return stream;
+      var url=LOCAL_PROXY+'/playlist.m3u8?url='+encodeURIComponent(stream.url)+'&mid='+encodeURIComponent(mediaId);
+      return Object.assign({},stream,{url:url,headers:{'User-Agent':UA},
+        label:(stream.label||'Uniquestream')+' · Local HLS proxy'});
+    });
+  });
 }
 function _mediaCandidates(html,page) {
   var out=[],seen={};
@@ -510,7 +557,7 @@ function _mediaCandidates(html,page) {
 function getVideoSources(episodeUrl,opts) {
   var page;try{page=_episodePage(episodeUrl);}catch(e){return Promise.reject(e);}
   if(/^\/api\/v1\/episode\//i.test(_pathname(page))) {
-    return _json(page).then(function(payload){return _apiMediaSources(payload,page);});
+    return _json(page).then(function(payload){return _apiMediaSources(payload,page);}).then(_useLocalProxy);
   }
   return _request(page,page).then(function(html){
     var streams=_mediaCandidates(html,page);
