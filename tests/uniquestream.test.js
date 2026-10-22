@@ -51,6 +51,16 @@ global.fetch = async (url, opts) => {
     ])
   };
   if (u.includes('/api/v1/season/SEASON001/episodes?page=2')) return {status:200,body:'[]'};
+  if (u.includes('/api/v1/episode/APIEP001/media/hls/ja-JP')) return {
+    status:200,
+    body:JSON.stringify({
+      media_id:'MEDIA001',
+      hls:{locale:'ja-JP',playlist:'https://media.uniquestream.net/hls/master.m3u8',hard_subs:[
+        {locale:'en-US',playlist:'https://media.uniquestream.net/hls/en.m3u8'}
+      ]},
+      versions:{hls:[{locale:'en-US',playlist:'https://media.uniquestream.net/hls/dub.m3u8'}]}
+    })
+  };
   if (u.includes('/api/v1/videos/popular?')) return {
     status:200,
     body:JSON.stringify([{content_id:'AG689vQw',title:'Attack on Titan',image:'https://media.uniquestream.net/posters/aot.jpg',type:'show'}])
@@ -126,7 +136,9 @@ async function main() {
     const quickJsDetail=await provider.getDetail(quickJsResults[0].url);
     assert.equal(quickJsDetail.title,'Attack on Titan','metadata lookup must work without global URL');
     const quickJsStreams=await provider.getVideoSources(quickJsDetail.episodes[0].url);
-    assert.equal(quickJsStreams.length,1,'playback URL parsing must work without global URL');
+    assert.equal(quickJsStreams.length,3,'media API must expose raw, hard-sub, and dub playlists without global URL');
+    assert.equal(quickJsStreams[0].url,'https://media.uniquestream.net/hls/master.m3u8');
+    assert.equal(quickJsStreams[0].headers['x-am-media-id'],'MEDIA001');
   } finally {
     global.URL=savedURL;
   }
