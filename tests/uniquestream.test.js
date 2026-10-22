@@ -73,7 +73,7 @@ global.fetch = async (url, opts) => {
   return {status:404,body:'not found'};
 };
 async function main() {
-  assert.equal(provider.version,'0.4.0');
+  assert.equal(provider.version,'0.5.0');
   assert.equal(provider.getInfo().name,'Uniquestream');
   assert.deepEqual(await provider.search(''),[]);
   const results=await provider.search('Attack on Titan');
@@ -113,6 +113,23 @@ async function main() {
   assert.equal(apiDetail.episodeCount,2);
   assert.equal(apiDetail.episodes.length,2,'episodes should be listed from the public season API');
   assert.equal(apiDetail.episodes[0].title,'API Show Episode 1');
+  // Zangetsu's QuickJS runtime does not guarantee the browser URL constructor.
+  // Regression-test the exact environment that caused live API cards to vanish.
+  const savedURL=global.URL;
+  global.URL=undefined;
+  try {
+    const quickJsResults=await provider.search('Attack on Titan');
+    assert.equal(quickJsResults.length,2,'API search must work without global URL');
+    assert.equal(quickJsResults[0].title,'Attack on Titan');
+    const quickJsHome=await provider.getHome();
+    assert.ok(quickJsHome.length&&quickJsHome[0].items.length,'catalogue must work without global URL');
+    const quickJsDetail=await provider.getDetail(quickJsResults[0].url);
+    assert.equal(quickJsDetail.title,'Attack on Titan','metadata lookup must work without global URL');
+    const quickJsStreams=await provider.getVideoSources(quickJsDetail.episodes[0].url);
+    assert.equal(quickJsStreams.length,1,'playback URL parsing must work without global URL');
+  } finally {
+    global.URL=savedURL;
+  }
   const streams=await provider.getVideoSources(detail.episodes[0].url);
   assert.equal(streams.length,1);
   assert.equal(streams[0].url,'https://media.uniquestream.net/video/episode1.m3u8');
