@@ -58,7 +58,9 @@ async function main() {
   assert.equal(fallbackResults[0].title,'Fallback Show');
   assert.match(fallbackResults[0].url,/FALLBK/);
   assert.deepEqual(await provider.search('malformed'),[]);
-  assert.deepEqual(await provider.search('fallback'),[]);
+  const fallbackShort=await provider.search('fallback');
+  assert.equal(fallbackShort.length,1,'search should recover from an unavailable search route via the public catalogue');
+  assert.equal(fallbackShort[0].title,'Fallback Show');
   assert.deepEqual(await provider.search('network error'),[]);
   const detail=await provider.getDetail(results[0].url);
   assert.equal(detail.title,'Attack on Titan');
