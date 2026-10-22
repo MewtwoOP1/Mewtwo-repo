@@ -5,12 +5,12 @@
 
 const SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID)
   ? String(__SOURCE_ID) : 'av1encodes';
-const VERSION = '1.0.5';
-const DEFAULT_DOMAIN = 'https://av1please.com';
+const VERSION = '1.1.0';
+const DEFAULT_DOMAIN = 'https://av1encodes.com';
 const SITE_DOMAINS = [
-  'https://av1please.com',
+  'https://av1encodes.com',
   'https://animealpha.cc',
-  'https://av1encodes.com'
+  'https://av1please.com'
 ];
 const LOGO = 'https://www.google.com/s2/favicons?sz=256&domain=av1encodes.com';
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
@@ -46,10 +46,23 @@ function _readSetting(key) {
   try {
     const settings = typeof __settings !== 'undefined' && __settings
       ? __settings[SOURCE_ID] : null;
-    return settings && settings[key] != null ? settings[key] : null;
-  } catch (e) {
+    if (!settings) return null;
+    // Support current upstream setting names and previously saved Zangetsu values.
+    const aliases = {
+      domain: ['preferred_domain', 'domain'],
+      preferred_domain: ['preferred_domain', 'domain'],
+      quality: ['preferred_quality', 'quality'],
+      preferred_quality: ['preferred_quality', 'quality'],
+      preferred_link_type: ['preferred_link_type', 'preferredLinkType'],
+      preferredLinkType: ['preferred_link_type', 'preferredLinkType'],
+      showTorrent: ['show_torrent', 'showTorrent'],
+      show_torrent: ['show_torrent', 'showTorrent']
+    };
+    for (const candidate of aliases[key] || [key]) {
+      if (settings[candidate] !== undefined && settings[candidate] !== null) return settings[candidate];
+    }
     return null;
-  }
+  } catch (e) { return null; }
 }
 
 function _cleanDomain(value) {
@@ -61,11 +74,9 @@ function _cleanDomain(value) {
 }
 
 function _domain() {
-  const selected = _readSetting('domain');
+  const selected = _readSetting('preferred_domain');
   if (!selected || String(selected).trim().toLowerCase() === 'auto') return DEFAULT_DOMAIN;
   const normalized = _cleanDomain(selected);
-  // This is a chooser for known site domains, not an arbitrary custom-domain
-  // override. Invalid or unknown values safely return to automatic mode.
   return SITE_DOMAINS.indexOf(normalized) >= 0 ? normalized : DEFAULT_DOMAIN;
 }
 
@@ -96,35 +107,48 @@ function getInfo() {
 function getSettings() {
   return [
     {
-      key: 'domain',
-      label: 'Optional domain',
-      description: 'Optional preferred mirror. Keep Auto to select the default automatically; only official AV1Encodes domains are supported.',
+      key: 'preferred_domain',
+      label: 'Domain',
+      description: 'Choose an official mirror. Auto tries the official domains and preserves the mirror that served the title.',
       type: 'enum',
       default: 'auto',
       options: [
         { value: 'auto', label: 'Auto (recommended)' },
-        { value: 'https://av1please.com', label: 'av1please.com' },
+        { value: 'https://av1encodes.com', label: 'av1encodes.com (default)' },
         { value: 'https://animealpha.cc', label: 'animealpha.cc' },
-        { value: 'https://av1encodes.com', label: 'av1encodes.com' }
+        { value: 'https://av1please.com', label: 'av1please.com (mirror)' }
       ]
     },
     {
-      key: 'quality',
-      label: 'Preferred quality',
-      description: 'Preferred resolution. Episode listings fall back to lower resolutions when needed.',
+      key: 'preferred_quality',
+      label: 'Preferred Resolution',
+      description: 'Episode discovery falls back to other resolutions when needed.',
       type: 'enum',
-      default: '1080p',
+      default: '1920 x 1080',
       options: [
-        { value: '1080p', label: '1080p' },
-        { value: '720p', label: '720p' },
-        { value: '480p', label: '480p' },
-        { value: '360p', label: '360p' }
+        { value: '1920 x 1080', label: '1080p' },
+        { value: '1280 x 720', label: '720p' },
+        { value: '854 x 480', label: '480p' },
+        { value: '640 x 360', label: '360p' }
       ]
     },
     {
-      key: 'showTorrent',
-      label: 'Show torrent links',
-      description: 'Include torrent links in the returned sources when AV1Encodes provides one.',
+      key: 'preferred_link_type',
+      label: 'Preferred Server / Hoster',
+      description: 'Prefer this server type when multiple playable variants are available.',
+      type: 'enum',
+      default: 'Stream',
+      options: [
+        { value: 'Stream', label: 'Stream' },
+        { value: 'Direct DL', label: 'Direct DL' },
+        { value: 'Dash', label: 'Dash' },
+        { value: 'Torrent', label: 'Torrent' }
+      ]
+    },
+    {
+      key: 'show_torrent',
+      label: 'Show Torrent Link',
+      description: 'Include a torrent link as a source when AV1Encodes provides one.',
       type: 'bool',
       default: false
     }
@@ -229,7 +253,7 @@ function _canonicalSiteUrl(url, base) {
   const host = _host(full);
   if (!_isKnownHost(host)) return full;
 
-  const explicit = _readSetting('domain');
+  const explicit = _readSetting('preferred_domain');
   const hasExplicitDomain = !!explicit && String(explicit).trim().toLowerCase() !== 'auto';
   // A URL returned by a successful mirror is evidence of which host actually
   // served the title. In Auto mode preserve that origin across detail, episode
@@ -247,7 +271,7 @@ function _siteBases(preferred) {
   };
   add(preferred || _domain());
 
-  const configured = _readSetting('domain');
+  const configured = _readSetting('preferred_domain');
   const explicit = !!configured && String(configured).trim().toLowerCase() !== 'auto';
   // A manually selected domain is a strict override. Auto mode probes all
   // official mirrors in parallel, and preserves the origin of whichever one
@@ -535,7 +559,7 @@ function _siteLink(raw, base) {
   const host = _host(full);
   if (!_isKnownHost(host)) return null;
 
-  const explicit = _readSetting('domain');
+  const explicit = _readSetting('preferred_domain');
   const hasExplicitDomain = !!explicit && String(explicit).trim().toLowerCase() !== 'auto';
   const absoluteHref = /^https?:\/\//i.test(rawValue) || rawValue.indexOf('//') === 0;
   // Keep absolute upstream URLs intact: its episode token may be scoped to the
@@ -569,6 +593,30 @@ function _cardFromBlock(block, base) {
   return null;
 }
 
+function _containerFlagsAt(source, position) {
+  const tagRe = /<\/?(div|ul|section|aside|main|article|li)\b[^>]*>/gi;
+  const stack = [];
+  let match;
+  while ((match = tagRe.exec(source)) !== null && match.index < position) {
+    const raw = match[0];
+    const tag = match[1].toLowerCase();
+    if (/^<\//.test(raw)) {
+      for (let i = stack.length - 1; i >= 0; i--) {
+        if (stack[i].tag === tag) { stack.length = i; break; }
+      }
+    } else if (!/\/\s*>$/.test(raw)) {
+      stack.push({
+        tag: tag,
+        popular: /id\s*=\s*["'](?:latestCompletedList|popularAnimeList)["']/i.test(raw) ||
+          /class\s*=\s*["'][^"']*sidebar-list-panel[^"']*["']/i.test(raw),
+        latest: /id\s*=\s*["']episodeGrid["']/i.test(raw) ||
+          /class\s*=\s*["'][^"']*latest-panel[^"']*["']/i.test(raw)
+      });
+    }
+  }
+  return { popular: stack.some(x => x.popular), latest: stack.some(x => x.latest) };
+}
+
 function _parseCards(html, base, mode) {
   const source = String(html || '');
   const blocks = [];
@@ -576,55 +624,41 @@ function _parseCards(html, base, mode) {
   const articleRe = /<article\b[^>]*>[\s\S]*?<\/article\s*>/gi;
   while ((m = articleRe.exec(source)) !== null) {
     const open = (m[0].match(/^<article\b[^>]*>/i) || [''])[0];
-    blocks.push({
-      html: m[0], attrs: open,
-      spotlight: /spotlight-slide/i.test(open),
-      latest: /episodeGrid|latest-panel|anime-card|latest|card/i.test(open)
-    });
+    const flags = _containerFlagsAt(source, m.index);
+    blocks.push({ html: m[0], attrs: open, index: m.index,
+      popular: /spotlight-slide/i.test(open) || flags.popular,
+      latest: flags.latest || /(?:latest-panel|episodeGrid)/i.test(open) });
   }
   const liRe = /<li\b[^>]*>[\s\S]*?<\/li\s*>/gi;
   while ((m = liRe.exec(source)) !== null) {
     const open = (m[0].match(/^<li\b[^>]*>/i) || [''])[0];
-    blocks.push({
-      html: m[0], attrs: open,
-      spotlight: /latestCompletedList|sidebar-list-panel|spotlight/i.test(open),
-      latest: /latest|episode|sidebar-list-panel/i.test(open)
-    });
+    const flags = _containerFlagsAt(source, m.index);
+    blocks.push({ html: m[0], attrs: open, index: m.index,
+      popular: flags.popular || /latestCompletedList|sidebar-list-panel|spotlight/i.test(open),
+      latest: flags.latest });
   }
   const linkRe = /<a\b[^>]*href\s*=\s*(["'])[^"']*\/anime\/[^"']+\1[^>]*>[\s\S]*?<\/a\s*>/gi;
   while ((m = linkRe.exec(source)) !== null) {
     const open = (m[0].match(/^<a\b[^>]*>/i) || [''])[0];
     if (/anime-link/i.test(_attr(open, 'class') || '')) {
-      blocks.push({ html: m[0], attrs: open, spotlight: false, latest: false });
+      blocks.push({ html: m[0], attrs: open, index: m.index, popular: false, latest: false });
     }
   }
-
   let chosen = blocks;
-  if (mode === 'popular') {
-    const preferred = blocks.filter(b => b.spotlight);
-    if (preferred.length) chosen = preferred;
-  } else if (mode === 'latest') {
-    const preferred = blocks.filter(b => b.latest && !b.spotlight);
-    if (preferred.length) chosen = preferred;
-  }
+  if (mode === 'popular') chosen = blocks.filter(x => x.popular);
+  else if (mode === 'latest') chosen = blocks.filter(x => x.latest);
+  chosen.sort((a, b) => a.index - b.index);
 
-  const out = [];
-  const seen = Object.create(null);
+  const out = [], seen = Object.create(null);
   for (const block of chosen) {
     const card = _cardFromBlock(block.html, base);
-    if (card && !seen[card.url]) {
-      seen[card.url] = true;
-      out.push(card);
-    }
+    if (card && !seen[card.url]) { seen[card.url] = true; out.push(card); }
   }
-  if (!out.length || mode === 'all') {
+  if (mode === 'all' && !out.length) {
     for (const a of _anchors(source)) {
       if (!/\/anime\/[^/?#]+/i.test(a.href)) continue;
       const card = _cardFromBlock(a.html, base);
-      if (card && !seen[card.url]) {
-        seen[card.url] = true;
-        out.push(card);
-      }
+      if (card && !seen[card.url]) { seen[card.url] = true; out.push(card); }
     }
   }
   return out;
@@ -652,9 +686,30 @@ async function search(query, page, opts) {
   const q = String(query || '').trim();
   const p = Math.max(1, parseInt(page, 10) || 1);
   const base = _domain();
-  const url = q
-    ? base + '/search?q=' + encodeURIComponent(q) + '&page=' + p
-    : base + '/anime?page=' + (p - 1);
+  let url;
+  if (q) {
+    url = base + '/search?q=' + encodeURIComponent(q) + '&page=' + p;
+  } else {
+    const filters = opts && typeof opts === 'object'
+      ? (opts.filters && typeof opts.filters === 'object' ? opts.filters : opts) : {};
+    const sortRaw = String(filters.sort || filters.sortBy || '').trim().toLowerCase();
+    const typeRaw = String(filters.type || filters.audioType || '').trim().toLowerCase();
+    const genreRaw = String(filters.genre || '').trim().toLowerCase();
+    const sortMap = {
+      'a-z':'a-z', az:'a-z', 'z-a':'z-a', za:'z-a',
+      'episode count':'episodes', episodes:'episodes'
+    };
+    const typeMap = { sub:'sub', 'sub only':'sub', dual:'dual', 'dual audio':'dual' };
+    const genreMap = {
+      action:'action', adventure:'adventure', comedy:'comedy', drama:'drama',
+      fantasy:'fantasy', horror:'horror', romance:'romance', 'sci-fi':'sci-fi'
+    };
+    const params = ['page=' + p];
+    if (sortMap[sortRaw]) params.push('sort=' + encodeURIComponent(sortMap[sortRaw]));
+    if (typeMap[typeRaw]) params.push('type=' + encodeURIComponent(typeMap[typeRaw]));
+    if (genreMap[genreRaw]) params.push('genres=' + encodeURIComponent(genreMap[genreRaw]));
+    url = base + '/anime?' + params.join('&');
+  }
   const response = await _fetchSite(url, base + '/');
   if (!response.body) return [];
   return q ? _parseCards(response.body, response.base, 'all')
@@ -671,30 +726,65 @@ function _metaContent(html, key, value) {
   return null;
 }
 
+function _detailImageUrl(html, base) {
+  const source = String(html || '');
+  const images = source.match(/<img\b[^>]*>/gi) || [];
+  const sourceOf = tag => _attr(tag, 'data-src') || _attr(tag, 'data-lazy-src') ||
+    _attr(tag, 'data-original') || _attr(tag, 'src');
+  const eligible = tag => !/(?:logo|avatar|icon|banner-ad)/i.test(
+    (_attr(tag, 'class') || '') + ' ' + (_attr(tag, 'alt') || '')
+  );
+
+  let selected = images.find(tag => eligible(tag) &&
+    /(?:anime-poster|poster|anime-hero|hero-cover|cover-image)/i.test(_attr(tag, 'class') || ''));
+  if (!selected) {
+    const main = (source.match(/<main\b[^>]*>[\s\S]*?<\/main\s*>/i) || [''])[0];
+    selected = (main.match(/<img\b[^>]*>/gi) || []).find(eligible);
+  }
+  if (!selected) selected = images.find(eligible);
+  const raw = selected ? sourceOf(selected) : '';
+  if (raw && !/^(?:data:|about:blank)/i.test(raw)) {
+    const resolved = _absolute(raw, base);
+    if (resolved) return resolved;
+  }
+
+  const ogImage = _absolute(_metaContent(source, 'property', 'og:image'), base);
+  if (ogImage) return ogImage;
+
+  // Restrict CSS fallback to anime poster/hero-specific nodes, never body wallpaper.
+  const hero = source.match(/<(?:div|section|article)\b[^>]*(?:class|id)=["'][^"']*(?:anime-poster|poster|anime-hero|hero-cover|cover-image)[^"']*["'][^>]*>/i);
+  if (hero) {
+    const bg = _attr(hero[0], 'style').match(/url\(\s*["']?([^"')]+)["']?\s*\)/i);
+    if (bg && bg[1]) return _absolute(bg[1], base);
+  }
+  return null;
+}
+
 function _detailFromHtml(url, html, base) {
-  const title = _htmlText(_tagContents(html, 'h1')) ||
-    _htmlText(_metaContent(html, 'property', 'og:title')) ||
+  const source = String(html || '');
+  const title = _htmlText(_tagContents(source, 'h1')) ||
+    _htmlText(_metaContent(source, 'property', 'og:title')) ||
     _slugFromAnimeUrl(url).replace(/[-_]+/g, ' ');
-  let cover = _imageUrl(html, base) || _absolute(_metaContent(html, 'property', 'og:image'), base);
-  const synopsisMatch = String(html || '').match(/<(?:div|p)[^>]*class=["'][^"']*(?:anime-synopsis|synopsis|description|overview|desc)[^"']*["'][^>]*>[\s\S]*?<\/(?:div|p)>/i);
+  const cover = _detailImageUrl(source, base);
+  const synopsisMatch = source.match(/<(?:div|p)[^>]*class=["'][^"']*(?:anime-synopsis|synopsis|description|overview|desc)[^"']*["'][^>]*>[\s\S]*?<\/(?:div|p)>/i);
   const description = _htmlText(synopsisMatch ? synopsisMatch[0] : '') ||
-    _htmlText(_metaContent(html, 'name', 'description'));
+    _htmlText(_metaContent(source, 'name', 'description'));
   const genres = [];
   const genreRe = /<a\b([^>]*href\s*=\s*(["'])[^"']*\/(?:genre|tag)\/[^"']*\2[^>]*)>([\s\S]*?)<\/a\s*>/gi;
   let m;
-  while ((m = genreRe.exec(String(html || ''))) !== null) {
+  while ((m = genreRe.exec(source)) !== null) {
     const name = _htmlText(m[3]);
     if (name && genres.indexOf(name) < 0) genres.push(name);
   }
+  const studioMatch = source.match(/<[^>]*class=["'][^"']*(?:studio|studio-name)[^"']*["'][^>]*>([\s\S]*?)<\/[^>]+>/i);
+  const studio = studioMatch ? _htmlText(studioMatch[1]) : null;
   const slug = _slugFromAnimeUrl(url);
-  const coverMatch = String(html || '').match(/<[^>]+style=["'][^"']*background[^"']*url\((["']?)(.*?)\1\)[^"']*["'][^>]*>/i);
-  if (!cover && coverMatch) cover = _absolute(coverMatch[2], base);
-  return {
-    id: slug, title: title, englishTitle: title, url: _absolute(url, base),
+  return { id: slug, title: title, englishTitle: title, url: _absolute(url, base),
     cover: cover || null, description: description || null, genres: genres,
-    status: /class=["'][^"']*(?:airing|ongoing)[^"']*["']/i.test(html) ? 'ongoing' : 'completed',
-    type: 'anime', sourceId: SOURCE_ID, episodes: [], malId: null
-  };
+    studio: studio || null, author: studio || null,
+    status: /(?:class|id)=["'][^"']*(?:airing|ongoing|status-airing)[^"']*["']/i.test(source)
+      ? 'ongoing' : 'completed',
+    type: 'anime', sourceId: SOURCE_ID, episodes: [], malId: null };
 }
 
 // ── Episode parsing ───────────────────────────────────────────────────────
@@ -741,22 +831,18 @@ function _filenameFromUrl(url) {
 }
 
 function _episodeLabel(filename, label, number, slug, season) {
-  const n = Number(number) || _episodeNumber(filename) || _episodeNumber(label);
-  const nameMatch = String(_decode(filename || '')).replace(/\.(?:mkv|mp4)$/i, '')
-    .match(/\[(?:S\d{1,2}[-_ ]*)?E\d{1,4}\]\s*(.*?)\s*(?=\[|$)/i);
-  let title = nameMatch ? _htmlText(nameMatch[1]) : '';
-  title = title.replace(/\[(?:\d{3,4}p|dual|sub|dub|english\s*dub|tri|multi)[^\]]*\]/gi, ' ')
-    .replace(/\b(?:dual|sub|dub|english\s*dub|tri|multi)\b/gi, ' ')
-    .replace(/\s+/g, ' ').trim();
-  const normal = s => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-  const normalizedTitle = normal(title);
-  const normalizedSlug = normal(slug);
-  if (normalizedTitle && normalizedSlug &&
-      (normalizedTitle === normalizedSlug ||
-       normalizedTitle.replace(/(?:19|20)\d{2}$/, '') === normalizedSlug)) title = '';
-  if (n > 0) return 'Episode ' + n + (title ? ' - ' + title : '');
-  const fallback = _htmlText(label || title || filename || '');
-  return fallback || ('Season ' + (season || '1'));
+  const clean = String(_decode(filename || '')).replace(/\.(?:mkv|mp4)$/i, '').trim();
+  const match = clean.match(/\[(?:S\d{1,2}[-_ ]*)?E(\d{1,4})\]\s*(.+?)\s*\[/i);
+  const audio = clean.match(/\[(Dual|Sub|Dub|English Dub|Tri|Multi)\]/i);
+  const suffix = audio ? ' [' + audio[1] + ']' : '';
+  if (match) return 'Season ' + (season || '1') + ' Ep ' + match[1] + ' - ' +
+    _htmlText(match[2]).trim() + suffix;
+  const stripped = clean.replace(/\[\d{3,4}p\].*$/i, '').trim();
+  const fallback = _htmlText(label || stripped || '');
+  if (String(season || '1') !== '1' && String(season || '').trim()) {
+    return 'Season ' + season + ' - ' + (fallback || stripped);
+  }
+  return fallback || stripped || ('Season ' + (season || '1'));
 }
 
 function _episodeKey(url) {
@@ -788,26 +874,23 @@ function _makeEpisodeUrl(base, slug, season, resolution, filename) {
     encodeURIComponent(String(season)) + '/' + encodeURIComponent(resolution) + '/' + name;
 }
 
-function _episodeFromLink(rawHref, label, base, season, slug, resolution, number, ddl) {
+function _episodeFromLink(rawHref, label, base, season, slug, resolution, number, ddl, useSourceLabel) {
   let href = _siteLink(rawHref, base);
   const filename = _filenameFromUrl(href || rawHref || '');
   if (!href && filename) href = _makeEpisodeUrl(base, slug, season, resolution, filename);
   if (!href) return null;
   const n = Number(number) || _episodeNumber(filename + ' ' + label);
-  let url = href;
   if (ddl && typeof ddl === 'object' && _hasDdlLinks(ddl)) {
-    const packed = JSON.stringify(ddl);
-    // Keep the DDL with the episode so resolution still works if Zangetsu
-    // reloads a provider between episode listing and the play request.
-    if (packed.length <= 10000) url = _setQueryParam(url, DDL_QUERY_KEY, packed);
+    // Keep the signed upstream href unchanged. Cache embedded DDL in memory
+    // instead of adding a private query parameter that can affect positional matching.
+    DDL_BY_URL[href] = ddl;
+    DDL_BY_URL[_withoutQueryParams(href, [DDL_QUERY_KEY])] = ddl;
   }
-  const episode = {
-    id: url, number: n || 1,
-    title: _episodeLabel(filename, label, n, slug, season),
-    url: url, sourceId: SOURCE_ID
-  };
-  if (ddl && typeof ddl === 'object') episode.ddl = ddl;
-  return episode;
+  const sourceLabel = String(label || '').trim();
+  const title = useSourceLabel && sourceLabel ? _htmlText(sourceLabel)
+    : _episodeLabel(filename, '', n, slug, season);
+  return { id: href, number: n || 1, title: title || ('Season ' + (season || '1')),
+    url: href, sourceId: SOURCE_ID };
 }
 
 function _parseEpisodeJson(body, base, slug, season, resolution) {
@@ -829,7 +912,7 @@ function _parseEpisodeJson(body, base, slug, season, resolution) {
     const ddl = item.ddl || item.DDL || null;
     const num = Number(item.num || item.number || item.episode || item.episode_number || 0);
     const ep = _episodeFromLink(target, item.label || item.title || item.name || '',
-      base, season, slug, resolution, num, ddl);
+      base, season, slug, resolution, num, ddl, true);
     if (!ep) continue;
     out.push(ep);
   }
@@ -1025,7 +1108,7 @@ function _getInlineDdl(url) {
   // cannot leak across episodes. If the app restarts, fresh-token resolution
   // remains the fallback. Read old marker URLs for backward compatibility.
   const exact = String(url || '');
-  const cached = DDL_BY_URL[exact];
+  const cached = DDL_BY_URL[exact] || DDL_BY_URL[_withoutQueryParams(exact, [DDL_QUERY_KEY])];
   if (cached && _hasDdlLinks(cached)) return cached;
   const packed = _queryParam(url, DDL_QUERY_KEY);
   if (!packed) return null;
@@ -1062,7 +1145,9 @@ function _labelResolution(resolution, filename) {
 
 function _container(url) {
   if (/\.m3u8(?:[?#]|$)/i.test(url)) return 'hls';
+  if (/\.mpd(?:[?#]|$)/i.test(url)) return 'dash';
   if (/\.mp4(?:[?#]|$)/i.test(url)) return 'mp4';
+  if (/\.mkv(?:[?#]|$)/i.test(url)) return 'mkv';
   return 'unknown';
 }
 
@@ -1073,17 +1158,14 @@ function _mediaKind(filename) {
   return { kind: dubbed ? 'dub' : 'sub', audioLang: dubbed ? 'en' : 'ja' };
 }
 
-function _makeStream(url, label, filename, base) {
+function _makeStream(url, label, filename, base, linkType) {
   if (!url || !/^https?:\/\/|^magnet:/i.test(String(url))) return null;
   const kind = _mediaKind(filename);
   return {
-    url: String(url),
-    quality: label,
-    container: _container(String(url)),
+    url: String(url), quality: label, container: _container(String(url)),
     headers: { 'User-Agent': UA, Referer: (_origin(base) || _domain()) + '/' },
-    kind: kind.kind,
-    audioLang: kind.audioLang,
-    subtitles: []
+    kind: kind.kind, audioLang: kind.audioLang, subtitles: [],
+    linkType: linkType || 'Stream', preferred: false
   };
 }
 
@@ -1105,12 +1187,35 @@ async function _resolveLink(raw, base, ref, context) {
   const full = _absolute(raw, base);
   if (!full || /^magnet:/i.test(full)) return full;
   if (!/^https?:\/\//i.test(full)) return null;
-  // Direct media/CDN URLs do not need an extra GET. Only follow site redirect,
-  // player and watch routes, in parallel with the other DDL links.
   if (!_shouldFollow(full)) return full;
   const response = await _requestSiteUrl(full, ref || (_origin(base) || _domain()) + '/',
     {}, REDIRECT_TIMEOUT_MS, context);
-  return response.ok && response.url ? response.url : full;
+  if (!response.ok || !response.url || _isSiteErrorBody(response.body || '')) return null;
+  const finalUrl = String(response.url);
+  // Watch pages feed DASH URL construction; an unresolved redirect route is not media.
+  if (/\/(?:redirect|r)\//i.test(_pathOnly(finalUrl))) return null;
+  return finalUrl;
+}
+
+function _preferredLinkType() {
+  return String(_readSetting('preferred_link_type') || 'Stream').trim().toLowerCase();
+}
+
+function _sortAndMarkPreferred(streams) {
+  const output = [];
+  const seen = Object.create(null);
+  for (const item of streams || []) {
+    if (!item || !item.url) continue;
+    const key = String(item.url) + '|' + String(item.linkType || 'Stream');
+    if (!seen[key]) { seen[key] = true; output.push(item); }
+  }
+  const preferredType = _preferredLinkType();
+  output.sort((a, b) => {
+    const aa = String(a.linkType || '').toLowerCase() === preferredType;
+    const bb = String(b.linkType || '').toLowerCase() === preferredType;
+    return (bb ? 1 : 0) - (aa ? 1 : 0);
+  });
+  return output.map((item, index) => Object.assign({}, item, { preferred: index === 0 }));
 }
 
 async function _streamsFromDdl(ddl, base, info, resolution, pageHtml, ref, context) {
@@ -1119,29 +1224,32 @@ async function _streamsFromDdl(ddl, base, info, resolution, pageHtml, ref, conte
   const watchRaw = iframeUrl || _ddlValue(ddl, 'watch_link', 'watchLink');
   const streamRaw = _ddlValue(ddl, 'stream_link', 'streamLink');
   const downloadRaw = _ddlValue(ddl, 'download_link', 'downloadLink');
-  const torrentRaw = _readSetting('showTorrent') === true || String(_readSetting('showTorrent')).toLowerCase() === 'true'
-    ? _ddlValue(ddl, 'torrent_link', 'torrentLink') : null;
-
+  const showTorrent = _readSetting('show_torrent') === true ||
+    String(_readSetting('show_torrent')).toLowerCase() === 'true';
+  const torrentRaw = showTorrent ? _ddlValue(ddl, 'torrent_link', 'torrentLink') : null;
   const jobs = await Promise.all([
     watchRaw ? _resolveLink(watchRaw, base, ref, context) : Promise.resolve(null),
     streamRaw ? _resolveLink(streamRaw, base, ref, context) : Promise.resolve(null),
     downloadRaw ? _resolveLink(downloadRaw, base, ref, context) : Promise.resolve(null),
     torrentRaw ? _resolveLink(torrentRaw, base, ref, context) : Promise.resolve(null)
   ]);
-  const watch = jobs[0];
-  const stream = jobs[1];
-  const direct = jobs[2];
-  const torrent = jobs[3];
-  const label = 'AV1 · ' + _labelResolution(resolution || info.resolution, info.filename);
+  const watch = jobs[0], stream = jobs[1], direct = jobs[2], torrent = jobs[3];
+  const res = _labelResolution(resolution || info.resolution, info.filename);
+  const label = 'AV1 · ' + res;
   const audio = (String(info.filename || '').match(/\[(Dual|Sub|Dub|English Dub|Tri|Multi)\]/i) || [])[1];
-  const audioSuffix = audio ? ' [' + audio + ']' : '';
-  const out = [];
+  const suffix = audio ? ' [' + audio + ']' : '';
+  const output = [];
   const dash = _buildDashUrl(watch);
-  if (dash) out.push(_makeStream(dash, label + audioSuffix + ' · DASH', info.filename, base));
-  if (stream && stream !== watch) out.push(_makeStream(stream, label + audioSuffix + ' · Stream', info.filename, base));
-  if (direct && direct !== watch && direct !== stream) out.push(_makeStream(direct, label + audioSuffix + ' · Direct DL', info.filename, base));
-  if (torrent) out.push(_makeStream(torrent, label + audioSuffix + ' · Torrent', info.filename, base));
-  return out.filter(Boolean);
+  if (dash) output.push(_makeStream(dash, label + suffix + ' · DASH', info.filename, base, 'Dash'));
+
+  const streamSource = stream || direct;
+  if (streamSource) output.push(_makeStream(streamSource, label + suffix + ' · Stream',
+    info.filename, base, 'Stream'));
+  if (direct) output.push(_makeStream(direct, label + suffix + ' · Direct DL',
+    info.filename, base, 'Direct DL'));
+  if (torrent) output.push(_makeStream(torrent, label + suffix + ' · Torrent',
+    info.filename, base, 'Torrent'));
+  return output.filter(Boolean);
 }
 
 function _appendFreshToken(cleanUrl, token) {
@@ -1297,63 +1405,61 @@ async function _findEpisodeAtResolution(info, resolution, base) {
   return selected || null;
 }
 
-async function getVideoSources(episodeUrl) {
+async function getVideoSources(episodeUrl, opts) {
   const original = _absolute(episodeUrl, _domain());
   if (!original) return [];
   if (_isDirectMediaUrl(original)) {
-    const directName = _filenameFromUrl(original);
-    return [_makeStream(original, 'AV1 · ' + _labelResolution('', directName) + ' · Direct',
-      directName, _origin(original) || _domain())].filter(Boolean);
+    const name = _filenameFromUrl(original);
+    const stream = _makeStream(original, 'AV1 · ' + _labelResolution('', name) + ' · Direct',
+      name, _origin(original) || _domain(), 'Direct DL');
+    return _sortAndMarkPreferred(stream ? [stream] : []);
   }
 
   const siteUrl = _canonicalSiteUrl(original, _domain()) || original;
-  let info = _parseDownloadInfo(siteUrl);
-  const filename = info.filename || _filenameFromUrl(siteUrl);
+  const info = _parseDownloadInfo(siteUrl);
   if (!info.modern || !info.slug || !info.season || !info.filename) return [];
-  info = Object.assign({}, info, { filename: filename });
+
   const base = _origin(siteUrl) || _domain();
   const context = { warmupUsed: false, tokenCache: Object.create(null) };
+  const preferredResolution = info.resolution || _qualityValue(_readSetting('preferred_quality'));
+  const resolutions = [preferredResolution].concat(
+    QUALITY_LIST.map(item => item.value).filter(value => value !== preferredResolution)
+  );
   const embeddedDdl = _getInlineDdl(original) || _getInlineDdl(siteUrl);
-  const initialResolution = info.resolution || _qualityValue(_readSetting('quality'));
-  const streams = embeddedDdl
-    ? await _streamsFromDdl(embeddedDdl, base, info, initialResolution, '', base + '/', context)
-    : [];
-  if (streams.length) return _dedupeStreams(streams);
 
-  // The first quality is the link selected in the episode list. Only one
-  // alternate quality is attempted per resolve to stay within Zangetsu's
-  // resolver budget. Episode listing itself still checks every quality.
-  const candidates = _qualityCandidates(_readSetting('quality'));
-  const alternate = candidates.find(q => q !== initialResolution);
-  const attempts = [initialResolution];
-  if (alternate) attempts.push(alternate);
-  for (let index = 0; index < attempts.length; index++) {
-    const resolution = attempts[index];
+  // Current upstream tests every quality candidate and matches the same episode.
+  const tasks = resolutions.map(async resolution => {
     let candidateUrl = siteUrl;
-    let candidateInfo = info;
-    if (resolution !== initialResolution) {
-      const entry = await _findEpisodeAtResolution(info, resolution, base);
-      if (!entry) continue;
-      candidateUrl = entry.url;
-      candidateInfo = _parseDownloadInfo(candidateUrl);
-      candidateInfo = Object.assign({}, candidateInfo, { filename: candidateInfo.filename || filename });
-      const data = _getInlineDdl(candidateUrl);
-      if (data) {
-        const fromData = await _streamsFromDdl(data, _origin(candidateUrl) || base,
-          candidateInfo, resolution, '', _origin(candidateUrl) + '/', context);
-        if (fromData.length) return _dedupeStreams(fromData);
-        continue;
-      }
-    } else if (embeddedDdl) {
-      // The embedded payload did not contain usable playable links. Fall
-      // through to the fresh-token page flow below, not to its stale token.
+    let candidateInfo = Object.assign({}, info, { resolution: resolution });
+    if (resolution !== preferredResolution) {
+      const episode = await _findEpisodeAtResolution(info, resolution, base);
+      if (!episode || !episode.url) return [];
+      candidateUrl = episode.url;
+      const parsed = _parseDownloadInfo(candidateUrl);
+      candidateInfo = Object.assign({}, parsed, {
+        filename: parsed.filename || info.filename,
+        resolution: parsed.resolution || resolution
+      });
     }
 
-    const result = await _resolveDownloadPage(candidateUrl, candidateInfo, context);
-    if (result.streams && result.streams.length) return _dedupeStreams(result.streams);
-    if (index === attempts.length - 1 || result.stop) return [];
-  }
-  return [];
+    let ddl = resolution === preferredResolution ? embeddedDdl : _getInlineDdl(candidateUrl);
+    if (!ddl) {
+      const cached = DDL_BY_URL[candidateUrl] || DDL_BY_URL[_withoutQueryParams(candidateUrl, [DDL_QUERY_KEY])];
+      if (cached && _hasDdlLinks(cached)) ddl = cached;
+    }
+    let streams = [];
+    if (ddl && _hasDdlLinks(ddl)) {
+      streams = await _streamsFromDdl(ddl, _origin(candidateUrl) || base,
+        candidateInfo, resolution, '', candidateUrl, context);
+    }
+    if (!streams.length) {
+      const result = await _resolveDownloadPage(candidateUrl, candidateInfo, context);
+      streams = result && Array.isArray(result.streams) ? result.streams : [];
+    }
+    return streams;
+  });
+
+  return _sortAndMarkPreferred([].concat.apply([], await Promise.all(tasks)));
 }
 
 function _isDirectMediaUrl(url) {
@@ -1379,11 +1485,12 @@ function _dedupeStreams(items) {
 async function getHome(opts) {
   const base = _domain();
   const page = await _fetchSite(base + '/', base + '/');
-  let popular = _parseCards(page.body, page.base || base, 'popular');
-  let latest = _parseCards(page.body, page.base || base, 'latest');
+  const servedBy = page.base || base;
+  let popular = _parseCards(page.body, servedBy, 'popular');
+  let latest = _parseCards(page.body, servedBy, 'latest');
   if (!popular.length || !latest.length) {
-    const list = await _fetchSite(base + '/anime?page=0', base + '/');
-    const all = _parseAnimeIndex(list.body, list.base || base);
+    const listing = await _fetchSite(base + '/anime?page=0', base + '/');
+    const all = _parseAnimeIndex(listing.body, listing.base || base);
     if (!popular.length) popular = all;
     if (!latest.length) latest = all;
   }
