@@ -957,7 +957,7 @@
     {
       "id": "av1encodes",
       "name": "AV1Encodes",
-      "version": "1.0.5",
+      "version": "1.1.0",
       "type": "anime",
       "lang": "en",
       "file": "providers/av1encodes.js",
@@ -965,9 +965,9 @@
       "nsfw": false,
       "settings": [
         {
-          "key": "domain",
-          "label": "Optional domain",
-          "description": "Optional preferred mirror. Keep Auto to select the default automatically; only official AV1Encodes domains are supported.",
+          "key": "preferred_domain",
+          "label": "Domain",
+          "description": "Choose an official mirror. Auto tries the official domains and preserves the mirror that served the title.",
           "type": "enum",
           "default": "auto",
           "options": [
@@ -976,48 +976,73 @@
               "label": "Auto (recommended)"
             },
             {
-              "value": "https://av1please.com",
-              "label": "av1please.com"
+              "value": "https://av1encodes.com",
+              "label": "av1encodes.com (default)"
             },
             {
               "value": "https://animealpha.cc",
               "label": "animealpha.cc"
             },
             {
-              "value": "https://av1encodes.com",
-              "label": "av1encodes.com"
+              "value": "https://av1please.com",
+              "label": "av1please.com (mirror)"
             }
           ]
         },
         {
-          "key": "quality",
-          "label": "Preferred quality",
-          "description": "Preferred resolution. Episode listings fall back to lower resolutions when needed.",
+          "key": "preferred_quality",
+          "label": "Preferred Resolution",
+          "description": "Episode discovery falls back to other resolutions when needed.",
           "type": "enum",
-          "default": "1080p",
+          "default": "1920 x 1080",
           "options": [
             {
-              "value": "1080p",
+              "value": "1920 x 1080",
               "label": "1080p"
             },
             {
-              "value": "720p",
+              "value": "1280 x 720",
               "label": "720p"
             },
             {
-              "value": "480p",
+              "value": "854 x 480",
               "label": "480p"
             },
             {
-              "value": "360p",
+              "value": "640 x 360",
               "label": "360p"
             }
           ]
         },
         {
-          "key": "showTorrent",
-          "label": "Show torrent links",
-          "description": "Include torrent links in the returned sources when AV1Encodes provides one.",
+          "key": "preferred_link_type",
+          "label": "Preferred Server / Hoster",
+          "description": "Prefer this server type when multiple playable variants are available.",
+          "type": "enum",
+          "default": "Stream",
+          "options": [
+            {
+              "value": "Stream",
+              "label": "Stream"
+            },
+            {
+              "value": "Direct DL",
+              "label": "Direct DL"
+            },
+            {
+              "value": "Dash",
+              "label": "Dash"
+            },
+            {
+              "value": "Torrent",
+              "label": "Torrent"
+            }
+          ]
+        },
+        {
+          "key": "show_torrent",
+          "label": "Show Torrent Link",
+          "description": "Include a torrent link as a source when AV1Encodes provides one.",
           "type": "bool",
           "default": false
         }
