@@ -44,7 +44,7 @@ const rewrittenMedia = proxy.rewritePlaylist(
 );
 assert.doesNotMatch(rewrittenMedia, /#EXT-X-KEY/,
   'AES keys must be removed from the manifest because the proxy decrypts the segments');
-assert.match(rewrittenMedia, /\/segment\?url=.*segments%2F0007\.ts.*key=.*keys%2Fkey\.bin.*seq=7/,
+assert.match(rewrittenMedia, /\/segment\?url=.*segments%2F0007\.ts.*seq=7.*key=.*keys%2Fkey\.bin/,
   'first segment URL must carry key URL and the media sequence IV');
 assert.match(rewrittenMedia, /\/segment\?url=.*segments%2F0008\.ts.*seq=8/,
   'sequence number must advance for the next encrypted segment');
