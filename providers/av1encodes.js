@@ -5,7 +5,7 @@
 
 const SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID)
   ? String(__SOURCE_ID) : 'av1encodes';
-const VERSION = '1.1.4';
+const VERSION = '1.1.5';
 const DEFAULT_DOMAIN = 'https://av1encodes.com';
 const SITE_DOMAINS = [
   'https://av1encodes.com',
@@ -1130,11 +1130,28 @@ function _parseEpisodePage(html, base, slug, season, resolution) {
 }
 
 function _episodeSeason(item) {
-  // Match Yuzuno Aniyomi: seasons are consumed in descending route order.
-  // The visible filename label is display metadata, not the source route key.
+  // The website's download route season is not always the season shown in the
+  // source episode title. Zangetsu enriches source rows with episode metadata by
+  // list position, so use the visible source season first to keep those records
+  // aligned; fall back to the route key when the source gives no season label.
+  const title = String(item && item.title || '');
+  const namedSeason = title.match(/^\s*Season\s*(\d{1,2})\b/i);
+  if (namedSeason) return parseInt(namedSeason[1], 10) || 1;
+  const compactSeason = title.match(/^\s*S(\d{1,2})\s*[-_ ]*E\d{1,4}\b/i);
+  if (compactSeason) return parseInt(compactSeason[1], 10) || 1;
+
   const path = _pathOnly(item && (item.url || item.id) || '');
-  const m = path.match(/\/download\/[^/]+\/(\d+)\//i);
-  return m ? (parseInt(m[1], 10) || 1) : 1;
+  const routeSeason = path.match(/\/download\/[^/]+\/(\d+)\//i);
+  return routeSeason ? (parseInt(routeSeason[1], 10) || 1) : 1;
+}
+
+function _episodeSortNumber(item) {
+  // Prefer the displayed/file episode identity. The JSON "num" may be scoped
+  // to a route bucket, while metadata rows in Zangetsu are joined by position.
+  const filenameNumber = _episodeNumber(_filenameFromUrl(item && (item.url || item.id) || ''));
+  if (filenameNumber) return filenameNumber;
+  const titleNumber = _episodeNumber(item && item.title || '');
+  return titleNumber || Number(item && item.number) || 0;
 }
 
 function _uniqueEpisodes(items) {
@@ -1144,16 +1161,12 @@ function _uniqueEpisodes(items) {
     const key = _episodeKey(item.url || item.id || '');
     if (key && !seen[key]) { seen[key] = true; out.push(item); }
   }
-  // Keep upstream's exact ordering contract: season route descending and
-  // source episode num descending within each season. Do not "correct" names
-  // parsed from filenames into a different chronological season order. The
-  // app maps source URLs by their list index, so changing this breaks playback.
+  // Sort by the season/episode identity exposed by the website instead of its
+  // download route index. Keep each original item and signed URL untouched.
   return out.sort((a, b) => {
-    const seasonDiff = _episodeSeason(b) - _episodeSeason(a);
+    const seasonDiff = _episodeSeason(a) - _episodeSeason(b);
     if (seasonDiff) return seasonDiff;
-    const aNum = Number(a.number) || _episodeNumber(a.url + ' ' + a.title) || 0;
-    const bNum = Number(b.number) || _episodeNumber(b.url + ' ' + b.title) || 0;
-    return bNum - aNum;
+    return _episodeSortNumber(a) - _episodeSortNumber(b);
   });
 }
 
