@@ -919,8 +919,13 @@ function _detailFromHtml(url, html, base, opts) {
       tagName === 'p' && className.split(/\s+/).includes('anime-meta')
     );
     if (animeMeta !== null) {
-      // Yuzuno's substringAfter("Genre:").substringBefore("|").trim() fallback.
-      const fallbackGenre = animeMeta.split('Genre:').slice(1).join('Genre:').split('|')[0].trim();
+      // Kotlin substringAfter("Genre:") returns the original string when the
+      // delimiter is absent; preserve that exact fallback behavior.
+      const genreIndex = animeMeta.indexOf('Genre:');
+      const afterGenre = genreIndex >= 0
+        ? animeMeta.slice(genreIndex + 'Genre:'.length)
+        : animeMeta;
+      const fallbackGenre = afterGenre.split('|')[0].trim();
       if (fallbackGenre) genres = fallbackGenre.split(',').map(value => value.trim()).filter(Boolean);
     }
   }
