@@ -149,7 +149,7 @@ async function main() {
   await assert.rejects(provider.getVideoSources(detail.episodes[1].url),/did not expose|did not expose|did not expose|did not expose|direct HTTPS media URL/);
   const third='uniquestream://episode/'+encodeURIComponent('https://anime.uniquestream.net/watch/ep003/Attack-on-Titan-Episode-3');
   assert.equal((await provider.getVideoSources(third))[0].url,'https://cdn.example.net/video/episode3.mp4');
-  await assert.rejects(provider.getVideoSources('uniquestream://episode/'+encodeURIComponent('https://evil.example/watch/aa')),/invalid watch page/);
+  await assert.rejects(provider.getVideoSources('uniquestream://episode/'+encodeURIComponent('https://evil.example/watch/aa')),/invalid public episode or media URL/);
   const backup='https://media.uniquestream.net/video/fallback.mp4';
   global.fetch=async (url)=>({status:200,body:String(url).includes('/watch/')?'<script type="application/ld+json">'+JSON.stringify({contentUrl:backup})+'</script>':'<html></html>'});
   const fallback=await provider.getVideoSources(detail.episodes[0].url);
