@@ -1,21 +1,26 @@
 # Uniquestream provider
 
-This provider adapts public HTML pages from https://anime.uniquestream.net to Zangetsu's source interface.
+This provider adapts publicly exposed catalogue and playback information from https://anime.uniquestream.net to Zangetsu.
 
-## Coverage
-- Search tries two public search-page route variants and safely returns an empty list for request or parsing failures.
-- Detail extraction reads page title, description, poster, and public episode links.
-- Playback accepts only direct media URLs explicitly exposed in public watch-page HTML or JSON-LD, and only on the site's own public media hosts. It does not decode hidden/private player APIs, evade anti-bot checks, or bypass authentication.
-- Selector fallbacks: semantic cards and direct anchor fallbacks for catalogue results; data-attribute episode fallbacks; standard media tags and JSON-LD for streams.
-- Request errors/HTTP failures are surfaced from details and playback; search/home/episode-list methods fail safe with empty arrays as appropriate.
+## Implemented
 
-## Setup
-The provider is registered as `uniquestream` in `index.json`. Add this repository to Zangetsu using its normal repo URL, refresh the source list, then install **Uniquestream**. For local checks, use Node.js 22+ and run:
+- Search tries the public search-page route variants and parses catalogue cards inside article/list markup or standalone card containers.
+- Catalogue metadata includes title, synopsis, poster, year, studio, genres, season/episode counts when present in the page, and explicitly linked episode pages.
+- Episode parsing recognizes public `/watch/<id>/<slug>` links and structured episode data embedded in page markup. It does not invent episode URLs from counts alone.
+- Playback extraction reads direct HTTPS media URLs explicitly present in public watch-page HTML, media tags, JSON-LD, or inline script data. Direct media URLs are emitted with the watch-page Referer.
+- Failures are handled without silently treating a failed detail request as a successful empty episode list. Search/home methods still return empty arrays on unavailable catalogue pages.
+
+## Setup and tests
+
+The provider is registered as `uniquestream` in `index.json`. Add this repository in Zangetsu, refresh the repository source list, and install **Uniquestream**.
+
+Run with Node.js 22+:
 
 ```sh
 node tests/uniquestream.test.js
 node scripts/check-and-run.mjs
 ```
 
-## Known limitations
-The website has changed routes and page rendering over time. If its result cards or episode links are rendered only by client-side JavaScript, server-side HTML scraping can return no results. Playback is only returned when a direct `.m3u8`, `.mp4`, or `.mpd` URL is present in publicly served page markup or JSON-LD. If playback is produced by a private API, encrypted player payload, authentication, or an external host, this provider deliberately does not attempt to bypass those controls. Mocked tests establish parser behavior but do not prove real-site playback.
+## Limitations
+
+The site's public series pages may show metadata and an episode count while the episode catalogue itself fails to load. The provider cannot create valid episode URLs from a count alone. Playback is returned only when a direct HTTPS media URL is exposed in the fetched watch-page markup; if the page only contains an embed/player shell or the live source is unavailable, playback remains unresolved. Mocked tests validate parsing logic, not current live-site playback.
