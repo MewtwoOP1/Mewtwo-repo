@@ -234,7 +234,23 @@ async function main() {
     "https://cdn.example/en.vtt",
     "https://cdn.example/es-419.vtt",
   ]);
-  assert.equal(raw.subtitles[1].language, "Spanish (Latin America)");
+  assert.equal(raw.subtitles[0].lang, "English");
+  assert.equal(raw.subtitles[0].label, "English");
+  assert.equal(raw.subtitles[0].format, "vtt");
+  assert.equal(raw.subtitles[1].lang, "Spanish (Latin America)");
+  assert.equal(raw.subtitles[1].format, "vtt");
+  for (const stream of streams) {
+    assert.equal(typeof stream.url, "string", "stream URL must be a string");
+    assert.ok(["hls", "mp4", "torrent", "unknown"].includes(stream.container),
+      "container must match Zangetsu's VideoSource enum");
+    assert.ok(["sub", "dub", "raw", "unknown"].includes(stream.kind),
+      "audio kind must match Zangetsu's VideoSource enum");
+    for (const track of stream.subtitles || []) {
+      assert.equal(typeof track.url, "string", "subtitle URL must be a string");
+      assert.equal(typeof track.lang, "string", "subtitle lang is required by Zangetsu");
+      assert.ok(track.lang.length > 0, "subtitle language cannot be empty");
+    }
+  }
 
   const englishDub = streams.find(stream => stream.url === "https://cdn.example/dub-en.m3u8");
   assert.equal(englishDub.kind, "dub");
