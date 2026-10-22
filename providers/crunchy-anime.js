@@ -537,12 +537,12 @@ function _addStream(out, seen, variant, fallbackLocale, transport, hardSubLocale
   var kind = hardSubLocale ? 'sub' : (locale === 'ja-JP' ? 'sub' : 'dub');
   var label = language + (kind === 'dub' ? ' Dub' : ' Audio');
   if (hardSub) label += ' · ' + hardSub + ' Hard Subs';
-  if (parent) label = parent + ' · ' + label;
+  if (parent && parent !== 'Alternate') label = parent + ' · ' + label;
   label += ' · ' + (actualTransport === 'dash' ? 'DASH' : 'HLS');
   var subtitles = _subtitleTracks(variant.subtitles || (parent && parent.subtitles) || []);
   var quality = _quality(variant, playlist);
   var headers = { Referer: SITE + '/' };
-  var uniqueKey = playlist + '|' + label + '|' + quality;
+  var uniqueKey = playlist + '|' + (hardSubLocale || '') + '|' + actualTransport;
   if (seen[uniqueKey]) return;
   seen[uniqueKey] = true;
   out.push({
@@ -619,7 +619,7 @@ function getVideoSources(episodeUrl, opts) {
     var out = [], seen = Object.create(null);
     lists.forEach(function (list) {
       list.forEach(function (stream) {
-        var key = stream.url + '|' + stream.label;
+        var key = stream.url + '|' + stream.container;
         if (!seen[key]) {
           seen[key] = true;
           out.push(stream);
