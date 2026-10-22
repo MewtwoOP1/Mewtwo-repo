@@ -1,5 +1,6 @@
 const assert = require("node:assert/strict");
 const provider = require("../providers/crunchy-anime.js");
+const manifest = require("../index.json");
 
 const SITE = "https://anime.uniquestream.net";
 const API = SITE + "/api/v1";
@@ -167,7 +168,9 @@ global.fetch = async function (url, options) {
 };
 
 async function main() {
-  assert.equal(provider.version, "1.0.0");
+  const manifestEntry = manifest.sources.find(source => source.id === "crunchy-anime");
+  assert.ok(manifestEntry, "Crunchy-anime must be registered in index.json");
+  assert.equal(provider.version, manifestEntry.version, "Provider and manifest versions must match");
   assert.equal(provider.getInfo().name, "Crunchy-anime");
   assert.equal(provider.getInfo().baseUrl, SITE);
   assert.equal(provider.getInfo().type, "anime");
