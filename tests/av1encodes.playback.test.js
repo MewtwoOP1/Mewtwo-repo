@@ -167,6 +167,7 @@ function routeStreamExtraction(host) {
 
   await test('full path: search -> detail -> episode 1 -> extracted playable stream URLs', async () => {
     reset();
+    P.__settings.av1encodes.preferred_domain = 'auto';
     route(/^https:\/\/av1please\.com\/search\?q=black%20clover&page=1$/, () => fail(403, 'Forbidden'));
     route(/^https:\/\/animealpha\.cc\/search\?q=black%20clover&page=1$/, () => ok(fixtures.search));
     route(/^https:\/\/animealpha\.cc\/anime\/black-clover$/, () => ok(fixtures.detail));
@@ -347,21 +348,28 @@ function routeStreamExtraction(host) {
     assert.strictEqual(episodes[0].number, 1);
   });
 
-  await test('preferred link type prioritizes playable variants', async () => {
+  await test('preferred link type prioritizes playable variants through public playback', async () => {
     reset();
     P.__settings.av1encodes.preferred_link_type = 'Direct DL';
+    const downloadPage = '<html><iframe id="anime-video-player" src="/watch/example-ep-001"></iframe>' +
+      '<script>window.__ddl_token = "AAAAA1234567890";</script></html>';
+    route(/^https:\/\/av1please\.com\/download\/black-clover\/1\/1920%20x%201080\/.*[?&]token=listing-token(?:&|$)/,
+      () => ok(downloadPage));
     route(/^https:\/\/av1please\.com\/watch\/example-ep-001$/, () =>
       ok('', BASE + '/watch/example-ep-001'));
-    const streams = await P.__streamsFromDdl({
+    route(/^https:\/\/av1please\.com\/get_ddl\/.+$/, () => ok(JSON.stringify({
       success: true,
       watch_link: '/watch/example-ep-001',
       stream_link: 'https://cdn.example.com/episode.m3u8',
       download_link: 'https://cdn.example.com/episode.mp4'
-    }, BASE, { filename:'[E001] Example [1080p] [Dual].mkv' }, '1920 x 1080', '', BASE + '/', {});
-    const sorted = P.__sortAndMarkPreferred(streams);
-    assert.ok(sorted.length >= 3);
-    assert.strictEqual(sorted[0].linkType, 'Direct DL');
-    assert.strictEqual(sorted[0].preferred, true);
+    })));
+    const streams = await P.getVideoSources(BASE + EPISODE_PATH, {});
+    assert.ok(streams.length >= 3, 'DASH, stream and direct-download variants should be returned');
+    assert.strictEqual(streams[0].linkType, 'Direct DL');
+    assert.strictEqual(streams[0].preferred, true);
+    assert.ok(streams.some(item => item.url === BASE + '/dash/example-ep-001/manifest.mpd'));
+    assert.ok(streams.some(item => item.url === 'https://cdn.example.com/episode.m3u8'));
+    assert.ok(streams.some(item => item.url === 'https://cdn.example.com/episode.mp4'));
   });
 
   console.log('\n' + passed + ' passed, ' + failed + ' failed\n');
