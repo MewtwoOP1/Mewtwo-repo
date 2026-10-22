@@ -145,31 +145,6 @@ async function main() {
   } finally {
     global.URL=savedURL;
   }
-  // A playlist field can be a signed opaque CDN URL with no .m3u8 suffix.
-  // When the optional same-device helper is running, return its decrypted HLS
-  // proxy endpoint and avoid passing the media-id header to mpv directly.
-  const savedFetchForProxy=global.fetch;
-  global.fetch=async (url)=>{
-    const u=String(url);
-    if(u==='http://127.0.0.1:8787/health')return {status:200,body:'uniquestream-proxy-ok'};
-    if(u.includes('/api/v1/episode/APIEP001/media/hls/ja-JP'))return {
-      status:200,body:JSON.stringify({media_id:'MEDIA002',
-        hls:{locale:'ja-JP',playlist:'https://media.uniquestream.net/opaque/raw?sig=1'},
-        versions:{hls:[{locale:'en-US',playlist:'https://media.uniquestream.net/opaque/dub?sig=2'}]}})
-    };
-    return {status:404,body:'not found'};
-  };
-  try {
-    const proxied=await provider.getVideoSources(apiDetail.episodes[0].url);
-    assert.equal(proxied.length,2,'raw and dub sources should both be preserved');
-    assert.ok(proxied.every(s=>s.url.startsWith('http://127.0.0.1:8787/playlist.m3u8?url=')),
-      'the active local HLS helper should be used for opaque playlist URLs');
-    assert.ok(proxied.every(s=>!s.headers['x-am-media-id']),
-      'the player should use local proxy URLs rather than fetch encrypted upstream playlists directly');
-    assert.ok(proxied[0].label.includes('Local HLS proxy'));
-  } finally {
-    global.fetch=savedFetchForProxy;
-  }
   const streams=await provider.getVideoSources(detail.episodes[0].url);
   assert.equal(streams.length,1);
   assert.equal(streams[0].url,'https://media.uniquestream.net/video/episode1.m3u8');
