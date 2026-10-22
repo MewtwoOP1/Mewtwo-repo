@@ -296,7 +296,7 @@ function routeStreamExtraction(host) {
 
   await test('current upstream settings and provider version are exposed', async () => {
     reset();
-    assert.strictEqual(P.getInfo().version, '1.1.1');
+    assert.strictEqual(P.getInfo().version, '1.1.2');
     const settings = P.getSettings();
     assert.strictEqual(settings.map(item => item.key).join(','), [
       'preferred_domain', 'preferred_quality', 'preferred_link_type', 'show_torrent'
@@ -394,6 +394,35 @@ function routeStreamExtraction(host) {
     assert.strictEqual(episodes[0].url, BASE + item.href);
     assert.strictEqual(episodes[0].title, 'Season 1 Ep 001 - Black Clover [Dual]');
     assert.strictEqual(episodes[0].number, 1);
+  });
+
+  await test('episode metadata order follows explicit website season/episode labels', async () => {
+    reset();
+    const makeEpisode = (routeSeason, filenameNumber, title, token, number) => {
+      const href = BASE + '/download/mixed-show/' + routeSeason +
+        '/1920%20x%201080/%5BE' + String(filenameNumber).padStart(3, '0') +
+        '%5D%20Mixed%20Show%20%5B1080p%5D.mkv?token=' + token;
+      return { id: href, url: href, number, title };
+    };
+    // The site route index is not always the visible season. Zangetsu joins
+    // rich catalogue metadata to source entries by their final list position.
+    const sorted = P._uniqueEpisodes([
+      makeEpisode(1, 1, 'Season 4 Ep 01 - Mixed Show', 's4e1', 1),
+      makeEpisode(1, 2, 'Season 4 Ep 02 - Mixed Show', 's4e2', 2),
+      makeEpisode(2, 1, 'Season 2 Ep 01 - Mixed Show', 's2e1', 1),
+      makeEpisode(4, 1, 'Season 1 Ep 01 - Mixed Show', 's1e1', 1),
+      makeEpisode(4, 2, 'Season 1 Ep 02 - Mixed Show', 's1e2', 2)
+    ]);
+    assert.deepStrictEqual(
+      JSON.parse(JSON.stringify(sorted.map(item => item.title))),
+      [
+        'Season 1 Ep 01 - Mixed Show',
+        'Season 1 Ep 02 - Mixed Show',
+        'Season 2 Ep 01 - Mixed Show',
+        'Season 4 Ep 01 - Mixed Show',
+        'Season 4 Ep 02 - Mixed Show'
+      ]
+    );
   });
 
   await test('preferred link type prioritizes playable variants through public playback', async () => {
