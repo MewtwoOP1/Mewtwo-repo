@@ -141,7 +141,6 @@ function _locales(values, fallback) {
       out.push(locale);
     }
   }
-  if (!out.length) out.push('ja-JP');
   return out;
 }
 
