@@ -382,7 +382,8 @@ function routeStreamExtraction(host) {
 
   await test('detail metadata supports all upstream selector families and preserves selector order', async () => {
     reset();
-    const detail = '<html><head><meta property="og:image" content="/fallback-cover.jpg"></head><body>' +
+    const detail = '<html><head><!-- <h1>Fake comment title</h1><span class="airing-badge">Fake status</span> -->' +
+      '<meta property="og:image" content="/fallback-cover.jpg"></head><body>' +
       '<section class="page-detail"><h1>Native Detail Title</h1></section>' +
       '<main><img src="/main-cover.jpg"></main>' +
       '<section class="episode-overview">Native overview synopsis.</section>' +
