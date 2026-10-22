@@ -57,8 +57,8 @@ function _siteUrl(raw,base) {
   return (p.protocol==='https:'||p.protocol==='http:')&&
     (p.host==='anime.uniquestream.net'||p.host==='media.uniquestream.net')?u:'';
 }
-function _request(url,referer) {
-  return Promise.resolve().then(function(){return fetch(url,{headers:{'User-Agent':UA,'Accept':'text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8','Accept-Language':'en-US,en;q=0.9','Referer':referer||SITE+'/'},timeoutMs:15000});})
+function _request(url,referer,accept) {
+  return Promise.resolve().then(function(){return fetch(url,{headers:{'User-Agent':UA,'Accept':accept||'text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8','Accept-Language':'en-US,en;q=0.9','Referer':referer||SITE+'/'},timeoutMs:15000});})
     .then(function(r){
       if(!r)throw new Error('Uniquestream: empty response');
       var status=Number(r.status||200); if(status<200||status>=400)throw new Error('Uniquestream: HTTP '+status+' for '+url);
@@ -222,14 +222,11 @@ function _htmlSearch(query,page) {
 function search(query,page,opts) {
   var q=_trim(query);if(!q)return Promise.resolve([]);
   var p=page&&Number(page)>1?Number(page):1,enc=encodeURIComponent(q);
-  // The live site exposes a JSON API. Its parameter is query, with t, limit,
-  // and page. The older implementation scraped /search?q= where the browser
-  // receives an app shell and no result cards.
-  var apiUrls=[
-    SITE+'/api/v1/search?query='+enc+'&t=all&limit=24&page='+p,
-    SITE+'/api/v1/search?q='+enc+'&t=all&limit=24&page='+p
-  ];
-  return _fetchApiCards(apiUrls).then(function(items) {
+  // Match the official Aniyomi request contract exactly. The API documents
+  // "query", not "q"; a concurrent q fallback only adds load and can race
+  // through the single shared QuickJS fetch bridge.
+  var apiUrl=SITE+'/api/v1/search?page='+p+'&query='+enc+'&t=all&limit=24';
+  return _fetchApiCards([apiUrl]).then(function(items) {
     if(items.length)return items.slice(0,30);
     return _htmlSearch(q,p).then(function(fallback) {
       var out=[],seen={};
@@ -242,17 +239,18 @@ function search(query,page,opts) {
   }).catch(function(){return [];});
 }
 function popular(opts) {
-  // Public JSON catalogue routes used by other public AnimeStream clients.
-  var apiUrls=[
-    SITE+'/api/v1/videos/popular?limit=20&page=1&type=all',
-    SITE+'/api/v1/videos/new?limit=20&page=1&type=all'
-  ];
-  return _fetchApiCards(apiUrls).then(function(items) {
+  // Match the public Aniyomi API calls and retry Latest only if Popular is empty.
+  var popularUrl=SITE+'/api/v1/videos/popular?page=1&limit=20&type=all';
+  var latestUrl=SITE+'/api/v1/videos/new?page=1&limit=20&type=all';
+  return _fetchApiCards([popularUrl]).then(function(items) {
     if(items.length)return items.slice(0,30);
-    return _fetchCardPages([SITE+'/videos/popular/',SITE+'/videos/new/']).then(function(htmlItems) {
-      if(htmlItems.length)return htmlItems.slice(0,30);
-      return _fetchCardPages([SITE+'/videos/alphabetical/',SITE+'/']).then(function(fallback) {
-        return fallback.slice(0,30);
+    return _fetchApiCards([latestUrl]).then(function(latest) {
+      if(latest.length)return latest.slice(0,30);
+      return _fetchCardPages([SITE+'/videos/popular/',SITE+'/videos/new/']).then(function(htmlItems) {
+        if(htmlItems.length)return htmlItems.slice(0,30);
+        return _fetchCardPages([SITE+'/videos/alphabetical/',SITE+'/']).then(function(fallback) {
+          return fallback.slice(0,30);
+        });
       });
     });
   }).catch(function(){return [];});
