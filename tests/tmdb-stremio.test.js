@@ -8,6 +8,7 @@ global.__settings = {
     tmdbApiKey: "test-user-key",
     addonUrls: "https://addon.example/manifest.json?token=secret\nhttps://second.example/manifest.json",
     maxStreamsPerAddon: "10",
+    pencariMovieServerUrl: "",
   },
 };
 
@@ -48,7 +49,7 @@ async function main() {
   assert.equal(provider.getInfo().logo, source.logo, "provider and manifest logos should stay in sync");
 
   const settings = provider.getSettings();
-  assert.deepEqual(settings.map((setting) => setting.key), ["tmdbApiKey", "addonUrls", "maxStreamsPerAddon"]);
+  assert.deepEqual(settings.map((setting) => setting.key), ["tmdbApiKey", "addonUrls", "pencariMovieServerUrl", "maxStreamsPerAddon"]);
   assert.ok(settings.every((setting) => setting.description && setting.label));
   assert.equal(provider._combinedSettings().max, 10);
   assert.deepEqual(provider._parseAddonUrls(global.__settings["tmdb-stremio"].addonUrls).map(provider._manifestUrl), [
@@ -84,6 +85,23 @@ async function main() {
   assert.ok(addOnCalls.length > 0);
   assert.ok(addOnCalls.every((url) => !url.includes("test-user-key")));
   assert.ok(addOnCalls.some((url) => url.includes("?token=secret")));
+
+  // A private PencariMovie server is opt-in only, accepts its tokenized
+  // manifest URL, and is queried as an ordinary Stremio-compatible addon.
+  assert.ok(!provider._combinedSettings().urls.some((url) => url.includes("pencari")));
+  global.__settings["tmdb-stremio"].pencariMovieServerUrl =
+    "http://192.168.1.20:8088/my-private-token/manifest.json";
+  assert.deepEqual(provider._combinedSettings().urls, [
+    "https://addon.example::zangetsu-query::token=secret",
+    "https://second.example",
+    "http://192.168.1.20:8088/my-private-token",
+  ]);
+  assert.equal(
+    provider._manifestUrl(provider._combinedSettings().urls[2]),
+    "http://192.168.1.20:8088/my-private-token/manifest.json",
+  );
+  global.__settings["tmdb-stremio"].pencariMovieServerUrl = "";
+  assert.ok(!provider._combinedSettings().urls.some((url) => url.includes("192.168.1.20")));
 
   global.__settings["tmdb-stremio"].tmdbApiKey = "";
   assert.ok(provider._tmdbRequestUrl("/trending/movie/week").startsWith("https://api.themoviedb.org/3/"));

@@ -22,7 +22,14 @@
         {
           "key": "addonUrls",
           "label": "Stremio Add-on URLs (manifest URLs; comma/newline separated)",
-          "description": "One or more Stremio-compatible add-on manifest URLs. Add-ons provide streams; this repository does not host video.",
+          "description": "Optional Stremio-compatible add-on manifest URLs. These add-ons provide streams.",
+          "type": "text",
+          "default": ""
+        },
+        {
+          "key": "pencariMovieServerUrl",
+          "label": "Private PencariMovie Server (optional)",
+          "description": "Your self-hosted PencariMovie server URL, with its server token, optionally ending in /manifest.json. Leave blank to disable. This URL is not preconfigured or published.",
           "type": "text",
           "default": ""
         },
@@ -896,75 +903,6 @@
           "description": "VidNest movie, TV and anime source.",
           "type": "bool",
           "default": true
-        }
-      ]
-    },
-    {
-      "id": "av1encodes",
-      "name": "AV1Encodes",
-      "version": "1.0.5",
-      "type": "anime",
-      "lang": "en",
-      "file": "providers/av1encodes.js",
-      "logo": "https://www.google.com/s2/favicons?sz=256&domain=av1encodes.com",
-      "nsfw": false,
-      "settings": [
-        {
-          "key": "domain",
-          "label": "Optional domain",
-          "description": "Optional preferred mirror. Keep Auto to select the default automatically; only official AV1Encodes domains are supported.",
-          "type": "enum",
-          "default": "auto",
-          "options": [
-            {
-              "value": "auto",
-              "label": "Auto (recommended)"
-            },
-            {
-              "value": "https://av1please.com",
-              "label": "av1please.com"
-            },
-            {
-              "value": "https://animealpha.cc",
-              "label": "animealpha.cc"
-            },
-            {
-              "value": "https://av1encodes.com",
-              "label": "av1encodes.com"
-            }
-          ]
-        },
-        {
-          "key": "quality",
-          "label": "Preferred quality",
-          "description": "Preferred resolution. Episode listings fall back to lower resolutions when needed.",
-          "type": "enum",
-          "default": "1080p",
-          "options": [
-            {
-              "value": "1080p",
-              "label": "1080p"
-            },
-            {
-              "value": "720p",
-              "label": "720p"
-            },
-            {
-              "value": "480p",
-              "label": "480p"
-            },
-            {
-              "value": "360p",
-              "label": "360p"
-            }
-          ]
-        },
-        {
-          "key": "showTorrent",
-          "label": "Show torrent links",
-          "description": "Include torrent links in the returned sources when AV1Encodes provides one.",
-          "type": "bool",
-          "default": false
         }
       ]
     }
