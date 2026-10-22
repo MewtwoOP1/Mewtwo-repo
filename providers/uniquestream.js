@@ -124,8 +124,8 @@ function _fetchCardPages(urls) {
   })).then(_uniqueCards);
 }
 function _json(url) {
-  return _request(url).then(function(body) {
-    try { return JSON.parse(body); }
+  return _request(url,SITE+'/','application/json, text/plain, */*').then(function(body) {
+    try { return JSON.parse(String(body).replace(/^\\uFEFF/,'')); }
     catch(e) { throw new Error('Uniquestream: invalid JSON response from '+url); }
   });
 }
