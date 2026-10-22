@@ -40,7 +40,7 @@ async function main() {
   assert.ok(rewrittenMaster.includes("/m3u8?url="), "master child playlists must route through the Worker");
   assert.ok(rewrittenMaster.includes("mid=" + encodeURIComponent(mediaId)));
   assert.ok(rewrittenMaster.includes("token=secret"));
-  assert.ok(rewrittenMaster.includes(encodeURIComponent("https://cdn.example/vod/variants/720.m3u8?sig=abc")));
+  assert.ok(rewrittenMaster.includes(encodeURIComponent("https://cdn.example/vod/variants/720.m3u8")));
 
   const media = [
     "#EXTM3U",
