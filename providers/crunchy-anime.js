@@ -136,7 +136,7 @@ function _locales(values, fallback) {
   if (!input.length && Array.isArray(fallback)) input = fallback;
   for (var i = 0; i < input.length; i++) {
     var locale = _trim(input[i]);
-    if (locale && /^[a-z]{2,3}-[A-Z]{2,4}$/.test(locale) && !seen[locale]) {
+    if (locale && /^[a-z]{2,3}-[A-Z0-9]{2,4}$/.test(locale) && !seen[locale]) {
       seen[locale] = true;
       out.push(locale);
     }
