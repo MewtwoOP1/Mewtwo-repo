@@ -3,7 +3,7 @@ var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID) ? String(__S
 var SITE = 'https://anime.uniquestream.net';
 var MEDIA = 'https://media.uniquestream.net';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36';
-var VERSION = '0.2.0';
+var VERSION = '0.3.0';
 
 function getInfo() { return { name:'Uniquestream', lang:'en', baseUrl:SITE, logo:'https://www.google.com/s2/favicons?sz=256&domain=anime.uniquestream.net', type:'anime', version:VERSION }; }
 function getSettings() { return []; }
@@ -83,27 +83,104 @@ function _cards(html,base) {
   for(var k=0;k<bare.length;k++)_cardFromBlock(bare[k],base,out,seen);
   return out;
 }
+function _uniqueCards(groups) {
+  var out=[],seen={};
+  for(var i=0;i<groups.length;i++) {
+    var list=groups[i]||[];
+    for(var j=0;j<list.length;j++) {
+      var item=list[j],key=String(item.url||item.id||'');
+      if(!key||seen[key])continue;
+      seen[key]=true;out.push(item);
+    }
+  }
+  return out;
+}
+function _fetchCardPages(urls) {
+  // Fetch independent public pages together so a dead route cannot consume
+  // the entire provider-call timeout before a working fallback is tried.
+  return Promise.all(urls.map(function(url) {
+    return _request(url).then(function(html){return _cards(html,url);},function(){return [];});
+  })).then(_uniqueCards);
+}
+function _normalTitle(s) {
+  return _trim(String(s||'').toLowerCase())
+    .replace(/&amp;/g,' and ')
+    .replace(/[^a-z0-9]+/g,' ')
+    .replace(/\\s+/g,' ')
+    .trim();
+}
+function _matchingCards(items,query) {
+  var q=_normalTitle(query),words=q.split(' ').filter(function(w){return w.length>1;});
+  if(!q)return [];
+  return items.filter(function(item) {
+    var t=_normalTitle(item.title);
+    if(!t)return false;
+    if(t.indexOf(q)>=0)return true;
+    // Some site titles add a subtitle or alternate title. Require every
+    // meaningful query token rather than returning unrelated catalogue rows.
+    return words.length>0&&words.every(function(w){return t.indexOf(w)>=0;});
+  });
+}
+function _letterFor(query) {
+  var s=_trim(query).replace(/^#+/,'');
+  if(!s)return 'A';
+  var c=s.charAt(0).toUpperCase();
+  return /^[A-Z0-9]$/.test(c)?c:'A';
+}
 function search(query,page,opts) {
   var q=_trim(query); if(!q)return Promise.resolve([]);
   var p=page&&Number(page)>1?Number(page):1;
-  var candidates=[SITE+'/search?q='+encodeURIComponent(q)+'&page='+p,SITE+'/search/?q='+encodeURIComponent(q)+'&page='+p,SITE+'/search?query='+encodeURIComponent(q)+'&page='+p];
-  function tryAt(i) {
-    if(i>=candidates.length)return Promise.resolve([]);
-    return _request(candidates[i]).then(function(html){
-      var items=_cards(html,candidates[i]);
-      if(items.length)return items;
-      // Continue through public route variants when the response is a shell
-      // or a valid page with no cards; a later route may be the actual result.
-      return i+1<candidates.length?tryAt(i+1):[];
-    },function(){return i+1<candidates.length?tryAt(i+1):[];});
-  }
-  return tryAt(0).then(function(items){return items;}).catch(function(){return [];});
+  var enc=encodeURIComponent(q);
+  // Try public search-page variants first. The site is Nuxt-rendered and can
+  // return an app shell on one route while the actual result cards are absent.
+  var candidates=[
+    SITE+'/search?q='+enc+'&page='+p,
+    SITE+'/search/?q='+enc+'&page='+p,
+    SITE+'/search?query='+enc+'&page='+p,
+    SITE+'/search?keyword='+enc+'&page='+p
+  ];
+  return _fetchCardPages(candidates).then(function(items) {
+    if(items.length)return items;
+    // Live inspection found that the public Latest/Popular shelves currently
+    // render without card data, while the public A–Z archive is server-rendered.
+    // Search that public archive by the query's initial and match titles locally.
+    var letter=_letterFor(q),letterUrls=[];
+    for(var n=p;n<=p+2;n++) {
+      letterUrls.push(SITE+'/videos/alphabetical/?letter='+encodeURIComponent(letter)+'&page='+n);
+    }
+    letterUrls.push(SITE+'/videos/alphabetical/?letter='+encodeURIComponent(letter));
+    return _fetchCardPages(letterUrls).then(function(found) {
+      var matches=_matchingCards(found,q);
+      if(matches.length)return matches;
+      // Last-resort public catalogue pages. Only return actual title matches.
+      return _fetchCardPages([SITE+'/videos/alphabetical/',SITE+'/']).then(function(fallback) {
+        return _matchingCards(fallback,q);
+      });
+    });
+  }).then(function(items) {
+    // Never return duplicate aliases or an unbounded catalogue page as search
+    // results. A page is capped to keep Zangetsu's metadata decode inexpensive.
+    var out=[],seen={};
+    for(var i=0;i<items.length&&out.length<30;i++) {
+      var key=String(items[i].url||items[i].id||'');
+      if(key&&!seen[key]){seen[key]=true;out.push(items[i]);}
+    }
+    return out;
+  }).catch(function(){return [];});
 }
 function popular(opts) {
   var paths=[SITE+'/videos/popular/',SITE+'/videos/new/'];
-  return _request(paths[0]).then(function(h){var a=_cards(h,paths[0]);if(a.length)return a;return _request(paths[1]).then(function(x){return _cards(x,paths[1]);},function(){return [];});}).catch(function(){return [];});
+  return _fetchCardPages(paths).then(function(items) {
+    if(items.length)return items;
+    // The public A–Z page is currently more reliable than the dynamic shelves.
+    return _fetchCardPages([SITE+'/videos/alphabetical/',SITE+'/']).then(function(fallback) {
+      return fallback.slice(0,30);
+    });
+  }).catch(function(){return [];});
 }
-function getHome(opts) { return popular(opts).then(function(items){return items.length?[{title:'Popular Anime',items:items}]:[];}); }
+function getHome(opts) {
+  return popular(opts).then(function(items){return items.length?[{title:'Uniquestream Catalogue',items:items}]:[];});
+}
 function _seriesUrl(value) {
   var raw=String(value||'');
   if(raw.indexOf('uniquestream://series/')===0)raw=raw.slice('uniquestream://series/'.length);
