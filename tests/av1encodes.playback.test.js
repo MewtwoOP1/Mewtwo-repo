@@ -251,12 +251,16 @@ function routeStreamExtraction(host) {
 
     const episodes = await P.getEpisodes(BASE + '/anime/long-anime', {});
     assert.strictEqual(episodes.length, 50, 'all 50 source episodes must survive parsing');
-    assert.strictEqual(episodes[44].number, 45, 'Zangetsu resolves episode N using the Nth source-list entry');
-    assert.strictEqual(episodes[44].title, 'Episode 45', 'a non-empty upstream JSON label is preserved');
-    assert.ok(!episodes[44].url.includes('__av1ddl='), 'new episode URLs preserve the original upstream href');
-    assert.ok(episodes[44].url.includes('token=token-45'));
+    // Yuzuno sorts episode JSON by source num descending. Address the episode
+    // by its source identity, not an ascending-list index that contradicts
+    // the upstream order contract.
+    const episode45 = episodes.find(item => item.number === 45);
+    assert.ok(episode45, 'Episode 45 must remain addressable in the sorted source list');
+    assert.strictEqual(episode45.title, 'Episode 45', 'a non-empty upstream JSON label is preserved');
+    assert.ok(!episode45.url.includes('__av1ddl='), 'new episode URLs preserve the original upstream href');
+    assert.ok(episode45.url.includes('token=token-45'));
 
-    const streams = await P.getVideoSources(episodes[44].url);
+    const streams = await P.getVideoSources(episode45.url);
     assert.ok(streams.some(stream => stream.url === BASE + '/dash/episode-45/manifest.mpd'),
       'episode 45 must yield a DASH URL');
     assert.ok(streams.some(stream => stream.url === 'https://cdn.example.com/episode-45.m3u8'),
@@ -296,7 +300,7 @@ function routeStreamExtraction(host) {
 
   await test('current upstream settings and provider version are exposed', async () => {
     reset();
-    assert.strictEqual(P.getInfo().version, '1.1.3');
+    assert.strictEqual(P.getInfo().version, '1.1.4');
     const settings = P.getSettings();
     assert.strictEqual(settings.map(item => item.key).join(','), [
       'preferred_domain', 'preferred_quality', 'preferred_link_type', 'show_torrent'
@@ -378,6 +382,36 @@ function routeStreamExtraction(host) {
     route(/^https:\/\/av1please\.com\/anime\/meta-genre$/, () => ok(detail));
     const result = await P.getDetail(BASE + '/anime/meta-genre', {});
     assert.deepStrictEqual(JSON.parse(JSON.stringify(result.genres)), ['Action', 'Adventure']);
+  });
+
+  await test('detail metadata supports all upstream selector families and preserves selector order', async () => {
+    reset();
+    const detail = '<html><head><!-- <h1>Fake comment title</h1><span class="airing-badge">Fake status</span> -->' +
+      '<meta property="og:image" content="/fallback-cover.jpg"></head><body>' +
+      '<section class="page-detail"><h1>Native Detail Title</h1></section>' +
+      '<main><img src="/main-cover.jpg"></main>' +
+      '<section class="episode-overview">Native overview synopsis.</section>' +
+      '<div class="custom-genre-taxonomy"><a href="/category/fantasy">Fantasy</a></div>' +
+      '<span class="producer-studio-info">Native Studio</span>' +
+      '<span class="AIRING-badge">Uppercase class must not match the case-sensitive CSS selector</span>' +
+      '</body></html>';
+    route(/^https:\/\/av1please\.com\/anime\/selector-metadata$/, () => ok(detail));
+    const result = await P.getDetail(BASE + '/anime/selector-metadata', {});
+    assert.strictEqual(result.title, 'Native Detail Title');
+    assert.strictEqual(result.cover, BASE + '/main-cover.jpg');
+    assert.strictEqual(result.description, 'Native overview synopsis.');
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(result.genres)), ['Fantasy']);
+    assert.strictEqual(result.author, 'Native Studio');
+    assert.strictEqual(result.status, 'completed');
+  });
+
+  await test('anime-meta fallback matches Kotlin substringAfter behavior when Genre is absent', async () => {
+    reset();
+    const detail = '<html><body><h1>Metadata Fallback</h1>' +
+      '<p class="anime-meta">Type: TV | Adventure | Complete</p></body></html>';
+    route(/^https:\/\/av1please\.com\/anime\/missing-genre-label$/, () => ok(detail));
+    const result = await P.getDetail(BASE + '/anime/missing-genre-label', {});
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(result.genres)), ['Type: TV']);
   });
 
   await test('episode JSON href stays unchanged and filename labels match upstream format', async () => {
