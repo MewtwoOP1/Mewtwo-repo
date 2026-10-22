@@ -71,17 +71,11 @@ function _combinedSettings() {
   if (max > 100) max = 100;
   var urls = _parseAddonUrls(_readSetting('addonUrls'));
   var privatePencari = _trim(_readSetting('pencariMovieServerUrl'));
-  if (privatePencari) {
-    // PencariMovie exposes a Stremio-compatible manifest at
-    // /<server-token>/manifest.json. Accept either the manifest URL or its
-    // tokenized base URL, and only add it when the user explicitly configures it.
-    if (/^https?:\/\//i.test(privatePencari)) {
-      if (/\/manifest\.json(?:\?.*)?$/i.test(privatePencari)) {
-        urls.push(privatePencari.replace(/\/manifest\.json(\?.*)?$/i, '$1'));
-      } else {
-        urls.push(privatePencari);
-      }
-    }
+  if (privatePencari && /^https?:\/\//i.test(privatePencari)) {
+    // Normalize either a tokenized base URL or a complete /manifest.json URL
+    // through the same parser as ordinary add-ons. This setting remains empty
+    // by default and is never replaced with a public server.
+    urls = urls.concat(_parseAddonUrls(privatePencari));
   }
   var uniqueUrls = [], seenUrls = {};
   urls.forEach(function (url) {
