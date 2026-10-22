@@ -30,10 +30,10 @@ function _text(s) {
   return _trim(_decode(v).replace(/\s+/g, ' '));
 }
 function _attr(tag, name) {
-  var pattern = '(?:^|\\\\s)' + name + '\\\\s*=\\\\s*([\"\\\\x27])([^\"\\\\x27]*)[\"\\\\x27]';
+  var pattern = '(?:^|\\s)' + name + '\\s*=\\s*(["\\x27])([^"\\x27]*)["\\x27]';
   var m = String(tag || '').match(new RegExp(pattern, 'i'));
   if (m) return _decode(m[2]);
-  var bare = String(tag || '').match(new RegExp('(?:^|\\\\s)' + name + '\\\\s*=\\\\s*([^\\\\s>]+)', 'i'));
+  var bare = String(tag || '').match(new RegExp('(?:^|\\s)' + name + '\\s*=\\s*([^\\s>]+)', 'i'));
   return bare ? _decode(bare[1]) : '';
 }
 function _abs(raw, base) {
