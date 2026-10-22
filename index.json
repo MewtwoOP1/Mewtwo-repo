@@ -957,7 +957,7 @@
     {
       "id": "av1encodes",
       "name": "AV1Encodes",
-      "version": "1.1.2",
+      "version": "1.1.3",
       "type": "anime",
       "lang": "en",
       "file": "providers/av1encodes.js",
