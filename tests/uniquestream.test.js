@@ -27,6 +27,17 @@ const searchHtml = `
 </body></html>`;
 global.fetch = async (url, opts) => {
   const u = String(url); calls.push({url:u,opts:opts||{}});
+  if (u.includes('/api/v1/search?query=Attack%20on%20Titan')) return {
+    status:200,
+    body:JSON.stringify({series:[
+      {content_id:'AG689vQw',title:'Attack on Titan',image:'https://media.uniquestream.net/posters/aot.jpg'},
+      {content_id:'XYZ123',title:'Another Show',image:''}
+    ],movies:[],episodes:[]})
+  };
+  if (u.includes('/api/v1/videos/popular?')) return {
+    status:200,
+    body:JSON.stringify([{content_id:'AG689vQw',title:'Attack on Titan',image:'https://media.uniquestream.net/posters/aot.jpg',type:'show'}])
+  };
   if (u.includes('/search?q=Attack%20on%20Titan')) return {status:200,body:searchHtml};
   if (u.includes('/search?q=missing')) return {status:200,body:'<main>No titles</main>'};
   if (u.includes('/search?q=malformed')) return {status:200,body:'<html><div'};
@@ -45,13 +56,17 @@ global.fetch = async (url, opts) => {
   return {status:404,body:'not found'};
 };
 async function main() {
-  assert.equal(provider.version,'0.3.0');
+  assert.equal(provider.version,'0.4.0');
   assert.equal(provider.getInfo().name,'Uniquestream');
   assert.deepEqual(await provider.search(''),[]);
   const results=await provider.search('Attack on Titan');
-  assert.equal(results.length,2,'catalogue cards inside divs must be found even when nav lists exist');
+  assert.equal(results.length,2,'JSON API search results must be converted to provider cards');
   assert.equal(results[0].title,'Attack on Titan');
   assert.equal(results[0].cover,'https://media.uniquestream.net/posters/aot.jpg');
+  assert.ok(calls.some(c=>c.url.includes('/api/v1/search?query=Attack%20on%20Titan')),'search must use the public JSON API');
+  const home=await provider.getHome();
+  assert.equal(home.length,1,'home should fall back to the public JSON catalogue');
+  assert.equal(home[0].items[0].title,'Attack on Titan');
   assert.deepEqual(await provider.search('missing'),[]);
   const fallbackResults=await provider.search('Fallback Show');
   assert.equal(fallbackResults.length,1,'public alphabetical catalogue must be used when search routes fail');
