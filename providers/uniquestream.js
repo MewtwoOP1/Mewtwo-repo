@@ -45,7 +45,7 @@ function _abs(raw,base) {
 function _urlParts(raw) {
   var m=String(raw||'').match(/^(https?):\/\/([^\/?#]+)([^?#]*)/i);
   if(!m)return null;
-  return {protocol:m[1].toLowerCase(),host:m[2].toLowerCase().replace(/:\d+$/,''),pathname:m[3]||'/'};
+  return {protocol:m[1].toLowerCase()+':',host:m[2].toLowerCase().replace(/:\d+$/,''),pathname:m[3]||'/'};
 }
 function _pathname(raw) {
   var parts=_urlParts(raw);
