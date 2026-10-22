@@ -24,3 +24,6 @@ node scripts/check-and-run.mjs
 ## Limitations
 
 The site's public series pages may show metadata and an episode count while the episode catalogue itself fails to load. The provider cannot create valid episode URLs from a count alone. Playback is returned only when a direct HTTPS media URL is exposed in the fetched watch-page markup; if the page only contains an embed/player shell or the live source is unavailable, playback remains unresolved. Mocked tests validate parsing logic, not current live-site playback.
+
+
+Version 0.3.0: search now falls back to the public A–Z archive and home catalogue when the site’s search endpoint yields no cards; the home catalogue also falls back from the currently empty dynamic shelves.
