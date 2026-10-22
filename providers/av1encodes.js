@@ -5,7 +5,7 @@
 
 const SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID)
   ? String(__SOURCE_ID) : 'av1encodes';
-const VERSION = '1.1.0';
+const VERSION = '1.1.1';
 const DEFAULT_DOMAIN = 'https://av1encodes.com';
 const SITE_DOMAINS = [
   'https://av1encodes.com',
@@ -726,65 +726,221 @@ function _metaContent(html, key, value) {
   return null;
 }
 
-function _detailImageUrl(html, base) {
+function _htmlInnerAt(source, tagName, afterOpen) {
+  const voidTags = /^(?:area|base|br|col|embed|hr|img|input|link|meta|param|source|track|wbr)$/i;
+  if (voidTags.test(tagName)) return '';
+  const tokenRe = new RegExp('<\\/?' + tagName + '\\b[^>]*>', 'gi');
+  tokenRe.lastIndex = afterOpen;
+  let depth = 1;
+  let match;
+  while ((match = tokenRe.exec(source)) !== null) {
+    if (/^<\//.test(match[0])) {
+      depth--;
+      if (depth === 0) return source.slice(afterOpen, match.index);
+    } else if (!/\/\s*>$/.test(match[0])) {
+      depth++;
+    }
+  }
+  return source.slice(afterOpen);
+}
+
+function _firstClassElementText(html, predicate) {
   const source = String(html || '');
-  const images = source.match(/<img\b[^>]*>/gi) || [];
-  const sourceOf = tag => _attr(tag, 'data-src') || _attr(tag, 'data-lazy-src') ||
-    _attr(tag, 'data-original') || _attr(tag, 'src');
-  const eligible = tag => !/(?:logo|avatar|icon|banner-ad)/i.test(
-    (_attr(tag, 'class') || '') + ' ' + (_attr(tag, 'alt') || '')
-  );
-
-  let selected = images.find(tag => eligible(tag) &&
-    /(?:anime-poster|poster|anime-hero|hero-cover|cover-image)/i.test(_attr(tag, 'class') || ''));
-  if (!selected) {
-    const main = (source.match(/<main\b[^>]*>[\s\S]*?<\/main\s*>/i) || [''])[0];
-    selected = (main.match(/<img\b[^>]*>/gi) || []).find(eligible);
-  }
-  if (!selected) selected = images.find(eligible);
-  const raw = selected ? sourceOf(selected) : '';
-  if (raw && !/^(?:data:|about:blank)/i.test(raw)) {
-    const resolved = _absolute(raw, base);
-    if (resolved) return resolved;
-  }
-
-  const ogImage = _absolute(_metaContent(source, 'property', 'og:image'), base);
-  if (ogImage) return ogImage;
-
-  // Restrict CSS fallback to anime poster/hero-specific nodes, never body wallpaper.
-  const hero = source.match(/<(?:div|section|article)\b[^>]*(?:class|id)=["'][^"']*(?:anime-poster|poster|anime-hero|hero-cover|cover-image)[^"']*["'][^>]*>/i);
-  if (hero) {
-    const bg = _attr(hero[0], 'style').match(/url\(\s*["']?([^"')]+)["']?\s*\)/i);
-    if (bg && bg[1]) return _absolute(bg[1], base);
+  const openRe = /<([a-z][a-z0-9:-]*)\b[^>]*>/gi;
+  let match;
+  while ((match = openRe.exec(source)) !== null) {
+    const tagName = match[1].toLowerCase();
+    const attrs = match[0];
+    const className = _attr(attrs, 'class') || '';
+    if (!predicate(tagName, className, attrs)) continue;
+    return _htmlText(_htmlInnerAt(source, tagName, openRe.lastIndex));
   }
   return null;
 }
 
-function _detailFromHtml(url, html, base) {
+function _extractUpstreamGenres(html) {
   const source = String(html || '');
-  const title = _htmlText(_tagContents(source, 'h1')) ||
-    _htmlText(_metaContent(source, 'property', 'og:title')) ||
-    _slugFromAnimeUrl(url).replace(/[-_]+/g, ' ');
-  const cover = _detailImageUrl(source, base);
-  const synopsisMatch = source.match(/<(?:div|p)[^>]*class=["'][^"']*(?:anime-synopsis|synopsis|description|overview|desc)[^"']*["'][^>]*>[\s\S]*?<\/(?:div|p)>/i);
-  const description = _htmlText(synopsisMatch ? synopsisMatch[0] : '') ||
-    _htmlText(_metaContent(source, 'name', 'description'));
+  const tokenRe = /<\/?([a-z][a-z0-9:-]*)\b[^>]*>/gi;
+  const stack = [];
   const genres = [];
-  const genreRe = /<a\b([^>]*href\s*=\s*(["'])[^"']*\/(?:genre|tag)\/[^"']*\2[^>]*)>([\s\S]*?)<\/a\s*>/gi;
-  let m;
-  while ((m = genreRe.exec(source)) !== null) {
-    const name = _htmlText(m[3]);
-    if (name && genres.indexOf(name) < 0) genres.push(name);
+  const voidTags = /^(?:area|base|br|col|embed|hr|img|input|link|meta|param|source|track|wbr)$/i;
+  let match;
+
+  while ((match = tokenRe.exec(source)) !== null) {
+    const raw = match[0];
+    const tagName = match[1].toLowerCase();
+    if (/^<\//.test(raw)) {
+      for (let i = stack.length - 1; i >= 0; i--) {
+        if (stack[i].tagName === tagName) {
+          stack.length = i;
+          break;
+        }
+      }
+      continue;
+    }
+
+    const className = _attr(raw, 'class') || '';
+    const classes = className.split(/\s+/).filter(Boolean);
+    const href = _attr(raw, 'href') || '';
+    const rel = _attr(raw, 'rel') || '';
+    let selected = false;
+    let value = '';
+
+    if (tagName === 'link' && rel === 'tag' && href.indexOf('/genre/') >= 0) {
+      selected = true;
+      const path = href.split(/[?#]/)[0];
+      const last = path.split('/').filter(Boolean).pop() || '';
+      const decoded = _decode(last);
+      value = decoded ? decoded.charAt(0).toUpperCase() + decoded.slice(1) : '';
+    } else {
+      const classSelector = classes.indexOf('genre-tag') >= 0 || classes.indexOf('tag') >= 0;
+      const hrefSelector = tagName === 'a' && /\/(?:genre|tag)\//.test(href);
+      const genreAncestor = tagName === 'a' && stack.some(item =>
+        String(item.className || '').indexOf('genre') >= 0
+      );
+      selected = classSelector || hrefSelector || genreAncestor;
+      if (selected) value = _htmlText(_htmlInnerAt(source, tagName, tokenRe.lastIndex));
+    }
+
+    if (selected && value && genres.indexOf(value) < 0) genres.push(value);
+    if (!voidTags.test(tagName) && !/\/\s*>$/.test(raw)) {
+      stack.push({ tagName: tagName, className: className });
+    }
   }
-  const studioMatch = source.match(/<[^>]*class=["'][^"']*(?:studio|studio-name)[^"']*["'][^>]*>([\s\S]*?)<\/[^>]+>/i);
-  const studio = studioMatch ? _htmlText(studioMatch[1]) : null;
+  return genres;
+}
+
+function _extractDetailCover(html, base) {
+  const source = String(html || '');
+  const tokenRe = /<\/?([a-z][a-z0-9:-]*)\b[^>]*>/gi;
+  const stack = [];
+  const voidTags = /^(?:area|base|br|col|embed|hr|img|input|link|meta|param|source|track|wbr)$/i;
+  let selectedImage = null;
+  let backgroundNode = null;
+  let bodyNode = null;
+  let match;
+
+  // Mirrors the upstream image selectors in document order.
+  while ((match = tokenRe.exec(source)) !== null) {
+    const raw = match[0];
+    const tagName = match[1].toLowerCase();
+    if (/^<\//.test(raw)) {
+      for (let i = stack.length - 1; i >= 0; i--) {
+        if (stack[i].tagName === tagName) {
+          stack.length = i;
+          break;
+        }
+      }
+      continue;
+    }
+
+    const className = _attr(raw, 'class') || '';
+    if (tagName === 'body' && !bodyNode) bodyNode = raw;
+    if (!backgroundNode && className &&
+        (className.indexOf('poster') >= 0 || className.indexOf('hero') >= 0)) {
+      backgroundNode = raw;
+    }
+    if (tagName === 'img' && !selectedImage) {
+      const ownClasses = className.split(/\s+/);
+      const ownPoster = ownClasses.indexOf('anime-poster') >= 0 || ownClasses.indexOf('poster') >= 0;
+      const matchingAncestor = stack.some(item =>
+        item.tagName === 'main' ||
+        String(item.className || '').indexOf('anime-hero') >= 0 ||
+        String(item.className || '').indexOf('poster') >= 0 ||
+        String(item.className || '').indexOf('hero') >= 0
+      );
+      if (ownPoster || matchingAncestor) selectedImage = raw;
+    }
+
+    if (!voidTags.test(tagName) && !/\/\s*>$/.test(raw)) {
+      stack.push({ tagName: tagName, className: className });
+    }
+  }
+
+  if (selectedImage) {
+    const raw = _attr(selectedImage, 'data-src') ||
+      _attr(selectedImage, 'data-lazy-src') || _attr(selectedImage, 'src');
+    if (raw) {
+      if (/^(?:data:|about:blank)/i.test(raw)) return raw;
+      const resolved = _absolute(raw, base);
+      if (resolved) return resolved;
+    }
+  }
+
+  const ogImage = _metaContent(source, 'property', 'og:image');
+  if (ogImage) return _absolute(ogImage, base) || ogImage;
+
+  // Match upstream fallback: poster/hero background, then body background if
+  // no matching poster/hero element exists.
+  const fallback = backgroundNode || bodyNode;
+  if (fallback) {
+    const style = _attr(fallback, 'style') || '';
+    const bg = style.match(/url\(['"]([^'"]+)['"]\)/i);
+    if (bg && bg[1]) {
+      if (/^https?:\/\//i.test(bg[1])) return bg[1];
+      return (_origin(base) || base) + '/' + bg[1].replace(/^\/+/, '');
+    }
+  }
+  return null;
+}
+
+function _detailTitleFallback(opts) {
+  if (typeof opts === 'string') return opts;
+  if (!opts || typeof opts !== 'object') return '';
+  if (typeof opts.title === 'string') return opts.title;
+  if (opts.anime && typeof opts.anime.title === 'string') return opts.anime.title;
+  if (opts.metadata && typeof opts.metadata.title === 'string') return opts.metadata.title;
+  return '';
+}
+
+function _detailFromHtml(url, html, base, opts) {
+  const source = String(html || '');
+  const heading = source.match(/<h1\b[^>]*>([\s\S]*?)<\/h1\s*>/i);
+  // Upstream uses the website H1, falling back to the existing anime title;
+  // it does not synthesize SEO copy or a guessed title from the URL slug.
+  const title = heading ? _htmlText(heading[1]) : _detailTitleFallback(opts);
+  const cover = _extractDetailCover(source, base);
+  const description = _firstClassElementText(source, (tagName, className) =>
+    className.split(/\s+/).some(value =>
+      value === 'anime-synopsis' || value === 'synopsis' ||
+      value === 'description' || value === 'desc'
+    ) || /synopsis|description|overview/.test(className)
+  );
+
+  let genres = _extractUpstreamGenres(source);
+  if (!genres.length) {
+    const animeMeta = _firstClassElementText(source, (tagName, className) =>
+      tagName === 'p' && className.split(/\s+/).indexOf('anime-meta') >= 0
+    );
+    if (animeMeta !== null) {
+      const index = animeMeta.indexOf('Genre:');
+      const after = index >= 0 ? animeMeta.slice(index + 'Genre:'.length) : animeMeta;
+      const fallbackGenre = after.split('|')[0].trim();
+      if (fallbackGenre) genres = fallbackGenre.split(',').map(value => value.trim()).filter(Boolean);
+    }
+  }
+
+  const author = _firstClassElementText(source, (tagName, className) =>
+    className.indexOf('studio') >= 0
+  );
+  const isAiring = /<[^>]+\bclass\s*=\s*["'][^"']*airing[^"']*["'][^>]*>/i.test(source);
   const slug = _slugFromAnimeUrl(url);
-  return { id: slug, title: title, englishTitle: title, url: _absolute(url, base),
-    cover: cover || null, description: description || null, genres: genres,
-    studio: studio || null, author: studio || null,
-    status: /(?:class|id)=["'][^"']*(?:airing|ongoing|status-airing)[^"']*["']/i.test(source)
-      ? 'ongoing' : 'completed',
-    type: 'anime', sourceId: SOURCE_ID, episodes: [], malId: null };
+
+  return {
+    id: slug,
+    title: title,
+    englishTitle: title,
+    url: _absolute(url, base),
+    cover: cover || null,
+    description: description === null ? null : description,
+    genres: genres,
+    author: author === null ? null : author,
+    status: isAiring ? 'ongoing' : 'completed',
+    type: 'anime',
+    sourceId: SOURCE_ID,
+    episodes: [],
+    malId: null
+  };
 }
 
 // ── Episode parsing ───────────────────────────────────────────────────────
@@ -1070,7 +1226,7 @@ async function getDetail(url, opts) {
     console.warn('[AV1Encodes] detail page unavailable status=' + page.status +
       ' reason=' + (page.reason || 'unknown') + ' url=' + full);
   }
-  const detail = _detailFromHtml(page.url || full, page.body, base);
+  const detail = _detailFromHtml(page.url || full, page.body, base, opts);
   if (page.body) {
     detail.episodes = await _episodesFromHtml(_slugFromAnimeUrl(full), base, page.body);
     _writeEpisodeCache(full, detail.episodes);
