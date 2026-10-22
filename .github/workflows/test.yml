@@ -21,3 +21,17 @@ jobs:
           node-version: 22
       - name: Validate providers and run tests
         run: node scripts/check-and-run.mjs
+
+  uniquestream-live-api:
+    if: github.event_name == 'pull_request' && github.head_ref == 'feat/uniquestream-provider'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Probe Uniquestream public API
+        run: node tests/uniquestream.live-smoke.mjs
