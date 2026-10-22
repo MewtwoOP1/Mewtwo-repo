@@ -897,9 +897,13 @@ function _detailFromHtml(url, html, base, opts) {
   // Direct JavaScript port of Yuzuno's AV1Encodes getAnimeDetails().
   // Upstream's combined title selector ends with generic "h1", so the first
   // H1 in document order is the corresponding result.
-  const source = String(html || '');
-  const title = _firstClassElementText(source, tagName => tagName === 'h1')
-    ?? _detailTitleFallback(opts);
+  // Comments and raw-text elements are not DOM elements in Jsoup, so remove
+  // them before applying the upstream selectors.
+  const source = String(html || '')
+    .replace(/<!--[\\s\\S]*?-->/g, ' ')
+    .replace(/<(script|style|noscript)\\b[^>]*>[\\s\\S]*?<\\/\\1>/gi, ' ');
+  const headingTitle = _firstClassElementText(source, tagName => tagName === 'h1');
+  const title = headingTitle === null ? _detailTitleFallback(opts) : headingTitle;
 
   // Keep upstream's exact image precedence: poster image, og:image, then
   // poster/hero background or body background.
