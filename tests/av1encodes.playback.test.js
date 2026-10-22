@@ -69,7 +69,12 @@ function mockFetch(url, options) {
 function createProviderSandbox() {
   const sandbox = {
     __SOURCE_ID: 'av1encodes',
-    __settings: { av1encodes: {} },
+    __settings: { av1encodes: {
+      preferred_domain: BASE,
+      preferred_quality: '1920 x 1080',
+      preferred_link_type: 'Stream',
+      show_torrent: false
+    } },
     fetch: mockFetch,
     console: { log: console.log, warn: () => {}, error: console.error },
     Promise, JSON, String, Number, Boolean, Object, Array, Math, RegExp, Error, Date,
@@ -162,6 +167,7 @@ function routeStreamExtraction(host) {
 
   await test('full path: search -> detail -> episode 1 -> extracted playable stream URLs', async () => {
     reset();
+    P.__settings.av1encodes.preferred_domain = 'auto';
     route(/^https:\/\/av1please\.com\/search\?q=black%20clover&page=1$/, () => fail(403, 'Forbidden'));
     route(/^https:\/\/animealpha\.cc\/search\?q=black%20clover&page=1$/, () => ok(fixtures.search));
     route(/^https:\/\/animealpha\.cc\/anime\/black-clover$/, () => ok(fixtures.detail));
@@ -199,6 +205,7 @@ function routeStreamExtraction(host) {
 
   await test('episode lookup tries the third official mirror after the pinned host and default fail', async () => {
     reset();
+    P.__settings.av1encodes.preferred_domain = 'auto';
     route(/^https:\/\/av1encodes\.com\/anime\/black-clover$/, () => fail(403, 'Forbidden'));
     route(/^https:\/\/av1encodes\.com\/$/, () => ok('<html>Home</html>'));
     route(/^https:\/\/av1please\.com\/anime\/black-clover$/, () => fail(403, 'Forbidden'));
@@ -245,8 +252,8 @@ function routeStreamExtraction(host) {
     const episodes = await P.getEpisodes(BASE + '/anime/long-anime', {});
     assert.strictEqual(episodes.length, 50, 'all 50 source episodes must survive parsing');
     assert.strictEqual(episodes[44].number, 45, 'Zangetsu resolves episode N using the Nth source-list entry');
-    assert.strictEqual(episodes[44].title, 'Episode 45', 'legacy label formatting must be restored');
-    assert.ok(episodes[44].url.includes('__av1ddl='), 'legacy inline DDL must remain attached to the episode URL');
+    assert.strictEqual(episodes[44].title, 'Episode 45', 'a non-empty upstream JSON label is preserved');
+    assert.ok(!episodes[44].url.includes('__av1ddl='), 'new episode URLs preserve the original upstream href');
     assert.ok(episodes[44].url.includes('token=token-45'));
 
     const streams = await P.getVideoSources(episodes[44].url);
@@ -260,6 +267,7 @@ function routeStreamExtraction(host) {
 
   await test('a terminal generator page on one mirror does not mask a healthy mirror', async () => {
     reset();
+    P.__settings.av1encodes.preferred_domain = 'auto';
     route(/^https:\/\/av1please\.com\/download\/black-clover\/1\/1920%20x%201080\/.*[?&]token=listing-token(?:&|$)/,
       () => ok(fixtures.generatorError));
     route(/^https:\/\/animealpha\.cc\/download\/black-clover\/1\/1920%20x%201080\/.*[?&]token=listing-token(?:&|$)/,
@@ -284,6 +292,84 @@ function routeStreamExtraction(host) {
     assert.ok(!streams.some(source => /\/download\//.test(source.url)));
     assert.ok(!calls.some(call => /\/get_token(?:\?|$)/.test(call.url)),
       'the provider must not preflight /get_token when the signed page has a terminal generator error');
+  });
+
+  await test('current upstream settings and provider version are exposed', async () => {
+    reset();
+    assert.strictEqual(P.getInfo().version, '1.1.0');
+    const settings = P.getSettings();
+    assert.strictEqual(settings.map(item => item.key).join(','), [
+      'preferred_domain', 'preferred_quality', 'preferred_link_type', 'show_torrent'
+    ].join(','));
+    assert.ok(settings[0].options.some(item => item.value === 'https://animealpha.cc'));
+    assert.ok(settings[2].options.some(item => item.value === 'Dash'));
+  });
+
+  await test('home parsing recognizes upstream spotlight, completed and latest containers', async () => {
+    reset();
+    const home = '<html><body>' +
+      '<section><article class="spotlight-slide"><a href="/anime/spotlight"><h3>Spotlight Title</h3><img class="poster" src="/spotlight.jpg"></a></article></section>' +
+      '<div id="latestCompletedList"><ul><li><a href="/anime/completed"><h4>Completed Title</h4><img src="/completed.jpg"></a></li></ul></div>' +
+      '<div id="episodeGrid"><article class="episode-card"><a href="/anime/latest"><h3>Latest Title</h3><img src="/latest.jpg"></a></article></div>' +
+      '</body></html>';
+    route(/^https:\/\/av1please\.com\/$/, () => ok(home));
+    const rows = await P.getHome({});
+    const popular = rows.find(row => row.title === 'Popular');
+    const latest = rows.find(row => row.title === 'Latest');
+    assert.ok(popular && popular.items.some(item => /spotlight|completed/.test(item.url)));
+    assert.ok(latest && latest.items.some(item => /latest/.test(item.url)));
+    assert.ok(!popular.items.some(item => /latest/.test(item.url)));
+  });
+
+  await test('detail parsing rejects a generic body wallpaper as an anime cover', async () => {
+    reset();
+    const detail = '<html><head><title>Anime title</title></head>' +
+      '<body style="background-image:url(https://cdn.example.com/site-wallpaper.jpg)">' +
+      '<main><h1>Anime title</h1><p class="synopsis">Synopsis text</p></main></body></html>';
+    route(/^https:\/\/av1please\.com\/anime\/wallpaper-test$/, () => ok(detail));
+    const result = await P.getDetail(BASE + '/anime/wallpaper-test', {});
+    assert.strictEqual(result.cover, null, 'generic body background must not become a cover');
+    assert.strictEqual(result.title, 'Anime title');
+  });
+
+  await test('episode JSON href stays unchanged and filename labels match upstream format', async () => {
+    reset();
+    const detail = '<html><body><h1>Black Clover</h1><div data-season="1"></div></body></html>';
+    route(/^https:\/\/av1please\.com\/anime\/black-clover$/, () => ok(detail));
+    const item = {
+      num: 1,
+      href: '/download/black-clover/1/1920%20x%201080/%5BE001%5D%20Black%20Clover%20%5B1080p%5D%20%5BDual%5D.mkv?token=label-test'
+    };
+    route(/^https:\/\/av1please\.com\/episodes\/black-clover\/1\/1920%20x%201080$/, () => ok(JSON.stringify([item])));
+    const episodes = await P.getEpisodes(BASE + '/anime/black-clover', {});
+    assert.strictEqual(episodes.length, 1);
+    assert.strictEqual(episodes[0].url, BASE + item.href);
+    assert.strictEqual(episodes[0].title, 'Season 1 Ep 001 - Black Clover [Dual]');
+    assert.strictEqual(episodes[0].number, 1);
+  });
+
+  await test('preferred link type prioritizes playable variants through public playback', async () => {
+    reset();
+    P.__settings.av1encodes.preferred_link_type = 'Direct DL';
+    const downloadPage = '<html><iframe id="anime-video-player" src="/watch/example-ep-001"></iframe>' +
+      '<script>window.__ddl_token = "AAAAA1234567890";</script></html>';
+    route(/^https:\/\/av1please\.com\/download\/black-clover\/1\/1920%20x%201080\/.*[?&]token=listing-token(?:&|$)/,
+      () => ok(downloadPage));
+    route(/^https:\/\/av1please\.com\/watch\/example-ep-001$/, () =>
+      ok('', BASE + '/watch/example-ep-001'));
+    route(/^https:\/\/av1please\.com\/get_ddl\/.+$/, () => ok(JSON.stringify({
+      success: true,
+      watch_link: '/watch/example-ep-001',
+      stream_link: 'https://cdn.example.com/episode.m3u8',
+      download_link: 'https://cdn.example.com/episode.mp4'
+    })));
+    const streams = await P.getVideoSources(BASE + EPISODE_PATH, {});
+    assert.ok(streams.length >= 3, 'DASH, stream and direct-download variants should be returned');
+    assert.strictEqual(streams[0].linkType, 'Direct DL');
+    assert.strictEqual(streams[0].preferred, true);
+    assert.ok(streams.some(item => item.url === BASE + '/dash/example-ep-001/manifest.mpd'));
+    assert.ok(streams.some(item => item.url === 'https://cdn.example.com/episode.m3u8'));
+    assert.ok(streams.some(item => item.url === 'https://cdn.example.com/episode.mp4'));
   });
 
   console.log('\n' + passed + ' passed, ' + failed + ' failed\n');
