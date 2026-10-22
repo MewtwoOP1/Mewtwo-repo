@@ -957,13 +957,28 @@
     {
       "id": "crunchy-anime",
       "name": "Crunchy-anime",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "type": "anime",
       "lang": "en",
       "file": "providers/crunchy-anime.js",
       "logo": "https://www.google.com/s2/favicons?sz=256&domain=anime.uniquestream.net",
       "nsfw": false,
-      "settings": []
+      "settings": [
+        {
+          "key": "hlsProxyUrl",
+          "label": "HLS proxy URL",
+          "description": "Required for protected Crunchy-anime HLS playback. Deploy workers/crunchy-anime-hls-proxy.mjs and enter its Worker origin.",
+          "type": "text",
+          "default": ""
+        },
+        {
+          "key": "hlsProxyToken",
+          "label": "HLS proxy token",
+          "description": "The PROXY_TOKEN secret configured on your Crunchy-anime HLS Worker.",
+          "type": "text",
+          "default": ""
+        }
+      ]
     }
   ]
 }
