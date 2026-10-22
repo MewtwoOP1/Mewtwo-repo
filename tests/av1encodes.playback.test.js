@@ -296,7 +296,7 @@ function routeStreamExtraction(host) {
 
   await test('current upstream settings and provider version are exposed', async () => {
     reset();
-    assert.strictEqual(P.getInfo().version, '1.1.0');
+    assert.strictEqual(P.getInfo().version, '1.1.1');
     const settings = P.getSettings();
     assert.strictEqual(settings.map(item => item.key).join(','), [
       'preferred_domain', 'preferred_quality', 'preferred_link_type', 'show_torrent'
@@ -321,15 +321,63 @@ function routeStreamExtraction(host) {
     assert.ok(!popular.items.some(item => /latest/.test(item.url)));
   });
 
-  await test('detail parsing rejects a generic body wallpaper as an anime cover', async () => {
+  await test('detail metadata follows the website selectors used by upstream Aniyomi', async () => {
     reset();
-    const detail = '<html><head><title>Anime title</title></head>' +
-      '<body style="background-image:url(https://cdn.example.com/site-wallpaper.jpg)">' +
-      '<main><h1>Anime title</h1><p class="synopsis">Synopsis text</p></main></body></html>';
-    route(/^https:\/\/av1please\.com\/anime\/wallpaper-test$/, () => ok(detail));
-    const result = await P.getDetail(BASE + '/anime/wallpaper-test', {});
-    assert.strictEqual(result.cover, null, 'generic body background must not become a cover');
-    assert.strictEqual(result.title, 'Anime title');
+    const detail = '<html><head>' +
+      '<title>Browser SEO title</title>' +
+      '<meta property="og:title" content="SEO replacement title">' +
+      '<meta name="description" content="SEO replacement description">' +
+      '<meta property="og:image" content="/images/seo-cover.jpg">' +
+      '<link rel="tag" href="/genre/fantasy">' +
+      '</head><body>' +
+      '<div class="anime-hero"><h1 class="anime-title">Website Title &amp; Original</h1>' +
+      '<img class="anime-poster" data-src="/images/website-poster.jpg" src="/images/fallback-poster.jpg"></div>' +
+      '<div class="anime-synopsis">Website synopsis &amp; details.</div>' +
+      '<a class="genre-tag" href="/other-path">Native Genre</a>' +
+      '<div class="genre-list"><a href="/genre/action">Action</a></div>' +
+      '<span class="studio-name">Website Studio</span>' +
+      '<span class="status-airing">Currently airing</span>' +
+      '</body></html>';
+    route(/^https:\/\/av1please\.com\/anime\/native-metadata$/, () => ok(detail));
+    const result = await P.getDetail(BASE + '/anime/native-metadata', {});
+    assert.strictEqual(result.title, 'Website Title & Original');
+    assert.strictEqual(result.englishTitle, 'Website Title & Original');
+    assert.strictEqual(result.cover, BASE + '/images/website-poster.jpg');
+    assert.strictEqual(result.description, 'Website synopsis & details.');
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(result.genres)),
+      ['Fantasy', 'Native Genre', 'Action']);
+    assert.strictEqual(result.author, 'Website Studio');
+    assert.strictEqual(result.status, 'ongoing');
+    assert.ok(!Object.prototype.hasOwnProperty.call(result, 'studio'),
+      'Map the upstream studio selector to author rather than adding a duplicate metadata field');
+  });
+
+  await test('missing website title and synopsis are not replaced with SEO or slug text', async () => {
+    reset();
+    const detail = '<html><head>' +
+      '<meta property="og:title" content="SEO title not used as the anime title">' +
+      '<meta name="description" content="SEO description not used as synopsis">' +
+      '<meta property="og:image" content="/images/og.jpg">' +
+      '</head><body><p>Unrelated page text</p></body></html>';
+    route(/^https:\/\/av1please\.com\/anime\/missing-metadata$/, () => ok(detail));
+    const result = await P.getDetail(BASE + '/anime/missing-metadata', {});
+    assert.strictEqual(result.title, '');
+    assert.strictEqual(result.description, null);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(result.genres)), []);
+    assert.strictEqual(result.author, null);
+    assert.strictEqual(result.cover, BASE + '/images/og.jpg');
+    const withExistingTitle = await P.getDetail(BASE + '/anime/missing-metadata', { title: 'Existing Source Title' });
+    assert.strictEqual(withExistingTitle.title, 'Existing Source Title');
+  });
+
+  await test('anime-meta genre fallback follows the website Genre field', async () => {
+    reset();
+    const detail = '<html><body><h1>Anime Page Title</h1>' +
+      '<p class="anime-meta">Type: TV | Genre: Action, Adventure | Status: Complete</p>' +
+      '</body></html>';
+    route(/^https:\/\/av1please\.com\/anime\/meta-genre$/, () => ok(detail));
+    const result = await P.getDetail(BASE + '/anime/meta-genre', {});
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(result.genres)), ['Action', 'Adventure']);
   });
 
   await test('episode JSON href stays unchanged and filename labels match upstream format', async () => {
