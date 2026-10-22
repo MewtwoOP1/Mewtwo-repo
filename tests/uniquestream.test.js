@@ -34,6 +34,23 @@ global.fetch = async (url, opts) => {
       {content_id:'XYZ123',title:'Another Show',image:''}
     ],movies:[],episodes:[]})
   };
+  if (u.includes('/api/v1/series/API001')) return {
+    status:200,
+    body:JSON.stringify({
+      content_id:'API001',title:'API Show',description:'Metadata from public JSON API',
+      images:[{type:'poster_tall',url:'https://media.uniquestream.net/posters/api-show.jpg'}],
+      genre:['Action','Fantasy'],year:2024,
+      seasons:[{content_id:'SEASON001',title:'Season 1',episode_count:2}]
+    })
+  };
+  if (u.includes('/api/v1/season/SEASON001/episodes?page=1')) return {
+    status:200,
+    body:JSON.stringify([
+      {content_id:'APIEP001',title:'API Show Episode 1',episode_number:1},
+      {content_id:'APIEP002',title:'API Show Episode 2',episode_number:2}
+    ])
+  };
+  if (u.includes('/api/v1/season/SEASON001/episodes?page=2')) return {status:200,body:'[]'};
   if (u.includes('/api/v1/videos/popular?')) return {
     status:200,
     body:JSON.stringify([{content_id:'AG689vQw',title:'Attack on Titan',image:'https://media.uniquestream.net/posters/aot.jpg',type:'show'}])
@@ -88,6 +105,14 @@ async function main() {
   assert.equal(detail.episodes.length,2,'shortcut link should not be treated as an episode');
   assert.equal(detail.episodes[1].number,2);
   assert.equal((await provider.getEpisodes(results[0].url)).length,2);
+  const apiDetail=await provider.getDetail('https://anime.uniquestream.net/series/API001/API-Show');
+  assert.equal(apiDetail.title,'API Show','metadata should use the public series API');
+  assert.equal(apiDetail.description,'Metadata from public JSON API');
+  assert.equal(apiDetail.cover,'https://media.uniquestream.net/posters/api-show.jpg');
+  assert.deepEqual(apiDetail.genres,['Action','Fantasy']);
+  assert.equal(apiDetail.episodeCount,2);
+  assert.equal(apiDetail.episodes.length,2,'episodes should be listed from the public season API');
+  assert.equal(apiDetail.episodes[0].title,'API Show Episode 1');
   const streams=await provider.getVideoSources(detail.episodes[0].url);
   assert.equal(streams.length,1);
   assert.equal(streams[0].url,'https://media.uniquestream.net/video/episode1.m3u8');
