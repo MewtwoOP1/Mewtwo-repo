@@ -957,7 +957,7 @@
     {
       "id": "uniquestream",
       "name": "Uniquestream",
-      "version": "0.6.0",
+      "version": "0.7.0",
       "type": "anime",
       "lang": "en",
       "file": "providers/uniquestream.js",
