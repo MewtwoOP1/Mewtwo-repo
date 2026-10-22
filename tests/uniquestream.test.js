@@ -6,7 +6,7 @@ const seriesHtml = `<main><h1>Sample Series</h1><meta name="description" content
 const searchHtml = `<main><article><a href="/series/series1/Sample-Series"><h2>Sample Series</h2><img src="https://media.uniquestream.net/posters/sample.jpg"></a></article></main>`;
 global.fetch = async (url, opts) => {
   const u = String(url); calls.push({url:u,opts:opts||{}});
-  if (u.includes('/search?q=Sample%20Series')) return {status:200,body:searchHtml};
+  if (u.includes('/search?q=Sample%20Series') || u.includes('/search/?q=Sample%20Series')) return {status:200,body:searchHtml};
   if (u.includes('/search/?q=Sample%20Series')) return {status:200,body:searchHtml};
   if (u.includes('/series/series1/Sample-Series/')) return {status:200,body:seriesHtml};
   if (u.includes('/watch/abc123/Episode-1')) return {status:200,body:`<video><source src="https://media.uniquestream.net/video/episode1.m3u8"></video>`};
