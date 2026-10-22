@@ -451,9 +451,40 @@ function _episodePage(epUrl) {
   var raw=String(epUrl||'');if(raw.indexOf('uniquestream://episode/')!==0)throw new Error('Uniquestream: invalid episode URL');
   var encoded=raw.slice('uniquestream://episode/'.length),page;
   try{page=decodeURIComponent(encoded);}catch(e){throw new Error('Uniquestream: malformed episode URL');}
-  var safe=_siteUrl(page,SITE+'/');
-  if(!safe||!/^\/watch\/[A-Za-z0-9_-]+(?:\/|$)/i.test(_pathname(safe)))throw new Error('Uniquestream: invalid watch page URL');
+  var safe=_siteUrl(page,SITE+'/'),path=_pathname(safe);
+  var watch=/^\/watch\/[A-Za-z0-9_-]+(?:\/|$)/i.test(path);
+  var apiMedia=/^\/api\/v1\/episode\/[A-Za-z0-9_-]+\/media\/hls\/[A-Za-z0-9-]+\/?$/i.test(path);
+  if(!safe||(!watch&&!apiMedia))throw new Error('Uniquestream: invalid public episode or media URL');
   return safe;
+}
+function _apiMediaSources(payload,page) {
+  var data=payload&&payload.data&&typeof payload.data==='object'?payload.data:
+    (payload&&payload.result&&typeof payload.result==='object'?payload.result:payload);
+  if(!data||typeof data!=='object')throw new Error('Uniquestream: media API returned no media data');
+  var mediaId=String(data.media_id||data.mediaId||'');
+  var out=[],seen={};
+  function add(entry,label,locale) {
+    if(!entry||typeof entry!=='object')return;
+    var url=String(entry.playlist||entry.url||'');
+    if(!/^https:\/\//i.test(url)||!/\.(?:m3u8|mpd)(?:$|[?#])/i.test(url)||seen[url])return;
+    seen[url]=true;
+    var headers={'User-Agent':UA,'Referer':SITE+'/','Origin':SITE};
+    if(mediaId)headers['x-am-media-id']=mediaId;
+    out.push({url:url,quality:'Auto',label:label,container:/\.mpd/i.test(url)?'dash':'hls',headers:headers,kind:/raw/i.test(label)?'raw':'sub',audioLang:locale||'ja'});
+  }
+  var hls=data.hls||{};
+  add(hls,'Uniquestream Raw ('+(hls.locale||'original')+')',hls.locale);
+  var hard=Array.isArray(hls.hard_subs)?hls.hard_subs:[];
+  for(var i=0;i<hard.length;i++)add(hard[i],'Uniquestream Sub ('+(hard[i].locale||'unknown')+')',hard[i].locale);
+  var versions=data.versions&&Array.isArray(data.versions.hls)?data.versions.hls:[];
+  for(var j=0;j<versions.length;j++){
+    var v=versions[j]||{};
+    add(v,'Uniquestream Dub ('+(v.locale||'unknown')+')',v.locale);
+    var subs=Array.isArray(v.hard_subs)?v.hard_subs:[];
+    for(var k=0;k<subs.length;k++)add(subs[k],'Uniquestream Dub + Sub ('+(subs[k].locale||'unknown')+')',v.locale);
+  }
+  if(!out.length)throw new Error('Uniquestream: media API returned no direct HLS/DASH playlist');
+  return out;
 }
 function _mediaCandidates(html,page) {
   var out=[],seen={};
@@ -478,6 +509,9 @@ function _mediaCandidates(html,page) {
 }
 function getVideoSources(episodeUrl,opts) {
   var page;try{page=_episodePage(episodeUrl);}catch(e){return Promise.reject(e);}
+  if(/^\/api\/v1\/episode\//i.test(_pathname(page))) {
+    return _json(page).then(function(payload){return _apiMediaSources(payload,page);});
+  }
   return _request(page,page).then(function(html){
     var streams=_mediaCandidates(html,page);
     if(!streams.length)throw new Error('Uniquestream: watch page did not expose a direct HTTPS media URL; playback cannot be resolved from public page markup');
