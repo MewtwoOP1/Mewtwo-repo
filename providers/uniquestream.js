@@ -114,7 +114,10 @@ function _normalTitle(s) {
     .trim();
 }
 function _slug(s) {
-  return _normalTitle(s).replace(/\s+/g,'-') || 'title';
+  return _trim(String(s||''))
+    .replace(/&amp;/gi,'and')
+    .replace(/[^A-Za-z0-9]+/g,'-')
+    .replace(/^-+|-+$/g,'') || 'title';
 }
 function _apiCard(item,kind) {
   if(!item||typeof item!=='object')return null;
