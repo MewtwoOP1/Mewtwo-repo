@@ -1,18 +1,19 @@
 # Uniquestream provider
 
-This provider adapts publicly exposed catalogue and playback information from https://anime.uniquestream.net to Zangetsu.
+This provider adapts publicly exposed catalogue and metadata from https://anime.uniquestream.net to Zangetsu.
 
 ## Implemented
 
-- Search tries the public search-page route variants and parses catalogue cards inside article/list markup or standalone card containers.
-- Catalogue metadata includes title, synopsis, poster, year, studio, genres, season/episode counts when present in the page, and explicitly linked episode pages.
-- Episode parsing recognizes public `/watch/<id>/<slug>` links and structured episode data embedded in page markup. It does not invent episode URLs from counts alone.
-- Playback extraction reads direct HTTPS media URLs explicitly present in public watch-page HTML, media tags, JSON-LD, or inline script data. Direct media URLs are emitted with the watch-page Referer.
-- Failures are handled without silently treating a failed detail request as a successful empty episode list. Search/home methods still return empty arrays on unavailable catalogue pages.
+- Search uses the public JSON endpoint `/api/v1/search?query=…&t=all&limit=…&page=…` first, with the alternate `q` parameter and HTML search/A–Z parsing as fallbacks.
+- Home/catalogue uses the public JSON endpoints `/api/v1/videos/popular` and `/api/v1/videos/new` before falling back to HTML catalogue pages.
+- JSON result cards map content IDs, titles, types, and poster URLs into Zangetsu's provider result format.
+- Detail metadata uses `/api/v1/series/<content_id>` (or `/api/v1/movie/<content_id>` for movies) first, with HTML parsing as a fallback.
+- Series episodes are loaded from the public `/api/v1/season/<season_id>/episodes` endpoint. Requests are paginated and capped per season.
+- Playback extraction still checks public watch-page markup for direct HTTPS media links. It does not yet implement the site's special media-key transformation, so a returned HLS URL is not a guarantee that every episode is playable.
 
 ## Setup and tests
 
-The provider is registered as `uniquestream` in `index.json`. Add this repository in Zangetsu, refresh the repository source list, and install **Uniquestream**.
+The provider is registered as `uniquestream` in `index.json`. In Zangetsu, refresh the repository source list and install **Uniquestream**.
 
 Run with Node.js 22+:
 
@@ -21,12 +22,6 @@ node tests/uniquestream.test.js
 node scripts/check-and-run.mjs
 ```
 
-## Limitations
+## Validation
 
-The site's public series pages may show metadata and an episode count while the episode catalogue itself fails to load. The provider cannot create valid episode URLs from a count alone. Playback is returned only when a direct HTTPS media URL is exposed in the fetched watch-page markup; if the page only contains an embed/player shell or the live source is unavailable, playback remains unresolved. Mocked tests validate parsing logic, not current live-site playback.
-
-
-Version 0.4.0: search now falls back to the public A–Z archive and home catalogue when the site’s search endpoint yields no cards; the home catalogue also falls back from the currently empty dynamic shelves.
-
-
-Version 0.4.0 uses the site's public `/api/v1/search` JSON endpoint first (`query`, `t`, `limit`, `page`) and the JSON `/api/v1/videos/popular` and `/api/v1/videos/new` catalogue endpoints. HTML-page parsing remains a fallback when the API is unavailable.
+Mocked tests cover API search, catalogue mapping, detail metadata, paginated episode mapping, HTML fallback, and failure handling. They verify parsing and provider contracts; they do not prove that live search, all episode pages, or playback are reachable from every device/network.
