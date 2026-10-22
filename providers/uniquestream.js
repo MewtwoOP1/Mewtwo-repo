@@ -3,7 +3,7 @@ var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID) ? String(__S
 var SITE = 'https://anime.uniquestream.net';
 var MEDIA = 'https://media.uniquestream.net';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36';
-var VERSION = '0.4.0';
+var VERSION = '0.5.0';
 
 function getInfo() { return { name:'Uniquestream', lang:'en', baseUrl:SITE, logo:'https://www.google.com/s2/favicons?sz=256&domain=anime.uniquestream.net', type:'anime', version:VERSION }; }
 function getSettings() { return []; }
@@ -26,13 +26,36 @@ function _attr(tag,name) {
   return bare?_decode(bare[1]):'';
 }
 function _abs(raw,base) {
-  var s=_trim(_decode(raw)); if(!s||/^(?:javascript|data|mailto):/i.test(s))return '';
-  try{return new URL(s,base||SITE+'/').href;}catch(e){return '';}
+  var s=_trim(_decode(raw));
+  if(!s||/^(?:javascript|data|mailto):/i.test(s))return '';
+  if(/^https?:\/\//i.test(s))return s;
+  if(/^\/\//.test(s))return 'https:'+s;
+  // Zangetsu's QuickJS bootstrap supplies absUrl(), but not every JS runtime
+  // has the browser URL constructor. Prefer the host helper and keep a local
+  // string-only fallback so API result mapping works in both QuickJS and Node.
+  if(typeof absUrl==='function') {
+    try { var resolved=absUrl(s,base||SITE+'/'); if(resolved)return String(resolved); } catch(e) {}
+  }
+  var b=String(base||SITE+'/').replace(/[?#].*$/,'');
+  var origin=(b.match(/^(https?:\/\/[^\/?#]+)/i)||[])[1];
+  if(!origin)return '';
+  if(s.charAt(0)==='/')return origin+s;
+  return b.replace(/\/+$/,'')+'/'+s.replace(/^\/+/,'');
+}
+function _urlParts(raw) {
+  var m=String(raw||'').match(/^(https?):\/\/([^\/?#]+)([^?#]*)/i);
+  if(!m)return null;
+  return {protocol:m[1].toLowerCase(),host:m[2].toLowerCase().replace(/:\d+$/,''),pathname:m[3]||'/'};
+}
+function _pathname(raw) {
+  var parts=_urlParts(raw);
+  return parts?parts.pathname:'';
 }
 function _siteUrl(raw,base) {
   var u=_abs(raw,base); if(!u)return '';
-  try { var p=new URL(u); return (p.protocol==='https:'||p.protocol==='http:')&&(p.hostname==='anime.uniquestream.net'||p.hostname==='media.uniquestream.net')?p.href:''; }
-  catch(e){return '';}
+  var p=_urlParts(u); if(!p)return '';
+  return (p.protocol==='https:'||p.protocol==='http:')&&
+    (p.host==='anime.uniquestream.net'||p.host==='media.uniquestream.net')?u:'';
 }
 function _request(url,referer) {
   return Promise.resolve().then(function(){return fetch(url,{headers:{'User-Agent':UA,'Accept':'text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8','Accept-Language':'en-US,en;q=0.9','Referer':referer||SITE+'/'},timeoutMs:15000});})
@@ -242,7 +265,7 @@ function _seriesUrl(value) {
   if(raw.indexOf('uniquestream://series/')===0)raw=raw.slice('uniquestream://series/'.length);
   var u=_siteUrl(raw,SITE+'/');
   if(!u)return '';
-  try { var p=new URL(u); return /^\/(?:series|film|title|content)\//i.test(p.pathname)?p.href:''; }catch(e){return '';}
+  return /^\/(?:series|film|title|content)\//i.test(_pathname(u))?u:'';
 }
 function _metaValue(html,property) {
   var tags=String(html||'').match(/<meta\b[^>]*>/gi)||[];
@@ -413,8 +436,7 @@ function _apiMetadata(payload,page,isMovie) {
 function getDetail(url,opts) {
   var page=_seriesUrl(url);
   if(!page)return Promise.reject(new Error('Uniquestream: invalid or non-public series URL'));
-  var path='';
-  try{path=new URL(page).pathname;}catch(e){}
+  var path=_pathname(page);
   var movie=/^\/(?:content|film)\//i.test(path);
   var match=path.match(/^\/(?:series|film|title|content)\/([^/]+)/i);
   var contentId=match?decodeURIComponent(match[1]):'';
@@ -430,14 +452,14 @@ function _episodePage(epUrl) {
   var encoded=raw.slice('uniquestream://episode/'.length),page;
   try{page=decodeURIComponent(encoded);}catch(e){throw new Error('Uniquestream: malformed episode URL');}
   var safe=_siteUrl(page,SITE+'/');
-  if(!safe||!/^\/watch\/[A-Za-z0-9_-]+(?:\/|$)/i.test(new URL(safe).pathname))throw new Error('Uniquestream: invalid watch page URL');
+  if(!safe||!/^\/watch\/[A-Za-z0-9_-]+(?:\/|$)/i.test(_pathname(safe)))throw new Error('Uniquestream: invalid watch page URL');
   return safe;
 }
 function _mediaCandidates(html,page) {
   var out=[],seen={};
   function add(raw,label) {
     var u=_abs(raw,page);if(!u||seen[u])return;
-    try{var p=new URL(u);if(p.protocol!=='https:'||!/\.(?:m3u8|mp4|mpd)(?:$|[?#])/i.test(p.href))return;}catch(e){return;}
+    if(!/^https:\/\//i.test(u)||!/\.(?:m3u8|mp4|mpd)(?:$|[?#])/i.test(u))return;
     seen[u]=true;out.push({url:u,quality:'Auto',label:label||'Uniquestream',container:/\.m3u8/i.test(u)?'hls':(/\.mpd/i.test(u)?'dash':'mp4'),headers:{'User-Agent':UA,'Referer':page,'Origin':SITE},kind:'sub',audioLang:'ja'});
   }
   var tags=String(html||'').match(/<(?:video|source|iframe|a)\b[^>]*>/gi)||[];
