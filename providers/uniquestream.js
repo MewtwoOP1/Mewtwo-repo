@@ -106,7 +106,7 @@ function _normalTitle(s) {
   return _trim(String(s||'').toLowerCase())
     .replace(/&amp;/g,' and ')
     .replace(/[^a-z0-9]+/g,' ')
-    .replace(/\\s+/g,' ')
+    .replace(/\s+/g,' ')
     .trim();
 }
 function _matchingCards(items,query) {
