@@ -1,13 +1,14 @@
 // Crunchy-anime — AnimeStream / UniqueStream provider for Zangetsu.
 // Uses the site's public JSON routes for catalogue, metadata, episodes and
-// media variants. It returns every media playlist and subtitle track the API
-// exposes; it does not bypass anti-bot checks or decrypt/proxy wrapped HLS keys.
+// media variants. Protected HLS playback uses the companion Worker in
+// workers/crunchy-anime-hls-proxy.mjs to recover wrapped AES keys and rewrite
+// playlists; configure its deployed URL and token in provider settings.
 
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID)
   ? String(__SOURCE_ID) : 'crunchy-anime';
 var SITE = 'https://anime.uniquestream.net';
 var API = SITE + '/api/v1';
-var VERSION = '1.0.1';
+var VERSION = '1.0.2';
 var PAGE_SIZE = 20;
 var REQUEST_TIMEOUT_MS = 12000;
 var DETAIL_CACHE_TTL_MS = 120000;
@@ -45,7 +46,47 @@ function getInfo() {
 }
 
 function getSettings() {
-  return [];
+  return [
+    {
+      key: 'hlsProxyUrl',
+      label: 'HLS proxy URL',
+      description: 'Required for protected Crunchy-anime HLS playback. Deploy workers/crunchy-anime-hls-proxy.mjs and enter its Worker origin.',
+      type: 'text',
+      default: ''
+    },
+    {
+      key: 'hlsProxyToken',
+      label: 'HLS proxy token',
+      description: 'The PROXY_TOKEN secret configured on your Crunchy-anime HLS Worker.',
+      type: 'text',
+      default: ''
+    }
+  ];
+}
+
+function _setting(key) {
+  try {
+    if (typeof __settings === 'undefined' || !__settings) return '';
+    if (__settings[SOURCE_ID] && __settings[SOURCE_ID][key] != null) {
+      return String(__settings[SOURCE_ID][key] || '');
+    }
+    if (__settings[key] != null) return String(__settings[key] || '');
+  } catch (e) {}
+  return '';
+}
+
+function _hlsProxyConfig() {
+  var base = _trim(_setting('hlsProxyUrl')).replace(/\/+$/, '');
+  var token = _trim(_setting('hlsProxyToken'));
+  if (!base || !token || !/^https:\/\/[^/?#]+$/i.test(base)) return null;
+  return { base: base, token: token };
+}
+
+function _proxyPlaylistUrl(proxy, playlist, mediaId) {
+  if (!proxy || !mediaId || !/\.m3u8(?:[?#]|$)/i.test(playlist)) return playlist;
+  return proxy.base + '/m3u8?url=' + encodeURIComponent(playlist)
+    + '&mid=' + encodeURIComponent(mediaId)
+    + '&token=' + encodeURIComponent(proxy.token);
 }
 
 function _trim(value) {
@@ -524,7 +565,7 @@ function _quality(variant, url) {
   return m ? m[1] + 'p' : 'Auto';
 }
 
-function _addStream(out, seen, variant, fallbackLocale, transport, hardSubLocale, parent) {
+function _addStream(out, seen, variant, fallbackLocale, transport, hardSubLocale, parent, mediaId, proxy) {
   if (!variant || typeof variant !== 'object') return;
   var playlist = _absolute(variant.playlist || variant.url || variant.file, SITE);
   if (!/^https?:\/\//i.test(playlist)) return;
@@ -533,6 +574,8 @@ function _addStream(out, seen, variant, fallbackLocale, transport, hardSubLocale
   var language = _localeName(locale);
   var actualTransport = /\.mpd(?:[?#]|$)/i.test(playlist) ? 'unknown' :
     (/\.m3u8(?:[?#]|$)/i.test(playlist) ? 'hls' : (transport || 'hls'));
+  var resolvedUrl = actualTransport === 'hls'
+    ? _proxyPlaylistUrl(proxy, playlist, mediaId) : playlist;
   var kind = hardSubLocale ? 'sub' : (locale === 'ja-JP' ? 'sub' : 'dub');
   var label = language + (kind === 'dub' ? ' Dub' : ' Audio');
   if (hardSub) label += ' · ' + hardSub + ' Hard Subs';
@@ -541,11 +584,11 @@ function _addStream(out, seen, variant, fallbackLocale, transport, hardSubLocale
   var subtitles = _subtitleTracks(variant.subtitles || (parent && parent.subtitles) || []);
   var quality = _quality(variant, playlist);
   var headers = { Referer: SITE + '/' };
-  var uniqueKey = playlist + '|' + (hardSubLocale || '') + '|' + actualTransport;
+  var uniqueKey = resolvedUrl + '|' + (hardSubLocale || '') + '|' + actualTransport;
   if (seen[uniqueKey]) return;
   seen[uniqueKey] = true;
   out.push({
-    url: playlist,
+    url: resolvedUrl,
     quality: quality,
     label: 'Crunchy-anime · ' + label,
     container: actualTransport,
@@ -556,43 +599,45 @@ function _addStream(out, seen, variant, fallbackLocale, transport, hardSubLocale
   });
 }
 
-function _streamsFromMedia(raw, requestedLocale) {
+function _streamsFromMedia(raw, requestedLocale, proxy) {
   var data = _payload(raw) || {};
+  var mediaId = _safeId(data.media_id || data.mediaId);
   var out = [], seen = Object.create(null);
   var base = data.hls || null;
   var dash = data.dash || null;
   if (base) {
-    _addStream(out, seen, base, requestedLocale, 'hls', '', '');
+    _addStream(out, seen, base, requestedLocale, 'hls', '', '', mediaId, proxy);
     var hard = Array.isArray(base.hard_subs) ? base.hard_subs : [];
     hard.forEach(function (sub) {
       _addStream(out, seen, sub, base.locale || requestedLocale, 'hls',
-        sub && (sub.locale || sub.language), '');
+        sub && (sub.locale || sub.language), '', mediaId, proxy);
     });
   }
-  if (dash) _addStream(out, seen, dash, requestedLocale, 'dash', '', '');
+  if (dash) _addStream(out, seen, dash, requestedLocale, 'dash', '', '', mediaId, proxy);
 
   var versions = data.versions || {};
   ['hls', 'dash'].forEach(function (transport) {
     var list = Array.isArray(versions[transport]) ? versions[transport] : [];
     list.forEach(function (version) {
-      _addStream(out, seen, version, requestedLocale, transport, '', 'Alternate');
+      _addStream(out, seen, version, requestedLocale, transport, '', 'Alternate', mediaId, proxy);
       var hardSubs = Array.isArray(version.hard_subs) ? version.hard_subs :
         (Array.isArray(version.hardSubs) ? version.hardSubs : []);
       hardSubs.forEach(function (sub) {
         _addStream(out, seen, sub, version.locale || requestedLocale, transport,
-          sub && (sub.locale || sub.language), _localeName(version.locale || requestedLocale) + ' Dub');
+          sub && (sub.locale || sub.language), _localeName(version.locale || requestedLocale) + ' Dub',
+          mediaId, proxy);
       });
     });
   });
   return out;
 }
 
-function _fetchMedia(kind, id, locale) {
+function _fetchMedia(kind, id, locale, proxy) {
   // The verified API exposes HLS media and alternate audio variants under this
   // endpoint. Do not probe an undocumented /media/dash route on every miss.
   var path = '/' + kind + '/' + encodeURIComponent(id) + '/media/hls/' + encodeURIComponent(locale);
   return _apiJson(path).then(function (media) {
-    return _streamsFromMedia(media, locale);
+    return _streamsFromMedia(media, locale, proxy);
   }).catch(function () {
     return [];
   });
@@ -603,8 +648,9 @@ function getVideoSources(episodeUrl, opts) {
   if (!ref) return Promise.resolve([]);
   var kind = ref.type === 'movie' ? 'movie' : 'episode';
   var locales = _locales(ref.locales, ['ja-JP']);
+  var proxy = _hlsProxyConfig();
   var jobs = locales.map(function (locale) {
-    return _fetchMedia(kind, ref.id, locale);
+    return _fetchMedia(kind, ref.id, locale, proxy);
   });
   return Promise.all(jobs).then(function (lists) {
     var out = [], seen = Object.create(null);

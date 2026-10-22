@@ -174,7 +174,7 @@ async function main() {
   assert.equal(provider.getInfo().name, "Crunchy-anime");
   assert.equal(provider.getInfo().baseUrl, SITE);
   assert.equal(provider.getInfo().type, "anime");
-  assert.deepEqual(provider.getSettings(), []);
+  assert.deepEqual(provider.getSettings().map(setting => setting.key), ["hlsProxyUrl", "hlsProxyToken"]);
 
   const home = await provider.getHome({});
   assert.deepEqual(home.map(row => row.title), [
@@ -263,6 +263,27 @@ async function main() {
   assert.ok(calls.some(call => call.url === API + "/episode/EP1/media/hls/ja-JP"));
   assert.ok(calls.some(call => call.url === API + "/episode/EP1/media/hls/en-US"));
   assert.ok(calls.some(call => call.url === API + "/episode/EP1/media/hls/es-419"));
+
+  // When the optional Worker endpoint is configured, the provider must wrap
+  // each HLS playlist URL with its media ID and auth token. DASH stays direct.
+  global.__settings = {
+    "crunchy-anime": {
+      hlsProxyUrl: "https://proxy.example.workers.dev",
+      hlsProxyToken: "test-proxy-token",
+    },
+  };
+  const proxiedStreams = await provider.getVideoSources(detail.episodes[0].url, {});
+  const proxiedRaw = proxiedStreams.find(stream => stream.label.includes("Japanese Audio"));
+  assert.ok(proxiedRaw, "proxied Japanese HLS stream must be returned");
+  const proxiedUrl = new URL(proxiedRaw.url);
+  assert.equal(proxiedUrl.origin, "https://proxy.example.workers.dev");
+  assert.equal(proxiedUrl.pathname, "/m3u8");
+  assert.equal(proxiedUrl.searchParams.get("url"), "https://cdn.example/raw-master.m3u8");
+  assert.equal(proxiedUrl.searchParams.get("mid"), "MEDIA-EP1");
+  assert.equal(proxiedUrl.searchParams.get("token"), "test-proxy-token");
+  assert.ok(proxiedStreams.some(stream => stream.url === "https://cdn.example/raw-master.mpd"),
+    "DASH is not routed through the HLS Worker");
+  delete global.__settings;
 
   provider._clearCache();
   const movie = await provider.getDetail(search[1].url, {});
