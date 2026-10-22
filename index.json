@@ -22,7 +22,14 @@
         {
           "key": "addonUrls",
           "label": "Stremio Add-on URLs (manifest URLs; comma/newline separated)",
-          "description": "One or more Stremio-compatible add-on manifest URLs. Add-ons provide streams; this repository does not host video.",
+          "description": "Optional Stremio-compatible add-on manifest URLs. These add-ons provide streams.",
+          "type": "text",
+          "default": ""
+        },
+        {
+          "key": "pencariMovieServerUrl",
+          "label": "Private PencariMovie Server (optional)",
+          "description": "Your self-hosted PencariMovie server URL, with its server token, optionally ending in /manifest.json. Leave blank to disable. This URL is not preconfigured or published.",
           "type": "text",
           "default": ""
         },
