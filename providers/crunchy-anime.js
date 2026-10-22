@@ -1,7 +1,8 @@
 // Crunchy-anime — AnimeStream / UniqueStream provider for Zangetsu.
 // Uses the site's public JSON routes for catalogue, metadata, episodes and
-// media variants. It returns every media playlist and subtitle track the API
-// exposes; it does not bypass anti-bot checks or decrypt/proxy wrapped HLS keys.
+// media variants. Protected HLS playback uses the companion Worker in
+// workers/crunchy-anime-hls-proxy.mjs to recover wrapped AES keys and rewrite
+// playlists; configure its deployed URL and token in provider settings.
 
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID)
   ? String(__SOURCE_ID) : 'crunchy-anime';
