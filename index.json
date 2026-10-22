@@ -957,7 +957,7 @@
     {
       "id": "crunchy-anime",
       "name": "Crunchy-anime",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "type": "anime",
       "lang": "en",
       "file": "providers/crunchy-anime.js",
