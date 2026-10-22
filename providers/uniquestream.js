@@ -4,7 +4,6 @@ var SITE = 'https://anime.uniquestream.net';
 var MEDIA = 'https://media.uniquestream.net';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36';
 var VERSION = '0.7.0';
-var LOCAL_PROXY = 'http://127.0.0.1:8787';
 
 function getInfo() { return { name:'Uniquestream', lang:'en', baseUrl:SITE, logo:'https://www.google.com/s2/favicons?sz=256&domain=anime.uniquestream.net', type:'anime', version:VERSION }; }
 function getSettings() { return []; }
@@ -511,28 +510,6 @@ function _apiMediaSources(payload,page) {
   if(!out.length)throw new Error('Uniquestream: media API returned no HTTPS HLS playlist');
   return out;
 }
-function _localProxyAvailable() {
-  return Promise.resolve().then(function() {
-    return fetch(LOCAL_PROXY+'/health',{headers:{'Accept':'text/plain'},timeoutMs:1200});
-  }).then(function(r) {
-    if(!r||Number(r.status||0)!==200)return false;
-    var body=typeof r.body==='string'?r.body:(typeof r.text==='function'?r.text():'');
-    return Promise.resolve(body).then(function(s){return String(s||'').indexOf('uniquestream-proxy-ok')>=0;});
-  }).catch(function(){return false;});
-}
-function _useLocalProxy(streams) {
-  return _localProxyAvailable().then(function(available) {
-    if(!available)return streams;
-    return streams.map(function(stream) {
-      if(stream.container!=='hls')return stream;
-      var mediaId=String(stream.headers&&stream.headers['x-am-media-id']||'');
-      if(!mediaId)return stream;
-      var url=LOCAL_PROXY+'/playlist.m3u8?url='+encodeURIComponent(stream.url)+'&mid='+encodeURIComponent(mediaId);
-      return Object.assign({},stream,{url:url,headers:{'User-Agent':UA},
-        label:(stream.label||'Uniquestream')+' · Local HLS proxy'});
-    });
-  });
-}
 function _mediaCandidates(html,page) {
   var out=[],seen={};
   function add(raw,label) {
@@ -557,7 +534,7 @@ function _mediaCandidates(html,page) {
 function getVideoSources(episodeUrl,opts) {
   var page;try{page=_episodePage(episodeUrl);}catch(e){return Promise.reject(e);}
   if(/^\/api\/v1\/episode\//i.test(_pathname(page))) {
-    return _json(page).then(function(payload){return _apiMediaSources(payload,page);}).then(_useLocalProxy);
+    return _json(page).then(function(payload){return _apiMediaSources(payload,page);});
   }
   return _request(page,page).then(function(html){
     var streams=_mediaCandidates(html,page);
