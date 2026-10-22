@@ -251,12 +251,16 @@ function routeStreamExtraction(host) {
 
     const episodes = await P.getEpisodes(BASE + '/anime/long-anime', {});
     assert.strictEqual(episodes.length, 50, 'all 50 source episodes must survive parsing');
-    assert.strictEqual(episodes[44].number, 45, 'Zangetsu resolves episode N using the Nth source-list entry');
-    assert.strictEqual(episodes[44].title, 'Episode 45', 'a non-empty upstream JSON label is preserved');
-    assert.ok(!episodes[44].url.includes('__av1ddl='), 'new episode URLs preserve the original upstream href');
-    assert.ok(episodes[44].url.includes('token=token-45'));
+    // Yuzuno sorts episode JSON by source num descending. Address the episode
+    // by its source identity, not an ascending-list index that contradicts
+    // the upstream order contract.
+    const episode45 = episodes.find(item => item.number === 45);
+    assert.ok(episode45, 'Episode 45 must remain addressable in the sorted source list');
+    assert.strictEqual(episode45.title, 'Episode 45', 'a non-empty upstream JSON label is preserved');
+    assert.ok(!episode45.url.includes('__av1ddl='), 'new episode URLs preserve the original upstream href');
+    assert.ok(episode45.url.includes('token=token-45'));
 
-    const streams = await P.getVideoSources(episodes[44].url);
+    const streams = await P.getVideoSources(episode45.url);
     assert.ok(streams.some(stream => stream.url === BASE + '/dash/episode-45/manifest.mpd'),
       'episode 45 must yield a DASH URL');
     assert.ok(streams.some(stream => stream.url === 'https://cdn.example.com/episode-45.m3u8'),
