@@ -7,7 +7,7 @@ var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID)
   ? String(__SOURCE_ID) : 'crunchy-anime';
 var SITE = 'https://anime.uniquestream.net';
 var API = SITE + '/api/v1';
-var VERSION = '1.0.0';
+var VERSION = '1.0.1';
 var PAGE_SIZE = 20;
 var REQUEST_TIMEOUT_MS = 12000;
 var DETAIL_CACHE_TTL_MS = 120000;
