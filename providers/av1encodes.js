@@ -5,7 +5,7 @@
 
 const SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID)
   ? String(__SOURCE_ID) : 'av1encodes';
-const VERSION = '1.1.3';
+const VERSION = '1.1.4';
 const DEFAULT_DOMAIN = 'https://av1encodes.com';
 const SITE_DOMAINS = [
   'https://av1encodes.com',
@@ -894,36 +894,45 @@ function _detailTitleFallback(opts) {
 }
 
 function _detailFromHtml(url, html, base, opts) {
+  // Direct JavaScript port of Yuzuno's AV1Encodes getAnimeDetails().
+  // Upstream's combined title selector ends with generic "h1", so the first
+  // H1 in document order is the corresponding result.
   const source = String(html || '');
-  const heading = source.match(/<h1\b[^>]*>([\s\S]*?)<\/h1\s*>/i);
-  // Upstream uses the website H1, falling back to the existing anime title;
-  // it does not synthesize SEO copy or a guessed title from the URL slug.
-  const title = heading ? _htmlText(heading[1]) : _detailTitleFallback(opts);
+  const title = _firstClassElementText(source, tagName => tagName === 'h1')
+    ?? _detailTitleFallback(opts);
+
+  // Keep upstream's exact image precedence: poster image, og:image, then
+  // poster/hero background or body background.
   const cover = _extractDetailCover(source, base);
+
   const description = _firstClassElementText(source, (tagName, className) =>
     className.split(/\s+/).some(value =>
       value === 'anime-synopsis' || value === 'synopsis' ||
       value === 'description' || value === 'desc'
-    ) || /synopsis|description|overview/.test(className)
+    ) || className.includes('synopsis') ||
+      className.includes('description') || className.includes('overview')
   );
 
   let genres = _extractUpstreamGenres(source);
   if (!genres.length) {
     const animeMeta = _firstClassElementText(source, (tagName, className) =>
-      tagName === 'p' && className.split(/\s+/).indexOf('anime-meta') >= 0
+      tagName === 'p' && className.split(/\s+/).includes('anime-meta')
     );
     if (animeMeta !== null) {
-      const index = animeMeta.indexOf('Genre:');
-      const after = index >= 0 ? animeMeta.slice(index + 'Genre:'.length) : animeMeta;
-      const fallbackGenre = after.split('|')[0].trim();
+      // Yuzuno's substringAfter("Genre:").substringBefore("|").trim() fallback.
+      const fallbackGenre = animeMeta.split('Genre:').slice(1).join('Genre:').split('|')[0].trim();
       if (fallbackGenre) genres = fallbackGenre.split(',').map(value => value.trim()).filter(Boolean);
     }
   }
 
-  const author = _firstClassElementText(source, (tagName, className) =>
-    className.indexOf('studio') >= 0
+  const author = _firstClassElementText(source, (_tagName, className) =>
+    className.includes('studio')
   );
-  const isAiring = /<[^>]+\bclass\s*=\s*["'][^"']*airing[^"']*["'][^>]*>/i.test(source);
+
+  // Equivalent to upstream [class*='airing']; class values are case-sensitive.
+  const isAiring = (source.match(/<[a-z][a-z0-9:-]*\b[^>]*>/gi) || []).some(tag =>
+    (_attr(tag, 'class') || '').includes('airing')
+  );
   const slug = _slugFromAnimeUrl(url);
 
   return {
