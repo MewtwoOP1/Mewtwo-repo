@@ -208,13 +208,11 @@ function _browse(filter, page) {
 function getHome(opts) {
   return Promise.all([
     _browse('new', 1),
-    _browse('popular', 1),
-    _browse('movies', 1)
+    _browse('popular', 1)
   ]).then(function (results) {
     return [
       { title: 'Latest on Crunchy-anime', items: results[0] },
-      { title: 'Popular on Crunchy-anime', items: results[1] },
-      { title: 'Anime Movies', items: results[2] }
+      { title: 'Popular on Crunchy-anime', items: results[1] }
     ].filter(function (row) { return row.items.length > 0; });
   });
 }
@@ -568,7 +566,7 @@ function _streamsFromMedia(raw, requestedLocale) {
     var hard = Array.isArray(base.hard_subs) ? base.hard_subs : [];
     hard.forEach(function (sub) {
       _addStream(out, seen, sub, base.locale || requestedLocale, 'hls',
-        sub && (sub.locale || sub.language), 'Hard Subs');
+        sub && (sub.locale || sub.language), '');
     });
   }
   if (dash) _addStream(out, seen, dash, requestedLocale, 'dash', '', '');
@@ -590,21 +588,13 @@ function _streamsFromMedia(raw, requestedLocale) {
 }
 
 function _fetchMedia(kind, id, locale) {
+  // The verified API exposes HLS media and alternate audio variants under this
+  // endpoint. Do not probe an undocumented /media/dash route on every miss.
   var path = '/' + kind + '/' + encodeURIComponent(id) + '/media/hls/' + encodeURIComponent(locale);
   return _apiJson(path).then(function (media) {
-    var streams = _streamsFromMedia(media, locale);
-    if (streams.length) return streams;
-    var dashPath = '/' + kind + '/' + encodeURIComponent(id) +
-      '/media/dash/' + encodeURIComponent(locale);
-    return _apiJson(dashPath).then(function (fallback) {
-      return _streamsFromMedia(fallback, locale);
-    }).catch(function () { return []; });
+    return _streamsFromMedia(media, locale);
   }).catch(function () {
-    var dashPath = '/' + kind + '/' + encodeURIComponent(id) +
-      '/media/dash/' + encodeURIComponent(locale);
-    return _apiJson(dashPath).then(function (fallback) {
-      return _streamsFromMedia(fallback, locale);
-    }).catch(function () { return []; });
+    return [];
   });
 }
 
