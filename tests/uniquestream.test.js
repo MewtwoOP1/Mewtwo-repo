@@ -7,13 +7,12 @@ const searchHtml = `<main><article><a href="/series/series1/Sample-Series"><h2>S
 global.fetch = async (url, opts) => {
   const u = String(url); calls.push({url:u,opts:opts||{}});
   if (u.includes('/search?q=Sample%20Series') || u.includes('/search/?q=Sample%20Series')) return {status:200,body:searchHtml};
-  if (u.includes('/search/?q=Sample%20Series')) return {status:200,body:searchHtml};
+  if (u.includes('/search?q=missing') || u.includes('/search/?q=missing')) return {status:200,body:'<main>No titles</main>'};
+  if (u.includes('/search?q=malformed') || u.includes('/search/?q=malformed')) return {status:200,body:'<html><div'};
+  if (u.includes('/search?q=fallback') || u.includes('/search/?q=fallback')) return {status:503,body:'busy'};
   if (u.includes('/series/series1/Sample-Series/')) return {status:200,body:seriesHtml};
   if (u.includes('/watch/abc123/Episode-1')) return {status:200,body:`<video><source src="https://media.uniquestream.net/video/episode1.m3u8"></video>`};
   if (u.includes('/watch/def456/Episode-2')) return {status:200,body:'<main>Playback not available</main>'};
-  if (u.includes('/search?q=missing') || u.includes('/search/?q=missing')) return {status:200,body:'<main>No titles</main>'};
-  if (u.includes('/search?q=malformed') || u.includes('/search/?q=malformed')) return {status:200,body:'<html><div'};
-  if (u.includes('/search?q=fallback')) return {status:503,body:'busy'};
   if (u.includes('/videos/popular/')) return {status:200,body:searchHtml};
   if (u.includes('/watch/err/')) throw new Error('network down');
   return {status:404,body:'not found'};
