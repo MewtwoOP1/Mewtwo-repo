@@ -296,7 +296,7 @@ function routeStreamExtraction(host) {
 
   await test('current upstream settings and provider version are exposed', async () => {
     reset();
-    assert.strictEqual(P.getInfo().version, '1.1.2');
+    assert.strictEqual(P.getInfo().version, '1.1.3');
     const settings = P.getSettings();
     assert.strictEqual(settings.map(item => item.key).join(','), [
       'preferred_domain', 'preferred_quality', 'preferred_link_type', 'show_torrent'
@@ -396,7 +396,7 @@ function routeStreamExtraction(host) {
     assert.strictEqual(episodes[0].number, 1);
   });
 
-  await test('episode metadata order follows explicit website season/episode labels', async () => {
+  await test('episode ordering matches Yuzuno Aniyomi season and JSON-number ordering', async () => {
     reset();
     const makeEpisode = (routeSeason, filenameNumber, title, token, number) => {
       const href = BASE + '/download/mixed-show/' + routeSeason +
@@ -404,24 +404,28 @@ function routeStreamExtraction(host) {
         '%5D%20Mixed%20Show%20%5B1080p%5D.mkv?token=' + token;
       return { id: href, url: href, number, title };
     };
-    // The site route index is not always the visible season. Zangetsu joins
-    // rich catalogue metadata to source entries by their final list position.
-    const sorted = P._uniqueEpisodes([
-      makeEpisode(1, 1, 'Season 4 Ep 01 - Mixed Show', 's4e1', 1),
-      makeEpisode(1, 2, 'Season 4 Ep 02 - Mixed Show', 's4e2', 2),
-      makeEpisode(2, 1, 'Season 2 Ep 01 - Mixed Show', 's2e1', 1),
-      makeEpisode(4, 1, 'Season 1 Ep 01 - Mixed Show', 's1e1', 1),
-      makeEpisode(4, 2, 'Season 1 Ep 02 - Mixed Show', 's1e2', 2)
-    ]);
+    // Upstream sorts season routes descending and each /episodes JSON response
+    // by its source "num" descending. Preserve the website's exact label and
+    // signed href: do not renumber/order by a parsed "proper" season label.
+    const s4e1 = makeEpisode(1, 1, 'Season 4 Ep 01 - Mixed Show', 's4e1', 1);
+    const s4e2 = makeEpisode(1, 2, 'Season 4 Ep 02 - Mixed Show', 's4e2', 2);
+    const s2e1 = makeEpisode(2, 1, 'Season 2 Ep 01 - Mixed Show', 's2e1', 1);
+    const s1e1 = makeEpisode(4, 1, 'Season 1 Ep 01 - Mixed Show', 's1e1', 1);
+    const s1e2 = makeEpisode(4, 2, 'Season 1 Ep 02 - Mixed Show', 's1e2', 2);
+    const sorted = P._uniqueEpisodes([s4e1, s4e2, s2e1, s1e1, s1e2]);
     assert.deepStrictEqual(
       JSON.parse(JSON.stringify(sorted.map(item => item.title))),
       [
-        'Season 1 Ep 01 - Mixed Show',
         'Season 1 Ep 02 - Mixed Show',
+        'Season 1 Ep 01 - Mixed Show',
         'Season 2 Ep 01 - Mixed Show',
-        'Season 4 Ep 01 - Mixed Show',
-        'Season 4 Ep 02 - Mixed Show'
+        'Season 4 Ep 02 - Mixed Show',
+        'Season 4 Ep 01 - Mixed Show'
       ]
+    );
+    assert.deepStrictEqual(
+      JSON.parse(JSON.stringify(sorted.map(item => item.url))),
+      [s1e2.url, s1e1.url, s2e1.url, s4e2.url, s4e1.url]
     );
   });
 
