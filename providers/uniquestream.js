@@ -242,7 +242,7 @@ function _seriesUrl(value) {
   if(raw.indexOf('uniquestream://series/')===0)raw=raw.slice('uniquestream://series/'.length);
   var u=_siteUrl(raw,SITE+'/');
   if(!u)return '';
-  try { var p=new URL(u); return /^\/(?:series|film|title)\//i.test(p.pathname)?p.href:''; }catch(e){return '';}
+  try { var p=new URL(u); return /^\/(?:series|film|title|content)\//i.test(p.pathname)?p.href:''; }catch(e){return '';}
 }
 function _metaValue(html,property) {
   var tags=String(html||'').match(/<meta\b[^>]*>/gi)||[];
@@ -329,11 +329,100 @@ function _metadata(html,url) {
   for(var g=0;g<genreLinks.length;g++){var genre=_text(genreLinks[g]);if(genre&&!genres.includes(genre))genres.push(genre);}
   var studioMatch=html.match(/STUDIO\s*<[^>]*>\s*([^<]+)/i),studio=studioMatch?_trim(_decode(studioMatch[1])):'';
   var audio=_metaValue(html,'audio')||'';
-  return {id:url,title:title||url.split('/').filter(Boolean).pop().replace(/-/g,' '),url:url,cover:cover,description:description||'',year:year,status:'unknown',genres:genres,studios:studio?[studio]:[],type:/\/film\//i.test(url)?'movie':'anime',sourceId:SOURCE_ID,episodes:episodes,episodeCount:episodeCount,seasons:seasons,audio:audio,subCount:episodes.length,dubCount:0};
+  return {id:url,title:title||url.split('/').filter(Boolean).pop().replace(/-/g,' '),url:url,cover:cover,description:description||'',year:year,status:'unknown',genres:genres,studios:studio?[studio]:[],type:/\/(?:film|content)\//i.test(url)?'movie':'anime',sourceId:SOURCE_ID,episodes:episodes,episodeCount:episodeCount,seasons:seasons,audio:audio,subCount:episodes.length,dubCount:0};
+}
+function _apiArray(payload) {
+  var data=payload&&payload.data!=null?payload.data:payload;
+  if(Array.isArray(data))return data;
+  if(data&&typeof data==='object') {
+    var keys=['episodes','items','results','data'];
+    for(var i=0;i<keys.length;i++)if(Array.isArray(data[keys[i]]))return data[keys[i]];
+  }
+  return [];
+}
+function _apiSeasonEpisodes(seasons) {
+  if(!Array.isArray(seasons)||!seasons.length)return Promise.resolve([]);
+  return Promise.all(seasons.map(function(season,seasonIndex) {
+    var seasonId=String(season&&season.content_id||'');
+    if(!seasonId)return Promise.resolve([]);
+    var collected=[];
+    function fetchPage(page) {
+      if(page>10)return Promise.resolve(collected);
+      var url=SITE+'/api/v1/season/'+encodeURIComponent(seasonId)+'/episodes?page='+page+'&limit=20&order_by=asc';
+      return _json(url).then(function(payload) {
+        var batch=_apiArray(payload);
+        for(var i=0;i<batch.length;i++)if(batch[i]&&batch[i].content_id)collected.push(batch[i]);
+        if(batch.length>=20)return fetchPage(page+1);
+        return collected;
+      }).catch(function(){return collected;});
+    }
+    return fetchPage(1).then(function(items) {
+      return items.map(function(item,index) {
+        var episodeId=String(item.content_id||''),title=_trim(item.title||'');
+        var epNumber=Number(item.episode_number||item.episode||index+1);
+        var watch=SITE+'/watch/'+encodeURIComponent(episodeId);
+        return {
+          id:'uniquestream://episode/'+encodeURIComponent(watch),
+          number:isFinite(epNumber)&&epNumber>0?epNumber:index+1,
+          title:title||('Episode '+(index+1)),
+          url:'uniquestream://episode/'+encodeURIComponent(watch),
+          sourceId:SOURCE_ID,type:'anime',
+          _seasonOrder:seasonIndex,_episodeOrder:index
+        };
+      });
+    });
+  })).then(function(groups) {
+    var all=[];
+    for(var i=0;i<groups.length;i++)for(var j=0;j<groups[i].length;j++)all.push(groups[i][j]);
+    all.sort(function(a,b){return a._seasonOrder-b._seasonOrder||a._episodeOrder-b._episodeOrder;});
+    for(var k=0;k<all.length;k++){delete all[k]._seasonOrder;delete all[k]._episodeOrder;}
+    return all;
+  });
+}
+function _apiMetadata(payload,page,isMovie) {
+  var data=payload&&payload.data&&typeof payload.data==='object'?payload.data:
+    (payload&&payload.result&&typeof payload.result==='object'?payload.result:payload);
+  if(!data||typeof data!=='object'||!_trim(data.title||''))throw new Error('Uniquestream: API detail payload has no title');
+  var seasons=Array.isArray(data.seasons)?data.seasons:[];
+  var images=Array.isArray(data.images)?data.images:[];
+  var cover='';
+  for(var i=0;i<images.length;i++)if(images[i]&&images[i].type==='poster_tall'&&images[i].url){cover=images[i].url;break;}
+  if(!cover)for(var j=0;j<images.length;j++)if(images[j]&&images[j].url){cover=images[j].url;break;}
+  cover=cover||data.image||data.poster||'';
+  var genres=data.genre||data.genres||[];
+  if(!Array.isArray(genres))genres=[];
+  genres=genres.map(function(g){return typeof g==='string'?g:(g&&(_trim(g.name||g.title||'')));}).filter(Boolean);
+  var summary=String(data.description||data.synopsis||'');
+  var seasonCount=seasons.length||Number(data.seasons_count||data.season_count||0)||null;
+  var count=Number(data.episodes_count||data.episode_count||0);
+  if(!count&&seasons.length)for(var s=0;s<seasons.length;s++)count+=Number(seasons[s].episode_count||seasons[s].episodes_count||0);
+  return (isMovie?Promise.resolve([]):_apiSeasonEpisodes(seasons)).then(function(episodes) {
+    var audio=data.audio_locales||data.audio||[];
+    if(Array.isArray(audio))audio=audio.join(', ');
+    return {
+      id:page,title:_trim(data.title),url:page,cover:cover?_abs(cover,page):null,
+      description:summary,year:Number(data.year||data.release_year||0)||null,
+      status:data.status||'unknown',genres:genres,
+      studios:data.studio?[String(data.studio)]:[],
+      type:isMovie?'movie':'anime',sourceId:SOURCE_ID,episodes:episodes,
+      episodeCount:count||episodes.length||null,
+      seasons:seasonCount,audio:String(audio||''),subCount:episodes.length,dubCount:0
+    };
+  });
 }
 function getDetail(url,opts) {
-  var page=_seriesUrl(url);if(!page)return Promise.reject(new Error('Uniquestream: invalid or non-public series URL'));
-  return _request(page).then(function(html){return _metadata(html,page);});
+  var page=_seriesUrl(url);
+  if(!page)return Promise.reject(new Error('Uniquestream: invalid or non-public series URL'));
+  var path='';
+  try{path=new URL(page).pathname;}catch(e){}
+  var movie=/^\/(?:content|film)\//i.test(path);
+  var match=path.match(/^\/(?:series|film|title|content)\/([^/]+)/i);
+  var contentId=match?decodeURIComponent(match[1]):'';
+  if(!contentId)return _request(page).then(function(html){return _metadata(html,page);});
+  var endpoint=SITE+'/api/v1/'+(movie?'movie':'series')+'/'+encodeURIComponent(contentId);
+  return _json(endpoint)
+    .then(function(payload){return _apiMetadata(payload,page,movie);})
+    .catch(function(){return _request(page).then(function(html){return _metadata(html,page);});});
 }
 function getEpisodes(url,opts) { return getDetail(url,opts).then(function(d){return d.episodes||[];}); }
 function _episodePage(epUrl) {
