@@ -96,11 +96,15 @@ function _uniqueCards(groups) {
   return out;
 }
 function _fetchCardPages(urls) {
-  // Fetch independent public pages together so a dead route cannot consume
-  // the entire provider-call timeout before a working fallback is tried.
   return Promise.all(urls.map(function(url) {
     return _request(url).then(function(html){return _cards(html,url);},function(){return [];});
   })).then(_uniqueCards);
+}
+function _json(url) {
+  return _request(url).then(function(body) {
+    try { return JSON.parse(body); }
+    catch(e) { throw new Error('Uniquestream: invalid JSON response from '+url); }
+  });
 }
 function _normalTitle(s) {
   return _trim(String(s||'').toLowerCase())
@@ -109,6 +113,48 @@ function _normalTitle(s) {
     .replace(/\s+/g,' ')
     .trim();
 }
+function _slug(s) {
+  return _normalTitle(s).replace(/\s+/g,'-') || 'title';
+}
+function _apiCard(item,kind) {
+  if(!item||typeof item!=='object')return null;
+  var id=String(item.content_id||item.contentId||item.id||'');
+  var title=_trim(item.title||item.name||'');
+  if(!id||!title)return null;
+  var type=(kind==='movie'||String(item.type||'').toLowerCase()==='movie')?'movie':'anime';
+  var path=type==='movie'?('/content/'+encodeURIComponent(id)):('/series/'+encodeURIComponent(id)+'/'+_slug(title));
+  var url=SITE+path;
+  var cover=item.image||item.image_tall||item.poster||item.cover||null;
+  if(cover)cover=_abs(cover,SITE+'/');
+  return {id:url,title:title,url:url,cover:cover,type:type,sourceId:SOURCE_ID};
+}
+function _apiCards(payload) {
+  var data=payload&&payload.data!=null?payload.data:payload;
+  var groups=[];
+  if(Array.isArray(data))groups.push(data);
+  if(data&&typeof data==='object') {
+    if(Array.isArray(data.series))groups.push(data.series.map(function(x){return Object.assign({_kind:'series'},x);}));
+    if(Array.isArray(data.movies))groups.push(data.movies.map(function(x){return Object.assign({_kind:'movie'},x);}));
+    if(Array.isArray(data.items))groups.push(data.items);
+    if(Array.isArray(data.results))groups.push(data.results);
+    if(Array.isArray(data.data))groups.push(data.data);
+  }
+  var out=[];
+  for(var i=0;i<groups.length;i++) {
+    for(var j=0;j<groups[i].length;j++) {
+      var raw=groups[i][j]||{},kind=raw._kind||'';
+      var item=_apiCard(raw,kind);
+      if(item)out.push(item);
+    }
+  }
+  if(!out.length&&data&&typeof data==='object'&&data.result&&typeof data.result==='object')return _apiCards(data.result);
+  return _uniqueCards([out]);
+}
+function _fetchApiCards(urls) {
+  return Promise.all(urls.map(function(url) {
+    return _json(url).then(_apiCards,function(){return [];});
+  })).then(_uniqueCards);
+}
 function _matchingCards(items,query) {
   var q=_normalTitle(query),words=q.split(' ').filter(function(w){return w.length>1;});
   if(!q)return [];
@@ -116,8 +162,6 @@ function _matchingCards(items,query) {
     var t=_normalTitle(item.title);
     if(!t)return false;
     if(t.indexOf(q)>=0)return true;
-    // Some site titles add a subtitle or alternate title. Require every
-    // meaningful query token rather than returning unrelated catalogue rows.
     return words.length>0&&words.every(function(w){return t.indexOf(w)>=0;});
   });
 }
@@ -127,12 +171,8 @@ function _letterFor(query) {
   var c=s.charAt(0).toUpperCase();
   return /^[A-Z0-9]$/.test(c)?c:'A';
 }
-function search(query,page,opts) {
-  var q=_trim(query); if(!q)return Promise.resolve([]);
-  var p=page&&Number(page)>1?Number(page):1;
-  var enc=encodeURIComponent(q);
-  // Try public search-page variants first. The site is Nuxt-rendered and can
-  // return an app shell on one route while the actual result cards are absent.
+function _htmlSearch(query,page) {
+  var enc=encodeURIComponent(query),p=page||1;
   var candidates=[
     SITE+'/search?q='+enc+'&page='+p,
     SITE+'/search/?q='+enc+'&page='+p,
@@ -141,40 +181,53 @@ function search(query,page,opts) {
   ];
   return _fetchCardPages(candidates).then(function(items) {
     if(items.length)return items;
-    // Live inspection found that the public Latest/Popular shelves currently
-    // render without card data, while the public A–Z archive is server-rendered.
-    // Search that public archive by the query's initial and match titles locally.
-    var letter=_letterFor(q),letterUrls=[];
-    for(var n=p;n<=p+2;n++) {
-      letterUrls.push(SITE+'/videos/alphabetical/?letter='+encodeURIComponent(letter)+'&page='+n);
-    }
+    var letter=_letterFor(query),letterUrls=[];
+    for(var n=p;n<=p+2;n++)letterUrls.push(SITE+'/videos/alphabetical/?letter='+encodeURIComponent(letter)+'&page='+n);
     letterUrls.push(SITE+'/videos/alphabetical/?letter='+encodeURIComponent(letter));
     return _fetchCardPages(letterUrls).then(function(found) {
-      var matches=_matchingCards(found,q);
+      var matches=_matchingCards(found,query);
       if(matches.length)return matches;
-      // Last-resort public catalogue pages. Only return actual title matches.
       return _fetchCardPages([SITE+'/videos/alphabetical/',SITE+'/']).then(function(fallback) {
-        return _matchingCards(fallback,q);
+        return _matchingCards(fallback,query);
       });
     });
-  }).then(function(items) {
-    // Never return duplicate aliases or an unbounded catalogue page as search
-    // results. A page is capped to keep Zangetsu's metadata decode inexpensive.
-    var out=[],seen={};
-    for(var i=0;i<items.length&&out.length<30;i++) {
-      var key=String(items[i].url||items[i].id||'');
-      if(key&&!seen[key]){seen[key]=true;out.push(items[i]);}
-    }
-    return out;
+  });
+}
+function search(query,page,opts) {
+  var q=_trim(query);if(!q)return Promise.resolve([]);
+  var p=page&&Number(page)>1?Number(page):1,enc=encodeURIComponent(q);
+  // The live site exposes a JSON API. Its parameter is query, with t, limit,
+  // and page. The older implementation scraped /search?q= where the browser
+  // receives an app shell and no result cards.
+  var apiUrls=[
+    SITE+'/api/v1/search?query='+enc+'&t=all&limit=24&page='+p,
+    SITE+'/api/v1/search?q='+enc+'&t=all&limit=24&page='+p
+  ];
+  return _fetchApiCards(apiUrls).then(function(items) {
+    if(items.length)return items.slice(0,30);
+    return _htmlSearch(q,p).then(function(fallback) {
+      var out=[],seen={};
+      for(var i=0;i<fallback.length&&out.length<30;i++) {
+        var key=String(fallback[i].url||fallback[i].id||'');
+        if(key&&!seen[key]){seen[key]=true;out.push(fallback[i]);}
+      }
+      return out;
+    });
   }).catch(function(){return [];});
 }
 function popular(opts) {
-  var paths=[SITE+'/videos/popular/',SITE+'/videos/new/'];
-  return _fetchCardPages(paths).then(function(items) {
-    if(items.length)return items;
-    // The public A–Z page is currently more reliable than the dynamic shelves.
-    return _fetchCardPages([SITE+'/videos/alphabetical/',SITE+'/']).then(function(fallback) {
-      return fallback.slice(0,30);
+  // Public JSON catalogue routes used by other public AnimeStream clients.
+  var apiUrls=[
+    SITE+'/api/v1/videos/popular?limit=20&page=1&type=all',
+    SITE+'/api/v1/videos/new?limit=20&page=1&type=all'
+  ];
+  return _fetchApiCards(apiUrls).then(function(items) {
+    if(items.length)return items.slice(0,30);
+    return _fetchCardPages([SITE+'/videos/popular/',SITE+'/videos/new/']).then(function(htmlItems) {
+      if(htmlItems.length)return htmlItems.slice(0,30);
+      return _fetchCardPages([SITE+'/videos/alphabetical/',SITE+'/']).then(function(fallback) {
+        return fallback.slice(0,30);
+      });
     });
   }).catch(function(){return [];});
 }
