@@ -300,7 +300,7 @@ function routeStreamExtraction(host) {
 
   await test('current upstream settings and provider version are exposed', async () => {
     reset();
-    assert.strictEqual(P.getInfo().version, '1.1.4');
+    assert.strictEqual(P.getInfo().version, '1.1.5');
     const settings = P.getSettings();
     assert.strictEqual(settings.map(item => item.key).join(','), [
       'preferred_domain', 'preferred_quality', 'preferred_link_type', 'show_torrent'
@@ -430,7 +430,7 @@ function routeStreamExtraction(host) {
     assert.strictEqual(episodes[0].number, 1);
   });
 
-  await test('episode ordering matches Yuzuno Aniyomi season and JSON-number ordering', async () => {
+  await test('episode order follows visible season and episode identity for metadata alignment', async () => {
     reset();
     const makeEpisode = (routeSeason, filenameNumber, title, token, number) => {
       const href = BASE + '/download/mixed-show/' + routeSeason +
@@ -438,9 +438,11 @@ function routeStreamExtraction(host) {
         '%5D%20Mixed%20Show%20%5B1080p%5D.mkv?token=' + token;
       return { id: href, url: href, number, title };
     };
-    // Upstream sorts season routes descending and each /episodes JSON response
-    // by its source "num" descending. Preserve the website's exact label and
-    // signed href: do not renumber/order by a parsed "proper" season label.
+    // Anime metadata is attached to rows by list position. Some AV1Encodes
+    // route IDs do not match the visible season in the source episode label,
+    // so ordering only by /download/{slug}/{route-season}/ scrambles dates and
+    // synopses. Sort by the visible season + filename episode identity while
+    // preserving exact signed hrefs required for playback.
     const s4e1 = makeEpisode(1, 1, 'Season 4 Ep 01 - Mixed Show', 's4e1', 1);
     const s4e2 = makeEpisode(1, 2, 'Season 4 Ep 02 - Mixed Show', 's4e2', 2);
     const s2e1 = makeEpisode(2, 1, 'Season 2 Ep 01 - Mixed Show', 's2e1', 1);
@@ -450,16 +452,16 @@ function routeStreamExtraction(host) {
     assert.deepStrictEqual(
       JSON.parse(JSON.stringify(sorted.map(item => item.title))),
       [
-        'Season 1 Ep 02 - Mixed Show',
         'Season 1 Ep 01 - Mixed Show',
+        'Season 1 Ep 02 - Mixed Show',
         'Season 2 Ep 01 - Mixed Show',
-        'Season 4 Ep 02 - Mixed Show',
-        'Season 4 Ep 01 - Mixed Show'
+        'Season 4 Ep 01 - Mixed Show',
+        'Season 4 Ep 02 - Mixed Show'
       ]
     );
     assert.deepStrictEqual(
       JSON.parse(JSON.stringify(sorted.map(item => item.url))),
-      [s1e2.url, s1e1.url, s2e1.url, s4e2.url, s4e1.url]
+      [s1e1.url, s1e2.url, s2e1.url, s4e1.url, s4e2.url]
     );
   });
 
