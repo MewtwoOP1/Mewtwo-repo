@@ -310,7 +310,7 @@ function _episodeItem(record, series, season, position, seasonPosition, isMovie)
   return {
     id: url,
     title: title,
-    number: position + 1,
+    number: localNum,
     episodeNumber: localNum,
     url: url,
     sourceId: SOURCE_ID,
@@ -331,7 +331,7 @@ function _seasonEpisodes(season) {
     var jobs = [];
     for (var page = 1; page <= pageCount; page++) {
       jobs.push(_apiJson('/season/' + encodeURIComponent(seasonId) +
-        '/episodes?page=' + page + '&limit=' + PAGE_SIZE + '&order_by=asc')
+        '/episodes?page=' + page + '&limit=' + PAGE_SIZE)
         .then(function (json) { return _array(_payload(json)); })
         .catch(function () { return []; }));
     }
@@ -346,7 +346,7 @@ function _seasonEpisodes(season) {
   function next(page) {
     if (page > 100) return Promise.resolve(all);
     return _apiJson('/season/' + encodeURIComponent(seasonId) +
-      '/episodes?page=' + page + '&limit=' + PAGE_SIZE + '&order_by=asc')
+      '/episodes?page=' + page + '&limit=' + PAGE_SIZE)
       .then(function (json) {
         var batch = _array(_payload(json));
         all = all.concat(batch);
@@ -507,12 +507,13 @@ function _subtitleTracks(list) {
     var key = url + '|' + locale;
     if (seen[key]) return;
     seen[key] = true;
+    var pathLower = url.toLowerCase().split('?')[0].split('#')[0];
+    var format = pathLower.endsWith('.srt') ? 'srt' : (pathLower.endsWith('.vtt') ? 'vtt' : null);
     out.push({
       url: url,
-      language: _localeName(locale),
-      name: _localeName(locale),
-      kind: 'captions',
-      headers: { Referer: SITE + '/' }
+      lang: _localeName(locale),
+      label: _localeName(locale),
+      format: format
     });
   });
   return out;
@@ -532,7 +533,7 @@ function _addStream(out, seen, variant, fallbackLocale, transport, hardSubLocale
   var locale = variant.locale || fallbackLocale || 'ja-JP';
   var hardSub = hardSubLocale ? _localeName(hardSubLocale) : '';
   var language = _localeName(locale);
-  var actualTransport = /\.mpd(?:[?#]|$)/i.test(playlist) ? 'dash' :
+  var actualTransport = /\.mpd(?:[?#]|$)/i.test(playlist) ? 'unknown' :
     (/\.m3u8(?:[?#]|$)/i.test(playlist) ? 'hls' : (transport || 'hls'));
   var kind = hardSubLocale ? 'sub' : (locale === 'ja-JP' ? 'sub' : 'dub');
   var label = language + (kind === 'dub' ? ' Dub' : ' Audio');
@@ -551,7 +552,7 @@ function _addStream(out, seen, variant, fallbackLocale, transport, hardSubLocale
     label: 'Crunchy-anime · ' + label,
     container: actualTransport,
     kind: kind,
-    language: language,
+    audioLang: String(locale || ''),
     headers: headers,
     subtitles: subtitles
   });
