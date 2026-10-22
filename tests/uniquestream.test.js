@@ -37,11 +37,15 @@ global.fetch = async (url, opts) => {
   if (u.includes('/watch/ep002/')) return {status:200,body:'<main>Playback not available</main>'};
   if (u.includes('/watch/ep003/')) return {status:200,body:'<script>window.player={"file":"https://cdn.example.net/video/episode3.mp4"};</script>'};
   if (u.includes('/videos/popular/')) return {status:200,body:searchHtml};
+  if (u.includes('/videos/alphabetical/?letter=F&page=1')) return {
+    status:200,
+    body:'<div class="catalog-card"><a href="/series/FALLBK/Fallback-Show"><h2>Fallback Show</h2></a></div>'
+  };
   if (u.includes('/watch/err/')) throw new Error('network down');
   return {status:404,body:'not found'};
 };
 async function main() {
-  assert.equal(provider.version,'0.2.0');
+  assert.equal(provider.version,'0.3.0');
   assert.equal(provider.getInfo().name,'Uniquestream');
   assert.deepEqual(await provider.search(''),[]);
   const results=await provider.search('Attack on Titan');
@@ -49,6 +53,10 @@ async function main() {
   assert.equal(results[0].title,'Attack on Titan');
   assert.equal(results[0].cover,'https://media.uniquestream.net/posters/aot.jpg');
   assert.deepEqual(await provider.search('missing'),[]);
+  const fallbackResults=await provider.search('Fallback Show');
+  assert.equal(fallbackResults.length,1,'public alphabetical catalogue must be used when search routes fail');
+  assert.equal(fallbackResults[0].title,'Fallback Show');
+  assert.match(fallbackResults[0].url,/FALLBK/);
   assert.deepEqual(await provider.search('malformed'),[]);
   assert.deepEqual(await provider.search('fallback'),[]);
   assert.deepEqual(await provider.search('network error'),[]);
