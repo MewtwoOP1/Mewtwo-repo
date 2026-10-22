@@ -83,7 +83,7 @@ global.fetch = async (url, opts) => {
   return {status:404,body:'not found'};
 };
 async function main() {
-  assert.equal(provider.version,'0.5.0');
+  assert.equal(provider.version,'0.6.0');
   assert.equal(provider.getInfo().name,'Uniquestream');
   assert.deepEqual(await provider.search(''),[]);
   const results=await provider.search('Attack on Titan');
