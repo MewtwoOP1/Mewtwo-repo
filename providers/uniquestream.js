@@ -381,12 +381,14 @@ function _apiSeasonEpisodes(seasons) {
       return items.map(function(item,index) {
         var episodeId=String(item.content_id||''),title=_trim(item.title||'');
         var epNumber=Number(item.episode_number||item.episode||index+1);
-        var watch=SITE+'/watch/'+encodeURIComponent(episodeId);
+        var locales=Array.isArray(item.audio_locales)?item.audio_locales:[];
+        var locale=locales.indexOf('ja-JP')>=0?'ja-JP':(locales[0]||'ja-JP');
+        var media=SITE+'/api/v1/episode/'+encodeURIComponent(episodeId)+'/media/hls/'+encodeURIComponent(locale);
         return {
-          id:'uniquestream://episode/'+encodeURIComponent(watch),
+          id:'uniquestream://episode/'+encodeURIComponent(media),
           number:isFinite(epNumber)&&epNumber>0?epNumber:index+1,
           title:title||('Episode '+(index+1)),
-          url:'uniquestream://episode/'+encodeURIComponent(watch),
+          url:'uniquestream://episode/'+encodeURIComponent(media),
           sourceId:SOURCE_ID,type:'anime',
           _seasonOrder:seasonIndex,_episodeOrder:index
         };
