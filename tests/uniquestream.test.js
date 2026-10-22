@@ -133,8 +133,8 @@ async function main() {
     assert.equal(quickJsResults[0].title,'Attack on Titan');
     const quickJsHome=await provider.getHome();
     assert.ok(quickJsHome.length&&quickJsHome[0].items.length,'catalogue must work without global URL');
-    const quickJsDetail=await provider.getDetail(quickJsResults[0].url);
-    assert.equal(quickJsDetail.title,'Attack on Titan','metadata lookup must work without global URL');
+    const quickJsDetail=await provider.getDetail('https://anime.uniquestream.net/series/API001/API-Show');
+    assert.equal(quickJsDetail.title,'API Show','metadata lookup must work without global URL');
     const quickJsStreams=await provider.getVideoSources(quickJsDetail.episodes[0].url);
     assert.equal(quickJsStreams.length,3,'media API must expose raw, hard-sub, and dub playlists without global URL');
     assert.equal(quickJsStreams[0].url,'https://media.uniquestream.net/hls/master.m3u8');
