@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="310" viewBox="0 0 1200 310" role="img" aria-labelledby="title desc">
+  <title id="title">How the Zangetsu provider integrations work</title>
+  <desc id="desc">TMDB supplies catalogue metadata to Zangetsu. One selected playback provider supplies streams separately: PencariMovie, AIOStreams, or configured Stremio add-ons.</desc>
+  <defs>
+    <linearGradient id="purple" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7C3AED"/><stop offset="1" stop-color="#4F46E5"/></linearGradient>
+    <linearGradient id="teal" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0F766E"/><stop offset="1" stop-color="#0D9488"/></linearGradient>
+    <linearGradient id="orange" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#C2410C"/><stop offset="1" stop-color="#EA580C"/></linearGradient>
+    <marker id="arrow" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0 0 L9 4.5 L0 9 Z" fill="#94A3B8"/></marker>
+  </defs>
+  <rect width="1200" height="310" rx="22" fill="#0D1117"/>
+  <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+    <text x="42" y="44" font-size="15" font-weight="700" letter-spacing="2.5" fill="#A5B4FC">THE FLOW</text>
+    <text x="42" y="72" font-size="22" font-weight="700" fill="#F8FAFC">Metadata and playback are separate</text>
+    <rect x="42" y="106" width="235" height="142" rx="17" fill="#1B2240" stroke="#6366F1" stroke-opacity=".9"/>
+    <circle cx="78" cy="143" r="17" fill="#4338CA"/><path d="M70 143h16M78 135v16" stroke="#E0E7FF" stroke-width="2" stroke-linecap="round"/>
+    <text x="69" y="183" font-size="22" font-weight="700" fill="#FFFFFF">TMDB</text>
+    <text x="69" y="207" font-size="14" fill="#C7D2FE">Titles · artwork</text>
+    <text x="69" y="227" font-size="14" fill="#C7D2FE">Seasons · episodes</text>
+    <path d="M290 177 H360" fill="none" stroke="#94A3B8" stroke-width="2.5" marker-end="url(#arrow)"/>
+    <rect x="376" y="106" width="242" height="142" rx="17" fill="#161B22" stroke="#64748B" stroke-opacity=".9"/>
+    <path d="M407 134 l15 9 -15 9 -15 -9 z" fill="#C4B5FD"/><path d="M407 152v13" stroke="#C4B5FD" stroke-width="2"/>
+    <text x="402" y="189" font-size="22" font-weight="700" fill="#FFFFFF">Zangetsu</text>
+    <text x="402" y="213" font-size="14" fill="#C9D1D9">Catalogue + source</text>
+    <text x="402" y="232" font-size="14" fill="#C9D1D9">configuration</text>
+    <path d="M633 177 H686" fill="none" stroke="#94A3B8" stroke-width="2.5" marker-end="url(#arrow)"/>
+    <text x="714" y="104" fill="#9CA3AF" font-size="13" font-weight="700" letter-spacing="1.6">CHOOSE A PLAYBACK SOURCE</text>
+    <rect x="700" y="120" width="450" height="37" rx="10" fill="#241A3A" stroke="#8B5CF6" stroke-opacity=".8"/>
+    <circle cx="721" cy="138.5" r="5" fill="#A78BFA"/><text x="738" y="144" font-size="16" font-weight="600" fill="#EDE9FE">TMDB + PencariMovie</text>
+    <rect x="700" y="168" width="450" height="37" rx="10" fill="#122D2D" stroke="#14B8A6" stroke-opacity=".8"/>
+    <circle cx="721" cy="186.5" r="5" fill="#5EEAD4"/><text x="738" y="192" font-size="16" font-weight="600" fill="#CCFBF1">AIOStreams</text>
+    <rect x="700" y="216" width="450" height="37" rx="10" fill="#332016" stroke="#F97316" stroke-opacity=".8"/>
+    <circle cx="721" cy="234.5" r="5" fill="#FDBA74"/><text x="738" y="240" font-size="16" font-weight="600" fill="#FFEDD5">TMDB + Stremio add-ons</text>
+    <text x="42" y="283" fill="#9CA3AF" font-size="13">The catalogue can load even when a playback provider has no matching live stream.</text>
+  </g>
+</svg>
