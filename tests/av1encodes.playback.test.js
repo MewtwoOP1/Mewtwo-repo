@@ -300,7 +300,7 @@ function routeStreamExtraction(host) {
 
   await test('current upstream settings and provider version are exposed', async () => {
     reset();
-    assert.strictEqual(P.getInfo().version, '1.1.7');
+    assert.strictEqual(P.getInfo().version, '1.1.8');
     const settings = P.getSettings();
     assert.strictEqual(settings.map(item => item.key).join(','), [
       'preferred_domain', 'preferred_quality', 'preferred_link_type', 'show_torrent'
@@ -430,12 +430,12 @@ function routeStreamExtraction(host) {
     assert.strictEqual(episodes[0].number, 1);
   });
 
-  await test('episode list preserves Yuzuno season-bucket order even when signed href seasons differ', async () => {
+  await test('episode list preserves raw source selector and JSON payload order', async () => {
     reset();
     const detail = '<html><body>' +
-      '<div class="season-tab" data-season="1"></div>' +
       '<div class="season-tab" data-season="2"></div>' +
       '<div class="season-tab" data-season="4"></div>' +
+      '<div class="season-tab" data-season="1"></div>' +
       '</body></html>';
     route(/^https:\/\/av1please\.com\/anime\/mixed-show$/, () => ok(detail));
 
@@ -454,23 +454,23 @@ function routeStreamExtraction(host) {
       item(1, 'Season 2 Ep 01 - Mixed Show', 2, 1, 's2e1')
     ];
     const season1 = [
-      item(1, 'Season 1 Ep 01 - Mixed Show', 4, 1, 's1e1'),
-      item(2, 'Season 1 Ep 02 - Mixed Show', 4, 2, 's1e2')
+      item(2, 'Season 1 Ep 02 - Mixed Show', 4, 2, 's1e2'),
+      item(1, 'Season 1 Ep 01 - Mixed Show', 4, 1, 's1e1')
     ];
     route(/^https:\/\/av1please\.com\/episodes\/mixed-show\/4\/1920%20x%201080$/, () => ok(JSON.stringify(season4)));
     route(/^https:\/\/av1please\.com\/episodes\/mixed-show\/2\/1920%20x%201080$/, () => ok(JSON.stringify(season2)));
     route(/^https:\/\/av1please\.com\/episodes\/mixed-show\/1\/1920%20x%201080$/, () => ok(JSON.stringify(season1)));
 
     const episodes = await P.getEpisodes(BASE + '/anime/mixed-show', {});
-    // Yuzuno flattens route seasons in descending selector order (4, 2, 1),
-    // sorting each JSON result by its original num descending. It does NOT
-    // globally sort by the season segment embedded in href: these can disagree.
+    // Preserve the sequence actually exposed by this source page and each
+    // JSON payload, even when it looks random. Do not sort seasons or episode
+    // numbers, and do not infer list order from seasons embedded in signed URLs.
     assert.deepStrictEqual(
       JSON.parse(JSON.stringify(episodes.map(item => item.title))),
       [
-        'Season 4 Ep 02 - Mixed Show',
-        'Season 4 Ep 01 - Mixed Show',
         'Season 2 Ep 01 - Mixed Show',
+        'Season 4 Ep 01 - Mixed Show',
+        'Season 4 Ep 02 - Mixed Show',
         'Season 1 Ep 02 - Mixed Show',
         'Season 1 Ep 01 - Mixed Show'
       ]
@@ -478,11 +478,11 @@ function routeStreamExtraction(host) {
     assert.deepStrictEqual(
       JSON.parse(JSON.stringify(episodes.map(item => item.url))),
       [
-        BASE + season4[1].href,
-        BASE + season4[0].href,
         BASE + season2[0].href,
-        BASE + season1[1].href,
-        BASE + season1[0].href
+        BASE + season4[0].href,
+        BASE + season4[1].href,
+        BASE + season1[0].href,
+        BASE + season1[1].href
       ]
     );
     assert.ok(calls.some(call => call.url === BASE + '/episodes/mixed-show/4/1920%20x%201080'));
