@@ -49,7 +49,7 @@ function getInfo() {
     baseUrl: BASE,
     logo: 'icons/av1encodes.png',
     type: 'anime',
-    version: '1.3.2'
+    version: '1.3.3'
   };
 }
 
@@ -795,7 +795,7 @@ function _fetchSeasonEpisodes(slug, season, candidates) {
             });
           }
           if (out.length) {
-            out.sort(function (a, b) { return (b.number || 0) - (a.number || 0); });
+            out.sort(function (a, b) { return (a.number || 0) - (b.number || 0); });
             return out;
           }
         }
@@ -816,7 +816,7 @@ function _fetchSeasonEpisodes(slug, season, candidates) {
             season: season
           };
         });
-        eps.sort(function (a, b) { return (b.number || 0) - (a.number || 0); });
+        eps.sort(function (a, b) { return (a.number || 0) - (b.number || 0); });
         return eps;
       }
 
@@ -832,7 +832,7 @@ function _fetchSeasonEpisodes(slug, season, candidates) {
             season: season
           };
         });
-        made.sort(function (a, b) { return (b.number || 0) - (a.number || 0); });
+        made.sort(function (a, b) { return (a.number || 0) - (b.number || 0); });
         return made;
       }
 
@@ -864,11 +864,16 @@ function _fetchEpisodes(animeUrl) {
       for (var r = 0; r < results.length; r++) {
         for (var e = 0; e < results[r].length; e++) all.push(results[r][e]);
       }
+      // Zangetsu canonicalizes source episode position to episode 1..N.
+      // Keep the provider list in chronological order (season asc, episode
+      // asc); UI layers can reverse it for display. Returning newest-first here
+      // made canonical episode 1 point at the latest episode, and shifted every
+      // metadata episode onto the wrong source URL.
       all.sort(function (a, b) {
         var sa = parseInt(a.season, 10) || 0;
         var sb = parseInt(b.season, 10) || 0;
-        if (sb !== sa) return sb - sa;
-        return (b.number || 0) - (a.number || 0);
+        if (sa !== sb) return sa - sb;
+        return (a.number || 0) - (b.number || 0);
       });
       return all;
     });
@@ -1397,7 +1402,7 @@ function getStreams(id, opts) {
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    version: '1.3.2',
+    version: '1.3.3',
     getInfo: getInfo,
     getSettings: getSettings,
     getHome: getHome,
