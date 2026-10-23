@@ -1136,9 +1136,9 @@ function _parseEpisodePage(html, base, slug, season, resolution) {
 }
 
 function _uniqueEpisodes(items) {
-  // Only de-duplicate here. Never globally re-sort by URL route: Yuzuno keeps
-  // the season buckets in descending selector order, irrespective of the
-  // season segment inside each signed /download/ href.
+  // Only de-duplicate here. Preserve the exact order emitted by the
+  // source's season selectors and episode payloads, irrespective of the season
+  // segment inside each signed /download/ href.
   const out = [];
   const seen = Object.create(null);
   for (const item of items || []) {
