@@ -100,7 +100,11 @@ function _requestJson(url, options) {
   for (k in (options.headers || {})) if (Object.prototype.hasOwnProperty.call(options.headers, k)) headers[k] = options.headers[k];
   return new Promise(function (resolve, reject) {
     var retries = !options.noRetry && !options.deadlineAt && options.retry !== false ? 1 : 0;
-    var task = { cancelled: false, run: function () {
+    var queueTimer = null;
+    var task = { cancelled: false, started: false, run: function () {
+      task.started = true;
+      if (queueTimer !== null) { clearTimeout(queueTimer); queueTimer = null; }
+      if (task.cancelled) { _release(); return; }
       function attempt() {
         if (task.cancelled) { _release(); return; }
         var remaining = options.deadlineAt ? options.deadlineAt - Date.now() : timeout;
@@ -129,6 +133,17 @@ function _requestJson(url, options) {
       task.run();
     } else {
       if (_queue.length >= MAX_QUEUE) { reject(new Error('AIOStreams: request queue is full')); return; }
+      if (options.deadlineAt && typeof setTimeout === 'function') {
+        queueTimer = setTimeout(function () {
+          if (task.cancelled || task.started) return;
+          var index = _queue.indexOf(task);
+          if (index >= 0) {
+            _queue.splice(index, 1);
+            task.cancelled = true;
+            reject(new Error('AIOStreams: stream lookup deadline exceeded while waiting for a request slot'));
+          }
+        }, Math.max(1, options.deadlineAt - Date.now()));
+      }
       if (options.priority) _queue.unshift(task);
       else _queue.push(task);
     }
