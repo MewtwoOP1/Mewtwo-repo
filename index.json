@@ -961,7 +961,7 @@
       "type": "anime",
       "lang": "en",
       "file": "providers/av1encodes.js",
-      "logo": "icons/av1encodes.png",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=animealpha.cc",
       "nsfw": false
     }
   ]
