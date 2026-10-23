@@ -14,7 +14,7 @@
 // every series detail. Series now report type 'movie' like every working
 // source; the tmdb://tv/ URL keeps the series routing.
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID) ? String(__SOURCE_ID) : 'mewstream';
-var VERSION = '4.0.3';
+var VERSION = '4.0.4';
 
 // ── Polyfills (Zangetsu sandbox) ──────────────────────────────────────
 var _BC = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
@@ -161,21 +161,32 @@ async function _fj(u, o) {
   try { return JSON.parse(t); } catch (e) { return null; }
 }
 
-// Guarded timeout — never throws if setTimeout is missing
+// Guarded timeout. Clear the timer as soon as a source finishes so a quick
+// result doesn't keep a test process or the app's JS runtime alive unnecessarily.
 function _withTimeout(p, ms, fb, label) {
   if (typeof setTimeout !== 'function') {
     return Promise.resolve(p).catch(function () { return fb || []; });
   }
-  var done = false;
-  return Promise.race([
-    Promise.resolve(p).then(function (v) { done = true; return v; },
-      function (e) { done = true; throw e; }),
-    new Promise(function (res) {
-      setTimeout(function () {
-        if (!done) { if (label) console.log('Mewstream: ' + label + ' timed out'); res(fb || []); }
-      }, ms);
-    })
-  ]);
+  return new Promise(function (resolve, reject) {
+    var done = false;
+    var timer = setTimeout(function () {
+      if (done) return;
+      done = true;
+      if (label) console.log('Mewstream: ' + label + ' timed out');
+      resolve(fb || []);
+    }, ms);
+    Promise.resolve(p).then(function (value) {
+      if (done) return;
+      done = true;
+      if (typeof clearTimeout === 'function') clearTimeout(timer);
+      resolve(value);
+    }, function (error) {
+      if (done) return;
+      done = true;
+      if (typeof clearTimeout === 'function') clearTimeout(timer);
+      reject(error);
+    });
+  });
 }
 
 // ── AES-CBC core ───────────────────────────────────────────────────────
@@ -1485,94 +1496,116 @@ async function getVideoSources(url, opts) {
   var m = await _resolveMeta(p);
   var an = m.isAnime === true;
   var subs = [], cb = function (s) { if (s && s.url) subs.push(s); };
-  var dg = [];
+  var diagnostics = [];
+  var sources = [];
 
-  function race(src, tag) {
-    if (!src.length) return Promise.resolve([]);
-    return new Promise(function (res) {
-      var pd = src.length, dn = false;
-      function st(r, n) {
-        if (dn) return;
-        pd--;
-        if (r && r.length) {
-          dn = true;
-          console.log('Mewstream: ' + tag + ' hit ' + r.length + ' from ' + n);
-          res(r);
-          return;
-        }
-        if (pd === 0) { dn = true; res([]); }
-      }
-      src.forEach(function (s) {
-        _withTimeout(s.fn(), 20000, [], s.name)
-          .then(function (r) {
-            if (!r || !r.length) dg.push(s.name + ':0');
-            st(r, s.name);
-          })
-          .catch(function (e) {
-            dg.push(s.name + ':' + (e && e.message || e));
-            st([], s.name);
-          });
-      });
-    });
+  // Schedule only enabled sources with the metadata they require. This makes
+  // "skipped" (missing ID/setting) distinguishable from "tried, no stream".
+  function addSource(group, name, setting, available, reason, fn) {
+    if (!_bool(setting, true)) {
+      diagnostics.push(name + ':skipped(disabled)');
+      return;
+    }
+    if (!available) {
+      diagnostics.push(name + ':skipped(' + (reason || 'missing-required-metadata') + ')');
+      return;
+    }
+    sources.push({ group: group, name: name, fn: fn });
   }
 
-  var as = [];
+  var epNum = p.absolute || p.episode;
   if (an) {
-    var epNum = p.absolute || p.episode;
-    if (_bool('enableMegaplayDirect', true) && (m.malId || m.anilistId))
-      as.push({ name: 'MegaPlay-Direct', fn: function () { return getMegaplayDirect(m.malId, m.anilistId, epNum, cb); } });
-    if (_bool('enableAnikoto', true) && m.title)
-      as.push({ name: 'AniKoto', fn: function () { return getAnikoto(m.title, p.season, epNum, cb); } });
-    if (_bool('enableAnizone', true) && m.title)
-      as.push({ name: 'AniZone', fn: function () { return getAnizone(m.title, p.season, epNum); } });
-    if (_bool('enableAnimesalt', true) && m.title)
-      as.push({ name: 'AnimeSalt', fn: function () { return getAnimesalt(m.title, p.season, epNum); } });
-    if (_bool('enableRareanimes', true) && m.title)
-      as.push({ name: 'RareAnimes', fn: function () { return getRareanimes(m.title, p.season, epNum, cb); } });
+    addSource('anime', 'MegaPlay-Direct', 'enableMegaplayDirect',
+      !!(m.malId || m.anilistId), 'missing-mal-or-anilist-id',
+      function () { return getMegaplayDirect(m.malId, m.anilistId, epNum, cb); });
+    addSource('anime', 'AniKoto', 'enableAnikoto', !!m.title, 'missing-title',
+      function () { return getAnikoto(m.title, p.season, epNum, cb); });
+    addSource('anime', 'AniZone', 'enableAnizone', !!m.title, 'missing-title',
+      function () { return getAnizone(m.title, p.season, epNum); });
+    addSource('anime', 'AnimeSalt', 'enableAnimesalt', !!m.title, 'missing-title',
+      function () { return getAnimesalt(m.title, p.season, epNum); });
+    addSource('anime', 'RareAnimes', 'enableRareanimes', !!m.title, 'missing-title',
+      function () { return getRareanimes(m.title, p.season, epNum, cb); });
   } else {
-    dg.push('anime-sources:skipped(' + (m.classifyReason || 'not-anime') + ')');
+    diagnostics.push('anime-sources:skipped(' + (m.classifyReason || 'not-anime') + ')');
   }
 
-  var ms = [];
-  if (_bool('enableVaplayer', true) && m.imdbId)
-    ms.push({ name: 'VaPlayer', fn: function () { return getVaplayer(m.imdbId, p.season, p.episode, cb); } });
-  if (_bool('enableVidrock', true) && m.tmdbId)
-    ms.push({ name: 'Vidrock', fn: function () { return getVidrock(m.tmdbId, p.season, p.episode); } });
-  if (_bool('enableVidfast', true) && m.tmdbId)
-    ms.push({ name: 'Vidfast', fn: function () { return getVidfast(m.tmdbId, p.season, p.episode, cb); } });
-  if (_bool('enableHexa', true) && m.tmdbId)
-    ms.push({ name: 'Hexa', fn: function () { return getHexa(m.tmdbId, p.season, p.episode); } });
-  if (_bool('enableVidzee', true) && m.tmdbId)
-    ms.push({ name: 'Vidzee', fn: function () { return getVidzee(m.tmdbId, p.season, p.episode, cb); } });
-  if (_bool('enableShowbox', true) && m.imdbId)
-    ms.push({ name: 'Showbox', fn: function () { return getShowbox(m.imdbId, p.season, p.episode, cb); } });
-  if (_bool('enableVidsrc', true) && (m.tmdbId || m.imdbId))
-    ms.push({ name: 'VidSrc', fn: function () { return getVidsrc(m.imdbId, m.tmdbId, p.season, p.episode); } });
-  if (_bool('enableVidcore', true) && m.tmdbId) {
-    ms.push({ name: 'VidCore', fn: function () { return getVidcore(m.tmdbId, p.season, p.episode, cb); } });
-    ms.push({ name: 'VidUp', fn: function () { return getVidup(m.tmdbId, p.season, p.episode, cb); } });
-  }
-  if (_bool('enableMoviesapi', true) && m.tmdbId)
-    ms.push({ name: 'moviesapi', fn: function () { return getMoviesapi(m.tmdbId, p.season, p.episode); } });
-  if (_bool('enableVidnest', true) && m.tmdbId)
-    ms.push({ name: 'VidNest', fn: function () { return getVidnest(m.tmdbId, p.season, p.episode); } });
+  // Generic movie/TV resolvers are also viable for anime when TMDB/IMDb IDs
+  // are present. They must not be treated as a fallback group that only runs
+  // after every anime host has failed.
+  addSource('media', 'VaPlayer', 'enableVaplayer', !!m.imdbId, 'missing-imdb-id',
+    function () { return getVaplayer(m.imdbId, p.season, p.episode, cb); });
+  addSource('media', 'Vidrock', 'enableVidrock', !!m.tmdbId, 'missing-tmdb-id',
+    function () { return getVidrock(m.tmdbId, p.season, p.episode); });
+  addSource('media', 'Vidfast', 'enableVidfast', !!m.tmdbId, 'missing-tmdb-id',
+    function () { return getVidfast(m.tmdbId, p.season, p.episode, cb); });
+  addSource('media', 'Hexa', 'enableHexa', !!m.tmdbId, 'missing-tmdb-id',
+    function () { return getHexa(m.tmdbId, p.season, p.episode); });
+  addSource('media', 'Vidzee', 'enableVidzee', !!m.tmdbId, 'missing-tmdb-id',
+    function () { return getVidzee(m.tmdbId, p.season, p.episode, cb); });
+  addSource('media', 'Showbox', 'enableShowbox', !!(m.imdbId && _rs('showboxToken')), 'missing-imdb-id-or-showbox-token',
+    function () { return getShowbox(m.imdbId, p.season, p.episode, cb); });
+  addSource('media', 'VidSrc', 'enableVidsrc', !!(m.tmdbId || m.imdbId), 'missing-tmdb-or-imdb-id',
+    function () { return getVidsrc(m.imdbId, m.tmdbId, p.season, p.episode); });
+  addSource('media', 'VidCore', 'enableVidcore', !!m.tmdbId, 'missing-tmdb-id',
+    function () { return getVidcore(m.tmdbId, p.season, p.episode, cb); });
+  addSource('media', 'VidUp', 'enableVidcore', !!m.tmdbId, 'missing-tmdb-id',
+    function () { return getVidup(m.tmdbId, p.season, p.episode, cb); });
+  addSource('media', 'moviesapi', 'enableMoviesapi', !!m.tmdbId, 'missing-tmdb-id',
+    function () { return getMoviesapi(m.tmdbId, p.season, p.episode); });
+  addSource('media', 'VidNest', 'enableVidnest', !!m.tmdbId, 'missing-tmdb-id',
+    function () { return getVidnest(m.tmdbId, p.season, p.episode); });
 
+  // The old race() returned the first non-empty source and threw away the rest;
+  // it also skipped all generic adapters whenever an anime resolver succeeded.
+  // Run all compatible adapters concurrently, then combine every real HTTP(S)
+  // URL they return. Completion order keeps quick links near the top.
   var out = [];
-  if (an && as.length) out = await race(as, 'anime');
-  if (!out.length && ms.length) out = await race(ms, 'movie');
+  await Promise.all(sources.map(async function (source) {
+    try {
+      var result = await _withTimeout(
+        Promise.resolve().then(function () { return source.fn(); }),
+        20000, [], source.name
+      );
+      var streams = Array.isArray(result) ? result.filter(function (stream) {
+        return stream && typeof stream.url === 'string' && /^https?:\/\//i.test(stream.url);
+      }) : [];
+      if (streams.length) {
+        diagnostics.push(source.name + ':' + streams.length);
+        console.log('Mewstream: ' + source.group + ' hit ' + streams.length + ' from ' + source.name);
+        out = out.concat(streams);
+      } else {
+        diagnostics.push(source.name + ':0');
+      }
+    } catch (error) {
+      diagnostics.push(source.name + ':' + (error && error.message || String(error)));
+      console.log('Mewstream: ' + source.name + ' failed: ' + (error && error.message || String(error)));
+    }
+  }));
 
   var seen = {}, dd = [];
-  out.forEach(function (s) { if (s && s.url && !seen[s.url]) { seen[s.url] = 1; dd.push(s); } });
+  out.forEach(function (stream) {
+    if (stream && stream.url && !seen[stream.url]) {
+      seen[stream.url] = 1;
+      dd.push(stream);
+    }
+  });
 
   if (typeof opts.onSubtitle === 'function') {
     var ss = {};
-    subs.forEach(function (s) { if (!ss[s.url]) { ss[s.url] = 1; opts.onSubtitle(s); } });
+    subs.forEach(function (subtitle) {
+      if (!ss[subtitle.url]) {
+        ss[subtitle.url] = 1;
+        opts.onSubtitle(subtitle);
+      }
+    });
   }
 
-  if (!dd.length) console.log('Mewstream: 0 streams | anime=' + an + ' | ' + dg.join(' | '));
-  else console.log('Mewstream DONE: ' + dd.length + ' streams | ' + (m.title || '?') + ' | anime=' + an);
+  if (!dd.length) console.log('Mewstream: 0 streams | anime=' + an + ' | ' + diagnostics.join(' | '));
+  else console.log('Mewstream DONE: ' + dd.length + ' streams | ' + (m.title || '?') + ' | anime=' + an + ' | ' + diagnostics.join(' | '));
   return dd;
 }
+
 function getStreams(id, opts) { return getVideoSources(id, opts); }
 function getLinks(id, opts) { return getVideoSources(id, opts); }
 
