@@ -216,7 +216,16 @@ function g(t) { console.log('\n\x1b[36m' + t + '\x1b[0m'); }
   global.fetch = originalFetch;
   if (oldSettings === undefined) delete global.__settings; else global.__settings = oldSettings;
 
-  g('8. Live metadata (skipped if unreachable)');
+  g('8. Source latency guard');
+  ok('source timeout stays below playback budget', P._debug.timeoutLimits.sourceMs < 20000,
+    JSON.stringify(P._debug.timeoutLimits));
+  var timeoutStart = Date.now();
+  var timeoutValue = await P._debug.withTimeout(new Promise(function () {}), 25, [], 'test-hung-source');
+  ok('hung source resolves to fallback', Array.isArray(timeoutValue) && timeoutValue.length === 0);
+  ok('hung source returns promptly', Date.now() - timeoutStart < 500,
+    String(Date.now() - timeoutStart) + 'ms');
+
+  g('9. Live metadata (skipped if unreachable)');
   var f;
   try { f = await P.getDetail('tmdb://movie/tt1375666'); } catch (e) {}
   if (f) { ok('Inception type=movie', f.type === 'movie', f.type); ok('Inception isAnime=false', f.isAnime === false); ok('Inception 1 slot', f.episodes.length === 1); } else skipT('film detail', 'Cinemeta blocked');
@@ -224,7 +233,7 @@ function g(t) { console.log('\n\x1b[36m' + t + '\x1b[0m'); }
   try { a = await P.getDetail('tmdb://anime/kitsu-42765'); } catch (e) {}
   if (a) { ok('Jujutsu Kaisen type=anime', a.type === 'anime', a.type); ok('Jujutsu Kaisen isAnime=true', a.isAnime === true); ok('kitsuId 42765', a.kitsuId === '42765'); } else skipT('anime detail', 'Kitsu blocked');
 
-  g('9. Search (skipped if unreachable)');
+  g('10. Search (skipped if unreachable)');
   var rs;
   try { rs = await P.search('Inception'); } catch (e) {}
   if (rs && rs.length) { ok('search found results', rs.length >= 1, 'got ' + rs.length); ok('result has url', !!rs[0].url); ok('sourceId=mewstream', rs[0].sourceId === 'mewstream'); } else skipT('search("Inception")', 'Cinemeta blocked');
