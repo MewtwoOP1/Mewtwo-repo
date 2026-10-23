@@ -12,7 +12,7 @@ function getInfo() {
     name: 'TMDB + Stremio',
     lang: 'en',
     baseUrl: 'https://www.themoviedb.org',
-    logo: 'https://www.google.com/s2/favicons?sz=256&domain=themoviedb.org',
+    logo: 'https://www.google.com/s2/favicons?sz=256&domain=strem.io',
     type: 'movie',
     version: '3.0.0'
   };

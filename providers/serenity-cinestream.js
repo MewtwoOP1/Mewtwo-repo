@@ -197,7 +197,7 @@ var CS_WYZIE = 'https://sub.wyzie.io';
 
 function getInfo() {
   return { name: 'CineStream', lang: 'en', baseUrl: CS_CINEMETA_META,
-    logo: 'https://v3-cinemeta.strem.io/favicon.ico', type: 'movie', version: CINESTREAM_VERSION };
+    logo: 'https://www.google.com/s2/favicons?sz=256&domain=cinemeta.strem.io', type: 'movie', version: CINESTREAM_VERSION };
 }
 
 function getSettings() {
