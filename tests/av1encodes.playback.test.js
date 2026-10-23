@@ -68,6 +68,18 @@ const DDL_EP2 = JSON.stringify({
   subtitles: [{ language: "English", url: "https://cdn.example/ep02.vtt" }]
 });
 
+const DDL_EP3 = JSON.stringify({
+  success: true,
+  watch_link: "https://av1please.com/watch/ep03-fallback",
+  stream_link: "https://cdn.example/ep03-fallback.m3u8",
+  download_link: "https://cdn.example/ep03-fallback.mkv",
+  subtitles: [{ language: "English", url: "https://cdn.example/ep03-fallback.vtt" }]
+});
+
+const DOWNLOAD_EP3 =
+  '<iframe id="anime-video-player" src="/watch/ep03-fallback"></iframe>' +
+  '<script>const token = "AAAAabcdefghij12345";</script>';
+
 const provider = require("../providers/av1encodes.js");
 const requests = [];
 
@@ -93,15 +105,26 @@ global.fetch = async function (input, options) {
   }
   if (pathname === "/anime/example-anime") return { status: 200, body: DETAIL, url };
   if (/^\/episodes\/example-anime\/1\//.test(pathname)) {
-    return { status: 200, body: EPISODES, url };
+    const items = JSON.parse(EPISODES);
+    const resolution = pathname.split("/").pop();
+    for (const item of items) {
+      item.href = item.href.replace("1920%20x%201080", resolution);
+    }
+    return { status: 200, body: JSON.stringify(items), url };
   }
   if (/^\/download\//.test(pathname)) {
-    if (/E03/i.test(decodeURIComponent(pathname))) {
+    const decodedPath = decodeURIComponent(pathname);
+    if (/E03/i.test(decodedPath) && decodedPath.includes("/1920 x 1080/")) {
       return { status: 200, body: DOWNLOAD_FAILED, url };
+    }
+    if (/E03/i.test(decodedPath)) {
+      return { status: 200, body: DOWNLOAD_EP3, url };
     }
     return { status: 200, body: DOWNLOAD_EP2, url };
   }
-  if (/^\/get_ddl\//.test(pathname)) return { status: 200, body: DDL_EP2, url };
+  if (/^\/get_ddl\//.test(pathname)) {
+    return { status: 200, body: /E03/i.test(decodeURIComponent(pathname)) ? DDL_EP3 : DDL_EP2, url };
+  }
   if (/^\/watch\//.test(pathname)) return { status: 200, body: "", url };
   if (host === "cdn.example") return { status: 200, body: "", url };
   return { status: 404, body: "", url };
@@ -164,10 +187,17 @@ async function main() {
   assert.equal(streams1[0].kind, "unknown");
   assert.equal(streams1[0].audioLang, undefined);
 
-  // Failed site-side generation returns no bogus HTML stream.
+  // Episode 3 fails at preferred 1080p, but its JSON episode item resolves
+  // to a lower-resolution URL. This specifically guards JSON-aware fallback.
   const ep3 = detail.episodes[0];
-  const failedStreams = await provider.getVideoSources(ep3.url, true);
-  assert.deepEqual(failedStreams, []);
+  const fallbackStreams = await provider.getVideoSources(ep3.url, true);
+  assert.ok(
+    fallbackStreams.some((stream) => stream.url === "https://cdn.example/ep03-fallback.m3u8"),
+    "should find a playable episode from the lower-resolution JSON list"
+  );
+  assert.ok(fallbackStreams.some((stream) => stream.url === "https://cdn.example/ep03-fallback.mkv"));
+  assert.ok(fallbackStreams.every((stream) => !stream.url.includes("/download/")));
+
 
   // Legacy alias accepts an options object.
   const alias = await provider.getStreams(ep1.url, {});
