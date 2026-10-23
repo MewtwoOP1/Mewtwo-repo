@@ -375,14 +375,16 @@ async function main() {
       }
 
       const before = requestLog.length;
-      for (const job of jobs) {
-        let pending;
-        try {
-          pending = Promise.resolve().then(job[1]);
-        } catch (error) {
-          pending = Promise.reject(error);
-        }
-        const outcome = await settleWithin(pending, CALL_TIMEOUT_MS, label + '.' + job[0]);
+      // Exercise all public entry points within one bounded provider window.
+      // Running the independent API calls together also catches shared-state
+      // races without waiting for one timeout per method.
+      const outcomes = await Promise.all(jobs.map(async function (job) {
+        const pending = Promise.resolve().then(job[1]);
+        return { job: job, outcome: await settleWithin(pending, CALL_TIMEOUT_MS, label + '.' + job[0]) };
+      }));
+      outcomes.forEach(function (item) {
+        const job = item.job;
+        const outcome = item.outcome;
         ok(label + ': ' + job[0] + ' settles on upstream HTTP errors', outcome.settled,
           outcome.settled ? '' : 'exceeded ' + CALL_TIMEOUT_MS + 'ms');
         if (outcome.settled) {
@@ -402,7 +404,7 @@ async function main() {
             }
           }
         }
-      }
+      });
       const sourceRequests = requestLog.slice(before);
       ok(label + ': every attempted fetch is an absolute HTTPS URL',
         sourceRequests.every(function (entry) {
