@@ -753,7 +753,7 @@ function _parseEpisodeJson(html, season, base) {
   const sorted = items.map((item, index) => ({ item: item, index: index })).sort((a, b) =>
     ((Number(b.item && b.item.num) || 0) - (Number(a.item && a.item.num) || 0)) || (a.index - b.index)
   ).map(entry => entry.item);
-  return _uniqueInOrder(sorted.map(item => _episodeFromJsonItem(item, season, base)));
+  return sorted.map(item => _episodeFromJsonItem(item, season, base));
 }
 function _parseEpisodeNumberFromHref(href) {
   const match = String(href || '').match(EPISODE_NUMBER_REGEX);
@@ -774,16 +774,16 @@ function _parseEpisodeHtml(html, season, slug, resolution, base) {
   const doc = _parseHtml(text);
   const links = _select(doc, "a[href*='/download/']");
   if (links.length) {
-    return _uniqueInOrder(links.slice().sort((a, b) =>
+    return links.slice().sort((a, b) =>
       _parseEpisodeNumberFromHref(_attr(b, 'href')) - _parseEpisodeNumberFromHref(_attr(a, 'href'))
-    ).map(link => _episodeFromHref(_attr(link, 'href'), season, base)));
+    ).map(link => _episodeFromHref(_attr(link, 'href'), season, base));
   }
   const filenames = _extractFilenames(text, base);
   if (filenames.length) {
     filenames.sort((a, b) => _parseEpisodeNumber(b) - _parseEpisodeNumber(a));
-    return _uniqueInOrder(filenames.map(filename => _episodeFromHref(
+    return filenames.map(filename => _episodeFromHref(
       '/download/' + slug + '/' + season + '/' + resolution + '/' + _encodeForm(filename), season, base
-    )));
+    ));
   }
   return [];
 }
@@ -812,14 +812,14 @@ async function _fetchSeasonEpisodes(slug, season, base, candidates) {
     const filenames = _extractFilenames(epHtml, base);
     if (filenames.length) {
       filenames.sort((a, b) => _parseEpisodeNumber(b) - _parseEpisodeNumber(a));
-      return _uniqueInOrder(filenames.map(filename => _episodeFromHref(
+      return filenames.map(filename => _episodeFromHref(
         '/download/' + slug + '/' + season + '/' + selectedRes + '/' + _encodeForm(filename).replace(/\+/g, '%20'), season, base
-      )));
+      ));
     }
   }
-  return _uniqueInOrder(downloadLinks.slice().sort((a, b) =>
+  return downloadLinks.slice().sort((a, b) =>
     _parseEpisodeNumberFromHref(b) - _parseEpisodeNumberFromHref(a)
-  ).map(href => _episodeFromHref(href, season, base)));
+  ).map(href => _episodeFromHref(href, season, base));
 }
 function _extractSeasons(doc) {
   const seasons = [];
@@ -836,7 +836,7 @@ async function _episodesFromDocument(doc, slug, base) {
   const result = await Promise.all(seasons.map(season =>
     _fetchSeasonEpisodes(slug, season, base, candidates).catch(() => [])
   ));
-  return _uniqueInOrder([].concat.apply([], result));
+  return [].concat.apply([], result);
 }
 async function getEpisodes(url, opts) {
   const base = _baseUrl();
