@@ -135,6 +135,86 @@ function g(t) { console.log('\n\x1b[36m' + t + '\x1b[0m'); }
   ok('MegaPlay source extracted from standard Fetch response', nativeResponse[0] && nativeResponse[0].url === 'https://cdn.example/native-anime.m3u8#mew-megaplay-sub', JSON.stringify(nativeResponse));
   global.fetch = originalFetch;
 
+  // All-source fan-out regression: a quick AniKoto hit must not stop the
+  // general movie/TV resolvers from running. Every source here is fixture-backed.
+  var oldSettings = global.__settings;
+  global.__settings = { mewstream: { showboxToken: 'test-token' } };
+  var fanoutCalls = [];
+  global.fetch = async function (input, options) {
+    var u = String(input);
+    fanoutCalls.push({ url: u, method: String((options && options.method) || 'GET').toUpperCase() });
+    if (u.indexOf('anikototv.to/filter?keyword=Test%20Anime') > -1) return { body: '<a href="/watch/test-anime">Test Anime</a>' };
+    if (u === 'https://anikototv.to/watch/test-anime') return { body: '<div data-id="123"></div>' };
+    if (u.indexOf('/ajax/episode/list/123') > -1) return { body: JSON.stringify({ result: '<a data-id="1" data-num="1" data-ids="anikoto-server" data-sub="1"></a>' }) };
+    if (u.indexOf('/ajax/server/list?servers=anikoto-server') > -1) return { body: JSON.stringify({ result: '<div data-type="sub"><li data-link-id="anikoto-link">MegaPlay</li></div>' }) };
+    if (u.indexOf('/ajax/server?get=anikoto-link') > -1) return { body: JSON.stringify({ result: { url: 'https://megaplays.se/stream/s-2/900/sub' } }) };
+    if (u === 'https://megaplays.se/stream/s-2/900/sub') return { body: '<div data-id="900"></div>' };
+    if (u.indexOf('/stream/getSourcesNew?id=900&type=sub') > -1) return { body: JSON.stringify({ sources: { file: 'https://cdn.example/anikoto.m3u8' }, tracks: [] }) };
+
+    if (u.indexOf('megaplays.se/stream/mal/52299/1/') > -1 || u.indexOf('megaplay.buzz/stream/mal/52299/1/') > -1) return { body: '' };
+    if (u.indexOf('anizone.to/search?query=Test%20Anime') > -1) return { body: '<a href="/anime/test-anime">Test Anime</a>' };
+    if (u === 'https://anizone.to/anime/test-anime/1') return { body: '<video src="https://cdn.example/anizone.m3u8"></video>' };
+    if (u === 'https://animesalt.to/episode/test-anime-1x1/') return { body: '<img src="https://as-cdn1.top/video/abcdef">' };
+    if (u.indexOf('as-cdn1.top/player/index.php?data=abcdef&do=getVideo') > -1) return { body: JSON.stringify({ videoSource: 'https://cdn.example/animesalt.m3u8' }) };
+    if (u.indexOf('rareanimes.mov/?s=Test+Anime') > -1) return { body: '' };
+
+    if (u.indexOf('streamdata.vaplayer.ru/api.php?imdb=tt1234567&type=tv&season=1&episode=1') > -1) return { body: JSON.stringify({ data: { stream_urls: ['https://cdn.example/vaplayer.m3u8'] } }) };
+    if (u.indexOf('vidrock.to/api/tv/12345_1_1/') > -1) return { body: '{}' };
+    if (u === 'https://vidfast.vc/tv/12345/1/1/') return { body: '' };
+    if (u === 'https://enc-dec.app/api/enc-hexa') return { body: JSON.stringify({ result: { token: 'fixture-token' } }) };
+    if (u.indexOf('theemoviedb.hexa.su/api/tmdb/tv/12345/season/1/episode/1/images') > -1) return { body: 'fixture-encrypted-payload' };
+    if (u === 'https://enc-dec.app/api/dec-hexa') return { body: JSON.stringify({ result: { sources: [{ url: 'https://cdn.example/hexa.m3u8', server: 'fixture' }] } }) };
+    if (u.indexOf('player.vidzee.wtf/api/server?id=12345&sr=') > -1) return { body: JSON.stringify({ url: [] }) };
+
+    if (u === 'https://showbox.media/search?keyword=tt1234567') return { body: '<div class="film-name"><a href="/movie/123">Test Anime</a></div>' };
+    if (u === 'https://showbox.media/movie/123') return { body: '<div class="heading-name"><a href="/files/456">Test Anime</a></div>' };
+    if (u === 'https://showbox.media/index/share_link?id=456&type=2') return { body: JSON.stringify({ data: { link: 'https://www.febbox.com/s/sharekey' } }) };
+    if (u === 'https://www.febbox.com/file/file_share_list?share_key=sharekey') return { body: JSON.stringify({ data: { file_list: [{ is_dir: true, file_name: 'Season 1', fid: 44 }] } }) };
+    if (u === 'https://www.febbox.com/file/file_share_list?share_key=sharekey&parent_id=44') return { body: JSON.stringify({ data: { file_list: [{ is_dir: false, file_name: 'Episode E01.mkv', fid: 55 }] } }) };
+    if (u === 'https://www.febbox.com/console/video_quality_list?fid=55&share_key=sharekey') return { body: JSON.stringify({ html: '<div class="file_quality" data-url="https://cdn.example/showbox.mp4" data-quality="1080"></div>' }) };
+
+    if (u === 'https://vidsrc.to/embed/tv/12345/1/1') return { body: '{"file":"https://cdn.example/vidsrc.m3u8"}' };
+    if (u === 'https://vidcore.org/tv/12345/1/1' || u === 'https://vidup.to/tv/12345/1/1') return { body: '<div data-token="fixture-token"></div>' };
+    if (u === 'https://moviesapi.to/tv/12345/1/1') return { body: '{"file":"https://cdn.example/moviesapi.m3u8"}' };
+    if (u === 'https://vidnest.fun/embed/tv/12345/1/1') return { body: '{"file":"https://cdn.example/vidnest.m3u8"}' };
+    return { body: '' };
+  };
+  var fanoutStreams = await P.getVideoSources(JSON.stringify({
+    imdbId: 'tt1234567', tmdbId: 12345, malId: 52299, anilistId: 151807,
+    season: 1, episode: 1, absolute: 1, title: 'Test Anime', isAnime: true
+  }), { onSubtitle: function () {} });
+  var expectedAdapters = [
+    ['MegaPlay-Direct', /megaplays\\.se\\/stream\\/mal\\/52299\\/1\\/sub/],
+    ['AniKoto', /anikototv\\.to\\/filter\\?keyword=Test%20Anime/],
+    ['AniZone', /anizone\\.to\\/search\\?query=Test%20Anime/],
+    ['AnimeSalt', /animesalt\\.to\\/episode\\/test-anime-1x1/],
+    ['RareAnimes', /rareanimes\\.mov\\//],
+    ['VaPlayer', /streamdata\\.vaplayer\\.ru\\/api\\.php\\?imdb=tt1234567/],
+    ['Vidrock', /vidrock\\.to\\/api\\/tv\\/12345_1_1/],
+    ['Vidfast', /vidfast\\.vc\\/tv\\/12345\\/1\\/1/],
+    ['Hexa', /theemoviedb\\.hexa\\.su\\/api\\/tmdb\\/tv\\/12345/],
+    ['VidZee', /player\\.vidzee\\.wtf\\/api\\/server\\?id=12345/],
+    ['Showbox', /showbox\\.media\\/search\\?keyword=tt1234567/],
+    ['VidSrc', /vidsrc\\.to\\/embed\\/tv\\/12345\\/1\\/1/],
+    ['VidCore', /vidcore\\.org\\/tv\\/12345\\/1\\/1/],
+    ['VidUp', /vidup\\.to\\/tv\\/12345\\/1\\/1/],
+    ['moviesapi', /moviesapi\\.to\\/tv\\/12345\\/1\\/1/],
+    ['VidNest', /vidnest\\.fun\\/embed\\/tv\\/12345\\/1\\/1/]
+  ];
+  expectedAdapters.forEach(function (entry) {
+    ok('source triggered: ' + entry[0], fanoutCalls.some(function (call) { return entry[1].test(call.url); }),
+      fanoutCalls.map(function (call) { return call.url; }).join('\\n'));
+  });
+  var resultUrls = fanoutStreams.map(function (stream) { return stream.url; });
+  ok('all successful source results are aggregated', resultUrls.length >= 8, JSON.stringify(resultUrls));
+  ['anikoto.m3u8', 'anizone.m3u8', 'animesalt.m3u8', 'vaplayer.m3u8',
+   'hexa.m3u8', 'showbox.mp4', 'vidsrc.m3u8', 'moviesapi.m3u8', 'vidnest.m3u8'
+  ].forEach(function (expected) {
+    ok('aggregated stream: ' + expected, resultUrls.some(function (url) { return url.indexOf(expected) >= 0; }), JSON.stringify(resultUrls));
+  });
+  global.fetch = originalFetch;
+  if (oldSettings === undefined) delete global.__settings; else global.__settings = oldSettings;
+
   g('8. Live metadata (skipped if unreachable)');
   var f;
   try { f = await P.getDetail('tmdb://movie/tt1375666'); } catch (e) {}
