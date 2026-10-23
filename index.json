@@ -3,13 +3,153 @@
   "description": "𝑴𝒆𝒘𝒕𝒘𝒐♡ community sources for Zangetsu. Third-party provider integrations; this repository does not host video files.",
   "sources": [
     {
+      "id": "aiostreams",
+      "name": "AIOStreams",
+      "version": "2.1.1",
+      "type": "movie",
+      "lang": "en",
+      "file": "providers/aiostreams.js",
+      "logo": "https://aiostreams.viren070.me/logo.png",
+      "nsfw": false,
+      "settings": [
+        {
+          "key": "manifestUrl",
+          "label": "AIOStreams Manifest URL (required)",
+          "description": "Personalized URL ending in /stremio/<id>/<config>/manifest.json.",
+          "type": "text",
+          "default": ""
+        },
+        {
+          "key": "userDataBase64",
+          "label": "Optional AIOStreams UserData (base64)",
+          "description": "Optional x-aiostreams-user-data value. When provided, it takes precedence over Basic authentication.",
+          "type": "text",
+          "default": ""
+        },
+        {
+          "key": "tmdbApiKey",
+          "label": "TMDB API key or Read Access Token (optional)",
+          "description": "Leave blank to use Zangetsu’s built-in TMDB key. Or provide your own v3 API key or Read Access Token.",
+          "type": "text",
+          "default": ""
+        },
+        {
+          "key": "showP2P",
+          "label": "Show torrent / P2P streams",
+          "description": "Enable only if your Zangetsu player supports magnet links.",
+          "type": "bool",
+          "default": false
+        },
+        {
+          "key": "maxConcurrentRequests",
+          "label": "Maximum concurrent requests",
+          "description": "Maximum simultaneous requests. Playback lookups move ahead of queued metadata requests.",
+          "type": "enum",
+          "default": "5",
+          "options": [
+            {
+              "value": "2",
+              "label": "2 requests"
+            },
+            {
+              "value": "3",
+              "label": "3 requests"
+            },
+            {
+              "value": "4",
+              "label": "4 requests"
+            },
+            {
+              "value": "5",
+              "label": "5 requests"
+            }
+          ]
+        },
+        {
+          "key": "requestTimeoutMs",
+          "label": "TMDB request timeout",
+          "description": "Timeout for an individual TMDB metadata request.",
+          "type": "enum",
+          "default": "5000",
+          "options": [
+            {
+              "value": "3000",
+              "label": "3 seconds"
+            },
+            {
+              "value": "5000",
+              "label": "5 seconds"
+            },
+            {
+              "value": "7000",
+              "label": "7 seconds"
+            },
+            {
+              "value": "10000",
+              "label": "10 seconds"
+            }
+          ]
+        },
+        {
+          "key": "streamTimeoutMs",
+          "label": "AIOStreams request timeout",
+          "description": "Maximum wait for the AIOStreams stream API request.",
+          "type": "enum",
+          "default": "7000",
+          "options": [
+            {
+              "value": "4000",
+              "label": "4 seconds"
+            },
+            {
+              "value": "5000",
+              "label": "5 seconds"
+            },
+            {
+              "value": "7000",
+              "label": "7 seconds"
+            },
+            {
+              "value": "9000",
+              "label": "9 seconds"
+            }
+          ]
+        },
+        {
+          "key": "totalTimeoutMs",
+          "label": "Total stream lookup deadline",
+          "description": "Hard maximum wait for one stream lookup, including time waiting for a request slot.",
+          "type": "enum",
+          "default": "8000",
+          "options": [
+            {
+              "value": "5000",
+              "label": "5 seconds"
+            },
+            {
+              "value": "8000",
+              "label": "8 seconds"
+            },
+            {
+              "value": "10000",
+              "label": "10 seconds"
+            },
+            {
+              "value": "12000",
+              "label": "12 seconds"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "id": "tmdb-stremio",
       "name": "TMDB + Stremio",
       "version": "3.0.0",
       "type": "movie",
       "lang": "en",
       "file": "providers/tmdb-stremio.js",
-      "logo": "https://www.google.com/s2/favicons?sz=256&domain=themoviedb.org",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=strem.io",
       "nsfw": false,
       "settings": [
         {
@@ -179,7 +319,7 @@
       "type": "anime",
       "lang": "en",
       "file": "providers/hianime.js",
-      "logo": "https://hianime.at/favicon.ico",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=hianime.at",
       "nsfw": false
     },
     {
@@ -189,7 +329,7 @@
       "type": "movie",
       "lang": "hi",
       "file": "providers/hdhub4u.js",
-      "logo": "https://new5.hdhub4u.cl/favicon.ico",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=hdhub4u.cl",
       "nsfw": false
     },
     {
@@ -199,7 +339,7 @@
       "type": "anime",
       "lang": "en",
       "file": "providers/serenity-animekai.js",
-      "logo": "https://animekaitv.to/favicon.ico",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=animekaitv.to",
       "nsfw": false,
       "settings": [
         {
@@ -330,7 +470,7 @@
       "type": "anime",
       "lang": "en",
       "file": "providers/serenity-aniwave.js",
-      "logo": "https://animewave.to/favicon.ico",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=animewave.to",
       "nsfw": false,
       "settings": [
         {
@@ -461,7 +601,7 @@
       "type": "movie",
       "lang": "en",
       "file": "providers/serenity-cinestream.js",
-      "logo": "https://v3-cinemeta.strem.io/favicon.ico",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=cinemeta.strem.io",
       "nsfw": false,
       "settings": [
         {
@@ -790,7 +930,7 @@
       "type": "anime",
       "lang": "en",
       "file": "providers/megaplay.js",
-      "logo": "https://megaplays.se/favicon.ico",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=megaplays.se",
       "nsfw": false
     },
     {
@@ -830,7 +970,7 @@
       "type": "movie",
       "lang": "en",
       "file": "providers/mewstream.js",
-      "logo": "https://www.google.com/s2/favicons?sz=256&domain=strem.io",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=mewstream.to",
       "nsfw": false,
       "settings": [
         {
@@ -951,146 +1091,6 @@
           "description": "VidNest movie, TV and anime source.",
           "type": "bool",
           "default": true
-        }
-      ]
-    },
-    {
-      "id": "aiostreams",
-      "name": "AIOStreams",
-      "version": "2.1.1",
-      "type": "movie",
-      "lang": "en",
-      "file": "providers/aiostreams.js",
-      "logo": "https://aiostreams.viren070.me/logo.png",
-      "nsfw": false,
-      "settings": [
-        {
-          "key": "manifestUrl",
-          "label": "AIOStreams Manifest URL (required)",
-          "description": "Personalized URL ending in /stremio/<id>/<config>/manifest.json.",
-          "type": "text",
-          "default": ""
-        },
-        {
-          "key": "userDataBase64",
-          "label": "Optional AIOStreams UserData (base64)",
-          "description": "Optional x-aiostreams-user-data value. When provided, it takes precedence over Basic authentication.",
-          "type": "text",
-          "default": ""
-        },
-        {
-          "key": "tmdbApiKey",
-          "label": "TMDB API key or Read Access Token (optional)",
-          "description": "Leave blank to use Zangetsu’s built-in TMDB key. Or provide your own v3 API key or Read Access Token.",
-          "type": "text",
-          "default": ""
-        },
-        {
-          "key": "showP2P",
-          "label": "Show torrent / P2P streams",
-          "description": "Enable only if your Zangetsu player supports magnet links.",
-          "type": "bool",
-          "default": false
-        },
-        {
-          "key": "maxConcurrentRequests",
-          "label": "Maximum concurrent requests",
-          "description": "Maximum simultaneous requests. Playback lookups move ahead of queued metadata requests.",
-          "type": "enum",
-          "default": "5",
-          "options": [
-            {
-              "value": "2",
-              "label": "2 requests"
-            },
-            {
-              "value": "3",
-              "label": "3 requests"
-            },
-            {
-              "value": "4",
-              "label": "4 requests"
-            },
-            {
-              "value": "5",
-              "label": "5 requests"
-            }
-          ]
-        },
-        {
-          "key": "requestTimeoutMs",
-          "label": "TMDB request timeout",
-          "description": "Timeout for an individual TMDB metadata request.",
-          "type": "enum",
-          "default": "5000",
-          "options": [
-            {
-              "value": "3000",
-              "label": "3 seconds"
-            },
-            {
-              "value": "5000",
-              "label": "5 seconds"
-            },
-            {
-              "value": "7000",
-              "label": "7 seconds"
-            },
-            {
-              "value": "10000",
-              "label": "10 seconds"
-            }
-          ]
-        },
-        {
-          "key": "streamTimeoutMs",
-          "label": "AIOStreams request timeout",
-          "description": "Maximum wait for the AIOStreams stream API request.",
-          "type": "enum",
-          "default": "7000",
-          "options": [
-            {
-              "value": "4000",
-              "label": "4 seconds"
-            },
-            {
-              "value": "5000",
-              "label": "5 seconds"
-            },
-            {
-              "value": "7000",
-              "label": "7 seconds"
-            },
-            {
-              "value": "9000",
-              "label": "9 seconds"
-            }
-          ]
-        },
-        {
-          "key": "totalTimeoutMs",
-          "label": "Total stream lookup deadline",
-          "description": "Hard maximum wait for one stream lookup, including time waiting for a request slot.",
-          "type": "enum",
-          "default": "8000",
-          "options": [
-            {
-              "value": "5000",
-              "label": "5 seconds"
-            },
-            {
-              "value": "8000",
-              "label": "8 seconds"
-            },
-            {
-              "value": "10000",
-              "label": "10 seconds"
-            },
-            {
-              "value": "12000",
-              "label": "12 seconds"
-            }
-          ]
         }
       ]
     }
