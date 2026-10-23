@@ -34,7 +34,7 @@ const EPISODES = JSON.stringify([
     href: "https://av1encodes.com/download/example-anime/1/1920%20x%201080/Example.Anime.%5BE05%5D%20%5B1080p%5D%20%5BDual%5D.mkv?token=ep05",
     ddl: {
       success: true,
-      watch_link: "https://av1please.com/watch/ep05",
+      watch_link: "https://av1please.com/r/redirect-hidden-watch",
       stream_link: "https://av1please.com/r/redirect-ep05",
       download_link: "https://av1please.com/r/redirect-download-ep05"
     }
@@ -121,15 +121,27 @@ global.fetch = async function (input, options) {
   // Model the site's /r/ redirect route. HEAD returns a redirect header; the
   // provider must walk it without following into a media body.
   if (host === "av1please.com" && pathname === "/r/redirect-ep05") {
-    assert.equal(options.followRedirects, false, "redirect endpoint must never auto-follow");
-    if (method === "HEAD") return { status: 405, body: "", url };
+    if (method === "HEAD") {
+      assert.notEqual(options.followRedirects, false, "HEAD must follow redirects without reading a video body");
+      return { status: 405, body: "", url };
+    }
     assert.equal(method, "GET", "unsupported HEAD should use a no-follow GET");
+    assert.equal(options.followRedirects, false);
     return { status: 302, body: "", url, headers: { Location: "https://cdn08.av1encodes.com/stream/.eJwOpaqueStreamToken" } };
   }
   if (host === "av1please.com" && pathname === "/r/redirect-download-ep05") {
     assert.equal(method, "HEAD");
-    assert.equal(options.followRedirects, false);
+    assert.notEqual(options.followRedirects, false);
     return { status: 302, body: "", url, headers: { location: "https://cdn08.av1encodes.com/dl/.eJwOpaqueDownloadToken" } };
+  }
+  if (host === "av1please.com" && pathname === "/r/redirect-hidden-watch") {
+    if (method === "HEAD") {
+      assert.notEqual(options.followRedirects, false);
+      return { status: 302, body: "", url };
+    }
+    assert.equal(method, "GET");
+    assert.equal(options.followRedirects, false);
+    return { status: 302, body: "", url, headers: { Location: "https://cdn08.av1encodes.com/media/.eJwOpaqueWatchToken" } };
   }
 
   // HEAD discovers redirects without buffering whole media responses.
@@ -169,7 +181,7 @@ global.fetch = async function (input, options) {
 
 async function main() {
   // Zangetsu source contract.
-  assert.equal(provider.version, "1.3.0");
+  assert.equal(provider.version, "1.3.1");
   const info = provider.getInfo();
   assert.equal(info.name, "AV1Encodes");
   assert.equal(info.logo, "icons/av1encodes.png");
@@ -210,14 +222,22 @@ async function main() {
   assert.ok(!requests.some((request) => request.url === "https://cdn08.av1encodes.com/dl/.eJwOpaqueDownloadToken"),
     "opaque download URLs must not be probed during redirect detection");
   assert.ok(requests.some((request) => request.url === "https://av1please.com/r/redirect-ep05" &&
-    request.method === "HEAD" && request.followRedirects === false),
-    "redirect resolution should inspect headers with followRedirects disabled");
+    request.method === "HEAD" && request.followRedirects !== false),
+    "redirect resolution should use HEAD with automatic redirect following");
   assert.ok(requests.some((request) => request.url === "https://av1please.com/r/redirect-ep05" &&
     request.method === "GET" && request.followRedirects === false),
     "if HEAD is unsupported, GET must not auto-follow into the media body");
   assert.ok(!requests.some((request) => request.url === "https://av1please.com/r/redirect-ep05" &&
     request.method === "GET" && request.followRedirects !== false),
     "redirect resolution must never use an auto-follow GET");
+  assert.ok(requests.some((request) => request.url === "https://av1please.com/r/redirect-hidden-watch" &&
+    request.method === "HEAD" && request.followRedirects !== false),
+    "watch redirect should first attempt a body-free, redirect-following HEAD");
+  assert.ok(requests.some((request) => request.url === "https://av1please.com/r/redirect-hidden-watch" &&
+    request.method === "GET" && request.followRedirects === false),
+    "a 302 missing Location on HEAD should retry once with no-follow GET");
+  assert.ok(opaqueStreams.every((stream) => !/av1please\.com\/r\//i.test(stream.url)),
+    "unresolved /r shortener URLs must never be returned as streams");
   assert.ok(!requests.some((request) => /https:\/\/(?:av1encodes\.com|animealpha\.cc|av1please\.com)\/stream\//i.test(request.url)),
     "opaque CDN stream URLs must not be rebased onto site/mirror domains");
 
@@ -228,6 +248,7 @@ async function main() {
   assert.ok(streams1.some((stream) => stream.url === "https://av1please.com/dash/ep01/manifest.mpd"));
   assert.equal(streams1[0].preferred, true);
   assert.ok(streams1[0].quality.includes("1080p"));
+  assert.match(streams1[0].headers["User-Agent"], /Mozilla/);
   assert.ok(!streams1.some((stream) => stream.url.includes("/download/")));
 
   // Regular download-page -> token -> get_ddl flow for an episode without
