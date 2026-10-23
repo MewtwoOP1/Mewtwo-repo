@@ -94,6 +94,24 @@ function g(t) { console.log('\n\x1b[36m' + t + '\x1b[0m'); }
   };
   var anikoto = await P._debug.getAnikoto('Test Anime', 1, 99, function () {});
   ok('AniKoto returns [] for missing episode 99', Array.isArray(anikoto) && anikoto.length === 0, JSON.stringify(anikoto));
+  // Native Fetch API regression: response.body is a ReadableStream, not text.
+  // The same AniKoto → MegaPlay flow must still extract a real source URL.
+  global.fetch = async function (u) {
+    var url = String(u), body = '';
+    if (url.indexOf('/filter?keyword=') > -1) body = '<a href="/watch/test-native">Test Anime</a>';
+    else if (url.indexOf('/watch/test-native') > -1) body = '<div data-id="321"></div>';
+    else if (url.indexOf('/ajax/episode/list/321') > -1) body = JSON.stringify({ result: '<a data-id="1" data-num="1" data-ids="native-sub" data-sub="1"></a>' });
+    else if (url.indexOf('/ajax/server/list?servers=native-sub') > -1) body = JSON.stringify({ result: '<div data-type="sub"><li data-link-id="native-link">MegaPlay</li></div>' });
+    else if (url.indexOf('/ajax/server?get=native-link') > -1) body = JSON.stringify({ result: { url: 'https://megaplays.se/stream/s-2/native/sub' } });
+    else if (url.indexOf('megaplays.se/stream/s-2/native/sub') > -1) body = '<div data-id="777"></div>';
+    else if (url.indexOf('/stream/getSourcesNew?id=777&type=sub') > -1) body = JSON.stringify({ sources: { file: 'https://cdn.example/native-anime.m3u8' }, tracks: [] });
+    else if (url.indexOf('/stream/getSources?id=777&type=sub') > -1) body = JSON.stringify({ sources: { file: 'https://cdn.example/native-anime-legacy.m3u8' }, tracks: [] });
+    else return new Response('', { status: 404 });
+    return new Response(body, { status: 200, headers: { 'Content-Type': 'text/plain' } });
+  };
+  var nativeResponse = await P._debug.getAnikoto('Test Anime', 1, 1, function () {});
+  ok('AniKoto handles standard Fetch Response bodies', Array.isArray(nativeResponse) && nativeResponse.length === 1, JSON.stringify(nativeResponse));
+  ok('MegaPlay source extracted from standard Fetch response', nativeResponse[0] && nativeResponse[0].url === 'https://cdn.example/native-anime.m3u8#mew-megaplay-sub', JSON.stringify(nativeResponse));
   global.fetch = originalFetch;
 
   g('8. Live metadata (skipped if unreachable)');
