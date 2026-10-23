@@ -46,7 +46,7 @@ function getInfo() {
     baseUrl: BASE,
     logo: 'icons/av1encodes.png',
     type: 'anime',
-    version: '1.0.1'
+    version: '1.0.2'
   };
 }
 
@@ -138,10 +138,26 @@ function _rebaseReferer(ref, base) {
   return path ? base + path : ref;
 }
 
+function _isSiteRootHost(host) {
+  var value = String(host || '').toLowerCase().replace(/^www\./, '').replace(/:\d+$/, '');
+  return DOMAIN_HOSTS.indexOf(value) !== -1;
+}
+
+// AV1Encodes uses opaque signed CDN endpoints such as /stream/.eJw... and
+// /dl/.eJw... that do not carry a file extension. These are media endpoints,
+// not site pages: never rebase them to mirror domains or probe them with GET.
+function _isOpaqueMediaEndpoint(url) {
+  var value = String(url || '');
+  var match = value.match(/^https?:\/\/([^/]+)(\/[^?#]*)?/i);
+  var host = match ? match[1].toLowerCase().replace(/^www\./, '').replace(/:\d+$/, '') : '';
+  var path = match ? (match[2] || '/') : value;
+  return /^cdn\d*\./i.test(host) || /\/(?:stream|dl)\//i.test(path);
+}
+
 function _fetchWithFallback(url, ref, extraHeaders, method) {
   var raw = String(url || '');
   var absolute = raw.match(/^https?:\/\/([^/]+)([\s\S]*)$/i);
-  var absoluteIsSite = !!(absolute && _isAllowedSiteHost(absolute[1]));
+  var absoluteIsSite = !!(absolute && _isSiteRootHost(absolute[1]) && !_isOpaqueMediaEndpoint(raw));
   var isRelative = !absolute && !/^\/\//.test(raw);
   if (!absoluteIsSite && !isRelative) {
     var directHeaders = _headers(ref);
@@ -890,7 +906,7 @@ function _findDownloadLinkForEpisode(html, encodedFilename, num) {
 function _resolveRedirect(path) {
   if (!path) return Promise.resolve(null);
   var url = _absUrl(path);
-  var isMedia = /\.(?:m3u8|mpd|mkv|mp4|webm|avi|torrent|vtt|srt)(?:[?#]|$)/i.test(url);
+  var isMedia = /\.(?:m3u8|mpd|mkv|mp4|webm|avi|torrent|vtt|srt)(?:[?#]|$)/i.test(url) || _isOpaqueMediaEndpoint(url);
 
   // Use HEAD so resolving a direct-download URL cannot buffer an entire MKV/MP4
   // in Zangetsu's fetch bridge just to discover its redirect destination.
@@ -1216,7 +1232,7 @@ function getStreams(id, opts) {
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    version: '1.0.1',
+    version: '1.0.2',
     getInfo: getInfo,
     getSettings: getSettings,
     getHome: getHome,
