@@ -14,7 +14,7 @@
 // every series detail. Series now report type 'movie' like every working
 // source; the tmdb://tv/ URL keeps the series routing.
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID) ? String(__SOURCE_ID) : 'mewstream';
-var VERSION = '4.0.2';
+var VERSION = '4.0.3';
 
 // ── Polyfills (Zangetsu sandbox) ──────────────────────────────────────
 var _BC = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
@@ -133,16 +133,27 @@ function _hst(u) { return ((String(u).match(/^https?:\/\/([^\/:?#]+)/i) || [])[1
 function _slg(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, ''); }
 function _yr(r) { return String(r.release_date || r.first_air_date || r.releaseInfo || r.year || '').slice(0, 4) || null; }
 
+async function _bodyText(r) {
+  if (!r) return '';
+  if (typeof r.body === 'string') return r.body;
+  // Native Fetch Response instances expose a ReadableStream at .body.
+  if (typeof r.text === 'function') {
+    try {
+      var text = await r.text();
+      return text == null ? '' : String(text);
+    } catch (e) { return ''; }
+  }
+  if (r.body == null) return '';
+  if (typeof r.body !== 'object') return String(r.body);
+  try { return JSON.stringify(r.body); } catch (e) { return ''; }
+}
 async function _ft(u, o) {
   o = o || {};
   var h = Object.assign({ 'User-Agent': UA }, o.headers || {});
   try {
     var q = { method: o.method || 'GET', headers: h };
     if (o.body != null) q.body = o.body;
-    var r = await fetch(u, q);
-    if (!r) return '';
-    var t = r.body;
-    return typeof t !== 'string' ? JSON.stringify(t) : t;
+    return await _bodyText(await fetch(u, q));
   } catch (e) { return ''; }
 }
 async function _fj(u, o) {
@@ -802,10 +813,8 @@ function _ep(embed, cat, name) {
     var tries = [_su(base, id, type), base + '/stream/getSources?id=' + id + '&type=' + type];
     function nx(i) {
       if (i >= tries.length) return Promise.reject(new Error('no getSources'));
-      return fetch(tries[i], { headers: { 'User-Agent': UA, Referer: embed, 'X-Requested-With': 'XMLHttpRequest' } })
-        .then(function (r) {
-          var b = (r && r.body) || '';
-          var j; try { j = JSON.parse(b); } catch (e) { return nx(i + 1); }
+      return _fj(tries[i], { headers: { 'User-Agent': UA, Referer: embed, 'X-Requested-With': 'XMLHttpRequest' } })
+        .then(function (j) {
           var file = _fs(j);
           if (!file) return nx(i + 1);
           var subs = [];
@@ -835,10 +844,8 @@ function _mp1(base, kind, id, ep, lang) {
     var us = [base + '/stream/getSourcesNew?id=' + did + '&type=' + lang, base + '/stream/getSources?id=' + did + '&type=' + lang];
     function t1(i) {
       if (i >= us.length) return Promise.reject(new Error('no src'));
-      return fetch(us[i], { headers: { 'User-Agent': UA, Referer: emb, 'X-Requested-With': 'XMLHttpRequest' } })
-        .then(function (r) {
-          var b = (r && r.body) || '';
-          var j; try { j = JSON.parse(b); } catch (e) { return t1(i + 1); }
+      return _fj(us[i], { headers: { 'User-Agent': UA, Referer: emb, 'X-Requested-With': 'XMLHttpRequest' } })
+        .then(function (j) {
           var f = _fs(j);
           if (!f) return t1(i + 1);
           var sb = [];
@@ -883,7 +890,7 @@ async function getMegaplayDirect(mal, ani, ep, cb) {
 function _ag(u, r, x) {
   var h = { 'User-Agent': UA, Referer: r || ANIKOTO + '/' };
   if (x) h['X-Requested-With'] = 'XMLHttpRequest';
-  return fetch(u, { headers: h }).then(function (res) { return (res && res.body) || ''; }).catch(function () { return ''; });
+  return fetch(u, { headers: h }).then(_bodyText).catch(function () { return ''; });
 }
 function _aj(p) {
   return _ag(ANIKOTO + p, ANIKOTO + '/', true).then(function (b) {
