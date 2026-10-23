@@ -1,5 +1,12 @@
 # Changelog
 
+## AIOStreams 2.1.1
+
+- Fix dead/empty catalogue behavior by using Zangetsu's built-in TMDB key when no per-source credential is supplied.
+- Keep optional user-provided TMDB v3 API keys and Read Access Tokens on the custom-auth path so Zangetsu's host interceptor cannot overwrite them.
+- Surface total catalogue failure from `getHome` instead of silently reporting four empty sections; redact API keys in request error URLs.
+- Add tests for built-in key routing, custom API-key routing, Read Access Token headers, and invalid-credential diagnostics.
+
 ## AIOStreams 2.1.0
 
 - Use TMDB as the sole metadata/catalogue API for films, series, and Japanese animation discovery; remove Kitsu, AniZip, and Cinemeta requests.

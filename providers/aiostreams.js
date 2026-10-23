@@ -4,7 +4,7 @@
  * Playback lookup is priority-queued, bounded, and does not retry slow searches.
  */
 var AIO_ID = 'aiostreams';
-var AIO_VERSION = '2.1.0';
+var AIO_VERSION = '2.1.1';
 var AIO_LOGO = 'https://aiostreams.viren070.me/logo.png';
 var TMDB = 'https://api.themoviedb.org/3';
 var TMDB_IMAGE = 'https://image.tmdb.org/t/p/';
@@ -23,7 +23,7 @@ function getSettings() {
   return [
     { key: 'manifestUrl', label: 'AIOStreams Manifest URL (required)', description: 'Personalized URL ending in /stremio/<id>/<config>/manifest.json.', type: 'text', default: '' },
     { key: 'userDataBase64', label: 'Optional AIOStreams UserData (base64)', description: 'Optional x-aiostreams-user-data value. When provided, it takes precedence over Basic authentication.', type: 'text', default: '' },
-    { key: 'tmdbApiKey', label: 'TMDB API key or Read Access Token (required)', description: 'Use a TMDB v3 API key or a TMDB API Read Access Token. Metadata and catalogues use TMDB only.', type: 'text', default: '' },
+    { key: 'tmdbApiKey', label: 'TMDB API key or Read Access Token (optional)', description: 'Leave blank to use Zangetsu’s built-in TMDB key. Or provide your own v3 API key or Read Access Token.', type: 'text', default: '' },
     { key: 'showP2P', label: 'Show torrent / P2P streams', description: 'Enable only if your Zangetsu player supports magnet links.', type: 'bool', default: false },
     { key: 'maxConcurrentRequests', label: 'Maximum concurrent requests', description: 'Maximum simultaneous requests. Playback lookups move ahead of queued metadata requests.', type: 'enum', default: '5', options: [{ value: '2', label: '2 requests' }, { value: '3', label: '3 requests' }, { value: '4', label: '4 requests' }, { value: '5', label: '5 requests' }] },
     { key: 'requestTimeoutMs', label: 'TMDB request timeout', description: 'Timeout for an individual TMDB metadata request.', type: 'enum', default: '5000', options: [{ value: '3000', label: '3 seconds' }, { value: '5000', label: '5 seconds' }, { value: '7000', label: '7 seconds' }, { value: '10000', label: '10 seconds' }] },
@@ -37,7 +37,7 @@ function _trim(v) { return String(v == null ? '' : v).replace(/^\s+|\s+$/g, '');
 function _bool(v, fallback) { if (v === true || v === false) return v; if (v == null || v === '') return fallback; return /^(1|true|yes|on)$/i.test(String(v)); }
 function _int(v, fallback, min, max) { var n = parseInt(v, 10); if (!isFinite(n)) n = fallback; return Math.max(min, Math.min(max, n)); }
 function _query(obj) { var out = [], k; for (k in obj) if (Object.prototype.hasOwnProperty.call(obj, k) && obj[k] !== undefined && obj[k] !== null && obj[k] !== '') out.push(encodeURIComponent(k) + '=' + encodeURIComponent(String(obj[k]))); return out.join('&'); }
-function _safeUrl(url) { return String(url || '').replace(/(\/stremio\/)[^/]+\/[^/]+/i, '$1[redacted]/[redacted]'); }
+function _safeUrl(url) { return String(url || '').replace(/(\/stremio\/)[^/]+\/[^/]+/i, '$1[redacted]/[redacted]').replace(/([?&]api_key=)[^&#]+/ig, '$1[redacted]'); }
 function _decode(v) { try { return decodeURIComponent(v); } catch (e) { return v; } }
 function _responseBody(response) {
   if (response && response.body != null) {
@@ -149,19 +149,25 @@ function _requestJson(url, options) {
     }
   });
 }
-function _tmdbAuth() {
-  var value = _trim(_cfg('tmdbApiKey', ''));
-  if (!value) throw new Error('AIOStreams: add a TMDB API key or Read Access Token in source settings');
-  return value;
-}
+function _tmdbAuth() { return _trim(_cfg('tmdbApiKey', '')); }
 function _tmdbUrl(path, params) {
-  var token = _tmdbAuth(), p = {}, k;
+  var token = _tmdbAuth(), p = {}, k, base = TMDB, headers = { Accept: 'application/json' };
   for (k in (params || {})) if (Object.prototype.hasOwnProperty.call(params, k)) p[k] = params[k];
-  var isReadToken = /^eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(token);
-  var headers = { Accept: 'application/json' };
-  if (isReadToken) headers.Authorization = 'Bearer ' + token;
-  else p.api_key = token;
-  return { url: TMDB + path + (Object.keys(p).length ? '?' + _query(p) : ''), headers: headers };
+  // Zangetsu's native fetch interceptor injects its built-in TMDB key for the
+  // exact api.themoviedb.org host. Leave the URL keyless by default so users
+  // don't have to configure a second API credential just to load metadata.
+  if (token) {
+    // Custom credentials use the trailing-dot DNS form to bypass the host
+    // interceptor; keep the HTTP Host header canonical for TLS/HTTP routing.
+    base = 'https://api.themoviedb.org./3';
+    headers.Host = 'api.themoviedb.org';
+    if (/^eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(token)) {
+      headers.Authorization = 'Bearer ' + token;
+    } else {
+      p.api_key = token;
+    }
+  }
+  return { url: base + path + (Object.keys(p).length ? '?' + _query(p) : ''), headers: headers };
 }
 function _tmdbRequest(path, params, options) {
   options = options || {};
@@ -303,14 +309,23 @@ function _b64(input) {
   return out;
 }
 function getHome() {
-  try { _tmdbAuth(); } catch (error) { return Promise.reject(error); }
+  var failures = [];
+  function homeList(path, params, type) {
+    return _list(path, params, type).catch(function (error) {
+      failures.push(error);
+      return [];
+    });
+  }
   return Promise.all([
-    _list('/movie/popular', { page: 1, language: 'en-US' }, 'movie').catch(function () { return []; }),
-    _list('/tv/popular', { page: 1, language: 'en-US' }, 'tv').catch(function () { return []; }),
-    _list('/discover/tv', { page: 1, language: 'en-US', with_genres: '16', with_origin_country: 'JP', with_original_language: 'ja', sort_by: 'popularity.desc' }, 'tv').catch(function () { return []; }),
-    _list('/discover/movie', { page: 1, language: 'en-US', with_genres: '16', with_origin_country: 'JP', with_original_language: 'ja', sort_by: 'popularity.desc' }, 'movie').catch(function () { return []; })
+    homeList('/movie/popular', { page: 1, language: 'en-US' }, 'movie'),
+    homeList('/tv/popular', { page: 1, language: 'en-US' }, 'tv'),
+    homeList('/discover/tv', { page: 1, language: 'en-US', with_genres: '16', with_origin_country: 'JP', with_original_language: 'ja', sort_by: 'popularity.desc' }, 'tv'),
+    homeList('/discover/movie', { page: 1, language: 'en-US', with_genres: '16', with_origin_country: 'JP', with_original_language: 'ja', sort_by: 'popularity.desc' }, 'movie')
   ]).then(function (rows) {
     var sections = [];
+    if (!rows.some(function (items) { return items.length > 0; }) && failures.length === rows.length) {
+      throw new Error('AIOStreams TMDB metadata failed: ' + String(failures[0] && (failures[0].message || failures[0]) || 'all catalogue requests failed'));
+    }
     if (rows[0].length) sections.push({ title: 'Popular Movies', items: rows[0] });
     if (rows[1].length) sections.push({ title: 'Popular TV Series', items: rows[1] });
     if (rows[2].length) sections.push({ title: 'Anime Series', items: rows[2] });
@@ -514,6 +529,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = {
   getStreams: getStreams,
   getLinks: getLinks,
   _parseManifest: _parseManifest,
+  _tmdbUrl: _tmdbUrl,
   _parseEpisodeUrl: _parseEpisodeUrl,
   _selectTmdbId: _selectTmdbId,
   _parseStreams: _parseStreams,
