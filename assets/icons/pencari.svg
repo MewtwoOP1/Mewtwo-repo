@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">PencariMovie integration</title>
+  <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#A78BFA"/><stop offset="1" stop-color="#6D28D9"/></linearGradient></defs>
+  <rect x="2" y="2" width="60" height="60" rx="17" fill="#17112A" stroke="#8B5CF6" stroke-opacity=".65"/>
+  <rect x="14" y="13" width="36" height="38" rx="7" fill="url(#g)"/>
+  <path d="M14 22h36M14 42h36M22 13v9M42 13v9M22 42v9M42 42v9" stroke="#EDE9FE" stroke-width="2" opacity=".85"/>
+  <path d="M28 27l11 6-11 6z" fill="#FFF"/>
+</svg>
