@@ -15,6 +15,9 @@ var DOMAIN_BASES = ['https://av1encodes.com', 'https://animealpha.cc', 'https://
 var BASE = DEFAULT_DOMAIN;
 var EMBEDDED_DDL_CACHE = {};
 var EMBEDDED_DDL_TTL_MS = 5 * 60 * 1000;
+var SITE_COOKIES = {};
+var SITE_WARMED_AT = {};
+var SITE_WARM_TTL_MS = 5 * 60 * 1000;
 
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
   '(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
@@ -53,8 +56,42 @@ function getSettings() {
 
 // ── HTTP helpers ─────────────────────────────────────────────────────────────
 
+function _siteHost(url) {
+  var m = String(url || '').match(/^https?:\/\/([^/]+)/i);
+  if (!m) return '';
+  var host = m[1].toLowerCase().replace(/^www\./, '').replace(/:\d+$/, '');
+  return _isAllowedSiteHost(host) ? host : '';
+}
+
+function _responseHeader(response, name) {
+  var headers = response && response.headers;
+  if (!headers) return '';
+  if (typeof headers.get === 'function') {
+    try {
+      var value = headers.get(name);
+      if (value) return String(value);
+    } catch (e) {}
+  }
+  var wanted = String(name).toLowerCase();
+  for (var key in headers) {
+    if (Object.prototype.hasOwnProperty.call(headers, key) && String(key).toLowerCase() === wanted) {
+      var result = headers[key];
+      return Array.isArray(result) ? result.join('; ') : String(result || '');
+    }
+  }
+  return '';
+}
+
+function _captureSiteCookie(response, base) {
+  var host = _siteHost(base);
+  if (!host) return;
+  var setCookie = _responseHeader(response, 'set-cookie');
+  var match = /(?:^|[,;]\s*)av1_client_id=([^;,\s]+)/i.exec(setCookie);
+  if (match) SITE_COOKIES[host] = 'av1_client_id=' + match[1];
+}
+
 function _headers(ref) {
-  return {
+  var h = {
     'User-Agent': UA,
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
     'Accept-Language': 'en-US,en;q=0.9',
@@ -68,6 +105,9 @@ function _headers(ref) {
     'Sec-Fetch-User': '?1',
     'Upgrade-Insecure-Requests': '1'
   };
+  var host = _siteHost(ref || (BASE + '/'));
+  if (host && SITE_COOKIES[host]) h.Cookie = SITE_COOKIES[host];
+  return h;
 }
 
 function _isAllowedSiteHost(host) {
@@ -78,12 +118,16 @@ function _isAllowedSiteHost(host) {
   return false;
 }
 
+function _isChallengeResponse(response) {
+  var body = String(response && response.body || '');
+  return /<title[^>]*>\s*(?:just a moment|attention required|access denied)|cf-chl-|verify you are human|cloudflare ray id|connection blacklisted|home\/blocked|ip or browser.identity blacklist|you have been blocked/i.test(body);
+}
+
 function _isBlockedResponse(response, path) {
   if (!response) return true;
   var status = Number(response.status) || 0;
+  if (status >= 400 || _isChallengeResponse(response)) return true;
   var body = String(response.body || '');
-  if (status >= 400) return true;
-  if (/<title[^>]*>\s*(?:just a moment|attention required|access denied)|cf-chl-|verify you are human|cloudflare ray id/i.test(body)) return true;
   if (/^\/download\//i.test(String(path || '')) && /unable to generate download link|failed to generate download/i.test(body)) return true;
   return false;
 }
@@ -121,12 +165,7 @@ function _fetchWithFallback(url, ref, extraHeaders, method) {
   if (absoluteIsSite) addBase('https://' + absolute[1].replace(/^www\./i, ''));
   for (var i = 0; i < DOMAIN_BASES.length; i++) addBase(DOMAIN_BASES[i]);
 
-  function attempt(index, lastResponse) {
-    if (index >= candidates.length) {
-      return Promise.resolve(lastResponse || { status: 0, body: '', url: raw });
-    }
-    var base = candidates[index];
-    var target = base + sitePath;
+  function optionsFor(base) {
     var headers = _headers(_rebaseReferer(ref, base));
     if (extraHeaders) {
       for (var k in extraHeaders) {
@@ -135,12 +174,52 @@ function _fetchWithFallback(url, ref, extraHeaders, method) {
     }
     var options = { headers: headers };
     if (method) options.method = method;
-    return fetch(target, options).then(function (response) {
+    return options;
+  }
+
+  function attempt(index, lastResponse) {
+    if (index >= candidates.length) {
+      return Promise.resolve(lastResponse || { status: 0, body: '', url: raw });
+    }
+
+    var base = candidates[index];
+    var target = base + sitePath;
+    return fetch(target, optionsFor(base)).then(function (response) {
+      _captureSiteCookie(response, base);
       if (!_isBlockedResponse(response, sitePath)) {
         BASE = base;
         return response;
       }
-      return attempt(index + 1, response);
+
+      // AnimeAlpha introduced an av1_client_id cookie that is issued during a
+      // browser-like homepage request. Zangetsu's fetch bridge doesn't share a
+      // browser cookie jar with this provider, so retain that cookie ourselves,
+      // warm this host once per TTL window, and replay the original request.
+      var host = _siteHost(base);
+      var status = Number(response && response.status) || 0;
+      var lastWarm = host ? (SITE_WARMED_AT[host] || 0) : 0;
+      var needsWarm = sitePath !== '/' &&
+        (status === 403 || _isChallengeResponse(response)) &&
+        host && (Date.now() - lastWarm >= SITE_WARM_TTL_MS);
+
+      if (!needsWarm) return attempt(index + 1, response);
+      SITE_WARMED_AT[host] = Date.now();
+
+      return fetch(base + '/', { headers: _headers(base + '/'), method: 'GET' })
+        .then(function (homepage) {
+          _captureSiteCookie(homepage, base);
+          return fetch(target, optionsFor(base)).then(function (retryResponse) {
+            _captureSiteCookie(retryResponse, base);
+            if (!_isBlockedResponse(retryResponse, sitePath)) {
+              BASE = base;
+              return retryResponse;
+            }
+            return attempt(index + 1, retryResponse);
+          });
+        })
+        .catch(function () {
+          return attempt(index + 1, response);
+        });
     }).catch(function () {
       return attempt(index + 1, lastResponse);
     });
@@ -572,11 +651,31 @@ function _extractFilenames(html) {
   return out;
 }
 
+function _tryParseEpisodeNumber(filename) {
+  var value = decodeURIComponent(String(filename || ''));
+  var m = value.match(EPISODE_S_NUMBER_REGEX) ||
+    value.match(/\b(?:episode|ep)[\s._-]*0*(\d{1,4})\b/i) ||
+    value.match(/\bE0*(\d{1,4})\b/i);
+  return m ? parseInt(m[1], 10) : null;
+}
+
 function _parseEpisodeNumber(filename) {
-  var m = filename.match(EPISODE_S_NUMBER_REGEX);
-  if (m) return parseFloat(m[1]);
-  m = filename.match(EPISODE_NUMBER_REGEX);
-  return m ? parseFloat(m[1]) : 1;
+  var number = _tryParseEpisodeNumber(filename);
+  return number == null ? 1 : number;
+}
+
+function _episodeMatchKey(filename) {
+  var value = decodeURIComponent(String(filename || '')).split('?')[0].split('/').pop();
+  return value
+    .replace(/\.(?:mkv|mp4|webm|avi)$/i, '')
+    .replace(/\[\d{3,4}p\]/ig, ' ')
+    .replace(/\[(?:dual|sub|dub|english dub|tri|multi)\]/ig, ' ')
+    .replace(/\[(?:S\d+-)?E\d+\]/ig, ' ')
+    .replace(/\b(?:episode|ep)\s*\d+\b/ig, ' ')
+    .replace(/[._-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
 }
 
 function _buildEpisodeLabel(filename, season) {
@@ -747,13 +846,18 @@ function getEpisodes(url, opts) {
 
 function _findDownloadLinkForEpisode(html, encodedFilename, num) {
   var links = _extractDownloadLinks(html);
+  var wantedKey = _episodeMatchKey(encodedFilename);
   for (var i = 0; i < links.length; i++) {
     var href = links[i];
     var decoded = decodeURIComponent(href);
-    var linkEp = (decoded.match(EPISODE_NUMBER_REGEX) || [])[1];
+    var linkFilename = decoded.split('?')[0].split('/').pop();
+    var linkEp = _tryParseEpisodeNumber(linkFilename);
 
-    if (num != null && linkEp != null && parseInt(linkEp, 10) === num) return href;
-    if (num == null && decoded.indexOf(decodeURIComponent(encodedFilename)) > -1) return href;
+    if (num != null && linkEp != null) {
+      if (linkEp === Number(num)) return href;
+      continue;
+    }
+    if (wantedKey && _episodeMatchKey(linkFilename) === wantedKey) return href;
   }
   return null;
 }
@@ -1003,9 +1107,10 @@ function getVideoSources(episodeUrl, fast) {
 
   var url = _episodeUrl(originalUrl) || _normalizePath(originalUrl) || originalUrl;
   var parts = String(url).split('?')[0].replace(/^\/+/, '').split('/');
-  if (parts[0] !== 'download' || parts.length < 5) {
+  if (parts[0] !== 'download') {
     return Promise.resolve(_isDirectMediaUrl(originalUrl) ? _fallbackDirect(originalUrl) : []);
   }
+  if (parts.length < 5) return Promise.resolve([]);
 
   var slug = parts[1];
   var season = parts[2];
