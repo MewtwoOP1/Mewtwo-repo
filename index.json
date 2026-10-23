@@ -826,7 +826,7 @@
     {
       "id": "mewstream",
       "name": "Mewstream",
-      "version": "4.0.4",
+      "version": "4.0.5",
       "type": "movie",
       "lang": "en",
       "file": "providers/mewstream.js",
