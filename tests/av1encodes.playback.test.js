@@ -138,7 +138,7 @@ global.fetch = async function (input, options) {
 
 async function main() {
   // Zangetsu source contract.
-  assert.equal(provider.version, "1.0.0");
+  assert.equal(provider.version, "1.0.1");
   const info = provider.getInfo();
   assert.equal(info.name, "AV1Encodes");
   assert.equal(info.logo, "icons/av1encodes.png");
