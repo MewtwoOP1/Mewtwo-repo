@@ -175,7 +175,6 @@ TMDB provides search, title details, catalogue metadata, and episode information
 - Metadata, artwork, and playback URLs are provided by TMDB or third-party services. Their availability, terms, and policies are controlled by their respective operators.
 - Users are responsible for ensuring that their use of third-party services and any content they access complies with applicable laws and service terms.
 - This is an unofficial community project, not affiliated with or endorsed by Zangetsu, TMDB, Stremio, AIOStreams, or PencariMovie.
-- Most code is licensed under MIT. The MovieBox IN port is separately licensed under GPL-3.0-only. See [LICENSE](LICENSE) and [LICENSES/GPL-3.0.txt](LICENSES/GPL-3.0.txt).
 
 ## Credits
 
