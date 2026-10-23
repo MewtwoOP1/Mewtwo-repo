@@ -209,6 +209,7 @@ function _fetchWithFallback(url, ref, extraHeaders, method, followRedirects) {
   var sitePath = absoluteIsSite ? (absolute[2] || '/') : raw;
   if (sitePath.charAt(0) !== '/') sitePath = '/' + sitePath;
   var candidates = [];
+  var sawExplicitDownloadFailure = false;
   function addBase(base) {
     if (base && candidates.indexOf(base.replace(/\/+$/, '')) === -1) candidates.push(base.replace(/\/+$/, ''));
   }
@@ -246,11 +247,14 @@ function _fetchWithFallback(url, ref, extraHeaders, method, followRedirects) {
         return response;
       }
 
-      // Once a /download page explicitly reports that the current filename
-      // cannot be generated, trying every mirror produces the same HTML and
-      // adds seconds of latency. Allow one alternate mirror, then fail this
-      // resolution so the caller can move to a lower quality.
-      if (_isExplicitDownloadFailure(response, sitePath) && index >= 1) {
+      var explicitDownloadFailure = _isExplicitDownloadFailure(response, sitePath);
+      if (explicitDownloadFailure && index === 0) sawExplicitDownloadFailure = true;
+
+      // If the preferred download page explicitly says this filename could not
+      // be generated, try one alternate. If it also fails/is blocked, stop this
+      // URL instead of serially probing the final mirror as well.
+      if (/^\/download\//i.test(sitePath) && index >= 1 &&
+          (explicitDownloadFailure || sawExplicitDownloadFailure)) {
         return response;
       }
 
