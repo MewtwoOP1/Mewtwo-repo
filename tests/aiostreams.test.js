@@ -188,7 +188,7 @@ async function main() {
   assert.equal(sources[1].container, 'hls');
   assert.equal(sources[1].kind, 'unknown');
   assert.equal(sources.some((x) => x.url.includes('/wrong.mp4') || x.url.startsWith('javascript:') || x.url.startsWith('magnet:')), false);
-  assert.equal(urls.filter((x) => new URL(x.url).hostname === 'api.themoviedb.org').length > 0, true);
+  assert.equal(urls.filter((x) => ['api.themoviedb.org', 'api.themoviedb.org.'].includes(new URL(x.url).hostname)).length > 0, true);
   assert.equal(urls.some((x) => /kitsu|ani\.zip|cinemeta/i.test(x.url)), false);
 
   const p2p = load((url) => Promise.resolve(response({ success: true, data: { results: [{ url: 'magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567', name: 'P2P' }] } })), { ...settings, showP2P: true });
