@@ -5,7 +5,7 @@
 
 const SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID)
   ? String(__SOURCE_ID) : 'av1encodes';
-const VERSION = '1.1.6';
+const VERSION = '1.1.7';
 const DEFAULT_DOMAIN = 'https://av1encodes.com';
 const SITE_DOMAINS = [
   'https://av1encodes.com',
@@ -1075,6 +1075,17 @@ function _parseEpisodeJson(body, base, slug, season, resolution) {
     else if (data && Array.isArray(data.items)) data = data.items;
     else return [];
   }
+
+  // Mirror Yuzuno's items.sortedByDescending { it.num } within the selected
+  // season route. Keep stable input order when num values are equal or missing.
+  data = data.map((item, index) => ({ item, index }))
+    .sort((a, b) => {
+      const aNum = Number(a.item && a.item.num) || 0;
+      const bNum = Number(b.item && b.item.num) || 0;
+      return (bNum - aNum) || (a.index - b.index);
+    })
+    .map(entry => entry.item);
+
   const out = [];
   for (const item of data) {
     if (!item || typeof item !== 'object') continue;
@@ -1120,8 +1131,15 @@ function _parseEpisodePage(html, base, slug, season, resolution) {
     const ep = _episodeFromLink(a.href, a.inner, base, season, slug, resolution);
     if (ep) out.push(ep);
   }
-  if (out.length) return _uniqueEpisodes(out);
-  for (const name of _extractFilenames(text)) {
+  if (out.length) {
+    // Yuzuno's HTML fallback sorts links by E(\\d+) in the original href.
+    out.sort((a, b) => _sourceEpisodeNumber(b.url) - _sourceEpisodeNumber(a.url));
+    return _uniqueEpisodes(out);
+  }
+  const filenames = _extractFilenames(text).sort((a, b) =>
+    _episodeNumber(b) - _episodeNumber(a)
+  );
+  for (const name of filenames) {
     const ep = _episodeFromLink(_makeEpisodeUrl(base, slug, season, resolution, name),
       '', base, season, slug, resolution);
     if (ep) out.push(ep);
@@ -1129,31 +1147,23 @@ function _parseEpisodePage(html, base, slug, season, resolution) {
   return _uniqueEpisodes(out);
 }
 
-function _episodeSeason(item) {
-  // Match Yuzuno's source behavior: sort by the season index in the download
-  // route, even when the displayed title names another season.
-  const path = _pathOnly(item && (item.url || item.id) || '');
-  const m = path.match(/\/download\/[^/]+\/(\d+)\//i);
-  return m ? (parseInt(m[1], 10) || 1) : 1;
+function _sourceEpisodeNumber(value) {
+  // Yuzuno's fallback path sorts download links by Regex("E(\\d+)") in href.
+  const match = _decode(String(value || '')).match(/E(\\d+)/i);
+  return match ? (parseInt(match[1], 10) || 0) : 0;
 }
 
 function _uniqueEpisodes(items) {
+  // Only de-duplicate here. Never globally re-sort by URL route: Yuzuno keeps
+  // the season buckets in descending selector order, irrespective of the
+  // season segment inside each signed /download/ href.
   const out = [];
   const seen = Object.create(null);
   for (const item of items || []) {
     const key = _episodeKey(item.url || item.id || '');
     if (key && !seen[key]) { seen[key] = true; out.push(item); }
   }
-  // Faithful to Yuzuno's getEpisodeList(): season routes descend; JSON entries
-  // retain source num-descending order. Do not normalize to visible season or
-  // filename order—the irregular source order is intentional compatibility.
-  return out.sort((a, b) => {
-    const seasonDiff = _episodeSeason(b) - _episodeSeason(a);
-    if (seasonDiff) return seasonDiff;
-    const aNum = Number(a.number) || _episodeNumber(a.url + ' ' + a.title) || 0;
-    const bNum = Number(b.number) || _episodeNumber(b.url + ' ' + b.title) || 0;
-    return bNum - aNum;
-  });
+  return out;
 }
 
 function _episodePageUrl(base, slug, season, resolution) {
