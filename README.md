@@ -53,7 +53,7 @@ The active movie/series providers include MovieBox IN, PressPlayX, HDHub4u, and 
 
 ## AIOStreams (native anime source)
 
-AIOStreams is available as a native anime source in this repository. It uses Kitsu for anime browsing and search, AniZip for cross-service IDs and episode metadata, and the configured AIOStreams instance's authenticated `/api/v1/search` endpoint for stream aggregation. It is **not** a generic Stremio add-on importer.
+AIOStreams is available as a native anime source in this repository. It uses Kitsu for anime browsing and search, AniZip for cross-service IDs and episode metadata, and the configured AIOStreams instance's authenticated `/api/v1/search` endpoint for stream aggregation. The resolver accepts both direct HTTP(S) URLs and optional torrent results; it does not require every result to contain an info hash. Credentials are sent only to the AIOStreams API, while provider-specific playback headers are preserved. It is **not** a generic Stremio add-on importer.
 
 1. Add this repository in Zangetsu: `https://raw.githubusercontent.com/MewtwoOP1/Zangetsu-repo/main/index.json`.
 2. Install **AIOStreams** and open its source settings.
