@@ -96,7 +96,7 @@ async function main() {
   assert.ok(registered, 'AIOStreams stays registered');
   const provider = load(() => Promise.reject(new Error('unexpected fetch')), settings);
   assert.equal(provider.version, registered.version);
-  assert.equal(provider.getInfo().version, '2.1.0');
+  assert.equal(provider.getInfo().version, '2.1.1');
   assert.equal(provider.getInfo().type, 'movie');
   assert.deepEqual(JSON.parse(JSON.stringify(provider.getSettings().map((x) => x.key))), registered.settings.map((x) => x.key));
   assert.ok(provider.getSettings().some((x) => x.key === 'tmdbApiKey'), 'TMDB credential setting exists');
@@ -237,10 +237,47 @@ async function main() {
   await Promise.all([homePromise, playbackPromise]);
   assert.ok(priorityOrder.indexOf('/api/v1/search') < priorityOrder.indexOf('/3/tv/popular'), 'queued playback lookup jumps ahead of catalog requests');
 
-  const missingKey = load(() => { throw new Error('Should not fetch without TMDB key'); }, { manifestUrl: settings.manifestUrl });
-  await assert.rejects(missingKey.getHome(), /TMDB API key or Read Access Token/);
+  // The production Zangetsu fetch interceptor supplies its built-in TMDB key
+  // for the exact api.themoviedb.org host. A blank per-source key must still
+  // request metadata rather than reject or display an empty catalogue.
+  const defaultKeyRequests = [];
+  const defaultKeyProvider = load((url, init) => {
+    const parsed = new URL(String(url));
+    defaultKeyRequests.push({ url: String(url), headers: init.headers || {} });
+    assert.equal(parsed.hostname, 'api.themoviedb.org', 'default auth must use the host intercepted by Zangetsu');
+    assert.equal(parsed.searchParams.has('api_key'), false, 'the provider delegates its built-in key to Zangetsu');
+    assert.equal((init.headers || {}).Authorization, undefined);
+    if (parsed.pathname === '/3/movie/popular') return Promise.resolve(response({ results: [tmdbMovie] }));
+    if (parsed.pathname === '/3/tv/popular') return Promise.resolve(response({ results: [tmdbTv] }));
+    if (parsed.pathname === '/3/discover/tv') return Promise.resolve(response({ results: [] }));
+    if (parsed.pathname === '/3/discover/movie') return Promise.resolve(response({ results: [] }));
+    throw new Error('Unexpected default-key request ' + parsed.pathname);
+  }, { manifestUrl: settings.manifestUrl });
+  const defaultHome = await defaultKeyProvider.getHome();
+  assert.deepEqual(JSON.parse(JSON.stringify(defaultHome.map((x) => x.title))), ['Popular Movies', 'Popular TV Series']);
+  assert.equal(defaultKeyRequests.length, 4, 'all TMDB home endpoints are reached without a custom key');
 
-  console.log('AIOStreams TMDB-only and stream-resolution tests passed.');
+  const defaultUrl = defaultKeyProvider._tmdbUrl('/movie/popular', { page: 1 });
+  assert.equal(new URL(defaultUrl.url).hostname, 'api.themoviedb.org');
+  assert.equal(new URL(defaultUrl.url).searchParams.has('api_key'), false);
+
+  const customKeyUrl = provider._tmdbUrl('/movie/501', { language: 'en-US' });
+  assert.equal(new URL(customKeyUrl.url).hostname, 'api.themoviedb.org.');
+  assert.equal(new URL(customKeyUrl.url).searchParams.get('api_key'), 'TEST_TMDB_KEY');
+  assert.equal(customKeyUrl.headers.Host, 'api.themoviedb.org');
+
+  const bearer = 'eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiJ0ZXN0In0.signature';
+  const bearerProvider = load(() => Promise.reject(new Error('unexpected network')), { ...settings, tmdbApiKey: bearer });
+  const bearerUrl = bearerProvider._tmdbUrl('/movie/501', {});
+  assert.equal(new URL(bearerUrl.url).hostname, 'api.themoviedb.org.');
+  assert.equal(bearerUrl.headers.Authorization, 'Bearer ' + bearer);
+  assert.equal(new URL(bearerUrl.url).searchParams.has('api_key'), false);
+  assert.equal(bearerUrl.headers.Host, 'api.themoviedb.org');
+
+  const allFail = load(() => Promise.resolve(response({ status_message: 'Invalid API key', status_code: 7 }, 401)), { ...settings, tmdbApiKey: 'invalid' });
+  await assert.rejects(allFail.getHome(), /AIOStreams TMDB metadata failed: HTTP 401/);
+
+  console.log('AIOStreams TMDB auth and stream-resolution tests passed.');
 }
 main().catch((error) => {
   console.error(error);
