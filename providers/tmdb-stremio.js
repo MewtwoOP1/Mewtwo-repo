@@ -15,7 +15,7 @@ function getInfo() {
     baseUrl: 'https://www.themoviedb.org',
     logo: 'https://www.google.com/s2/favicons?sz=256&domain=strem.io',
     type: 'movie',
-    version: '3.1.0'
+    version: '3.1.1'
   };
 }
 
@@ -766,7 +766,7 @@ function getLinks(id, opts) { return getVideoSources(id, opts); }
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    version: '3.1.0',
+    version: '3.1.1',
     getInfo: getInfo, getSettings: getSettings, getHome: getHome,
     popular: popular, search: search, getDetail: getDetail,
     getEpisodes: getEpisodes, getVideoSources: getVideoSources,
