@@ -892,8 +892,8 @@ function _buildStreams(info, resString, baseFilename, slug, season) {
   var directDlUrl = resolved.download || null;
   var torrentUrl = resolved.torrent || null;
   var subtitles = _parseSubtitles(ddl.subtitles);
-  var kind = /(?:\[Sub\])/i.test(audioTag) ? 'sub' :
-    (/(?:\[Dub\]|\[English Dub\])/i.test(audioTag) ? 'dub' : 'unknown');
+  var kind = /^Sub$/i.test(audioTag) ? 'sub' :
+    (/^(?:Dub|English Dub)$/i.test(audioTag) ? 'dub' : 'unknown');
   var audioLang = kind === 'sub' ? 'ja' : (kind === 'dub' ? 'en' : null);
   var out = [];
 
@@ -906,10 +906,6 @@ function _buildStreams(info, resString, baseFilename, slug, season) {
 
   function add(hoster, url) {
     if (!url || !/^https?:\/\//i.test(url)) return;
-    // Discard obvious site download pages; those return HTML, not a video.
-    if (/\/download\/[^?#]+\.(?:mkv|mp4)(?:[?#]|$)/i.test(url) && !/\/(?:cdn|stream)\//i.test(url)) {
-      return;
-    }
     var video = {
       url: url,
       quality: 'AV1 · ' + resLabel + audioSuffix + ' (' + hoster + ')',
