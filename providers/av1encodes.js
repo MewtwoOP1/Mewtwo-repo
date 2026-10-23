@@ -846,22 +846,49 @@ function getEpisodes(url, opts) {
 
 function _findDownloadLinkForEpisode(html, encodedFilename, num) {
   var links = _extractDownloadLinks(html);
+  var source = String(html || '').trim();
   var wantedKey = _episodeMatchKey(encodedFilename);
+
+  // The current site often returns JSON instead of HTML for /episodes. Looking
+  // only for <a href> tags makes quality fallback silently miss every episode.
+  if (source.charAt(0) === '[') {
+    try {
+      var items = JSON.parse(source);
+      if (Array.isArray(items)) {
+        for (var j = 0; j < items.length; j++) {
+          var item = items[j] || {};
+          var href = String(item.href || '');
+          if (!href) continue;
+          var itemPath = _episodeUrl(href);
+          if (!itemPath) continue;
+          var itemFilename = decodeURIComponent(itemPath.split('?')[0].split('/').pop());
+          var itemNumber = Number(item.num) > 0 ? Number(item.num) : _tryParseEpisodeNumber(itemFilename);
+          if (num != null && itemNumber != null) {
+            if (itemNumber === Number(num)) return itemPath;
+            continue;
+          }
+          if (wantedKey && _episodeMatchKey(itemFilename) === wantedKey) return itemPath;
+        }
+      }
+    } catch (e) {}
+  }
+
   for (var i = 0; i < links.length; i++) {
     var href = links[i];
-    var decoded = decodeURIComponent(href);
+    var normalized = _episodeUrl(href);
+    if (!normalized) continue;
+    var decoded = decodeURIComponent(normalized);
     var linkFilename = decoded.split('?')[0].split('/').pop();
     var linkEp = _tryParseEpisodeNumber(linkFilename);
 
     if (num != null && linkEp != null) {
-      if (linkEp === Number(num)) return href;
+      if (linkEp === Number(num)) return normalized;
       continue;
     }
-    if (wantedKey && _episodeMatchKey(linkFilename) === wantedKey) return href;
+    if (wantedKey && _episodeMatchKey(linkFilename) === wantedKey) return normalized;
   }
   return null;
 }
-
 function _resolveRedirect(path) {
   if (!path) return Promise.resolve(null);
   var url = _absUrl(path);
