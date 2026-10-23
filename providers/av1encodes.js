@@ -975,13 +975,14 @@ function _resolveRedirectNoBody(url, depth) {
       var target = _redirectTargetUrl(url, fallbackLocation);
       if (target && target !== url) return _resolveRedirectNoBody(target, depth + 1);
     }
+    // A 3xx without a usable Location is not a playable destination, even
+    // if the host bridge reports a changed URL while redirects are disabled.
+    if (fallbackStatus >= 300 && fallbackStatus < 400) return null;
     if (fallbackUrl !== url) {
-      // A URL returned after a redirect is already the final request URL. Do
-      // not issue another HEAD against the media server just to rediscover it.
+      // A URL returned after a completed redirect is already final. Do not
+      // issue another HEAD against the media server just to rediscover it.
       return _isRedirectEndpoint(fallbackUrl) ? null : fallbackUrl;
     }
-    // Never hand an unresolved 3xx endpoint to the player as if it were media.
-    if (fallbackStatus >= 300 && fallbackStatus < 400) return null;
     return isRedirect ? null : url;
   }
 
@@ -998,18 +999,22 @@ function _resolveRedirectNoBody(url, depth) {
       if (next && next !== url) return _resolveRedirectNoBody(next, depth + 1);
     }
 
-    // The host bridge exposes Dio's final response URL when HEAD follows a
-    // redirect. Return it directly; recursively probing it adds latency and can
-    // trigger rate limits on the actual streaming CDN.
+    // If HEAD still returns a 3xx without Location, try one no-follow GET
+    // to expose the redirect header. Never return the shortener URL itself.
+    // This also covers hosts that redirect only after a GET request.
+    if (status >= 300 && status < 400) {
+      return _fetchWithFallback(url, BASE + '/', null, 'GET', false)
+        .then(fromNoFollowFallback)
+        .catch(function () { return isRedirect ? null : url; });
+    }
+
+    // The host bridge exposes Dio's final request URL after a followed redirect.
+    // Return it directly; another HEAD only adds latency and rate-limit pressure.
     if (responseUrl !== url) {
       return _isRedirectEndpoint(responseUrl) ? null : responseUrl;
     }
 
-    // Some hosts return a 3xx without a Location header for HEAD. A no-follow
-    // GET is safe for the short redirect response and may expose the header;
-    // never use an auto-follow GET here, since it could download the whole file.
-    if ((status >= 300 && status < 400) ||
-        status === 405 || status === 501 ||
+    if (status === 405 || status === 501 ||
         (status >= 400 && status < 500) ||
         (status === 0 && isRedirect)) {
       return _fetchWithFallback(url, BASE + '/', null, 'GET', false)
