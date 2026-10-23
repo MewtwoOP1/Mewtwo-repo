@@ -523,7 +523,7 @@ function getEpisodes(url, opts) {
 
 function _parseAddonUrls(raw) {
   var source = String(raw || '');
-  var parts = source.split(/[,;\r\n]+/);
+  var parts = source.split(/(?:[;\r\n]+|,(?=\s*(?:https?:\/\/|stremio:\/\/)))/i);
   var out = [], seen = {};
   for (var i = 0; i < parts.length; i++) {
     var value = _trim(parts[i]);
