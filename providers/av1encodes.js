@@ -1405,6 +1405,7 @@ if (typeof module !== 'undefined' && module.exports) {
     getDetail: getDetail,
     getEpisodes: getEpisodes,
     getVideoSources: getVideoSources,
-    getStreams: getStreams
+    getStreams: getStreams,
+    _buildEpisodeLabel: _buildEpisodeLabel
   };
 }
