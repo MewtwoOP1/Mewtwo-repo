@@ -906,7 +906,11 @@ function _findDownloadLinkForEpisode(html, encodedFilename, num) {
 function _resolveRedirect(path) {
   if (!path) return Promise.resolve(null);
   var url = _absUrl(path);
-  var isMedia = /\.(?:m3u8|mpd|mkv|mp4|webm|avi|torrent|vtt|srt)(?:[?#]|$)/i.test(url) || _isOpaqueMediaEndpoint(url);
+  // Opaque CDN URLs are the playable endpoints themselves. Do not even HEAD
+  // probe them: some hosts reject HEAD or hang on it, while the native player
+  // can follow redirects when it opens the returned URL.
+  if (_isOpaqueMediaEndpoint(url)) return Promise.resolve(url);
+  var isMedia = /\.(?:m3u8|mpd|mkv|mp4|webm|avi|torrent|vtt|srt)(?:[?#]|$)/i.test(url);
 
   // Use HEAD so resolving a direct-download URL cannot buffer an entire MKV/MP4
   // in Zangetsu's fetch bridge just to discover its redirect destination.
