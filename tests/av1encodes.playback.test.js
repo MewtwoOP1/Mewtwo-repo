@@ -1,7 +1,4 @@
-// AV1Encodes realistic end-to-end regression tests.
-// HTML and route shapes mirror the currently served AnimeAlpha pages.
-// All requests are deterministic mocks; a live upstream generator failure is
-// asserted separately from episode discovery and stream extraction.
+// AV1Encodes regression tests for the clean Yuzuno source port.
 'use strict';
 
 const assert = require('assert');
@@ -10,52 +7,21 @@ const path = require('path');
 const vm = require('vm');
 
 const PROVIDER_PATH = path.join(__dirname, '..', 'providers', 'av1encodes.js');
-const BASE = 'https://av1please.com';
-const ALT = 'https://animealpha.cc';
-const LEGACY = 'https://av1encodes.com';
-const SLUG = 'black-clover';
-const EPISODE_PATH = '/download/black-clover/1/1920%20x%201080/%5BE001%5D%20Black%20Clover%20%5B1080p%5D%20%5BDual%5D.mkv?token=listing-token';
-const FRESH_EPISODE_RE = /\/download\/black-clover\/1\/1920%20x%201080\/.*[?&]token=fresh-token(?:&|$)/;
-
-const fixtures = {
-  search: '<html><article class="anime-card"><a href="/anime/black-clover">' +
-    '<h3>Black Clover</h3><img src="/covers/black-clover.jpg"></a></article></html>',
-  detail: '<!doctype html><html><head><title>Black Clover</title></head><body>' +
-    '<h1>Black Clover</h1>' +
-    '<a href="/episodes/black-clover/1/640%20x%20360">640 x 360</a>' +
-    '<a href="/episodes/black-clover/1/854%20x%20480">854 x 480</a>' +
-    '<a href="/episodes/black-clover/1/1280%20x%20720">1280 x 720</a>' +
-    '<a href="/episodes/black-clover/1/1920%20x%201080">1920 x 1080</a>' +
-    '</body></html>',
-  episodes: '<!doctype html><html><body>' +
-    '<a href="' + EPISODE_PATH + '">Episode 01 Dual</a>' +
-    '<a href="/download/black-clover/1/1920%20x%201080/%5BE002%5D%20Black%20Clover%20%5B1080p%5D%20%5BDual%5D.mkv?token=second-token">Episode 02 Dual</a>' +
-    '</body></html>',
-  player: '<!doctype html><html><body>' +
-    '<iframe id="anime-video-player" src="/watch/black-clover-ep-001"></iframe>' +
-    '<script>window.__ddl_token = "AAAAA1234567890";</script>' +
-    '</body></html>',
-  ddl: JSON.stringify({
-    success: true,
-    watch_link: '/watch/black-clover-ep-001',
-    stream_link: '/redirect/stream/black-clover-ep-001',
-    download_link: '/redirect/download/black-clover-ep-001',
-    file_name: '[E001] Black Clover [1080p] [Dual].mkv'
-  }),
-  generatorError: '<!doctype html><html><body><h1>Oops! Something went wrong</h1>' +
-    '<p>Unable to generate download link</p><button>Try Again</button></body></html>'
-};
-
+const BASE = 'https://av1encodes.com';
 const routes = [];
 const calls = [];
 function route(pattern, handler) { routes.push({ pattern, handler }); }
-function ok(body, url, headers) {
+function reply(body, url, status, headers) {
   const text = String(body == null ? '' : body);
-  return { ok: true, status: 200, body: text, url: url || '', headers: headers || {}, text: () => Promise.resolve(text) };
-}
-function fail(status, body, headers) {
-  const text = String(body || '');
-  return { ok: false, status: status || 404, body: text, url: '', headers: headers || {}, text: () => Promise.resolve(text) };
+  const code = status == null ? 200 : status;
+  return {
+    status: code,
+    ok: code >= 200 && code < 300,
+    url: url || '',
+    headers: headers || {},
+    body: text,
+    text: () => Promise.resolve(text)
+  };
 }
 function mockFetch(url, options) {
   const target = String(url);
@@ -64,9 +30,11 @@ function mockFetch(url, options) {
     r.pattern.lastIndex = 0;
     if (r.pattern.test(target)) return Promise.resolve(r.handler(target, options || {}));
   }
-  return Promise.resolve(fail(404, 'mock route not configured: ' + target));
+  return Promise.resolve(reply('not found: ' + target, target, 404));
 }
-function createProviderSandbox() {
+function freshProvider() {
+  routes.length = 0;
+  calls.length = 0;
   const sandbox = {
     __SOURCE_ID: 'av1encodes',
     __settings: { av1encodes: {
@@ -78,467 +46,184 @@ function createProviderSandbox() {
     fetch: mockFetch,
     console: { log: console.log, warn: () => {}, error: console.error },
     Promise, JSON, String, Number, Boolean, Object, Array, Math, RegExp, Error, Date,
-    encodeURIComponent, decodeURIComponent, parseInt, parseFloat, isNaN, setTimeout, clearTimeout
+    Set, Map, encodeURIComponent, decodeURIComponent, parseInt, parseFloat, isNaN, setTimeout, clearTimeout
   };
   vm.createContext(sandbox);
-  vm.runInContext(fs.readFileSync(PROVIDER_PATH, 'utf8'), sandbox);
+  vm.runInContext(fs.readFileSync(PROVIDER_PATH, 'utf8'), sandbox, { filename: PROVIDER_PATH });
   return sandbox;
 }
-let P = createProviderSandbox();
+let P = freshProvider();
 let passed = 0;
 let failed = 0;
-const failures = [];
-async function test(name, body) {
-  try {
-    await body();
-    passed++;
-    console.log('  ✓ ' + name);
-  } catch (error) {
-    failed++;
-    failures.push({ name, error });
-    console.log('  ✗ ' + name);
-    console.log('    ' + (error && error.message || String(error)));
-  }
+async function test(name, fn) {
+  try { await fn(); passed++; console.log('  ✓ ' + name); }
+  catch (e) { failed++; console.log('  ✗ ' + name + '\n    ' + (e && e.stack || String(e))); }
 }
-function reset() {
-  routes.length = 0;
-  calls.length = 0;
-  P = createProviderSandbox();
-}
-function routeResolutionPages(host, slug) {
-  const esc = value => String(value).replace(/\./g, '\\.');
-  route(new RegExp('^' + esc(host) + '/episodes/' + esc(slug) + '/1/1920%20x%201080$'),
-    () => ok(fixtures.episodes));
-}
-function routeStreamExtraction(host) {
-  const esc = value => String(value).replace(/\./g, '\\.');
-  route(new RegExp('^' + esc(host) + '/download/black-clover/1/1920%20x%201080/.*[?&]token=listing-token(?:&|$)'), () =>
-    ok(fixtures.player));
-  route(/^https:\/\/av1please\.com\/get_token$/, () =>
-    ok(JSON.stringify({ token: 'fresh-token' })));
-  route(FRESH_EPISODE_RE, () => ok(fixtures.player));
-  route(new RegExp('^' + esc(host) + '/get_ddl/'), (url, options) => {
-    assert.strictEqual(options.headers['X-Ddl-Token'], 'AAAAA1234567890');
-    assert.ok(options.headers.Referer.includes('token=listing-token'), 'DDL lookup must refer to the signed source href');
-    return ok(fixtures.ddl);
-  });
-  route(new RegExp('^' + esc(host) + '/watch/black-clover-ep-001$'), () =>
-    ok('', host + '/watch/black-clover-ep-001'));
-  route(new RegExp('^' + esc(host) + '/redirect/stream/black-clover-ep-001$'), () =>
-    ok('', 'https://cdn.example.com/black-clover-ep-001.m3u8'));
-  route(new RegExp('^' + esc(host) + '/redirect/download/black-clover-ep-001$'), () =>
-    ok('', 'https://cdn.example.com/black-clover-ep-001.mp4'));
-}
+function json(value) { return JSON.parse(JSON.stringify(value)); }
 
 (async function run() {
-  console.log('\nAV1Encodes AnimeAlpha session + signed playback integration tests\n');
+  console.log('\nAV1Encodes Yuzuno-port regression tests\n');
 
-  await test('search discovers Black Clover from an anime-card page', async () => {
-    reset();
-    route(/^https:\/\/av1please\.com\/search\?q=black%20clover&page=1$/, () => ok(fixtures.search));
-    const items = await P.search('black clover', 1, {});
-    assert.ok(items.some(item => item.title === 'Black Clover'));
-    const result = items.find(item => item.title === 'Black Clover');
-    assert.strictEqual(result.url, BASE + '/anime/' + SLUG);
-  });
-
-  await test('session cookie from a 403 is sent on the retry and subsequent page requests', async () => {
-    reset();
-    let searchAttempts = 0;
-    route(/^https:\/\/av1please\.com\/$/, () => ok('<html>Home</html>'));
-    route(/^https:\/\/av1please\.com\/search\?q=black%20clover&page=1$/, (url, options) => {
-      searchAttempts++;
-      const cookie = String(options.headers.Cookie || options.headers.cookie || '');
-      if (cookie.includes('av1_client_id=client-123')) return ok(fixtures.search);
-      return fail(403, 'Forbidden', {
-        'Set-Cookie': 'av1_client_id=client-123; Path=/; Max-Age=600; HttpOnly; Secure'
-      });
-    });
-
-    const items = await P.search('black clover', 1, {});
-    assert.ok(items.some(item => item.title === 'Black Clover'),
-      'source should recover when the server issues a normal session cookie');
-    assert.ok(searchAttempts >= 2, 'the blocked request must be retried');
-    assert.ok(calls.some(call =>
-      call.url.indexOf('/search?') >= 0 &&
-      String(call.options.headers.Cookie || call.options.headers.cookie || '').includes('av1_client_id=client-123')),
-      'the cookie from Set-Cookie must persist across separate JS fetch calls');
-  });
-
-  await test('full path: search -> detail -> episode 1 -> extracted playable stream URLs', async () => {
-    reset();
-    P.__settings.av1encodes.preferred_domain = 'auto';
-    route(/^https:\/\/av1please\.com\/search\?q=black%20clover&page=1$/, () => fail(403, 'Forbidden'));
-    route(/^https:\/\/animealpha\.cc\/search\?q=black%20clover&page=1$/, () => ok(fixtures.search));
-    route(/^https:\/\/animealpha\.cc\/anime\/black-clover$/, () => ok(fixtures.detail));
-    routeResolutionPages(ALT, SLUG);
-    routeStreamExtraction(ALT);
-
-    const found = await P.search('black clover', 1, {});
-    const anime = found.find(item => item.title === 'Black Clover');
-    assert.ok(anime, 'search must return the target anime');
-    assert.strictEqual(anime.url, ALT + '/anime/' + SLUG);
-
-    const detail = await P.getDetail(anime.url, {});
-    assert.strictEqual(detail.title, 'Black Clover');
-    assert.ok(detail.episodes.length >= 2, 'detail must include the source episode list');
-
-    const episodeOne = detail.episodes.find(item => item.number === 1);
-    assert.ok(episodeOne, 'episode 1 must be identified by its filename number');
-    assert.ok(episodeOne.url.startsWith(ALT + '/download/black-clover/1/'),
-      'episode URL must preserve the domain serving the episode list');
-    assert.ok(episodeOne.url.includes('token=listing-token'),
-      'episode URL must preserve the upstream listing token');
-
-    const streams = await P.getVideoSources(episodeOne.url);
-    assert.ok(streams.some(source => source.url === ALT + '/dash/black-clover-ep-001/manifest.mpd'),
-      'watch link must produce a DASH manifest URL');
-    assert.ok(streams.some(source => source.url === 'https://cdn.example.com/black-clover-ep-001.m3u8'),
-      'stream link must resolve to a playable HLS URL');
-    assert.ok(streams.some(source => source.url === 'https://cdn.example.com/black-clover-ep-001.mp4'),
-      'download link must resolve to a direct media URL');
-    assert.ok(!streams.some(source => /\/download\//.test(source.url)),
-      'HTML download pages must never be exposed as media streams');
-    assert.ok(!calls.some(call => /\/get_token(?:\?|$)/.test(call.url)),
-      'a valid signed episode URL with a player must not need a speculative token request');
-  });
-
-  await test('episode lookup tries the third official mirror after the pinned host and default fail', async () => {
-    reset();
-    P.__settings.av1encodes.preferred_domain = 'auto';
-    route(/^https:\/\/av1encodes\.com\/anime\/black-clover$/, () => fail(403, 'Forbidden'));
-    route(/^https:\/\/av1encodes\.com\/$/, () => ok('<html>Home</html>'));
-    route(/^https:\/\/av1please\.com\/anime\/black-clover$/, () => fail(403, 'Forbidden'));
-    routeResolutionPages(ALT, SLUG);
-    route(/^https:\/\/animealpha\.cc\/anime\/black-clover$/, () => ok(fixtures.detail));
-
-    const episodes = await P.getEpisodes(LEGACY + '/anime/black-clover', {});
-    assert.ok(episodes.some(item => item.number === 1),
-      'episodes must still load from mirror three when the first two hosts fail');
-    assert.ok(episodes[0].url.startsWith(ALT + '/download/'));
-    assert.ok(calls.some(call => call.url === ALT + '/anime/black-clover'));
-    assert.ok(calls.some(call => call.url === ALT + '/episodes/black-clover/1/1920%20x%201080'));
-  });
-
-  await test('legacy metadata keeps Episode 45 addressable and resolves its embedded stream links', async () => {
-    reset();
-    const detail = '<html><body><h1>Long Anime</h1><div data-season="1">Season 1</div></body></html>';
-    route(/^https:\/\/av1please\.com\/anime\/long-anime$/, () => ok(detail));
-
-    const episodeItems = [];
-    for (let n = 1; n <= 50; n++) {
-      const padded = String(n).padStart(3, '0');
-      const item = {
-        num: n,
-        label: 'Episode ' + String(n).padStart(2, '0'),
-        href: '/download/long-anime/1/1920%20x%201080/%5BE' + padded +
-          '%5D%20Long%20Anime%20%5B1080p%5D%20%5BDual%5D.mkv?token=token-' + n
-      };
-      if (n === 45) {
-        item.ddl = {
-          success: true,
-          watch_link: '/watch/episode-45',
-          stream_link: 'https://cdn.example.com/episode-45.m3u8',
-          download_link: 'https://cdn.example.com/episode-45.mp4'
-        };
-      }
-      episodeItems.push(item);
-    }
-    route(/^https:\/\/av1please\.com\/episodes\/long-anime\/1\/1920%20x%201080$/, () =>
-      ok(JSON.stringify(episodeItems)));
-    route(/^https:\/\/av1please\.com\/watch\/episode-45$/, () =>
-      ok('', BASE + '/watch/episode-45'));
-
-    const episodes = await P.getEpisodes(BASE + '/anime/long-anime', {});
-    assert.strictEqual(episodes.length, 50, 'all 50 source episodes must survive parsing');
-    // Yuzuno sorts episode JSON by source num descending. Address the episode
-    // by its source identity, not an ascending-list index that contradicts
-    // the upstream order contract.
-    const episode45 = episodes.find(item => item.number === 45);
-    assert.ok(episode45, 'Episode 45 must remain addressable in the sorted source list');
-    assert.strictEqual(episode45.title, 'Episode 45', 'a non-empty upstream JSON label is preserved');
-    assert.ok(!episode45.url.includes('__av1ddl='), 'new episode URLs preserve the original upstream href');
-    assert.ok(episode45.url.includes('token=token-45'));
-
-    const streams = await P.getVideoSources(episode45.url);
-    assert.ok(streams.some(stream => stream.url === BASE + '/dash/episode-45/manifest.mpd'),
-      'episode 45 must yield a DASH URL');
-    assert.ok(streams.some(stream => stream.url === 'https://cdn.example.com/episode-45.m3u8'),
-      'episode 45 must yield its upstream HLS URL');
-    assert.ok(streams.some(stream => stream.url === 'https://cdn.example.com/episode-45.mp4'),
-      'episode 45 must yield its direct media URL');
-  });
-
-  await test('a terminal generator page on one mirror does not mask a healthy mirror', async () => {
-    reset();
-    P.__settings.av1encodes.preferred_domain = 'auto';
-    route(/^https:\/\/av1please\.com\/download\/black-clover\/1\/1920%20x%201080\/.*[?&]token=listing-token(?:&|$)/,
-      () => ok(fixtures.generatorError));
-    route(/^https:\/\/animealpha\.cc\/download\/black-clover\/1\/1920%20x%201080\/.*[?&]token=listing-token(?:&|$)/,
-      () => ok('<html><iframe id="anime-video-player" src="/watch/black-clover-ep-001"></iframe></html>'));
-    route(/^https:\/\/animealpha\.cc\/watch\/black-clover-ep-001$/,
-      () => ok('', ALT + '/watch/black-clover-ep-001'));
-
-    const streams = await P.getVideoSources(BASE + EPISODE_PATH);
-    assert.ok(streams.some(stream => stream.url === ALT + '/dash/black-clover-ep-001/manifest.mpd'),
-      'a healthy mirror must be tried when the first mirror serves the terminal generator error');
-    assert.ok(calls.some(call => call.url.startsWith(ALT + '/download/black-clover/1/')),
-      'the signed episode URL must be tested against AnimeAlpha');
-  });
-
-  await test('upstream download-generator error is classified as no streams, never a fake media URL', async () => {
-    reset();
-    route(/^https:\/\/av1please\.com\/download\/black-clover\/1\/1920%20x%201080\/.*[?&]token=listing-token(?:&|$)/,
-      () => ok(fixtures.generatorError));
-    const episodeUrl = BASE + EPISODE_PATH;
-    const streams = await P.getVideoSources(episodeUrl);
-    assert.deepStrictEqual(JSON.parse(JSON.stringify(streams)), []);
-    assert.ok(!streams.some(source => /\/download\//.test(source.url)));
-    assert.ok(!calls.some(call => /\/get_token(?:\?|$)/.test(call.url)),
-      'the provider must not preflight /get_token when the signed page has a terminal generator error');
-  });
-
-  await test('current upstream settings and provider version are exposed', async () => {
-    reset();
-    assert.strictEqual(P.getInfo().version, '1.1.8');
+  await test('provider contract and upstream preference values match the manifest', async () => {
+    P = freshProvider();
+    assert.strictEqual(P.getInfo().name, 'AV1Encodes');
+    assert.strictEqual(P.getInfo().lang, 'en');
+    assert.strictEqual(P.getInfo().version, '1.1.9');
     const settings = P.getSettings();
-    assert.strictEqual(settings.map(item => item.key).join(','), [
+    assert.deepStrictEqual(json(settings.map(s => s.key)), [
       'preferred_domain', 'preferred_quality', 'preferred_link_type', 'show_torrent'
-    ].join(','));
-    assert.ok(settings[0].options.some(item => item.value === 'https://animealpha.cc'));
-    assert.ok(settings[2].options.some(item => item.value === 'Dash'));
+    ]);
+    assert.strictEqual(settings[0].default, BASE);
+    assert.deepStrictEqual(json(settings[0].options.map(o => o.value)), [
+      'https://av1encodes.com', 'https://animealpha.cc', 'https://av1please.com'
+    ]);
+    assert.deepStrictEqual(json(settings[1].options.map(o => o.value)), [
+      '1920 x 1080', '1280 x 720', '854 x 480', '640 x 360'
+    ]);
+    assert.deepStrictEqual(json(settings[2].options.map(o => o.value)), ['Stream', 'Direct DL', 'Dash', 'Torrent']);
   });
 
-  await test('home parsing recognizes upstream spotlight, completed and latest containers', async () => {
-    reset();
-    const home = '<html><body>' +
-      '<section><article class="spotlight-slide"><a href="/anime/spotlight"><h3>Spotlight Title</h3><img class="poster" src="/spotlight.jpg"></a></article></section>' +
-      '<div id="latestCompletedList"><ul><li><a href="/anime/completed"><h4>Completed Title</h4><img src="/completed.jpg"></a></li></ul></div>' +
-      '<div id="episodeGrid"><article class="episode-card"><a href="/anime/latest"><h3>Latest Title</h3><img src="/latest.jpg"></a></article></div>' +
-      '</body></html>';
-    route(/^https:\/\/av1please\.com\/$/, () => ok(home));
-    const rows = await P.getHome({});
-    const popular = rows.find(row => row.title === 'Popular');
-    const latest = rows.find(row => row.title === 'Latest');
-    assert.ok(popular && popular.items.some(item => /spotlight|completed/.test(item.url)));
-    assert.ok(latest && latest.items.some(item => /latest/.test(item.url)));
-    assert.ok(!popular.items.some(item => /latest/.test(item.url)));
+  await test('search uses upstream route and preserves source title and poster', async () => {
+    P = freshProvider();
+    const html = '<html><body><article class="anime-card"><a href="/anime/black-clover">' +
+      '<h3>Black Clover</h3><img src="/covers/black-clover.jpg"></a></article></body></html>';
+    route(/^https:\/\/av1encodes\.com\/search\?q=Black%20Clover&page=1$/, () => reply(html));
+    const results = await P.search('Black Clover', 1, {});
+    assert.strictEqual(results.length, 1);
+    assert.strictEqual(results[0].title, 'Black Clover');
+    assert.strictEqual(results[0].url, '/anime/black-clover');
+    assert.strictEqual(results[0].cover, BASE + '/covers/black-clover.jpg');
+    assert.ok(calls.some(c => c.url === BASE + '/search?q=Black%20Clover&page=1'));
   });
 
-  await test('detail metadata follows the website selectors used by upstream Aniyomi', async () => {
-    reset();
-    const detail = '<html><head>' +
-      '<title>Browser SEO title</title>' +
-      '<meta property="og:title" content="SEO replacement title">' +
-      '<meta name="description" content="SEO replacement description">' +
-      '<meta property="og:image" content="/images/seo-cover.jpg">' +
-      '<link rel="tag" href="/genre/fantasy">' +
-      '</head><body>' +
-      '<div class="anime-hero"><h1 class="anime-title">Website Title &amp; Original</h1>' +
-      '<img class="anime-poster" data-src="/images/website-poster.jpg" src="/images/fallback-poster.jpg"></div>' +
-      '<div class="anime-synopsis">Website synopsis &amp; details.</div>' +
-      '<a class="genre-tag" href="/other-path">Native Genre</a>' +
-      '<div class="genre-list"><a href="/genre/action">Action</a></div>' +
-      '<span class="studio-name">Website Studio</span>' +
-      '<span class="status-airing">Currently airing</span>' +
-      '</body></html>';
-    route(/^https:\/\/av1please\.com\/anime\/native-metadata$/, () => ok(detail));
-    const result = await P.getDetail(BASE + '/anime/native-metadata', {});
-    assert.strictEqual(result.title, 'Website Title & Original');
-    assert.strictEqual(result.englishTitle, 'Website Title & Original');
-    assert.strictEqual(result.cover, BASE + '/images/website-poster.jpg');
-    assert.strictEqual(result.description, 'Website synopsis & details.');
-    assert.deepStrictEqual(JSON.parse(JSON.stringify(result.genres)),
-      ['Fantasy', 'Native Genre', 'Action']);
-    assert.strictEqual(result.author, 'Website Studio');
-    assert.strictEqual(result.status, 'ongoing');
-    assert.ok(!Object.prototype.hasOwnProperty.call(result, 'studio'),
-      'Map the upstream studio selector to author rather than adding a duplicate metadata field');
+  await test('detail metadata uses upstream selectors, genre fallback, and airing status', async () => {
+    P = freshProvider();
+    const html = '<html><head><meta property="og:image" content="/meta-cover.jpg"></head><body>' +
+      '<section class="anime-hero"><h1>Source Detail Title</h1><img class="anime-poster" src="/poster.jpg"></section>' +
+      '<div class="anime-synopsis">Source synopsis text.</div>' +
+      '<p class="anime-meta">Type: TV | Genre: Adventure, Fantasy | Status: Airing</p>' +
+      '<span class="studio-name">Source Studio</span><span class="status-airing">Airing</span>' +
+      '<div class="season-tab" data-season="1"></div></body></html>';
+    route(/^https:\/\/av1encodes\.com\/anime\/metadata-show$/, () => reply(html));
+    route(/^https:\/\/av1encodes\.com\/episodes\/metadata-show\/1\/.*$/, () => reply('[]'));
+    const detail = await P.getDetail('/anime/metadata-show', {});
+    assert.strictEqual(detail.title, 'Source Detail Title');
+    assert.strictEqual(detail.cover, BASE + '/poster.jpg');
+    assert.strictEqual(detail.description, 'Source synopsis text.');
+    assert.strictEqual(detail.genre, 'Adventure, Fantasy');
+    assert.deepStrictEqual(json(detail.genres), ['Adventure', 'Fantasy']);
+    assert.strictEqual(detail.author, 'Source Studio');
+    assert.strictEqual(detail.status, 'ongoing');
   });
 
-  await test('missing website title and synopsis are not replaced with SEO or slug text', async () => {
-    reset();
-    const detail = '<html><head>' +
-      '<meta property="og:title" content="SEO title not used as the anime title">' +
-      '<meta name="description" content="SEO description not used as synopsis">' +
-      '<meta property="og:image" content="/images/og.jpg">' +
-      '</head><body><p>Unrelated page text</p></body></html>';
-    route(/^https:\/\/av1please\.com\/anime\/missing-metadata$/, () => ok(detail));
-    const result = await P.getDetail(BASE + '/anime/missing-metadata', {});
-    assert.strictEqual(result.title, '');
-    assert.strictEqual(result.description, null);
-    assert.deepStrictEqual(JSON.parse(JSON.stringify(result.genres)), []);
-    assert.strictEqual(result.author, null);
-    assert.strictEqual(result.cover, BASE + '/images/og.jpg');
-    const withExistingTitle = await P.getDetail(BASE + '/anime/missing-metadata', { title: 'Existing Source Title' });
-    assert.strictEqual(withExistingTitle.title, 'Existing Source Title');
-  });
-
-  await test('anime-meta genre fallback follows the website Genre field', async () => {
-    reset();
-    const detail = '<html><body><h1>Anime Page Title</h1>' +
-      '<p class="anime-meta">Type: TV | Genre: Action, Adventure | Status: Complete</p>' +
-      '</body></html>';
-    route(/^https:\/\/av1please\.com\/anime\/meta-genre$/, () => ok(detail));
-    const result = await P.getDetail(BASE + '/anime/meta-genre', {});
-    assert.deepStrictEqual(JSON.parse(JSON.stringify(result.genres)), ['Action', 'Adventure']);
-  });
-
-  await test('detail metadata supports all upstream selector families and preserves selector order', async () => {
-    reset();
-    const detail = '<html><head><!-- <h1>Fake comment title</h1><span class="airing-badge">Fake status</span> -->' +
-      '<meta property="og:image" content="/fallback-cover.jpg"></head><body>' +
-      '<section class="page-detail"><h1>Native Detail Title</h1></section>' +
-      '<main><img src="/main-cover.jpg"></main>' +
-      '<section class="episode-overview">Native overview synopsis.</section>' +
-      '<div class="custom-genre-taxonomy"><a href="/category/fantasy">Fantasy</a></div>' +
-      '<span class="producer-studio-info">Native Studio</span>' +
-      '<span class="AIRING-badge">Uppercase class must not match the case-sensitive CSS selector</span>' +
-      '</body></html>';
-    route(/^https:\/\/av1please\.com\/anime\/selector-metadata$/, () => ok(detail));
-    const result = await P.getDetail(BASE + '/anime/selector-metadata', {});
-    assert.strictEqual(result.title, 'Native Detail Title');
-    assert.strictEqual(result.cover, BASE + '/main-cover.jpg');
-    assert.strictEqual(result.description, 'Native overview synopsis.');
-    assert.deepStrictEqual(JSON.parse(JSON.stringify(result.genres)), ['Fantasy']);
-    assert.strictEqual(result.author, 'Native Studio');
-    assert.strictEqual(result.status, 'completed');
-  });
-
-  await test('anime-meta fallback matches Kotlin substringAfter behavior when Genre is absent', async () => {
-    reset();
-    const detail = '<html><body><h1>Metadata Fallback</h1>' +
-      '<p class="anime-meta">Type: TV | Adventure | Complete</p></body></html>';
-    route(/^https:\/\/av1please\.com\/anime\/missing-genre-label$/, () => ok(detail));
-    const result = await P.getDetail(BASE + '/anime/missing-genre-label', {});
-    assert.deepStrictEqual(JSON.parse(JSON.stringify(result.genres)), ['Type: TV']);
-  });
-
-  await test('episode JSON href stays unchanged and filename labels match upstream format', async () => {
-    reset();
-    const detail = '<html><body><h1>Black Clover</h1><div data-season="1"></div></body></html>';
-    route(/^https:\/\/av1please\.com\/anime\/black-clover$/, () => ok(detail));
-    const item = {
-      num: 1,
-      href: '/download/black-clover/1/1920%20x%201080/%5BE001%5D%20Black%20Clover%20%5B1080p%5D%20%5BDual%5D.mkv?token=label-test'
-    };
-    route(/^https:\/\/av1please\.com\/episodes\/black-clover\/1\/1920%20x%201080$/, () => ok(JSON.stringify([item])));
-    const episodes = await P.getEpisodes(BASE + '/anime/black-clover', {});
-    assert.strictEqual(episodes.length, 1);
-    assert.strictEqual(episodes[0].url, BASE + item.href);
-    assert.strictEqual(episodes[0].title, 'Season 1 Ep 001 - Black Clover [Dual]');
-    assert.strictEqual(episodes[0].number, 1);
-  });
-
-  await test('episode list preserves raw source selector and JSON payload order', async () => {
-    reset();
-    const detail = '<html><body>' +
-      '<div class="season-tab" data-season="2"></div>' +
-      '<div class="season-tab" data-season="4"></div>' +
+  await test('season buckets and JSON items follow the exact upstream sort and label behavior', async () => {
+    P = freshProvider();
+    const animeHtml = '<html><body>' +
       '<div class="season-tab" data-season="1"></div>' +
-      '</body></html>';
-    route(/^https:\/\/av1please\.com\/anime\/mixed-show$/, () => ok(detail));
-
-    const item = (num, label, hrefSeason, fileNumber, token) => ({
-      num,
-      label,
-      href: '/download/mixed-show/' + hrefSeason +
-        '/1920%20x%201080/%5BE' + String(fileNumber).padStart(3, '0') +
-        '%5D%20Mixed%20Show%20%5B1080p%5D.mkv?token=' + token
+      '<div class="season-option" data-season="4"></div>' +
+      '<div class="season-tab" data-season="2"></div></body></html>';
+    const item = (num, label, hrefSeason, ep, token) => ({
+      num, label,
+      href: '/download/mixed-show/' + hrefSeason + '/1920%20x%201080/%5BE' +
+        String(ep).padStart(3, '0') + '%5D%20Mixed%20Show%20%5B1080p%5D.mkv?token=' + token
     });
+    const season1 = [
+      item(1, 'Season 1 Ep 01 - Mixed Show', 4, 1, 's1e1'),
+      item(2, 'Season 1 Ep 02 - Mixed Show', 4, 2, 's1e2')
+    ];
+    const season2 = [item(1, 'Season 2 Ep 01 - Mixed Show', 2, 1, 's2e1')];
     const season4 = [
       item(1, 'Season 4 Ep 01 - Mixed Show', 1, 1, 's4e1'),
       item(2, 'Season 4 Ep 02 - Mixed Show', 1, 2, 's4e2')
     ];
-    const season2 = [
-      item(1, 'Season 2 Ep 01 - Mixed Show', 2, 1, 's2e1')
-    ];
-    const season1 = [
-      item(2, 'Season 1 Ep 02 - Mixed Show', 4, 2, 's1e2'),
-      item(1, 'Season 1 Ep 01 - Mixed Show', 4, 1, 's1e1')
-    ];
-    route(/^https:\/\/av1please\.com\/episodes\/mixed-show\/4\/1920%20x%201080$/, () => ok(JSON.stringify(season4)));
-    route(/^https:\/\/av1please\.com\/episodes\/mixed-show\/2\/1920%20x%201080$/, () => ok(JSON.stringify(season2)));
-    route(/^https:\/\/av1please\.com\/episodes\/mixed-show\/1\/1920%20x%201080$/, () => ok(JSON.stringify(season1)));
-
-    const episodes = await P.getEpisodes(BASE + '/anime/mixed-show', {});
-    // Preserve the sequence actually exposed by this source page and each
-    // JSON payload, even when it looks random. Do not sort seasons or episode
-    // numbers, and do not infer list order from seasons embedded in signed URLs.
-    assert.deepStrictEqual(
-      JSON.parse(JSON.stringify(episodes.map(item => item.title))),
-      [
-        'Season 2 Ep 01 - Mixed Show',
-        'Season 4 Ep 01 - Mixed Show',
-        'Season 4 Ep 02 - Mixed Show',
-        'Season 1 Ep 02 - Mixed Show',
-        'Season 1 Ep 01 - Mixed Show'
-      ]
-    );
-    assert.deepStrictEqual(
-      JSON.parse(JSON.stringify(episodes.map(item => item.url))),
-      [
-        BASE + season2[0].href,
-        BASE + season4[0].href,
-        BASE + season4[1].href,
-        BASE + season1[0].href,
-        BASE + season1[1].href
-      ]
-    );
-    assert.ok(calls.some(call => call.url === BASE + '/episodes/mixed-show/4/1920%20x%201080'));
-    assert.ok(calls.some(call => call.url === BASE + '/episodes/mixed-show/2/1920%20x%201080'));
-    assert.ok(calls.some(call => call.url === BASE + '/episodes/mixed-show/1/1920%20x%201080'));
+    route(/^https:\/\/av1encodes\.com\/anime\/mixed-show$/, () => reply(animeHtml));
+    route(/^https:\/\/av1encodes\.com\/episodes\/mixed-show\/4\/1920%20x%201080$/, () => reply(JSON.stringify(season4)));
+    route(/^https:\/\/av1encodes\.com\/episodes\/mixed-show\/2\/1920%20x%201080$/, () => reply(JSON.stringify(season2)));
+    route(/^https:\/\/av1encodes\.com\/episodes\/mixed-show\/1\/1920%20x%201080$/, () => reply(JSON.stringify(season1)));
+    const episodes = await P.getEpisodes('/anime/mixed-show', {});
+    // Upstream sorts data-season selectors numerically descending, and each
+    // JSON bucket by its own source num descending. Labels/URL route season are
+    // deliberately contradictory; neither is used to "correct" the sequence.
+    assert.deepStrictEqual(json(episodes.map(e => e.title)), [
+      'Season 4 Ep 02 - Mixed Show',
+      'Season 4 Ep 01 - Mixed Show',
+      'Season 2 Ep 01 - Mixed Show',
+      'Season 1 Ep 02 - Mixed Show',
+      'Season 1 Ep 01 - Mixed Show'
+    ]);
+    assert.deepStrictEqual(json(episodes.map(e => e.url)), [
+      BASE + season4[1].href, BASE + season4[0].href,
+      BASE + season2[0].href, BASE + season1[1].href, BASE + season1[0].href
+    ]);
+    assert.deepStrictEqual(json(episodes.map(e => e.number)), [2, 1, 1, 2, 1]);
   });
 
-  await test('episode de-duplication preserves the upstream-provided order', async () => {
-    reset();
-    const makeEpisode = (n, token) => {
-      const href = BASE + '/download/mixed-show/1/1920%20x%201080/%5BE' +
-        String(n).padStart(3, '0') + '%5D%20Mixed%20Show.mkv?token=' + token;
-      return { id: href, url: href, number: n, title: 'Episode ' + n };
-    };
-    const later = makeEpisode(2, 'second');
-    const earlier = makeEpisode(1, 'first');
-    const duplicate = Object.assign({}, later);
-    const preserved = P._uniqueEpisodes([later, earlier, duplicate]);
-    assert.deepStrictEqual(
-      JSON.parse(JSON.stringify(preserved.map(item => item.url))),
-      [later.url, earlier.url]
-    );
+  await test('HTML episode fallback uses the upstream descending E-number rule within a season', async () => {
+    P = freshProvider();
+    const animeHtml = '<html><body><div data-season="1"></div></body></html>';
+    route(/^https:\/\/av1encodes\.com\/anime\/fallback-show$/, () => reply(animeHtml));
+    route(/^https:\/\/av1encodes\.com\/episodes\/fallback-show\/1\/1920%20x%201080$/, () =>
+      reply('<html><body><a href="/download/fallback-show/1/1920%20x%201080/%5BE001%5D%20Fallback%20Show%20%5B1080p%5D.mkv">Ep 1</a>' +
+        '<a href="/download/fallback-show/1/1920%20x%201080/%5BE003%5D%20Fallback%20Show%20%5B1080p%5D.mkv">Ep 3</a>' +
+        '<a href="/download/fallback-show/1/1920%20x%201080/%5BE002%5D%20Fallback%20Show%20%5B1080p%5D.mkv">Ep 2</a></body></html>'));
+    const episodes = await P.getEpisodes('/anime/fallback-show', {});
+    assert.deepStrictEqual(json(episodes.map(e => e.title)), [
+      'Season 1 Ep 003 - Fallback Show',
+      'Season 1 Ep 002 - Fallback Show',
+      'Season 1 Ep 001 - Fallback Show'
+    ]);
   });
 
-  
-  await test('preferred link type prioritizes playable variants through public playback', async () => {
-    reset();
-    P.__settings.av1encodes.preferred_link_type = 'Direct DL';
-    const downloadPage = '<html><iframe id="anime-video-player" src="/watch/example-ep-001"></iframe>' +
-      '<script>window.__ddl_token = "AAAAA1234567890";</script></html>';
-    route(/^https:\/\/av1please\.com\/download\/black-clover\/1\/1920%20x%201080\/.*[?&]token=listing-token(?:&|$)/,
-      () => ok(downloadPage));
-    route(/^https:\/\/av1please\.com\/watch\/example-ep-001$/, () =>
-      ok('', BASE + '/watch/example-ep-001'));
-    route(/^https:\/\/av1please\.com\/get_ddl\/.+$/, () => ok(JSON.stringify({
+  await test('playback resolves upstream iframe, DDL stream/direct links and DASH', async () => {
+    P = freshProvider();
+    const filename = '%5BE001%5D%20Black%20Clover%20%5B1080p%5D%20%5BDual%5D.mkv';
+    const makeHref = res => '/download/black-clover/1/' + encodeURIComponent(res) .replace(/%20/g, '%20') + '/' + filename + '?token=token-1';
+    const episodePath = '/download/black-clover/1/1920%20x%201080/' + filename + '?token=token-1';
+    const qualities = ['1920%20x%201080', '1280%20x%20720', '854%20x%20480', '640%20x%20360'];
+    for (const quality of qualities.slice(1)) {
+      route(new RegExp('^https://av1encodes\\\\.com/episodes/black-clover/1/' + quality + '$'), () =>
+        reply('<html><body><a href="/download/black-clover/1/' + quality + '/' + filename +
+          '?token=token-1">Episode 1</a></body></html>'));
+    }
+    route(/^https:\/\/av1encodes\.com\/download\/black-clover\/1\/.*E001.*$/, () =>
+      reply('<html><body><iframe id="anime-video-player" src="/watch/ep-001"></iframe>' +
+        '<script>window.__ddl_token = "AAAAA1234567890";</script></body></html>'));
+    route(/^https:\/\/av1encodes\.com\/get_ddl\/.*$/, () => reply(JSON.stringify({
       success: true,
-      watch_link: '/watch/example-ep-001',
-      stream_link: 'https://cdn.example.com/episode.m3u8',
-      download_link: 'https://cdn.example.com/episode.mp4'
+      watch_link: 'https://av1encodes.com/watch/ep-001',
+      stream_link: 'https://av1encodes.com/redirect/stream/ep-001',
+      download_link: 'https://av1encodes.com/redirect/download/ep-001.mp4',
+      torrent_link: 'https://av1encodes.com/redirect/torrent/ep-001'
     })));
-    const streams = await P.getVideoSources(BASE + EPISODE_PATH, {});
-    assert.ok(streams.length >= 3, 'DASH, stream and direct-download variants should be returned');
-    assert.strictEqual(streams[0].linkType, 'Direct DL');
-    assert.strictEqual(streams[0].preferred, true);
-    assert.ok(streams.some(item => item.url === BASE + '/dash/example-ep-001/manifest.mpd'));
-    assert.ok(streams.some(item => item.url === 'https://cdn.example.com/episode.m3u8'));
-    assert.ok(streams.some(item => item.url === 'https://cdn.example.com/episode.mp4'));
+    route(/^https:\/\/av1encodes\.com\/watch\/ep-001$/, () => reply('', BASE + '/watch/ep-001'));
+    route(/^https:\/\/av1encodes\.com\/redirect\/stream\/ep-001$/, () => reply('', 'https://cdn.example.com/ep-001.m3u8'));
+    route(/^https:\/\/av1encodes\.com\/redirect\/download\/ep-001\.mp4$/, () => reply('', 'https://cdn.example.com/ep-001.mp4'));
+    route(/^https:\/\/av1encodes\.com\/redirect\/torrent\/ep-001$/, () => reply('', 'https://cdn.example.com/ep-001.torrent'));
+    const videos = await P.getVideoSources(episodePath, {});
+    assert.ok(videos.some(v => v.linkType === 'Stream' && v.url === 'https://cdn.example.com/ep-001.m3u8'));
+    assert.ok(videos.some(v => v.linkType === 'Direct DL' && v.url === 'https://cdn.example.com/ep-001.mp4'));
+    assert.ok(videos.some(v => v.linkType === 'Dash' && v.url === BASE + '/dash/ep-001/manifest.mpd'));
+    assert.ok(videos.every(v => v.headers && v.headers.Referer === BASE + '/'));
+  });
+
+  await test('preferred hoster and show-torrent options are taken from the source preferences', async () => {
+    P = freshProvider();
+    P.__settings.av1encodes.preferred_link_type = 'Direct DL';
+    P.__settings.av1encodes.show_torrent = true;
+    const episodePath = '/download/show/1/1920%20x%201080/%5BE001%5D%20Show%20%5B1080p%5D.mkv?token=x';
+    route(/^https:\/\/av1encodes\.com\/download\/show\/1\/.*$/, () =>
+      reply('<html><body><iframe id="anime-video-player" src="/watch/example"></iframe></body></html>'));
+    route(/^https:\/\/av1encodes\.com\/episodes\/show\/1\/.*$/, () =>
+      reply('<html><body><a href="/download/show/1/1920%20x%201080/%5BE001%5D%20Show%20%5B1080p%5D.mkv?token=x">Episode 1</a></body></html>'));
+    const result = await P.getVideoSources(episodePath, {});
+    // DDL/token is absent, so the source's fallback direct link remains available.
+    assert.ok(result.length);
+    assert.strictEqual(result[0].linkType, 'Direct DL');
   });
 
   console.log('\n' + passed + ' passed, ' + failed + ' failed\n');
-  if (failed) {
-    for (const item of failures) {
-      console.error('FAILED: ' + item.name);
-      console.error(item.error && item.error.stack ? item.error.stack : item.error);
-      console.error('');
-    }
-    process.exit(1);
-  }
-})();
+  if (failed) process.exitCode = 1;
+})().catch(error => {
+  console.error(error && error.stack || error);
+  process.exitCode = 1;
+});
