@@ -4,7 +4,7 @@
  * Playback lookup is priority-queued, bounded, and does not retry slow searches.
  */
 var AIO_ID = 'aiostreams';
-var AIO_VERSION = '2.1.0';
+var AIO_VERSION = '2.1.1';
 var AIO_LOGO = 'https://aiostreams.viren070.me/logo.png';
 var TMDB = 'https://api.themoviedb.org/3';
 var TMDB_IMAGE = 'https://image.tmdb.org/t/p/';
@@ -529,6 +529,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = {
   getStreams: getStreams,
   getLinks: getLinks,
   _parseManifest: _parseManifest,
+  _tmdbUrl: _tmdbUrl,
   _parseEpisodeUrl: _parseEpisodeUrl,
   _selectTmdbId: _selectTmdbId,
   _parseStreams: _parseStreams,
