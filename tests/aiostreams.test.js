@@ -19,7 +19,7 @@ function baseFetch(url) {
   if (url.includes('kitsu.app/api/edge/anime/123?')) return Promise.resolve(response({ data: anime, included: [{ type: 'mappings', attributes: { externalSite: 'myanimelist/anime', externalId: '456' } }, { type: 'categories', attributes: { title: 'Fantasy' } }] }));
   if (url.includes('api.ani.zip/mappings?kitsu_id=123')) return Promise.resolve(response({ mappings: { kitsu_id: 123, mal_id: 456, anilist_id: 789, imdb_id: 'tt1234567', themoviedb_id: 999, thetvdb_id: 888 }, episodes: { '1': { title: { en: 'First' }, episodeNumber: 1, seasonNumber: 1 }, '2': { title: { en: 'Second' }, episodeNumber: 2, seasonNumber: 1 } } }));
   if (url.includes('kitsu.app/api/edge/anime/123/episodes?')) return Promise.resolve(response({ data: [{ attributes: { number: 1, titles: { en: 'First' } } }, { attributes: { number: 2, titles: { en: 'Second' } } }], links: {} }));
-  if (url.includes('v3-cinemeta.strem.io/catalog/')) return Promise.resolve(response({ metas: [{ id: url.includes('/movie/') ? 'tt1234567' : 'tt7654321', type: url.includes('/movie/') ? 'movie' : 'series', name: 'Example Cinemeta', poster: 'https://img.example/cine.jpg', year: '2024' }] }));
+  if (url.includes('v3-cinemeta.strem.io/catalog/')) return Promise.resolve(response({ metas: [{ id: url.includes('/movie/') ? 'tt1234567' : 'tt7654321', type: url.includes('/movie/') ? 'movie' : 'series', name: 'Example Cinemeta', poster: 'https://img.example/cine.jpg', year: '2024', tmdb_id: url.includes('/movie/') ? '999' : '998', tvdb_id: url.includes('/movie/') ? '888' : '887', mal_id: '456', anilist_id: '789', genres: ['Drama'] }] }));
   if (url.includes('v3-cinemeta.strem.io/meta/movie/')) return Promise.resolve(response({ meta: { id: 'tt1234567', type: 'movie', name: 'Example Movie', year: '2024', poster: 'https://img.example/movie.jpg', description: 'Movie description' } }));
   if (url.includes('v3-cinemeta.strem.io/meta/series/')) return Promise.resolve(response({ meta: { id: 'tt7654321', type: 'series', name: 'Example Series', videos: [{ id: 'tt7654321:1:1', season: 1, episode: 1, title: 'Pilot' }, { id: 'tt7654321:1:2', season: 1, episode: 2, title: 'Second' }] } }));
   throw new Error('Unexpected URL ' + url);
@@ -53,6 +53,8 @@ async function main() {
   const matches = await provider.search('Example', 1);
   assert.equal(matches.length, 3, 'search aggregates Kitsu, movies and series and deduplicates only exact URLs');
   assert.ok(matches.some(x => x.url === 'aio://anime/123'));
+  assert.ok(matches.some(x => x.tmdbId === 999 && x.tmdbIsTv === false && x.malId === 456 && x.anilistId === 789), 'movie catalogue preserves mapped metadata IDs');
+  assert.ok(matches.some(x => x.tmdbId === 998 && x.tmdbIsTv === true && x.malId === 456 && x.anilistId === 789), 'series catalogue preserves mapped metadata IDs and TV namespace');
   const animeDetail = await provider.getDetail('aio://anime/123');
   assert.equal(animeDetail.genre, 'Fantasy');
   assert.equal(animeDetail.episodes.length, 2);
