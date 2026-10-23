@@ -181,7 +181,7 @@ global.fetch = async function (input, options) {
 
 async function main() {
   // Zangetsu source contract.
-  assert.equal(provider.version, "1.3.1");
+  assert.equal(provider.version, "1.3.2");
   const info = provider.getInfo();
   assert.equal(info.name, "AV1Encodes");
   assert.equal(info.logo, "icons/av1encodes.png");
@@ -247,6 +247,8 @@ async function main() {
   assert.ok(streams1.some((stream) => stream.url === "https://cdn.example/ep01.mkv"));
   assert.ok(streams1.some((stream) => stream.url === "https://av1please.com/dash/ep01/manifest.mpd"));
   assert.equal(streams1[0].preferred, true);
+  assert.equal(provider._buildEpisodeLabel("[S05-E03] Black Clover [1080p] [Sub].mkv", "1"), "Season 5 Ep 3 - Black Clover [Sub]");
+  assert.equal(provider._buildEpisodeLabel("[S01-E006] Black Clover [1080p] [Dual].mkv", "5"), "Season 1 Ep 6 - Black Clover [Dual]");
   assert.ok(streams1[0].quality.includes("1080p"));
   assert.match(streams1[0].headers["User-Agent"], /Mozilla/);
   assert.ok(!streams1.some((stream) => stream.url.includes("/download/")));
