@@ -14,7 +14,10 @@
 // every series detail. Series now report type 'movie' like every working
 // source; the tmdb://tv/ URL keeps the series routing.
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID) ? String(__SOURCE_ID) : 'mewstream';
-var VERSION = '4.0.4';
+var VERSION = '4.0.5';
+var FETCH_TIMEOUT_MS = 4000;
+var META_TIMEOUT_MS = 4500;
+var SOURCE_TIMEOUT_MS = 8500;
 
 // ── Polyfills (Zangetsu sandbox) ──────────────────────────────────────
 var _BC = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
@@ -147,13 +150,36 @@ async function _bodyText(r) {
   if (typeof r.body !== 'object') return String(r.body);
   try { return JSON.stringify(r.body); } catch (e) { return ''; }
 }
+function _deadline(promise, ms, fallback) {
+  if (typeof setTimeout !== 'function') {
+    return Promise.resolve(promise).catch(function () { return fallback; });
+  }
+  return new Promise(function (resolve) {
+    var done = false;
+    var timer = setTimeout(function () { finish(fallback); }, ms);
+    function finish(value) {
+      if (done) return;
+      done = true;
+      if (typeof clearTimeout === 'function') clearTimeout(timer);
+      resolve(value);
+    }
+    Promise.resolve(promise).then(finish, function () { finish(fallback); });
+  });
+}
+
 async function _ft(u, o) {
   o = o || {};
   var h = Object.assign({ 'User-Agent': UA }, o.headers || {});
+  var q = { method: o.method || 'GET', headers: h };
+  if (o.body != null) q.body = o.body;
   try {
-    var q = { method: o.method || 'GET', headers: h };
-    if (o.body != null) q.body = o.body;
-    return await _bodyText(await fetch(u, q));
+    // Bound both the HTTP request and response-body consumption. The mobile
+    // host's own timeout is much longer than the playback resolver budget.
+    return await _deadline(
+      Promise.resolve().then(function () { return fetch(u, q); }).then(_bodyText),
+      FETCH_TIMEOUT_MS,
+      ''
+    );
   } catch (e) { return ''; }
 }
 async function _fj(u, o) {
@@ -901,7 +927,7 @@ async function getMegaplayDirect(mal, ani, ep, cb) {
 function _ag(u, r, x) {
   var h = { 'User-Agent': UA, Referer: r || ANIKOTO + '/' };
   if (x) h['X-Requested-With'] = 'XMLHttpRequest';
-  return fetch(u, { headers: h }).then(_bodyText).catch(function () { return ''; });
+  return _ft(u, { headers: h });
 }
 function _aj(p) {
   return _ag(ANIKOTO + p, ANIKOTO + '/', true).then(function (b) {
@@ -1493,7 +1519,14 @@ async function getVidnest(tmdb, season, ep) {
 async function getVideoSources(url, opts) {
   opts = opts || {};
   var p = _sid(url);
-  var m = await _resolveMeta(p);
+  var fallbackMeta = {
+    title: p.title || null, year: p.year || null,
+    imdbId: p.imdbId, tmdbId: p.tmdbId, kitsuId: p.kitsuId,
+    malId: p.malId, anilistId: p.anilistId,
+    isAnime: p.isAnime === true, genres: [], originCountry: [],
+    originalLanguage: '', classifyReason: 'metadata-timeout'
+  };
+  var m = await _deadline(_resolveMeta(p), META_TIMEOUT_MS, fallbackMeta);
   var an = m.isAnime === true;
   var subs = [], cb = function (s) { if (s && s.url) subs.push(s); };
   var diagnostics = [];
@@ -1565,7 +1598,7 @@ async function getVideoSources(url, opts) {
     try {
       var result = await _withTimeout(
         Promise.resolve().then(function () { return source.fn(); }),
-        20000, [], source.name
+        SOURCE_TIMEOUT_MS, [], source.name
       );
       var streams = Array.isArray(result) ? result.filter(function (stream) {
         return stream && typeof stream.url === 'string' && /^https?:\/\//i.test(stream.url);
@@ -1643,7 +1676,9 @@ if (typeof module !== 'undefined' && module.exports) {
       getVidnest: getVidnest,
       classify: _cls,
       sim: _sim,
-      titleOk: _titleOk
+      titleOk: _titleOk,
+      withTimeout: _withTimeout,
+      timeoutLimits: { fetchMs: FETCH_TIMEOUT_MS, metadataMs: META_TIMEOUT_MS, sourceMs: SOURCE_TIMEOUT_MS }
     }
   };
 }
