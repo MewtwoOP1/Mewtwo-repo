@@ -62,19 +62,40 @@ function g(t) { console.log('\n\x1b[36m' + t + '\x1b[0m'); }
   var abs = (offsets[s2e3.season] || 0) + s2e3.episode;
   ok('S2E3 absolute = 15', abs === 15, String(abs));
 
-  g('6. Orchestrator gating — anime sources must not fire for movies');
+  g('6. Orchestrator gating — deterministic network fixtures');
   var logs = [], orig = console.log;
-  console.log = function () { logs.push([].slice.call(arguments).join(' ')); orig.apply(console, arguments); };
+  var fetchBeforeGating = global.fetch;
+  var gatingCalls = [];
+  // Do not depend on external sites in a test whose purpose is just to check
+  // anime/movie adapter gating. Live results previously made this assertion
+  // flaky (VaPlayer could return a stream before the test inspected the log).
+  global.fetch = async function (url) {
+    var u = String(url);
+    gatingCalls.push(u);
+    if (u.indexOf('/meta/movie/tt1375666.json') > -1) {
+      return { body: JSON.stringify({ meta: { name: 'Inception', imdb_id: 'tt1375666', moviedb_id: 27205, genre: ['Action', 'Thriller'] } }) };
+    }
+    if (u.indexOf('/movie/27205?api_key=') > -1) {
+      return { body: JSON.stringify({ genres: [{ name: 'Action' }, { name: 'Thriller' }], origin_country: ['US'], original_language: 'en' }) };
+    }
+    if (u.indexOf('/tv/95479?api_key=') > -1) {
+      return { body: JSON.stringify({ genres: [{ name: 'Animation' }], origin_country: ['JP'], original_language: 'ja' }) };
+    }
+    return { body: '' };
+  };
+  console.log = function () { logs.push([].slice.call(arguments).join(' ')); };
   logs = [];
   try { await P.getVideoSources(JSON.stringify({ imdbId: 'tt1375666', tmdbId: 27205, season: null, episode: 0, title: 'Inception', isAnime: false }), { onSubtitle: function () {} }); } catch (e) {}
   var fl = logs.filter(function (l) { return /Mewstream/i.test(l); }).join(' | ');
   ok('Inception anime=false', logs.some(function (l) { return /anime=false/.test(l); }), fl);
   ok('Inception anime skipped', logs.some(function (l) { return /anime-sources:skipped/.test(l); }), fl);
-  ok('Inception no anime source attempted', !logs.some(function (l) { return /from AniKoto|from AniZone|from AnimeSalt|from RareAnimes|from MegaPlay-Direct/.test(l); }), fl);
+  ok('Inception no anime source attempted', !gatingCalls.some(function (u) { return /anikototv\.to|animesalt\.to|rareanimes\.mov|megaplays\.se/.test(u); }), gatingCalls.join('\\n'));
   logs = [];
+  gatingCalls = [];
   try { await P.getVideoSources(JSON.stringify({ tmdbId: 95479, malId: 52299, anilistId: 151807, season: 1, episode: 3, absolute: 3, title: 'Jujutsu Kaisen', isAnime: true }), { onSubtitle: function () {} }); } catch (e) {}
   var al = logs.filter(function (l) { return /Mewstream/i.test(l); }).join(' | ');
   ok('Jujutsu Kaisen anime=true', logs.some(function (l) { return /anime=true/.test(l); }), al);
+  global.fetch = fetchBeforeGating;
   console.log = orig;
 
   g('7. No silent episode fallback');
