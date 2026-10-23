@@ -268,6 +268,16 @@ async function main() {
   assert.ok(ep4Requests.length <= 8,
     "failed download pages should not be fetched again after the episode API returns the same link");
 
+  // The fast playback API must return inside its own budget even if the site
+  // never produces a response. This mirrors the host's 'took too long' case.
+  const savedFetch = global.fetch;
+  global.fetch = function () { return new Promise(function () {}); };
+  const stallStarted = Date.now();
+  assert.deepEqual(await provider.getVideoSources(ep4.url, true), []);
+  assert.ok(Date.now() - stallStarted < 10000,
+    "fast playback should return before Zangetsu's 20s source budget");
+  global.fetch = savedFetch;
+
   // Legacy alias accepts an options object.
   const alias = await provider.getStreams(ep1.url, {});
   assert.equal(alias.length, streams1.length);
