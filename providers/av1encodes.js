@@ -46,7 +46,7 @@ function getInfo() {
     baseUrl: BASE,
     logo: 'icons/av1encodes.png',
     type: 'anime',
-    version: '1.0.3'
+    version: '1.2.0'
   };
 }
 
@@ -1308,7 +1308,7 @@ function getStreams(id, opts) {
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    version: '1.0.3',
+    version: '1.2.0',
     getInfo: getInfo,
     getSettings: getSettings,
     getHome: getHome,
