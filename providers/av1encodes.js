@@ -1149,7 +1149,7 @@ function _parseEpisodePage(html, base, slug, season, resolution) {
 
 function _sourceEpisodeNumber(value) {
   // Yuzuno's fallback path sorts download links by Regex("E(\\d+)") in href.
-  const match = _decode(String(value || '')).match(/E(\\d+)/i);
+  const match = _decode(String(value || '')).match(/E(\d+)/i);
   return match ? (parseInt(match[1], 10) || 0) : 0;
 }
 
