@@ -953,6 +953,117 @@
           "default": true
         }
       ]
+    },
+    {
+      "id": "aiostreams",
+      "name": "AIOStreams",
+      "version": "1.0.0",
+      "type": "anime",
+      "lang": "en",
+      "file": "providers/aiostreams.js",
+      "logo": "https://kitsu.app/favicon.ico",
+      "nsfw": false,
+      "settings": [
+        {
+          "key": "manifestUrl",
+          "label": "AIOStreams Manifest URL (required)",
+          "description": "Paste your personalized URL ending in /stremio/<id>/<config>/manifest.json from your AIOStreams instance.",
+          "type": "text",
+          "default": ""
+        },
+        {
+          "key": "titleLanguage",
+          "label": "Title Language",
+          "description": "Preferred display language for anime titles.",
+          "type": "enum",
+          "default": "english",
+          "options": [
+            {
+              "value": "english",
+              "label": "English"
+            },
+            {
+              "value": "romaji",
+              "label": "Romaji"
+            },
+            {
+              "value": "native",
+              "label": "Native Japanese"
+            }
+          ]
+        },
+        {
+          "key": "idPriority",
+          "label": "Stream ID Priority",
+          "description": "Which available ID is sent first to AIOStreams search.",
+          "type": "enum",
+          "default": "kitsu,imdb,mal,anilist,tmdb",
+          "options": [
+            {
+              "value": "kitsu,imdb,mal,anilist,tmdb",
+              "label": "Kitsu → IMDb → MAL → AniList → TMDB"
+            },
+            {
+              "value": "mal,kitsu,imdb,anilist,tmdb",
+              "label": "MAL → Kitsu → IMDb → AniList → TMDB"
+            },
+            {
+              "value": "kitsu,mal,imdb,anilist,tmdb",
+              "label": "Kitsu → MAL → IMDb → AniList → TMDB"
+            },
+            {
+              "value": "imdb,mal,kitsu,anilist,tmdb",
+              "label": "IMDb → MAL → Kitsu → AniList → TMDB"
+            },
+            {
+              "value": "anilist,kitsu,mal,imdb,tmdb",
+              "label": "AniList → Kitsu → MAL → IMDb → TMDB"
+            }
+          ]
+        },
+        {
+          "key": "markFillers",
+          "label": "Mark filler and recap episodes",
+          "description": "Show filler/recap markers when available.",
+          "type": "bool",
+          "default": false
+        },
+        {
+          "key": "showP2P",
+          "label": "Show torrent / P2P streams",
+          "description": "Enable only if your player supports magnet/torrent playback.",
+          "type": "bool",
+          "default": false
+        },
+        {
+          "key": "highlightSeaDex",
+          "label": "Highlight SeaDex best releases",
+          "description": "Mark releases matched by SeaDex.",
+          "type": "bool",
+          "default": true
+        },
+        {
+          "key": "sortSeaDex",
+          "label": "Move SeaDex best releases to the top",
+          "description": "Order matching SeaDex releases first.",
+          "type": "bool",
+          "default": true
+        },
+        {
+          "key": "tvdbApiKey",
+          "label": "TVDB API Key (optional)",
+          "description": "Reserved for optional TVDB episode metadata enrichment.",
+          "type": "text",
+          "default": ""
+        },
+        {
+          "key": "useAniDB",
+          "label": "Use AniDB title fallback",
+          "description": "Reserved for optional AniDB episode-title fallback.",
+          "type": "bool",
+          "default": false
+        }
+      ]
     }
   ]
 }
