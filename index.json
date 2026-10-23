@@ -957,7 +957,7 @@
     {
       "id": "aiostreams",
       "name": "AIOStreams",
-      "version": "2.1.0",
+      "version": "2.1.1",
       "type": "movie",
       "lang": "en",
       "file": "providers/aiostreams.js",
@@ -980,8 +980,8 @@
         },
         {
           "key": "tmdbApiKey",
-          "label": "TMDB API key or Read Access Token (required)",
-          "description": "Use a TMDB v3 API key or a TMDB API Read Access Token. Metadata and catalogues use TMDB only.",
+          "label": "TMDB API key or Read Access Token (optional)",
+          "description": "Leave blank to use Zangetsu’s built-in TMDB key. Or provide your own v3 API key or Read Access Token.",
           "type": "text",
           "default": ""
         },
