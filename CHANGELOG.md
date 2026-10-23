@@ -1,5 +1,14 @@
 # Changelog
 
+## AIOStreams 2.1.0
+
+- Use TMDB as the sole metadata/catalogue API for films, series, and Japanese animation discovery; remove Kitsu, AniZip, and Cinemeta requests.
+- Use only TMDB IDs when querying AIOStreams, with the correct film versus season/episode format.
+- Prioritize stream searches above queued metadata requests and reduce default stream lookup timeout to 7 seconds with an 8-second total deadline.
+- Skip automatic retries for AIOStreams stream lookup to avoid doubling latency when the aggregate API is already slow.
+- Map streams to Zangetsu's accepted container, audio-kind, audio-language, and subtitle fields.
+- Update settings and documentation to require a TMDB API key or Read Access Token.
+
 ## AIOStreams 2.0.0
 
 - Rebuild the Zangetsu AIOStreams provider around the documented authenticated `/api/v1/search` endpoint.
