@@ -29,6 +29,17 @@ const DETAIL =
 
 const EPISODES = JSON.stringify([
   {
+    num: 5,
+    label: "Episode 5 [Dual]",
+    href: "https://av1encodes.com/download/example-anime/1/1920%20x%201080/Example.Anime.%5BE05%5D%20%5B1080p%5D%20%5BDual%5D.mkv?token=ep05",
+    ddl: {
+      success: true,
+      watch_link: "https://av1please.com/watch/ep05",
+      stream_link: "https://cdn08.av1encodes.com/stream/.eJwOpaqueStreamToken",
+      download_link: "https://cdn08.av1encodes.com/dl/.eJwOpaqueDownloadToken"
+    }
+  },
+  {
     num: 1,
     label: "Episode 1 [Dual]",
     href: "https://av1encodes.com/download/example-anime/1/1920%20x%201080/Example.Anime.%5BE01%5D%20%5B1080p%5D%20%5BDual%5D.mkv?token=ep01",
@@ -101,6 +112,13 @@ global.fetch = async function (input, options) {
     return { status: 403, body: "Access denied", url };
   }
 
+  // The signed CDN stream/download endpoints reject HEAD. The provider must
+  // preserve their URLs rather than retry with GET and buffer video as text.
+  if (host === "cdn08.av1encodes.com" && (pathname.startsWith("/stream/") || pathname.startsWith("/dl/"))) {
+    if (method === "HEAD") return { status: 405, body: "Method Not Allowed", url };
+    throw new Error("Opaque media endpoints must not be probed with GET");
+  }
+
   // HEAD discovers redirects without buffering whole media responses.
   if (method === "HEAD") return { status: 200, body: "", url };
 
@@ -138,7 +156,7 @@ global.fetch = async function (input, options) {
 
 async function main() {
   // Zangetsu source contract.
-  assert.equal(provider.version, "1.0.1");
+  assert.equal(provider.version, "1.0.2");
   const info = provider.getInfo();
   assert.equal(info.name, "AV1Encodes");
   assert.equal(info.logo, "icons/av1encodes.png");
@@ -164,13 +182,22 @@ async function main() {
   assert.equal(detail.title, "Example Anime");
   assert.equal(detail.cover, "https://av1please.com/images/example.jpg");
   assert.ok(detail.description.includes("short synopsis"));
-  assert.deepEqual(detail.episodes.map((episode) => episode.number), [4, 3, 2, 1]);
+  assert.deepEqual(detail.episodes.map((episode) => episode.number), [5, 4, 3, 2, 1]);
   assert.ok(detail.episodes.every((episode) => episode.url.startsWith("/download/")));
   assert.ok(detail.episodes[3].url.includes("?token=ep01"));
   assert.ok(requests.some((request) => request.url.startsWith("https://av1please.com/")));
 
   // Embedded DDL should resolve immediately and only produce media URLs.
-  const ep1 = detail.episodes[3];
+  const opaqueEpisode = detail.episodes[0];
+  const opaqueStreams = await provider.getVideoSources(opaqueEpisode.url, true);
+  assert.ok(opaqueStreams.some((stream) => stream.url === "https://cdn08.av1encodes.com/stream/.eJwOpaqueStreamToken"));
+  assert.ok(opaqueStreams.some((stream) => stream.url === "https://cdn08.av1encodes.com/dl/.eJwOpaqueDownloadToken"));
+  assert.ok(requests.some((request) => request.url === "https://cdn08.av1encodes.com/stream/.eJwOpaqueStreamToken" && request.method === "HEAD"));
+  assert.ok(!requests.some((request) => request.url === "https://cdn08.av1encodes.com/stream/.eJwOpaqueStreamToken" && request.method === "GET"));
+  assert.ok(!requests.some((request) => /https:\/\/(?:av1encodes\.com|animealpha\.cc|av1please\.com)\/stream\//i.test(request.url)),
+    "opaque CDN stream URLs must not be rebased onto site/mirror domains");
+
+  const ep1 = detail.episodes[4];
   const streams1 = await provider.getVideoSources(ep1.url, true);
   assert.ok(streams1.some((stream) => stream.url === "https://cdn.example/ep01.m3u8"));
   assert.ok(streams1.some((stream) => stream.url === "https://cdn.example/ep01.mkv"));
@@ -181,7 +208,7 @@ async function main() {
 
   // Regular download-page -> token -> get_ddl flow for an episode without
   // embedded JSON DDL.
-  const ep2 = detail.episodes[2];
+  const ep2 = detail.episodes[3];
   const streams2 = await provider.getVideoSources(ep2.url, true);
   assert.ok(streams2.some((stream) => stream.url === "https://cdn.example/ep02.m3u8"));
   assert.ok(streams2.some((stream) => stream.url === "https://cdn.example/ep02.mkv"));
@@ -195,7 +222,7 @@ async function main() {
 
   // Episode 3 fails at preferred 1080p, but its JSON episode item resolves
   // to a lower-resolution URL. This specifically guards JSON-aware fallback.
-  const ep3 = detail.episodes[1];
+  const ep3 = detail.episodes[2];
   const fallbackStreams = await provider.getVideoSources(ep3.url, true);
   assert.ok(
     fallbackStreams.some((stream) => stream.url === "https://cdn.example/ep03-fallback.m3u8"),
@@ -206,7 +233,7 @@ async function main() {
 
   // Episode 4 fails at every available resolution. The provider must not return
   // the site's HTML download page disguised as an MKV stream.
-  const ep4 = detail.episodes[0];
+  const ep4 = detail.episodes[1];
   const noStreams = await provider.getVideoSources(ep4.url, true);
   assert.deepEqual(noStreams, []);
 
