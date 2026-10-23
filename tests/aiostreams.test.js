@@ -1,35 +1,128 @@
 'use strict';
-const assert=require('node:assert/strict');
-const fs=require('node:fs');
-const path=require('node:path');
-const vm=require('node:vm');
-const provider=require('../providers/aiostreams.js');
-const manifest=JSON.parse(fs.readFileSync(path.join(__dirname,'../index.json'),'utf8'));
-const source=manifest.sources.find(x=>x.id==='aiostreams');
-const code=fs.readFileSync(path.join(__dirname,'../providers/aiostreams.js'),'utf8');
-function response(data,status){status=status||200;return{ok:status>=200&&status<300,status,json:()=>Promise.resolve(data)};}
-function load(fetcher,settings){const s={module:{exports:{}},fetch:fetcher,__settings:{aiostreams:settings||{}},Promise,Date,Math,Object,String,Array,Number,RegExp,Error,JSON,parseInt,isNaN,encodeURIComponent,decodeURIComponent};vm.runInNewContext(code,s);return s.module.exports;}
-function anime(){return{id:'123',attributes:{canonicalTitle:'Example',titles:{en:'Example',en_jp:'Example Romaji',ja_jp:'例'},synopsis:'Description',episodeCount:2,subtype:'TV',status:'finished',startDate:'2024-01-01',posterImage:{original:'https://img.example/poster.jpg'}}};}
-function fetchBase(url){url=String(url);if(url.indexOf('kitsu.app/api/edge/anime?')>=0)return Promise.resolve(response({data:[anime()],links:{}}));if(url.indexOf('kitsu.app/api/edge/anime/123?')>=0)return Promise.resolve(response({data:anime(),included:[{type:'mappings',attributes:{externalSite:'myanimelist/anime',externalId:'456'}},{type:'categories',attributes:{title:'Fantasy'}}]}));if(url.indexOf('api.ani.zip/mappings?')>=0)return Promise.resolve(response({mappings:{kitsu_id:123,mal_id:456,anilist_id:789,imdb_id:'tt1234567',themoviedb_id:999},episodes:{'1':{title:{en:'First'},episodeNumber:1},'2':{title:{en:'Second'},episodeNumber:2}}}));if(url.indexOf('kitsu.app/api/edge/anime/123/episodes?')>=0)return Promise.resolve(response({data:[{attributes:{number:1,titles:{en:'First'}}}],links:{}}));if(url==='https://graphql.anilist.co')return Promise.resolve(response({data:{Media:{nextAiringEpisode:null,airingSchedule:{nodes:[]},streamingEpisodes:[]}}}));if(url.indexOf('api.jikan.moe/')>=0)return Promise.resolve(response({data:[]}));if(url.indexOf('releases.moe/')>=0)return Promise.resolve(response({items:[]}));throw new Error('Unexpected request '+url);}
-async function main(){
-assert.ok(source,'AIOStreams is registered');
-assert.equal(provider.version,source.version);
-assert.equal(provider.getInfo().name,source.name);
-assert.equal(provider.getInfo().logo,source.logo);
-for(const method of ['getInfo','getSettings','getHome','popular','search','getDetail','getEpisodes','getVideoSources','getStreams','getLinks'])assert.equal(typeof provider[method],'function',method);
-assert.deepEqual(provider.getSettings().map(x=>x.key),source.settings.map(x=>x.key));
-assert.ok(source.settings.every(x=>x.description&&x.label));
-assert.deepEqual(JSON.parse(JSON.stringify(provider._parseManifestUrl('https://aio.example/stremio/u123/cfg456/manifest.json'))),{baseUrl:'https://aio.example',uuid:'u123',encryptedBlob:'cfg456'});
-assert.equal(provider._parseManifestUrl('https://aio.example/manifest.json'),null);
-const p=load(fetchBase);const home=await p.getHome();assert.equal(home.length,2);assert.equal(home[0].items[0].title,'Example');assert.equal((await p.search('Example',2))[0].url,'aio://anime/123');
-const detail=await p.getDetail('aio://anime/123');assert.equal(detail.genre,'Fantasy');assert.equal(detail.episodes.length,2);assert.match(detail.episodes[0].url,/imdb=tt1234567/);assert.match(detail.episodes[0].url,/anilist=789/);
-let apiUrl='',auth='';
-const play=load((url,init)=>{if(String(url).indexOf('/api/v1/search?')>=0){apiUrl=String(url);auth=init.headers.Authorization;return Promise.resolve(response({data:{results:[{name:'Example 1080p',infoHash:'0123456789abcdef0123456789abcdef01234567',url:'https://cdn.example/episode.m3u8'}]}}));}if(String(url).indexOf('releases.moe/')>=0)return Promise.resolve(response({items:[]}));return fetchBase(url);},{manifestUrl:'https://aio.example/stremio/uuid123/encrypted123/manifest.json',idPriority:'imdb,tmdb,kitsu,anilist,mal'});
-const streams=await play.getVideoSources('aio://episode/123/2?season=1&epInSeason=2&imdb=tt1234567&tmdb=999&anilist=789&mal=456&kitsu=123&title=Example');assert.equal(streams.length,1);assert.equal(streams[0].url,'https://cdn.example/episode.m3u8');assert.equal(streams[0].container,'hls');assert.match(apiUrl,/type=series/);assert.match(decodeURIComponent(apiUrl),/id=tt1234567:1:2/);assert.equal(auth,'Basic '+Buffer.from('uuid123:encrypted123').toString('base64'));assert.doesNotMatch(apiUrl,/requiredFields=infoHash/);assert.equal(streams[0].headers,undefined);const direct=load((url,init)=>{if(String(url).indexOf('/api/v1/search?')>=0){apiUrl=String(url);return Promise.resolve(response({success:true,data:{results:[{name:'Direct 1080p',infoHash:null,url:'https://cdn.example/direct.m3u8',requestHeaders:{Referer:'https://provider.example/'}}],errors:[]}}));}if(String(url).indexOf('releases.moe/')>=0)return Promise.resolve(response({items:[]}));return fetchBase(url);},{manifestUrl:'https://aio.example/stremio/uuid123/encrypted123/manifest.json'});const directStreams=await direct.getVideoSources('aio://episode/123/2?season=1&epInSeason=2&kitsu=123&title=Example');assert.equal(directStreams.length,1);assert.equal(directStreams[0].url,'https://cdn.example/direct.m3u8');assert.deepEqual(JSON.parse(JSON.stringify(directStreams[0].headers)),{Referer:'https://provider.example/'});assert.equal(directStreams[0].headers.Authorization,undefined);assert.doesNotMatch(apiUrl,/requiredFields=infoHash/);
-let calls=0;const noConfig=load(()=>{calls++;return Promise.resolve(response({}));});await assert.rejects(noConfig.getVideoSources('aio://episode/123/1?kitsu=123'),/configure your personalized Manifest URL/);assert.equal(calls,0);
-const torrentFetcher=url=>String(url).indexOf('/api/v1/search?')>=0?Promise.resolve(response({data:{results:[{name:'torrent',infoHash:'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',url:'magnet:?xt=urn:btih:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'}]}})):String(url).indexOf('releases.moe/')>=0?Promise.resolve(response({items:[]})):fetchBase(url);
-const epUrl='aio://episode/123/1?season=1&epInSeason=1&kitsu=123';await assert.rejects(load(torrentFetcher,{manifestUrl:'https://aio.example/stremio/u/e/manifest.json'}).getVideoSources(epUrl),/no playable streams remain/);const torrent=await load(torrentFetcher,{manifestUrl:'https://aio.example/stremio/u/e/manifest.json',showP2P:true}).getVideoSources(epUrl);assert.equal(torrent.length,1);assert.match(torrent[0].url,/^magnet:/);assert.match(torrent[0].url,/tr=/);
-await assert.rejects(load(url=>String(url).indexOf('/api/v1/search?')>=0?Promise.resolve(response({},403)):fetchBase(url),{manifestUrl:'https://aio.example/stremio/u/e/manifest.json'}).getVideoSources('aio://episode/123/1?kitsu=123'),/HTTP 403/);await assert.rejects(load(url=>String(url).indexOf('/api/v1/search?')>=0?Promise.resolve(response({success:false,error:{code:'BAD_REQUEST',message:'Invalid credentials'}})):fetchBase(url),{manifestUrl:'https://aio.example/stremio/u/e/manifest.json'}).getVideoSources('aio://episode/123/1?kitsu=123'),/AIOStreams API: Invalid credentials/);
-console.log('AIOStreams tests passed');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
+const src = fs.readFileSync(path.join(__dirname, '../providers/aiostreams.js'), 'utf8');
+const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, '../index.json'), 'utf8'));
+const registered = manifest.sources.find(s => s.id === 'aiostreams');
+function response(data, status) { return { status: status || 200, body: typeof data === 'string' ? data : JSON.stringify(data) }; }
+function load(fetcher, settings) {
+  const sandbox = { module: { exports: {} }, fetch: fetcher, __settings: { aiostreams: settings || {} }, Promise, Date, Math, Object, String, Array, Number, RegExp, Error, JSON, parseInt, isFinite, encodeURIComponent, decodeURIComponent, setTimeout, clearTimeout, AbortController, console };
+  vm.runInNewContext(src, sandbox, { timeout: 1000 });
+  return sandbox.module.exports;
 }
-main().catch(e=>{console.error(e);process.exitCode=1;});
+const anime = { id: '123', attributes: { canonicalTitle: 'Example Anime', titles: { en: 'Example Anime', en_jp: 'Example Romaji', ja_jp: '例' }, synopsis: 'Anime description', episodeCount: 2, subtype: 'TV', status: 'finished', startDate: '2024-01-01', posterImage: { original: 'https://img.example/poster.jpg' }, coverImage: { original: 'https://img.example/cover.jpg' } } };
+function baseFetch(url) {
+  url = String(url);
+  if (url.includes('kitsu.app/api/edge/anime?')) return Promise.resolve(response({ data: [anime], links: {} }));
+  if (url.includes('kitsu.app/api/edge/anime/123?')) return Promise.resolve(response({ data: anime, included: [{ type: 'mappings', attributes: { externalSite: 'myanimelist/anime', externalId: '456' } }, { type: 'categories', attributes: { title: 'Fantasy' } }] }));
+  if (url.includes('api.ani.zip/mappings?kitsu_id=123')) return Promise.resolve(response({ mappings: { kitsu_id: 123, mal_id: 456, anilist_id: 789, imdb_id: 'tt1234567', themoviedb_id: 999, thetvdb_id: 888 }, episodes: { '1': { title: { en: 'First' }, episodeNumber: 1, seasonNumber: 1 }, '2': { title: { en: 'Second' }, episodeNumber: 2, seasonNumber: 1 } } }));
+  if (url.includes('kitsu.app/api/edge/anime/123/episodes?')) return Promise.resolve(response({ data: [{ attributes: { number: 1, titles: { en: 'First' } } }, { attributes: { number: 2, titles: { en: 'Second' } } }], links: {} }));
+  if (url.includes('v3-cinemeta.strem.io/catalog/')) return Promise.resolve(response({ metas: [{ id: url.includes('/movie/') ? 'tt1234567' : 'tt7654321', type: url.includes('/movie/') ? 'movie' : 'series', name: 'Example Cinemeta', poster: 'https://img.example/cine.jpg', year: '2024' }] }));
+  if (url.includes('v3-cinemeta.strem.io/meta/movie/')) return Promise.resolve(response({ meta: { id: 'tt1234567', type: 'movie', name: 'Example Movie', year: '2024', poster: 'https://img.example/movie.jpg', description: 'Movie description' } }));
+  if (url.includes('v3-cinemeta.strem.io/meta/series/')) return Promise.resolve(response({ meta: { id: 'tt7654321', type: 'series', name: 'Example Series', videos: [{ id: 'tt7654321:1:1', season: 1, episode: 1, title: 'Pilot' }, { id: 'tt7654321:1:2', season: 1, episode: 2, title: 'Second' }] } }));
+  throw new Error('Unexpected URL ' + url);
+}
+async function main() {
+  assert.ok(registered, 'AIOStreams remains registered');
+  const provider = load(baseFetch);
+  assert.equal(provider.version, '2.0.0');
+  assert.equal(provider.getInfo().version, registered.version);
+  assert.equal(provider.getInfo().name, registered.name);
+  assert.equal(provider.getInfo().type, registered.type);
+  assert.equal(provider.getInfo().lang, registered.lang);
+  assert.equal(provider.getInfo().logo, registered.logo);
+  assert.deepEqual(JSON.parse(JSON.stringify(provider.getSettings().map(x => x.key))), registered.settings.map(x => x.key));
+  for (const method of ['getInfo','getSettings','getHome','search','getDetail','getEpisodes','getVideoSources','getStreams','getLinks']) assert.equal(typeof provider[method], 'function');
+  assert.ok(provider.getSettings().some(s => s.key === 'maxConcurrentRequests'));
+  assert.ok(provider.getSettings().some(s => s.key === 'requestTimeoutMs'));
+  assert.deepEqual(JSON.parse(JSON.stringify(provider._parseManifest('https://aio.example/stremio/uuid/config/manifest.json'))), { baseUrl: 'https://aio.example', uuid: 'uuid', password: 'config' });
+  assert.deepEqual(JSON.parse(JSON.stringify(provider._parseManifest('https://aio.example/base/stremio/uuid/config/manifest.json'))), { baseUrl: 'https://aio.example/base', uuid: 'uuid', password: 'config' });
+  assert.equal(provider._parseManifest('https://aio.example/manifest.json'), null);
+  assert.equal(provider._selectId({ movie: true, ids: { imdb: 'tt1234567' } }, 'imdb').id, 'tt1234567');
+  assert.equal(provider._selectId({ movie: false, season: 2, episode: 3, ids: { tmdb: '2131' } }, 'tmdb').id, 'tmdb:2131:2:3');
+  assert.equal(provider._selectId({ movie: false, season: 1, episode: 2, ids: { tvdb: '888' } }, 'tvdb').id, 'tvdb:888:1:2');
+  assert.equal(provider._selectId({ movie: false, season: 1, episode: 2, absolute: 5, ids: { anilist: '789' } }, 'anilist').id, 'anilist:789:5', 'AniList uses its verified single episode suffix, preferring absolute numbering');
+  assert.equal(provider._selectId({ movie: false, season: 2, episode: 3, absolute: 8, ids: { mal: '456' } }, 'mal').id, 'mal:456:8');
+  assert.equal(provider._selectId({ movie: false, episode: 5, ids: { mal: '456' } }, 'mal').id, 'mal:456:5');
+  assert.equal(provider._selectId({ movie: false, episode: 5, ids: { kitsu: '123' } }, 'kitsu').id, 'kitsu:123:5');
+  assert.equal(provider._selectId({ movie: false, season: 1, episode: 2, ids: { imdb: 'https://www.imdb.com/title/tt1234567/' } }, 'imdb').id, 'tt1234567:1:2');
+  const home = await provider.getHome();
+  assert.deepEqual(JSON.parse(JSON.stringify(home.map(x => x.title).sort())), ['Currently Airing Anime','Popular Anime','Popular Movies','Popular Series'].sort());
+  const matches = await provider.search('Example', 1);
+  assert.equal(matches.length, 3, 'search aggregates Kitsu, movies and series and deduplicates only exact URLs');
+  assert.ok(matches.some(x => x.url === 'aio://anime/123'));
+  const animeDetail = await provider.getDetail('aio://anime/123');
+  assert.equal(animeDetail.genre, 'Fantasy');
+  assert.equal(animeDetail.episodes.length, 2);
+  assert.match(animeDetail.episodes[0].url, /imdb=tt1234567/);
+  assert.match(animeDetail.episodes[0].url, /anilist=789/);
+  const movieDetail = await provider.getDetail('aio://catalog/movie/tt1234567');
+  assert.equal(movieDetail.title, 'Example Movie');
+  assert.equal(movieDetail.episodes.length, 1);
+  assert.match(movieDetail.episodes[0].url, /movie=1/);
+  const seriesDetail = await provider.getDetail('aio://catalog/series/tt7654321');
+  assert.equal(seriesDetail.episodes.length, 2);
+  assert.match(seriesDetail.episodes[1].url, /epInSeason=2/);
+  assert.match(seriesDetail.url, /imdb=tt7654321/, 'detail URL preserves IDs for a subsequent getEpisodes call');
+  const secondSeriesEpisodes = await provider.getEpisodes(seriesDetail.url);
+  assert.equal(secondSeriesEpisodes.length, 2);
+
+  let requestUrl = '', auth = '', active = 0, maxActive = 0;
+  const streamResults = Array.from({ length: 7 }, (_, i) => ({ name: 'Example ' + (i + 1) + ' 1080p HEVC', description: 'English sub · 1.4 GB', url: 'https://cdn.example/video' + i + '.m3u8?token=a%2Fb', requestHeaders: { Referer: 'https://provider.example/' }, addon: 'Fixture' }));
+  const streamProvider = load((url, init) => {
+    requestUrl = String(url); auth = init.headers.Authorization;
+    active++; maxActive = Math.max(maxActive, active);
+    return new Promise(resolve => setTimeout(() => { active--; resolve(response({ success: true, data: { results: streamResults, errors: [] } })); }, 10));
+  }, { manifestUrl: 'https://aio.example/stremio/uuid123/password123/manifest.json', idPriority: 'imdb,tmdb,tvdb,anilist,mal,kitsu' });
+  const streamCalls = await Promise.all(Array.from({ length: 12 }, () => streamProvider.getVideoSources('aio://episode/series/tt1234567?season=1&epInSeason=2&absoluteEpisode=2&imdb=tt1234567&tmdb=999&tvdb=888&anilist=789&mal=456&kitsu=123')));
+  const streams = streamCalls[0];
+  assert.equal(streams.length, 7, 'five concurrent operations is not a five-result cap');
+  assert.ok(streamCalls.every(batch => batch.length === 7));
+  assert.ok(streams.every(s => s.url.startsWith('https://cdn.example/')));
+  assert.ok(streams.every(s => s.headers.Referer === 'https://provider.example/'));
+  assert.ok(streams.every(s => s.label.includes('1080p') && s.label.includes('HEVC')));
+  assert.equal(auth, 'Basic ' + Buffer.from('uuid123:password123').toString('base64'));
+  assert.match(decodeURIComponent(requestUrl), /id=tt1234567:1:2/);
+  assert.doesNotMatch(requestUrl, /requiredFields=infoHash/);
+  assert.ok(maxActive <= 5, 'API request concurrency must remain capped at five across parallel stream lookups');
+
+  const directProvider = load((url, init) => Promise.resolve(response({ success: true, data: { results: [{ name: 'Direct', url: 'https://cdn.example/direct.mp4?x=1&y=2', infoHash: null, requestHeaders: { Referer: 'https://provider.example/', Authorization: 'Bearer cdn-token' } }] } })), { manifestUrl: 'https://aio.example/stremio/u/p/manifest.json' });
+  const directStreams = await directProvider.getVideoSources('aio://episode/movie/tt1234567?movie=1&imdb=tt1234567');
+  assert.equal(directStreams.length, 1);
+  assert.equal(directStreams[0].url, 'https://cdn.example/direct.mp4?x=1&y=2');
+  assert.equal(directStreams[0].headers.Authorization, 'Bearer cdn-token', 'stream-specific auth headers must be preserved');
+  const p2pOff = load(() => Promise.resolve(response({ success: true, data: { results: [{ name: 'torrent', infoHash: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', url: 'magnet:?xt=urn:btih:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' }] } })), { manifestUrl: 'https://aio.example/stremio/u/p/manifest.json' });
+  await assert.rejects(p2pOff.getVideoSources('aio://episode/anime/123?season=1&epInSeason=1&kitsu=123'), /no playable streams returned/);
+  const p2pOn = load(() => Promise.resolve(response({ success: true, data: { results: [{ name: 'torrent', infoHash: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', url: 'magnet:?xt=urn:btih:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' }] } })), { manifestUrl: 'https://aio.example/stremio/u/p/manifest.json', showP2P: true, idPriority: 'kitsu' });
+  assert.equal((await p2pOn.getVideoSources('aio://episode/anime/123?season=1&epInSeason=1&kitsu=123'))[0].kind, 'torrent');
+  const dupProvider = load(() => Promise.resolve(response({ success: true, data: { results: [{ url: 'https://cdn.example/same.mp4', name: 'A' }, { url: 'https://cdn.example/same.mp4', name: 'B' }, { url: 'javascript:alert(1)', name: 'invalid' }, { url: 'https://cdn.example/no-hash.mp4', infoHash: null, name: 'direct' }, { url: 'https://badurl/', name: 'invalid host' }] } })), { manifestUrl: 'https://aio.example/stremio/u/p/manifest.json' });
+  assert.equal((await dupProvider.getVideoSources('aio://episode/movie/tt1234567?movie=1&imdb=tt1234567')).length, 2);
+  const userDataProvider = load((url, init) => { assert.equal(init.headers['x-aiostreams-user-data'], 'ZXhhbXBsZQ=='); assert.equal(init.headers.Authorization, undefined); return Promise.resolve(response({ success: true, data: { results: [{ url: 'https://cdn.example/a.mp4' }] } })); }, { manifestUrl: 'https://aio.example/stremio/u/p/manifest.json', userDataBase64: 'ZXhhbXBsZQ==' });
+  assert.equal((await userDataProvider.getVideoSources('aio://episode/movie/tt1234567?movie=1&imdb=tt1234567')).length, 1);
+  const badAuth = load(() => Promise.resolve(response({ success: false, error: { code: 'UNAUTHORIZED', message: 'Invalid credentials' }, data: null }, 200)), { manifestUrl: 'https://aio.example/stremio/u/p/manifest.json' });
+  await assert.rejects(badAuth.getVideoSources('aio://episode/movie/tt1234567?movie=1&imdb=tt1234567'), /Invalid credentials/);
+  const httpError = load(() => Promise.resolve(response({ error: 'bad request' }, 403)), { manifestUrl: 'https://aio.example/stremio/u/p/manifest.json' });
+  await assert.rejects(httpError.getVideoSources('aio://episode/movie/tt1234567?movie=1&imdb=tt1234567'), /HTTP 403/);
+  const malformed = load(() => Promise.resolve(response('not-json')), { manifestUrl: 'https://aio.example/stremio/u/p/manifest.json' });
+  await assert.rejects(malformed.getVideoSources('aio://episode/movie/tt1234567?movie=1&imdb=tt1234567'), /invalid JSON/);
+  const noResults = load(() => Promise.resolve(response({ success: true, data: { results: [], errors: [{ title: 'Source timeout', description: 'slow' }] } })), { manifestUrl: 'https://aio.example/stremio/u/p/manifest.json' });
+  await assert.rejects(noResults.getVideoSources('aio://episode/movie/tt1234567?movie=1&imdb=tt1234567'), /Source timeout: slow/);
+  const wrongEpisode = load(() => Promise.resolve(response({ success: true, data: { results: [{ name: 'Wrong episode', url: 'https://cdn.example/wrong.mkv', parsedFile: { seasonPack: false, seasons: [1], episodes: [9] } }] } })), { manifestUrl: 'https://aio.example/stremio/u/p/manifest.json' });
+  await assert.rejects(wrongEpisode.getVideoSources('aio://episode/series/tt1234567?season=1&epInSeason=2&imdb=tt1234567'), /no playable streams returned/);
+  const retryCount = { n: 0 };
+  const retryProvider = load(() => { retryCount.n++; return Promise.resolve(retryCount.n === 1 ? response({ error: 'transient' }, 503) : response({ success: true, data: { results: [{ url: 'https://cdn.example/retry.mp4' }] } })); }, { manifestUrl: 'https://aio.example/stremio/u/p/manifest.json' });
+  assert.equal((await retryProvider.getVideoSources('aio://episode/movie/tt1234567?movie=1&imdb=tt1234567')).length, 1);
+  assert.equal(retryCount.n, 2, 'transient 5xx responses retry once');
+  const missingId = load(() => Promise.resolve(response({})), { manifestUrl: 'https://aio.example/stremio/u/p/manifest.json' });
+  await assert.rejects(missingId.getVideoSources('aio://episode/movie/tt1234567?movie=1'), /no supported metadata ID/);
+  const noConfig = load(() => { throw Error('must not run'); });
+  await assert.rejects(noConfig.getVideoSources('aio://episode/movie/tt1234567?movie=1&imdb=tt1234567'), /configure the personalized Manifest URL/);
+  let aborted = false;
+  const timeoutProvider = load((url, init) => new Promise(() => { if (init.signal) init.signal.addEventListener('abort', () => { aborted = true; }); }), { manifestUrl: 'https://aio.example/stremio/u/p/manifest.json', requestTimeoutMs: 3000, totalTimeoutMs: 1000 });
+  await assert.rejects(timeoutProvider.getVideoSources('aio://episode/movie/tt1234567?movie=1&imdb=tt1234567'), /request timeout after 1000ms|total deadline/);
+  assert.ok(aborted, 'AbortController signal is used when supported');
+  console.log('AIOStreams rebuild tests passed');
+}
+main().catch(err => { console.error(err); process.exitCode = 1; });
