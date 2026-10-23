@@ -145,7 +145,7 @@
     {
       "id": "tmdb-stremio",
       "name": "TMDB + Stremio",
-      "version": "3.0.0",
+      "version": "3.1.1",
       "type": "movie",
       "lang": "en",
       "file": "providers/tmdb-stremio.js",
@@ -165,6 +165,13 @@
           "description": "One or more Stremio-compatible add-on manifest URLs. The add-ons provide streams; this repo does not host video.",
           "type": "text",
           "default": ""
+        },
+        {
+          "key": "enableAddonCatalogs",
+          "label": "Use configured add-on catalogues and metadata",
+          "description": "When enabled, browse configured add-on catalogues and prefer their metadata. Disable to use TMDB catalogues only.",
+          "type": "bool",
+          "default": false
         },
         {
           "key": "maxStreamsPerAddon",

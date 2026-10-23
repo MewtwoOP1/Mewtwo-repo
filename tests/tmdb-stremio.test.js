@@ -7,6 +7,7 @@ global.__settings = {
   "tmdb-stremio": {
     tmdbApiKey: "test-user-key",
     addonUrls: "https://addon.example/manifest.json?token=secret\nhttps://second.example/manifest.json",
+    enableAddonCatalogs: false,
     maxStreamsPerAddon: "10",
   },
 };
@@ -16,7 +17,33 @@ global.fetch = async (url) => {
   calls.push(requestUrl);
   let body = {};
 
-  if (requestUrl.includes("/trending/movie/week")) {
+  if (requestUrl.includes("https://catalog.example/manifest.json")) {
+    body = {
+      id: "catalog-only",
+      name: "Catalog Add-on",
+      resources: ["catalog", "stream"],
+      types: ["movie", "series"],
+      catalogs: [{
+        type: "series",
+        id: "popular",
+        name: "Popular",
+        extra: [{ name: "search" }],
+      }],
+    };
+  } else if (requestUrl.includes("/catalog/series/popular")) {
+    body = {
+      metas: [{
+        id: "tt222",
+        type: "series",
+        name: "Catalog Show",
+        poster: "https://img.example/catalog-poster.jpg",
+        background: "https://img.example/catalog-background.jpg",
+        description: "Catalogue-provided description",
+        releaseInfo: "2022",
+        genres: ["Drama"],
+      }],
+    };
+  } else if (requestUrl.includes("/trending/movie/week")) {
     body = { results: [{ id: 11, title: "Mock Film", release_date: "2024-01-01", poster_path: "/poster.jpg", media_type: "movie", vote_average: 7.8 }] };
   } else if (requestUrl.includes("/trending/tv/week")) {
     body = { results: [{ id: 22, name: "Mock Show", first_air_date: "2022-01-01", media_type: "tv", vote_average: 8.2 }] };
@@ -24,6 +51,8 @@ global.fetch = async (url) => {
     body = { results: [] };
   } else if (requestUrl.includes("/search/multi")) {
     body = { results: [{ id: 11, title: "Mock Film", release_date: "2024-01-01", media_type: "movie" }] };
+  } else if (requestUrl.includes("/find/tt222")) {
+    body = { tv_results: [{ id: 22, name: "Mock Show", first_air_date: "2022-01-01" }], movie_results: [] };
   } else if (requestUrl.includes("/tv/22?")) {
     body = { id: 22, name: "Mock Show", first_air_date: "2022-01-01", number_of_seasons: 1, external_ids: { imdb_id: "tt222" }, genres: [{ name: "Drama" }] };
   } else if (requestUrl.includes("/tv/22/season/1")) {
@@ -48,13 +77,24 @@ async function main() {
   assert.equal(provider.getInfo().logo, source.logo, "provider and manifest logos should stay in sync");
 
   const settings = provider.getSettings();
-  assert.deepEqual(settings.map((setting) => setting.key), ["tmdbApiKey", "addonUrls", "maxStreamsPerAddon"]);
+  assert.deepEqual(settings.map((setting) => setting.key), [
+    "tmdbApiKey",
+    "addonUrls",
+    "enableAddonCatalogs",
+    "maxStreamsPerAddon",
+  ]);
   assert.ok(settings.every((setting) => setting.description && setting.label));
+  assert.equal(settings.find((setting) => setting.key === "enableAddonCatalogs").default, false);
+  assert.equal(provider._combinedSettings().useAddonCatalogs, false);
   assert.equal(provider._combinedSettings().max, 10);
   assert.deepEqual(provider._parseAddonUrls(global.__settings["tmdb-stremio"].addonUrls).map(provider._manifestUrl), [
     "https://addon.example/manifest.json?token=secret",
     "https://second.example/manifest.json",
   ]);
+
+  const fenixUrl = "https://fenix.example/qualities=4k,1080p,720p,sd|audio=dublado,legendado|catalogs=popular_movie,popular_series/manifest.json";
+  assert.deepEqual(provider._parseAddonUrls(fenixUrl).map(provider._manifestUrl), [fenixUrl],
+    "commas inside a configured manifest path must not be treated as URL separators");
 
   const home = await provider.getHome({});
   assert.equal(home.length, 2);
@@ -77,10 +117,41 @@ async function main() {
   assert.equal(streams[0].headers.Referer, "https://addon.example/");
   assert.equal(await provider.getStreams(detail.episodes[0].url, {}).then((rows) => rows.length), 1);
 
+  // Regression: a Stremio add-on with catalog + stream resources but no meta
+  // resource must still open from its cached catalogue item and resolve episodes
+  // from TMDB using the catalogue item's IMDb ID.
+  global.__settings["tmdb-stremio"].addonUrls = "https://catalog.example/manifest.json";
+  global.__settings["tmdb-stremio"].enableAddonCatalogs = true;
+  assert.equal(provider._combinedSettings().useAddonCatalogs, true);
+
+  const addonHome = await provider.getHome({});
+  assert.equal(addonHome.length, 1);
+  assert.equal(addonHome[0].title, "Catalog Add-on · Popular");
+  assert.equal(addonHome[0].items.length, 1);
+  assert.equal(addonHome[0].items[0].title, "Catalog Show");
+
+  const addonSearch = await provider.search("Mock", 1, {});
+  assert.equal(addonSearch.length, 1);
+  assert.equal(addonSearch[0].title, "Catalog Show");
+
+  const addonDetail = await provider.getDetail(addonHome[0].items[0].url, {});
+  assert.equal(addonDetail.title, "Catalog Show");
+  assert.equal(addonDetail.cover, "https://img.example/catalog-poster.jpg");
+  assert.equal(addonDetail.tmdbId, 22);
+  assert.equal(addonDetail.episodes.length, 1);
+  assert.match(addonDetail.episodes[0].url, /"imdbId":"tt222"/);
+
+  const addonStreams = await provider.getVideoSources(addonDetail.episodes[0].url, {});
+  assert.equal(addonStreams.length, 1);
+  assert.equal(addonStreams[0].url, "https://cdn.example/video.m3u8");
+  assert.ok(calls.some((url) => url.includes("/catalog/series/popular.json")));
+  assert.ok(calls.some((url) => url.includes("/find/tt222?external_source=imdb_id")));
+  assert.ok(calls.some((url) => url.includes("/stream/series/tt222%3A1%3A1.json")));
+
   const tmdbCalls = calls.filter((url) => url.includes("themoviedb.org"));
   assert.ok(tmdbCalls.length > 0);
   assert.ok(tmdbCalls.every((url) => url.includes("api_key=test-user-key")));
-  const addOnCalls = calls.filter((url) => url.includes("addon.example") || url.includes("second.example"));
+  const addOnCalls = calls.filter((url) => url.includes("addon.example") || url.includes("second.example") || url.includes("catalog.example"));
   assert.ok(addOnCalls.length > 0);
   assert.ok(addOnCalls.every((url) => !url.includes("test-user-key")));
   assert.ok(addOnCalls.some((url) => url.includes("?token=secret")));
