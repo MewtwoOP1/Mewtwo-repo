@@ -46,7 +46,7 @@ function getInfo() {
     baseUrl: BASE,
     logo: 'icons/av1encodes.png',
     type: 'anime',
-    version: '1.0.2'
+    version: '1.0.3'
   };
 }
 
@@ -154,7 +154,24 @@ function _isOpaqueMediaEndpoint(url) {
   return /^cdn\d*\./i.test(host) || /\/(?:stream|dl)\//i.test(path);
 }
 
-function _fetchWithFallback(url, ref, extraHeaders, method) {
+function _isRedirectEndpoint(url) {
+  var match = String(url || '').match(/^https?:\/\/([^/]+)(\/[^?#]*)?/i);
+  return !!(match && _isAllowedSiteHost(match[1]) && /^\/r\//i.test(match[2] || '/'));
+}
+
+function _redirectTargetUrl(fromUrl, location) {
+  var value = String(location || '').trim();
+  if (!value) return '';
+  if (/^https?:\/\//i.test(value)) return value;
+  var from = String(fromUrl || '').match(/^(https?:\/\/[^/]+)(\/[^?#]*)?/i);
+  if (!from) return '';
+  if (value.indexOf('//') === 0) return from[1].split(':')[0] + ':' + value;
+  if (value.charAt(0) === '/') return from[1] + value;
+  var path = from[2] || '/';
+  return from[1] + path.substring(0, path.lastIndexOf('/') + 1) + value;
+}
+
+function _fetchWithFallback(url, ref, extraHeaders, method, followRedirects) {
   var raw = String(url || '');
   var absolute = raw.match(/^https?:\/\/([^/]+)([\s\S]*)$/i);
   var absoluteIsSite = !!(absolute && _isSiteRootHost(absolute[1]) && !_isOpaqueMediaEndpoint(raw));
@@ -168,6 +185,7 @@ function _fetchWithFallback(url, ref, extraHeaders, method) {
     }
     var directOptions = { headers: directHeaders };
     if (method) directOptions.method = method;
+    if (followRedirects === false) directOptions.followRedirects = false;
     return fetch(raw, directOptions);
   }
 
@@ -190,6 +208,7 @@ function _fetchWithFallback(url, ref, extraHeaders, method) {
     }
     var options = { headers: headers };
     if (method) options.method = method;
+    if (followRedirects === false) options.followRedirects = false;
     return options;
   }
 
@@ -202,7 +221,10 @@ function _fetchWithFallback(url, ref, extraHeaders, method) {
     var target = base + sitePath;
     return fetch(target, optionsFor(base)).then(function (response) {
       _captureSiteCookie(response, base);
-      if (!_isBlockedResponse(response, sitePath)) {
+      var methodName = String(method || 'GET').toUpperCase();
+      var statusCode = Number(response && response.status) || 0;
+      var unsupportedHeadForRedirect = methodName === 'HEAD' && statusCode === 405 && _isRedirectEndpoint(target);
+      if (!_isBlockedResponse(response, sitePath) || unsupportedHeadForRedirect) {
         BASE = base;
         return response;
       }
@@ -905,22 +927,72 @@ function _findDownloadLinkForEpisode(html, encodedFilename, num) {
 }
 function _resolveRedirect(path) {
   if (!path) return Promise.resolve(null);
-  var url = _absUrl(path);
-  // Opaque CDN URLs are the playable endpoints themselves. Do not even HEAD
-  // probe them: some hosts reject HEAD or hang on it, while the native player
-  // can follow redirects when it opens the returned URL.
-  if (_isOpaqueMediaEndpoint(url)) return Promise.resolve(url);
-  var isMedia = /\.(?:m3u8|mpd|mkv|mp4|webm|avi|torrent|vtt|srt)(?:[?#]|$)/i.test(url);
+  return _resolveRedirectNoBody(_absUrl(path), 0);
+}
 
-  // Use HEAD so resolving a direct-download URL cannot buffer an entire MKV/MP4
-  // in Zangetsu's fetch bridge just to discover its redirect destination.
-  return _fetchWithFallback(url, BASE + '/', null, 'HEAD').then(function (response) {
-    var finalUrl = response && response.url ? response.url : url;
+function _resolveRedirectNoBody(url, depth) {
+  if (!url) return Promise.resolve(null);
+  if (depth >= 8 || _isOpaqueMediaEndpoint(url)) return Promise.resolve(url);
+
+  var isMedia = /\.(?:m3u8|mpd|mkv|mp4|webm|avi|torrent|vtt|srt)(?:[?#]|$)/i.test(url);
+  var isRedirect = _isRedirectEndpoint(url);
+
+  // Zangetsu's fetch bridge eagerly buffers response bodies as text. Yuzuno's
+  // OkHttp resolver only inspects the final request URL and closes the response;
+  // doing GET with auto-redirect here can instead buffer the entire media file.
+  // Use a no-follow HEAD and walk Location headers ourselves so only small
+  // redirect responses are read, never the destination video.
+  return _fetchWithFallback(url, BASE + '/', null, 'HEAD', false).then(function (response) {
     var status = Number(response && response.status) || 0;
-    if (finalUrl !== url || !status || status < 400 || isMedia) return finalUrl;
-    // Small HTML embed/watch pages may reject HEAD; GET is safe for those pages.
-    return _fetchWithFallback(url, BASE + '/', null, 'GET').then(function (fallback) {
-      return fallback && fallback.url ? fallback.url : url;
+    var responseUrl = response && response.url ? response.url : url;
+    var location = _responseHeader(response, 'location');
+
+    if (location && status >= 300 && status < 400) {
+      var next = _redirectTargetUrl(url, location);
+      if (next && next !== url) return _resolveRedirectNoBody(next, depth + 1);
+    }
+    if (responseUrl !== url) {
+      if (_isOpaqueMediaEndpoint(responseUrl)) return responseUrl;
+      return _resolveRedirectNoBody(responseUrl, depth + 1);
+    }
+    if (status > 0 && status < 400) return responseUrl;
+
+    // Some /r/ hosts reject HEAD. A GET with redirects disabled is safe here:
+    // it can expose Location, but will not follow it into a large media body.
+    if (status === 405 || status === 501 || (status >= 400 && status < 500)) {
+      return _fetchWithFallback(url, BASE + '/', null, 'GET', false).then(function (fallback) {
+        var fallbackStatus = Number(fallback && fallback.status) || 0;
+        var fallbackLocation = _responseHeader(fallback, 'location');
+        var fallbackUrl = fallback && fallback.url ? fallback.url : url;
+        if (fallbackLocation && fallbackStatus >= 300 && fallbackStatus < 400) {
+          var target = _redirectTargetUrl(url, fallbackLocation);
+          if (target && target !== url) return _resolveRedirectNoBody(target, depth + 1);
+        }
+        if (fallbackUrl !== url) {
+          if (_isOpaqueMediaEndpoint(fallbackUrl)) return fallbackUrl;
+          return _resolveRedirectNoBody(fallbackUrl, depth + 1);
+        }
+        return url;
+      }).catch(function () { return url; });
+    }
+
+    // Never retry a media or /r/ URL with a redirect-following GET.
+    if (isMedia || isRedirect || _isOpaqueMediaEndpoint(url)) return url;
+    // A small HTML watch/embed page may not support HEAD. Keep redirect
+    // following disabled on GET as a further guard against video-body buffering.
+    return _fetchWithFallback(url, BASE + '/', null, 'GET', false).then(function (fallback) {
+      var fallbackStatus = Number(fallback && fallback.status) || 0;
+      var fallbackLocation = _responseHeader(fallback, 'location');
+      if (fallbackLocation && fallbackStatus >= 300 && fallbackStatus < 400) {
+        var targetUrl = _redirectTargetUrl(url, fallbackLocation);
+        if (targetUrl && targetUrl !== url) return _resolveRedirectNoBody(targetUrl, depth + 1);
+      }
+      var fallbackUrl = fallback && fallback.url ? fallback.url : url;
+      if (fallbackUrl !== url) {
+        if (_isOpaqueMediaEndpoint(fallbackUrl)) return fallbackUrl;
+        return _resolveRedirectNoBody(fallbackUrl, depth + 1);
+      }
+      return url;
     }).catch(function () { return url; });
   }).catch(function () {
     return url;
@@ -1236,7 +1308,7 @@ function getStreams(id, opts) {
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    version: '1.0.2',
+    version: '1.0.3',
     getInfo: getInfo,
     getSettings: getSettings,
     getHome: getHome,
