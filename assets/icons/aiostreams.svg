@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">AIOStreams integration</title>
+  <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#5EEAD4"/><stop offset="1" stop-color="#0F766E"/></linearGradient></defs>
+  <rect x="2" y="2" width="60" height="60" rx="17" fill="#0E2929" stroke="#14B8A6" stroke-opacity=".7"/>
+  <g fill="none" stroke="url(#g)" stroke-width="3.5" stroke-linecap="round"><path d="M17 23l15-9 15 9M17 41l15 9 15-9M17 23v18M47 23v18M17 23l15 18 15-18M17 41l15-18 15 18"/></g>
+  <circle cx="17" cy="23" r="4" fill="#CCFBF1"/><circle cx="47" cy="23" r="4" fill="#CCFBF1"/><circle cx="32" cy="14" r="4" fill="#CCFBF1"/><circle cx="17" cy="41" r="4" fill="#CCFBF1"/><circle cx="47" cy="41" r="4" fill="#CCFBF1"/><circle cx="32" cy="50" r="4" fill="#CCFBF1"/>
+</svg>
