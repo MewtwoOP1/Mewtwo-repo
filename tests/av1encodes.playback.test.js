@@ -173,6 +173,53 @@ async function main() {
   const alias = await provider.getStreams(ep1.url, {});
   assert.equal(alias.length, streams1.length);
 
+  // An incomplete site /download URL is an HTML endpoint, not a media URL.
+  assert.deepEqual(
+    await provider.getVideoSources("/download/example-anime/Example.Anime.E04.mkv", true),
+    []
+  );
+
+  // Re-create the provider module to verify the app-compatible fetch bridge's
+  // lack of a browser cookie jar is compensated by provider-side warm/replay.
+  delete require.cache[require.resolve("../providers/av1encodes.js")];
+  const warmProvider = require("../providers/av1encodes.js");
+  const warmRequests = [];
+  global.fetch = async function (input, options) {
+    const url = String(input);
+    const method = String((options && options.method) || "GET").toUpperCase();
+    const parsed = new URL(url);
+    const headers = (options && options.headers) || {};
+    warmRequests.push({ url, method, headers });
+
+    if (parsed.hostname === "av1encodes.com" && parsed.pathname === "/") {
+      return {
+        status: 200,
+        body: HOME,
+        url,
+        headers: { "set-cookie": "av1_client_id=warm-session-123; Path=/; HttpOnly; Secure" }
+      };
+    }
+    if (parsed.hostname === "av1encodes.com" && parsed.pathname === "/search") {
+      const cookie = String(headers.Cookie || headers.cookie || "");
+      if (!cookie.includes("av1_client_id=warm-session-123")) {
+        return { status: 403, body: "Access denied", url, headers: {} };
+      }
+      return { status: 200, body: SEARCH, url, headers: {} };
+    }
+    return { status: 404, body: "", url, headers: {} };
+  };
+
+  const warmResults = await warmProvider.search("warm", 1, {});
+  assert.equal(warmResults.length, 1, "provider should retry after warming av1_client_id");
+  assert.ok(warmRequests.some((request) =>
+    request.url === "https://av1encodes.com/" && request.method === "GET"
+  ), "provider should warm the homepage after a 403");
+  assert.ok(warmRequests.some((request) => {
+    const headers = request.headers || {};
+    return request.url.startsWith("https://av1encodes.com/search?") &&
+      String(headers.Cookie || headers.cookie || "").includes("av1_client_id=warm-session-123");
+  }), "retried request should carry the captured session cookie");
+
   console.log("[PASS] av1encodes: domain failover, episode contract, embedded DDL, regular DDL, fast mode, audio kind, failure handling, alias");
 }
 
