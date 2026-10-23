@@ -709,7 +709,7 @@ function _extractFilenames(html, base) {
   }
   FILENAME_REGEX.lastIndex = 0;
   let match;
-  while ((match = FILENAME_REGEX.exec(String(html || '')) !== null) addDecoded(match[1]);
+  while ((match = FILENAME_REGEX.exec(String(html || ''))) !== null) addDecoded(match[1]);
   return Array.from(filenames);
 }
 function _buildEpisodeLabel(filename, season) {
