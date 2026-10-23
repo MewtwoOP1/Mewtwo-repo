@@ -10,86 +10,105 @@ global.htmlText = function (s) {
     .trim();
 };
 
-// ── Fixtures ───────────────────────────────────────────────────────────────
+const HOME =
+  '<article class="spotlight-slide">' +
+  '<a href="/anime/example-anime">' +
+  '<img data-src="https://av1please.com/images/example.jpg" />' +
+  '<h3>Example Anime</h3></a></article>';
 
-const HOME = `
-<article class="spotlight-slide">
-  <a href="/anime/example-anime">
-    <img data-src="https://av1encodes.com/images/example.jpg" />
-    <h3>Example Anime</h3>
-  </a>
-</article>
-`;
+const SEARCH =
+  '<div class="card"><a href="/anime/example-anime">' +
+  '<img src="https://av1please.com/images/example.jpg" />' +
+  '<h3>Example Anime</h3></a></div>';
 
-const SEARCH = `
-<div class="card">
-  <a href="/anime/example-anime">
-    <img src="https://av1encodes.com/images/example.jpg" />
-    <h3>Example Anime</h3>
-  </a>
-</div>
-`;
+const DETAIL =
+  '<h1>Example Anime</h1>' +
+  '<img class="anime-poster" src="https://av1please.com/images/example.jpg" />' +
+  '<div class="anime-synopsis">A short synopsis for the example anime.</div>' +
+  '<a href="/genre/action">Action</a><div data-season="1"></div>';
 
-const DETAIL = `
-<h1>Example Anime</h1>
-<img class="anime-poster" src="https://av1encodes.com/images/example.jpg" />
-<div class="anime-synopsis">A short synopsis for the example anime.</div>
-<a href="/genre/action">Action</a>
-<div data-season="1"></div>
-`;
+const EPISODES = JSON.stringify([
+  {
+    num: 1,
+    label: "Episode 1 [Dual]",
+    href: "https://av1encodes.com/download/example-anime/1/1920%20x%201080/Example.Anime.%5BE01%5D%20%5B1080p%5D%20%5BDual%5D.mkv?token=ep01",
+    ddl: {
+      success: true,
+      watch_link: "https://av1please.com/watch/ep01",
+      stream_link: "https://cdn.example/ep01.m3u8",
+      download_link: "https://cdn.example/ep01.mkv",
+      subtitles: [{ language: "English", url: "https://cdn.example/ep01.vtt" }]
+    }
+  },
+  {
+    num: 2,
+    label: "Episode 2 [Sub]",
+    href: "/download/example-anime/1/1920%20x%201080/Example.Anime.%5BE02%5D%20%5B1080p%5D%20%5BSub%5D.mkv?token=ep02"
+  },
+  {
+    num: 3,
+    label: "Episode 3 [Sub]",
+    href: "/download/example-anime/1/1920%20x%201080/Example.Anime.%5BE03%5D%20%5B1080p%5D%20%5BSub%5D.mkv?token=ep03"
+  }
+]);
 
-const EPISODES = `
-<a href="/download/example-anime/1/1920%20x%201080/Example.Anime.S01E01.1080p.mkv">E01</a>
-<a href="/download/example-anime/1/1920%20x%201080/Example.Anime.S01E02.1080p.mkv">E02</a>
-`;
+const DOWNLOAD_EP2 =
+  '<iframe id="anime-video-player" src="/watch/ep02"></iframe>' +
+  '<script>const token = "AAAAabcdefghij12345";</script>';
 
-const DOWNLOAD = `
-<iframe id="anime-video-player" src="https://av1encodes.com/watch/xyz"></iframe>
-<script>const token = "AAAAabcdefghij12345";</script>
-`;
+const DOWNLOAD_FAILED =
+  '<h1>Example Anime</h1><div>Generating download link...</div>' +
+  '<div>Unable to generate download link</div>';
 
-const DDL = JSON.stringify({
-  watch_link: "https://av1encodes.com/watch/xyz",
-  stream_link: "https://cdn.example/stream.m3u8",
-  download_link: "https://cdn.example/download.mkv",
-  torrent_link: "https://cdn.example/torrent.torrent",
-  subtitles: [
-    { language: "English", url: "https://cdn.example/subs.vtt" }
-  ]
+const DDL_EP2 = JSON.stringify({
+  success: true,
+  watch_link: "https://av1please.com/watch/ep02",
+  stream_link: "https://cdn.example/ep02.m3u8",
+  download_link: "https://cdn.example/ep02.mkv",
+  subtitles: [{ language: "English", url: "https://cdn.example/ep02.vtt" }]
 });
 
-// ── fetch stub ─────────────────────────────────────────────────────────────
+const provider = require("../providers/av1encodes.js");
+const requests = [];
 
-global.fetch = async function (url, options) {
-  url = String(url);
+global.fetch = async function (input, options) {
+  const url = String(input);
+  const method = String((options && options.method) || "GET").toUpperCase();
+  const parsed = new URL(url);
+  const host = parsed.hostname.toLowerCase();
+  const pathname = parsed.pathname;
+  requests.push({ url, method });
 
-  if (url === "https://av1encodes.com/") return { status: 200, body: HOME, url };
-  if (url === "https://av1encodes.com/search?q=example&page=1") return { status: 200, body: SEARCH, url };
-  if (url === "https://av1encodes.com/anime/example-anime") return { status: 200, body: DETAIL, url };
+  // Simulate the default domain and its former alias being blocked.
+  if (host === "av1encodes.com" || host === "animealpha.cc") {
+    return { status: 403, body: "Access denied", url };
+  }
 
-  if (/^https:\/\/av1encodes\.com\/episodes\/example-anime\/1\//.test(url)) {
+  // HEAD discovers redirects without buffering whole media responses.
+  if (method === "HEAD") return { status: 200, body: "", url };
+
+  if (pathname === "/") return { status: 200, body: HOME, url };
+  if (pathname === "/search" && parsed.searchParams.get("q") === "example") {
+    return { status: 200, body: SEARCH, url };
+  }
+  if (pathname === "/anime/example-anime") return { status: 200, body: DETAIL, url };
+  if (/^\/episodes\/example-anime\/1\//.test(pathname)) {
     return { status: 200, body: EPISODES, url };
   }
-  if (/^https:\/\/av1encodes\.com\/download\//.test(url)) {
-    return { status: 200, body: DOWNLOAD, url };
+  if (/^\/download\//.test(pathname)) {
+    if (/E03/i.test(decodeURIComponent(pathname))) {
+      return { status: 200, body: DOWNLOAD_FAILED, url };
+    }
+    return { status: 200, body: DOWNLOAD_EP2, url };
   }
-  if (/^https:\/\/av1encodes\.com\/get_ddl\//.test(url)) {
-    return { status: 200, body: DDL, url };
-  }
-
-  if (url === "https://av1encodes.com/watch/xyz") return { status: 200, body: "", url };
-  if (url === "https://cdn.example/stream.m3u8") return { status: 200, body: "", url };
-  if (url === "https://cdn.example/download.mkv") return { status: 200, body: "", url };
-  if (url === "https://cdn.example/torrent.torrent") return { status: 200, body: "", url };
-  if (url === "https://cdn.example/subs.vtt") return { status: 200, body: "WEBVTT", url };
-
+  if (/^\/get_ddl\//.test(pathname)) return { status: 200, body: DDL_EP2, url };
+  if (/^\/watch\//.test(pathname)) return { status: 200, body: "", url };
+  if (host === "cdn.example") return { status: 200, body: "", url };
   return { status: 404, body: "", url };
 };
 
-const provider = require("../providers/av1encodes.js");
-
 async function main() {
-  // Contract
+  // Zangetsu source contract.
   assert.equal(provider.version, "1.0.0");
   const info = provider.getInfo();
   assert.equal(info.name, "AV1Encodes");
@@ -98,50 +117,63 @@ async function main() {
   assert.equal(info.type, "anime");
   assert.deepEqual(provider.getSettings(), []);
 
-  // Search
+  // Catalogue requests fail over from the blocked host.
   const results = await provider.search("example", 1, {});
   assert.equal(results.length, 1);
   assert.equal(results[0].title, "Example Anime");
   assert.equal(results[0].url, "/anime/example-anime");
-  assert.equal(results[0].cover, "https://av1encodes.com/images/example.jpg");
+  assert.equal(results[0].cover, "https://av1please.com/images/example.jpg");
 
-  // Home
   const home = await provider.getHome({});
-  assert.ok(Array.isArray(home));
   assert.ok(home.length >= 1);
   assert.equal(home[0].title, "Popular");
-  assert.ok(home[0].items.length >= 1);
   assert.equal(home[0].items[0].id, "/anime/example-anime");
 
-  // Detail + episodes
+  // JSON episode API, absolute URL normalization, query token preservation,
+  // stable order, and per-episode DDL cache.
   const detail = await provider.getDetail("/anime/example-anime", {});
   assert.equal(detail.title, "Example Anime");
-  assert.equal(detail.cover, "https://av1encodes.com/images/example.jpg");
-  assert.ok(detail.description.indexOf("short synopsis") !== -1);
-  assert.equal(detail.episodes.length, 2);
-  assert.equal(detail.episodes[0].number, 2);
-  assert.equal(detail.episodes[1].number, 1);
-  assert.ok(detail.episodes[0].url.indexOf("/download/") === 0);
-  assert.ok(detail.episodes[0].url.indexOf("E02") !== -1);
+  assert.equal(detail.cover, "https://av1please.com/images/example.jpg");
+  assert.ok(detail.description.includes("short synopsis"));
+  assert.deepEqual(detail.episodes.map((episode) => episode.number), [3, 2, 1]);
+  assert.ok(detail.episodes.every((episode) => episode.url.startsWith("/download/")));
+  assert.ok(detail.episodes[2].url.includes("?token=ep01"));
+  assert.ok(requests.some((request) => request.url.startsWith("https://av1please.com/")));
 
-  const eps = await provider.getEpisodes("/anime/example-anime", {});
-  assert.equal(eps.length, 2);
+  // Embedded DDL should resolve immediately and only produce media URLs.
+  const ep1 = detail.episodes[2];
+  const streams1 = await provider.getVideoSources(ep1.url, true);
+  assert.ok(streams1.some((stream) => stream.url === "https://cdn.example/ep01.m3u8"));
+  assert.ok(streams1.some((stream) => stream.url === "https://cdn.example/ep01.mkv"));
+  assert.ok(streams1.some((stream) => stream.url === "https://av1please.com/dash/ep01/manifest.mpd"));
+  assert.equal(streams1[0].preferred, true);
+  assert.ok(streams1[0].quality.includes("1080p"));
+  assert.ok(!streams1.some((stream) => stream.url.includes("/download/")));
 
-  // Stream extraction
-  const ep = detail.episodes[0];
-  const streams = await provider.getVideoSources(ep.url, {});
-  assert.ok(streams.length >= 3, "expected Stream, Direct DL and Dash entries");
-  assert.ok(streams.some((s) => s.url === "https://cdn.example/stream.m3u8"));
-  assert.ok(streams.some((s) => s.url === "https://cdn.example/download.mkv"));
-  assert.ok(streams.some((s) => s.url === "https://av1encodes.com/dash/xyz/manifest.mpd"));
-  assert.equal(streams[0].preferred, true);
-  assert.ok(streams[0].quality.indexOf("1080p") !== -1);
+  // Regular download-page -> token -> get_ddl flow for an episode without
+  // embedded JSON DDL.
+  const ep2 = detail.episodes[1];
+  const streams2 = await provider.getVideoSources(ep2.url, true);
+  assert.ok(streams2.some((stream) => stream.url === "https://cdn.example/ep02.m3u8"));
+  assert.ok(streams2.some((stream) => stream.url === "https://cdn.example/ep02.mkv"));
+  assert.ok(streams2.some((stream) => stream.url === "https://av1please.com/dash/ep02/manifest.mpd"));
+  assert.equal(streams2[0].kind, "sub");
+  assert.equal(streams2[0].audioLang, "ja");
 
-  // getStreams alias
-  const alias = await provider.getStreams(ep.url, {});
-  assert.equal(alias.length, streams.length);
+  // Dual audio is not incorrectly filtered into the Japanese-sub-only bucket.
+  assert.equal(streams1[0].kind, "unknown");
+  assert.equal(streams1[0].audioLang, undefined);
 
-  console.log("[PASS] av1encodes: search, home, detail, episodes, stream extraction, getStreams alias");
+  // Failed site-side generation returns no bogus HTML stream.
+  const ep3 = detail.episodes[0];
+  const failedStreams = await provider.getVideoSources(ep3.url, true);
+  assert.deepEqual(failedStreams, []);
+
+  // Legacy alias takes an options object and stays compatible.
+  const alias = await provider.getStreams(ep1.url, {});
+  assert.equal(alias.length, streams1.length);
+
+  console.log("[PASS] av1encodes: domain failover, episode contract, embedded DDL, regular DDL, fast mode, audio kind, failure handling, alias");
 }
 
 main().catch((error) => {
