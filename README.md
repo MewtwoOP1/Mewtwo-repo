@@ -51,13 +51,24 @@ Most code in this repository is licensed under the MIT License; see [LICENSE](LI
 
 The active movie/series providers include MovieBox IN, PressPlayX, HDHub4u, and TMDB + Stremio. The active anime providers include AIOStreams, AniKoto, AnimeSalt, DesiDub Anime, AnV, HiAnime, AnimeSuge, AniZone, MegaPlay, and RareAnimes • StreamBeta. StreamBeta is a playback resolver; RareAnimes • StreamBeta combines it with RareAnimes catalog and episode metadata.
 
-## AIOStreams (native anime source)
+## AIOStreams (native video source)
 
-AIOStreams is available as a native anime source in this repository. It uses Kitsu for anime browsing and search, AniZip for cross-service IDs and episode metadata, and the configured AIOStreams instance's authenticated `/api/v1/search` endpoint for stream aggregation. The resolver accepts both direct HTTP(S) URLs and optional torrent results; it does not require every result to contain an info hash. Credentials are sent only to the AIOStreams API, while provider-specific playback headers are preserved. It is **not** a generic Stremio add-on importer.
+AIOStreams v2.0.0 is a native Zangetsu source for **anime, movies, and TV series**. Anime discovery and episode mappings use Kitsu and AniZip; movie/series discovery and season/episode metadata use Cinemeta. Stream lookup uses AIOStreams' documented authenticated `/api/v1/search` endpoint. This is a native client for the AIOStreams search API, not a generic Stremio add-on importer.
+
+### Setup
 
 1. Add this repository in Zangetsu: `https://raw.githubusercontent.com/MewtwoOP1/Zangetsu-repo/main/index.json`.
 2. Install **AIOStreams** and open its source settings.
-3. Paste your personalized AIOStreams manifest URL (the URL containing `/stremio/<id>/<config>/manifest.json`).
-4. For P2P/torrent playback, enable the torrent setting only if your Zangetsu player supports magnets.
+3. Paste the personalized AIOStreams manifest URL containing `/stremio/<id>/<config>/manifest.json`.
+4. To use the alternate `x-aiostreams-user-data` authentication method, paste the base64 UserData value exported by AIOStreams in the optional UserData setting. That setting takes precedence over Basic authentication.
+5. Enable torrent/P2P results only if the Zangetsu player supports magnet links.
 
-AIOStreams credentials are derived from the personalized manifest URL and sent to the configured AIOStreams instance for the provider's stream-search requests. Do not share the manifest URL publicly. Tests use mocked HTTP responses and do not guarantee a public AIOStreams instance will return playable streams in every region.
+### Resolver behavior
+
+- Supports verified IMDb, TMDB, TVDB, AniList, MAL, and Kitsu identifier formats when those IDs are actually available. Series IDs include season/episode where the API's ID parser requires them; AniList/MAL/Kitsu use a single episode suffix, preferring absolute episode numbering when known.
+- Preserves direct HTTP(S) playback URLs and source-provided request headers. Direct streams do not need an `infoHash`; AIOStreams credentials are only sent to the AIOStreams API.
+- Keeps all playable results; the five-operation ceiling limits concurrent HTTP requests, **not** the number of returned streams.
+- Per-request timeout defaults to **10 seconds**; the total stream-search deadline defaults to **20 seconds**. Both are configurable, with a maximum of 25 seconds to stay within Zangetsu's provider-call ceiling. One transient network/HTTP failure may retry once.
+- Stream results are deduplicated by exact URL. P2P is opt-in. URLs are not preflighted with HEAD requests because signed and one-use links can be invalidated or consumed by probing them.
+
+The timeout settings bound how long Zangetsu waits; they cannot make a slow upstream add-on or AIOStreams instance respond faster. If the AIOStreams API itself stalls, check the timeouts of the add-ons configured in your AIOStreams instance. Tests use mocked HTTP responses and do not prove real-world playback against a private instance.

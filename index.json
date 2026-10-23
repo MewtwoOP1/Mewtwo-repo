@@ -957,8 +957,8 @@
     {
       "id": "aiostreams",
       "name": "AIOStreams",
-      "version": "1.0.3",
-      "type": "anime",
+      "version": "2.0.0",
+      "type": "movie",
       "lang": "en",
       "file": "providers/aiostreams.js",
       "logo": "https://aiostreams.viren070.me/logo.png",
@@ -967,14 +967,21 @@
         {
           "key": "manifestUrl",
           "label": "AIOStreams Manifest URL (required)",
-          "description": "Personalized AIOStreams URL ending in /stremio/<id>/<config>/manifest.json.",
+          "description": "Paste your personalized AIOStreams URL ending in /stremio/<id>/<config>/manifest.json.",
+          "type": "text",
+          "default": ""
+        },
+        {
+          "key": "userDataBase64",
+          "label": "Optional AIOStreams UserData (base64)",
+          "description": "Optional x-aiostreams-user-data header exported by AIOStreams. Leave blank to authenticate from the manifest URL.",
           "type": "text",
           "default": ""
         },
         {
           "key": "titleLanguage",
-          "label": "Title Language",
-          "description": "Preferred display language for anime titles.",
+          "label": "Anime title language",
+          "description": "Preferred Kitsu title language.",
           "type": "enum",
           "default": "english",
           "options": [
@@ -994,53 +1001,114 @@
         },
         {
           "key": "idPriority",
-          "label": "Stream ID Priority",
-          "description": "Select which available ID is used for stream lookup.",
+          "label": "Stream ID priority",
+          "description": "First valid identifier is used; unsupported or missing IDs are skipped.",
           "type": "enum",
-          "default": "kitsu,imdb,mal,anilist,tmdb",
+          "default": "imdb,tmdb,tvdb,anilist,mal,kitsu",
           "options": [
             {
-              "value": "kitsu,imdb,mal,anilist,tmdb",
-              "label": "Kitsu → IMDb → MAL → AniList → TMDB"
+              "value": "imdb,tmdb,tvdb,anilist,mal,kitsu",
+              "label": "IMDb → TMDB → TVDB → AniList → MAL → Kitsu"
             },
             {
-              "value": "mal,kitsu,imdb,anilist,tmdb",
-              "label": "MAL → Kitsu → IMDb → AniList → TMDB"
+              "value": "tmdb,imdb,tvdb,anilist,mal,kitsu",
+              "label": "TMDB → IMDb → TVDB → AniList → MAL → Kitsu"
             },
             {
-              "value": "kitsu,mal,imdb,anilist,tmdb",
-              "label": "Kitsu → MAL → IMDb → AniList → TMDB"
+              "value": "anilist,mal,kitsu,imdb,tmdb,tvdb",
+              "label": "AniList → MAL → Kitsu → IMDb → TMDB → TVDB"
             },
             {
-              "value": "imdb,mal,kitsu,anilist,tmdb",
-              "label": "IMDb → MAL → Kitsu → AniList → TMDB"
-            },
-            {
-              "value": "anilist,kitsu,mal,imdb,tmdb",
-              "label": "AniList → Kitsu → MAL → IMDb → TMDB"
+              "value": "mal,anilist,kitsu,imdb,tmdb,tvdb",
+              "label": "MAL → AniList → Kitsu → IMDb → TMDB → TVDB"
             }
           ]
         },
         {
           "key": "showP2P",
           "label": "Show torrent / P2P streams",
-          "description": "Enable if the installed player supports magnet links.",
+          "description": "Enable only when your Zangetsu player supports magnet links.",
           "type": "bool",
           "default": false
         },
         {
-          "key": "highlightSeaDex",
-          "label": "Highlight SeaDex best releases",
-          "description": "Mark releases matched by SeaDex.",
-          "type": "bool",
-          "default": true
+          "key": "maxConcurrentRequests",
+          "label": "Maximum concurrent requests",
+          "description": "Maximum simultaneous metadata/API requests. This is not a cap on returned stream count.",
+          "type": "enum",
+          "default": "5",
+          "options": [
+            {
+              "value": "1",
+              "label": "1 request"
+            },
+            {
+              "value": "2",
+              "label": "2 requests"
+            },
+            {
+              "value": "3",
+              "label": "3 requests"
+            },
+            {
+              "value": "4",
+              "label": "4 requests"
+            },
+            {
+              "value": "5",
+              "label": "5 requests"
+            }
+          ]
         },
         {
-          "key": "sortSeaDex",
-          "label": "Move SeaDex best releases to the top",
-          "description": "Sort SeaDex matches first.",
-          "type": "bool",
-          "default": true
+          "key": "requestTimeoutMs",
+          "label": "Per-request timeout",
+          "description": "Maximum wait for each HTTP request in milliseconds.",
+          "type": "enum",
+          "default": "10000",
+          "options": [
+            {
+              "value": "5000",
+              "label": "5 seconds"
+            },
+            {
+              "value": "8000",
+              "label": "8 seconds"
+            },
+            {
+              "value": "10000",
+              "label": "10 seconds"
+            },
+            {
+              "value": "15000",
+              "label": "15 seconds"
+            }
+          ]
+        },
+        {
+          "key": "totalTimeoutMs",
+          "label": "Stream lookup deadline",
+          "description": "Maximum total time for one stream-search operation. Does not cap stream results.",
+          "type": "enum",
+          "default": "20000",
+          "options": [
+            {
+              "value": "8000",
+              "label": "8 seconds"
+            },
+            {
+              "value": "12000",
+              "label": "12 seconds"
+            },
+            {
+              "value": "20000",
+              "label": "20 seconds"
+            },
+            {
+              "value": "25000",
+              "label": "25 seconds"
+            }
+          ]
         }
       ]
     }
