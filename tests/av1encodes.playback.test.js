@@ -112,11 +112,10 @@ global.fetch = async function (input, options) {
     return { status: 403, body: "Access denied", url };
   }
 
-  // The signed CDN stream/download endpoints reject HEAD. The provider must
-  // preserve their URLs rather than retry with GET and buffer video as text.
+  // If called unexpectedly, opaque CDN endpoints reject requests: the provider
+  // should preserve these URLs and leave redirect following to the media player.
   if (host === "cdn08.av1encodes.com" && (pathname.startsWith("/stream/") || pathname.startsWith("/dl/"))) {
-    if (method === "HEAD") return { status: 405, body: "Method Not Allowed", url };
-    throw new Error("Opaque media endpoints must not be probed with GET");
+    throw new Error("Opaque media endpoints must not be probed during URL resolution");
   }
 
   // HEAD discovers redirects without buffering whole media responses.
@@ -192,8 +191,10 @@ async function main() {
   const opaqueStreams = await provider.getVideoSources(opaqueEpisode.url, true);
   assert.ok(opaqueStreams.some((stream) => stream.url === "https://cdn08.av1encodes.com/stream/.eJwOpaqueStreamToken"));
   assert.ok(opaqueStreams.some((stream) => stream.url === "https://cdn08.av1encodes.com/dl/.eJwOpaqueDownloadToken"));
-  assert.ok(requests.some((request) => request.url === "https://cdn08.av1encodes.com/stream/.eJwOpaqueStreamToken" && request.method === "HEAD"));
-  assert.ok(!requests.some((request) => request.url === "https://cdn08.av1encodes.com/stream/.eJwOpaqueStreamToken" && request.method === "GET"));
+  assert.ok(!requests.some((request) => request.url === "https://cdn08.av1encodes.com/stream/.eJwOpaqueStreamToken"),
+    "opaque stream URLs must not be probed during redirect detection");
+  assert.ok(!requests.some((request) => request.url === "https://cdn08.av1encodes.com/dl/.eJwOpaqueDownloadToken"),
+    "opaque download URLs must not be probed during redirect detection");
   assert.ok(!requests.some((request) => /https:\/\/(?:av1encodes\.com|animealpha\.cc|av1please\.com)\/stream\//i.test(request.url)),
     "opaque CDN stream URLs must not be rebased onto site/mirror domains");
 
