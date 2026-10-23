@@ -99,24 +99,30 @@ function _requestJson(url, options) {
   var headers = { Accept: 'application/json', 'User-Agent': AIO_UA }, k;
   for (k in (options.headers || {})) if (Object.prototype.hasOwnProperty.call(options.headers, k)) headers[k] = options.headers[k];
   return new Promise(function (resolve, reject) {
+    var retries = !options.noRetry && !options.deadlineAt && options.retry !== false ? 1 : 0;
     var task = { cancelled: false, run: function () {
-      if (task.cancelled) { _release(); return; }
-      var remaining = options.deadlineAt ? options.deadlineAt - Date.now() : timeout;
-      if (remaining <= 0) { task.cancelled = true; reject(new Error('AIOStreams: stream lookup deadline exceeded')); _release(); return; }
-      var budget = Math.max(1, Math.min(timeout, remaining));
-      _fetchOnce(url, { method: options.method, headers: headers, body: options.body }, budget).then(function (value) {
-        _release(); resolve(value);
-      }, function (error) {
-        if (!options.noRetry && !options.deadlineAt && options.retry !== false && (error.status === 429 || error.status >= 500 || (!error.status && !/timeout/i.test(String(error.message || error))))) {
-          new Promise(function (done) { setTimeout(done, 120); }).then(function () {
-            if (task.cancelled) return;
-            _requestJson(url, { method: options.method, headers: headers, body: options.body, timeoutMs: timeout, noRetry: true }).then(resolve, reject);
-          }).then(function () { _release(); }, function () { _release(); });
-          return;
-        }
-        _release();
-        reject(error);
-      });
+      function attempt() {
+        if (task.cancelled) { _release(); return; }
+        var remaining = options.deadlineAt ? options.deadlineAt - Date.now() : timeout;
+        if (remaining <= 0) { task.cancelled = true; reject(new Error('AIOStreams: stream lookup deadline exceeded')); _release(); return; }
+        var budget = Math.max(1, Math.min(timeout, remaining));
+        _fetchOnce(url, { method: options.method, headers: headers, body: options.body }, budget).then(function (value) {
+          task.cancelled = true;
+          _release();
+          resolve(value);
+        }, function (error) {
+          var retryable = error.status === 429 || error.status >= 500 || (!error.status && !/timeout/i.test(String(error.message || error)));
+          if (retries > 0 && retryable && !task.cancelled) {
+            retries--;
+            setTimeout(attempt, 120);
+            return;
+          }
+          task.cancelled = true;
+          _release();
+          reject(error);
+        });
+      }
+      attempt();
     } };
     if (_active < _int(_cfg('maxConcurrentRequests', DEFAULT_CONCURRENCY), DEFAULT_CONCURRENCY, 1, 5)) {
       _active++;
