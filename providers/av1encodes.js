@@ -1,8 +1,9 @@
 // providers/av1encodes.js
-// AV1Encodes — Zangetsu provider
-// Ported from yuzono/anime-extensions AV1Encodes Kotlin extension.
-// Preserves the original scraping, metadata, search, episode discovery,
-// DDL extraction, redirect resolution, and playback behaviour.
+// AV1Encodes — rebuilt for the MewtwoOP1/Zangetsu-repo contract.
+// Original logic ported from yuzono/anime-extensions AV1Encodes Kotlin extension.
+// Scraping, metadata, search, episode discovery, DDL extraction, redirect
+// resolution and playback behaviour are preserved. Only the export/settings/
+// getStreams surface was adapted to this repository's provider model.
 
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID)
   ? String(__SOURCE_ID)
@@ -37,10 +38,14 @@ function getInfo() {
     name: 'AV1Encodes',
     lang: 'en',
     baseUrl: BASE,
-    logo: BASE + '/favicon.ico',
+    logo: 'icons/av1encodes.png',
     type: 'anime',
     version: '1.0.0'
   };
+}
+
+function getSettings() {
+  return [];
 }
 
 // ── HTTP helpers ─────────────────────────────────────────────────────────────
@@ -896,4 +901,20 @@ function getVideoSources(episodeUrl) {
   });
 }
 
-// Exported by the Zangetsu sandbox by declaring these top-level functions.
+function getStreams(id, opts) {
+  return getVideoSources(id, opts);
+}
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    version: '1.0.0',
+    getInfo: getInfo,
+    getSettings: getSettings,
+    getHome: getHome,
+    search: search,
+    getDetail: getDetail,
+    getEpisodes: getEpisodes,
+    getVideoSources: getVideoSources,
+    getStreams: getStreams
+  };
+}
