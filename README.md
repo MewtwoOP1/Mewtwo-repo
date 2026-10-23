@@ -53,13 +53,13 @@ The active movie/series providers include MovieBox IN, PressPlayX, HDHub4u, and 
 
 ## AIOStreams (native video source)
 
-AIOStreams v2.1.0 is a native Zangetsu source for **anime, movies, and TV series**. TMDB is the sole metadata/catalogue API for discovery, title details, and episode metadata. AIOStreams' authenticated `/api/v1/search` endpoint is used only to fetch streams; this is not a generic Stremio add-on importer.
+AIOStreams v2.1.1 is a native Zangetsu source for **anime, movies, and TV series**. TMDB is the sole metadata/catalogue API for discovery, title details, and episode metadata. AIOStreams' authenticated `/api/v1/search` endpoint is used only to fetch streams; this is not a generic Stremio add-on importer.
 
 ### Setup
 
 1. Add this repository in Zangetsu: `https://raw.githubusercontent.com/MewtwoOP1/Zangetsu-repo/main/index.json`.
 2. Install **AIOStreams** and open its source settings.
-3. Add a TMDB v3 API key or TMDB API Read Access Token in **TMDB API key or Read Access Token**.
+3. Leave the TMDB credential field blank to use Zangetsu's built-in TMDB key. You can optionally enter your own TMDB v3 API key or Read Access Token to override it.
 4. Paste the personalized AIOStreams manifest URL containing `/stremio/<id>/<config>/manifest.json`.
 5. Optionally provide the base64 UserData value for the `x-aiostreams-user-data` header. It takes precedence over Basic authentication.
 6. Enable torrent/P2P results only if the Zangetsu player supports magnet links.
@@ -67,6 +67,7 @@ AIOStreams v2.1.0 is a native Zangetsu source for **anime, movies, and TV series
 ### Resolver behavior
 
 - Uses TMDB for all metadata: popular movies, TV, Japanese animation discovery, multi-search, title details, and season/episode lists. There are no Kitsu, AniZip, or Cinemeta requests.
+- Uses Zangetsu's built-in TMDB API key by default, so no separate key is required. An optional personal API key or Read Access Token is supported; custom credentials are sent through the dedicated TMDB request path.
 - Sends TMDB IDs to AIOStreams: `tmdb:<id>` for films and `tmdb:<id>:<season>:<episode>` for TV episodes. Open titles from this provider so the TMDB ID is preserved.
 - Prioritizes stream requests ahead of queued catalogue requests, keeps up to five requests in flight, and does not retry failed AIOStreams stream lookups.
 - Stream lookup defaults to a **7-second request timeout** and an **8-second total deadline**. Both can be changed in settings.
