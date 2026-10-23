@@ -150,7 +150,10 @@ function _tmdbUrl(path, params) {
 }
 function _tmdbRequest(path, params, options) {
   options = options || {};
-  var request = _tmdbUrl(path, params), cacheKey = request.url + (request.headers.Authorization ? '|bearer' : '');
+  var request, cacheKey;
+  try { request = _tmdbUrl(path, params); }
+  catch (error) { return Promise.reject(error); }
+  cacheKey = request.url + (request.headers.Authorization ? '|bearer' : '');
   if (!options.noCache) {
     var cached = _httpCache[cacheKey];
     if (cached && cached.expires > Date.now()) return Promise.resolve(cached.value);
@@ -285,6 +288,7 @@ function _b64(input) {
   return out;
 }
 function getHome() {
+  try { _tmdbAuth(); } catch (error) { return Promise.reject(error); }
   return Promise.all([
     _list('/movie/popular', { page: 1, language: 'en-US' }, 'movie').catch(function () { return []; }),
     _list('/tv/popular', { page: 1, language: 'en-US' }, 'tv').catch(function () { return []; }),
