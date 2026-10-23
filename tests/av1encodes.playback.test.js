@@ -35,8 +35,8 @@ const EPISODES = JSON.stringify([
     ddl: {
       success: true,
       watch_link: "https://av1please.com/watch/ep05",
-      stream_link: "https://cdn08.av1encodes.com/stream/.eJwOpaqueStreamToken",
-      download_link: "https://cdn08.av1encodes.com/dl/.eJwOpaqueDownloadToken"
+      stream_link: "https://av1please.com/r/redirect-ep05",
+      download_link: "https://av1please.com/r/redirect-download-ep05"
     }
   },
   {
@@ -105,7 +105,7 @@ global.fetch = async function (input, options) {
   const parsed = new URL(url);
   const host = parsed.hostname.toLowerCase();
   const pathname = parsed.pathname;
-  requests.push({ url, method });
+  requests.push({ url, method, followRedirects: options && options.followRedirects });
 
   // Simulate the default domain and its former alias being blocked.
   if (host === "av1encodes.com" || host === "animealpha.cc") {
@@ -116,6 +116,19 @@ global.fetch = async function (input, options) {
   // should preserve these URLs and leave redirect following to the media player.
   if (host === "cdn08.av1encodes.com" && (pathname.startsWith("/stream/") || pathname.startsWith("/dl/"))) {
     throw new Error("Opaque media endpoints must not be probed during URL resolution");
+  }
+
+  // Model the site's /r/ redirect route. HEAD returns a redirect header; the
+  // provider must walk it without following into a media body.
+  if (host === "av1please.com" && pathname === "/r/redirect-ep05") {
+    assert.equal(method, "HEAD");
+    assert.equal(options.followRedirects, false);
+    return { status: 302, body: "", url, headers: { Location: "https://cdn08.av1encodes.com/stream/.eJwOpaqueStreamToken" } };
+  }
+  if (host === "av1please.com" && pathname === "/r/redirect-download-ep05") {
+    assert.equal(method, "HEAD");
+    assert.equal(options.followRedirects, false);
+    return { status: 302, body: "", url, headers: { location: "https://cdn08.av1encodes.com/dl/.eJwOpaqueDownloadToken" } };
   }
 
   // HEAD discovers redirects without buffering whole media responses.
@@ -155,7 +168,7 @@ global.fetch = async function (input, options) {
 
 async function main() {
   // Zangetsu source contract.
-  assert.equal(provider.version, "1.0.2");
+  assert.equal(provider.version, "1.0.3");
   const info = provider.getInfo();
   assert.equal(info.name, "AV1Encodes");
   assert.equal(info.logo, "icons/av1encodes.png");
@@ -195,6 +208,11 @@ async function main() {
     "opaque stream URLs must not be probed during redirect detection");
   assert.ok(!requests.some((request) => request.url === "https://cdn08.av1encodes.com/dl/.eJwOpaqueDownloadToken"),
     "opaque download URLs must not be probed during redirect detection");
+  assert.ok(requests.some((request) => request.url === "https://av1please.com/r/redirect-ep05" &&
+    request.method === "HEAD" && request.followRedirects === false),
+    "redirect resolution should inspect headers with followRedirects disabled");
+  assert.ok(!requests.some((request) => request.url === "https://av1please.com/r/redirect-ep05" && request.method === "GET"),
+    "a /r/ endpoint must not be fetched with a body-reading GET");
   assert.ok(!requests.some((request) => /https:\/\/(?:av1encodes\.com|animealpha\.cc|av1please\.com)\/stream\//i.test(request.url)),
     "opaque CDN stream URLs must not be rebased onto site/mirror domains");
 
