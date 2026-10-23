@@ -670,8 +670,6 @@ function _episodeMatchKey(filename) {
     .replace(/\.(?:mkv|mp4|webm|avi)$/i, '')
     .replace(/\[\d{3,4}p\]/ig, ' ')
     .replace(/\[(?:dual|sub|dub|english dub|tri|multi)\]/ig, ' ')
-    .replace(/\[(?:S\d+-)?E\d+\]/ig, ' ')
-    .replace(/\b(?:episode|ep)\s*\d+\b/ig, ' ')
     .replace(/[._-]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
