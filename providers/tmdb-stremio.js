@@ -6,6 +6,7 @@ var TMDB_API = 'https://api.themoviedb.org/3';
 var TMDB_POSTER = 'https://image.tmdb.org/t/p/w500';
 var TMDB_BACKDROP = 'https://image.tmdb.org/t/p/w780';
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID) ? String(__SOURCE_ID) : 'tmdb-stremio';
+var ADDON_CATALOG_META_CACHE = {};
 
 function getInfo() {
   return {
@@ -202,6 +203,9 @@ function _catalogItem(meta, base, fallbackType) {
   };
   var rating = Number(meta.imdbRating != null ? meta.imdbRating : (meta.rating != null ? meta.rating : meta.score));
   if (isFinite(rating)) item.score = Math.round(rating > 10 ? rating : rating * 10);
+  // Keep the catalogue preview so detail can still render for add-ons that
+  // publish catalog + stream but do not implement the optional meta resource.
+  try { ADDON_CATALOG_META_CACHE[url] = meta; } catch (e) {}
   return item;
 }
 
@@ -242,7 +246,7 @@ function _parseAddonItem(value) {
     var type = decodeURIComponent(match[2]).toLowerCase();
     if (type === 'tv') type = 'series';
     if (type !== 'movie' && type !== 'series') return null;
-    return { base: decodeURIComponent(match[1]), type: type, id: decodeURIComponent(match[3]) };
+    return { base: decodeURIComponent(match[1]), type: type, id: decodeURIComponent(match[3]), url: String(value) };
   } catch (e) { return null; }
 }
 
@@ -262,6 +266,7 @@ function _addonCanonicalIds(meta, fallbackId) {
 }
 
 function _addonDetail(parsed) {
+  var catalogMeta = ADDON_CATALOG_META_CACHE[parsed.url] || null;
   return _json(_catalogManifestUrl(parsed.base)).then(function (manifest) {
     if (!manifest || !Array.isArray(manifest.resources)) return null;
     var supportsMeta = manifest.resources.some(function (resource) {
@@ -317,7 +322,94 @@ function _addonDetail(parsed) {
       if (isFinite(rating)) result.score = Math.round(rating > 10 ? rating : rating * 10);
       return result;
     });
-  }).catch(function () { return null; });
+  }).catch(function () { return null; }).then(function (detail) {
+    return detail || _addonFallbackDetail(parsed, catalogMeta);
+  });
+}
+
+
+function _addonFallbackDetail(parsed, catalogMeta) {
+  var meta = catalogMeta || {};
+  var ids = _addonCanonicalIds(meta, parsed.id);
+  if (!ids.imdbId && /^tt\d+$/i.test(String(parsed.id || ''))) ids.imdbId = String(parsed.id);
+  var mediaType = parsed.type === 'series' ? 'tv' : 'movie';
+
+  function withPreview(detail) {
+    if (!detail) return _addonPreviewDetail(parsed, meta, ids);
+    var title = _trim(meta.name || meta.title || (meta.aliases && meta.aliases[0]) || '');
+    if (title) detail.title = title;
+    if (meta.poster || meta.cover) detail.cover = meta.poster || meta.cover;
+    if (meta.background || meta.banner) detail.banner = meta.background || meta.banner;
+    if (meta.description) detail.description = meta.description;
+    var year = String(meta.releaseInfo || meta.year || meta.release_date || meta.first_air_date || '').slice(0, 4);
+    if (year) detail.year = year;
+    var genres = Array.isArray(meta.genres) ? meta.genres : (Array.isArray(meta.genre) ? meta.genre : null);
+    if (genres && genres.length) detail.genres = genres;
+    var score = Number(meta.imdbRating != null ? meta.imdbRating : (meta.rating != null ? meta.rating : meta.score));
+    if (isFinite(score)) detail.score = Math.round(score > 10 ? score : score * 10);
+    if (mediaType === 'movie' && Array.isArray(detail.episodes) && detail.episodes.length && title) {
+      detail.episodes[0].title = title;
+    }
+    return detail;
+  }
+
+  if (ids.tmdbId && isFinite(Number(ids.tmdbId))) {
+    return getDetail(_tmdbUrl(mediaType, ids.tmdbId)).then(withPreview);
+  }
+
+  if (!ids.imdbId) return Promise.resolve(_addonPreviewDetail(parsed, meta, ids));
+
+  return _tmdbJson('/find/' + encodeURIComponent(ids.imdbId) + '?external_source=imdb_id').then(function (found) {
+    if (found) {
+      var wanted = mediaType === 'tv' ? found.tv_results : found.movie_results;
+      var alternate = mediaType === 'tv' ? found.movie_results : found.tv_results;
+      var record = Array.isArray(wanted) && wanted.length ? wanted[0] :
+        (Array.isArray(alternate) && alternate.length ? alternate[0] : null);
+      if (record && record.id != null) {
+        var actualType = Array.isArray(wanted) && wanted.length ? mediaType : (mediaType === 'tv' ? 'movie' : 'tv');
+        return getDetail(_tmdbUrl(actualType, record.id)).then(withPreview);
+      }
+    }
+    return _addonPreviewDetail(parsed, meta, ids);
+  }).catch(function () {
+    return _addonPreviewDetail(parsed, meta, ids);
+  });
+}
+
+function _addonPreviewDetail(parsed, meta, ids) {
+  meta = meta || {};
+  ids = ids || _addonCanonicalIds(meta, parsed.id);
+  var isTv = parsed.type === 'series';
+  var title = _trim(meta.name || meta.title || (meta.aliases && meta.aliases[0]) || parsed.id || 'Untitled');
+  var episodes = [];
+  if (!isTv) {
+    episodes.push({
+      id: 'movie',
+      title: title,
+      number: 1,
+      url: _episodeId('movie', Number(ids.tmdbId) || 0, ids.imdbId, 0, 0)
+    });
+  }
+  return {
+    id: parsed.url || ('stremio-addon://' + encodeURIComponent(parsed.base) + '/' + encodeURIComponent(parsed.type) + '/' + encodeURIComponent(parsed.id)),
+    url: parsed.url || ('stremio-addon://' + encodeURIComponent(parsed.base) + '/' + encodeURIComponent(parsed.type) + '/' + encodeURIComponent(parsed.id)),
+    title: title,
+    cover: meta.poster || meta.cover || null,
+    banner: meta.background || meta.banner || null,
+    description: meta.description || '',
+    status: _status(meta.status),
+    genres: Array.isArray(meta.genres) ? meta.genres : (Array.isArray(meta.genre) ? meta.genre : []),
+    studios: meta.studios || [],
+    type: 'movie',
+    sourceId: SOURCE_ID,
+    year: String(meta.releaseInfo || meta.year || meta.release_date || meta.first_air_date || '').slice(0, 4) || null,
+    imdbId: ids.imdbId || null,
+    tmdbId: ids.tmdbId || null,
+    tmdbIsTv: isTv,
+    episodes: episodes,
+    subCount: episodes.length,
+    dubCount: 0
+  };
 }
 
 function getHome(opts) {
