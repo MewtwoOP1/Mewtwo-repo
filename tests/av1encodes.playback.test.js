@@ -300,7 +300,7 @@ function routeStreamExtraction(host) {
 
   await test('current upstream settings and provider version are exposed', async () => {
     reset();
-    assert.strictEqual(P.getInfo().version, '1.1.6');
+    assert.strictEqual(P.getInfo().version, '1.1.7');
     const settings = P.getSettings();
     assert.strictEqual(settings.map(item => item.key).join(','), [
       'preferred_domain', 'preferred_quality', 'preferred_link_type', 'show_torrent'
@@ -430,39 +430,84 @@ function routeStreamExtraction(host) {
     assert.strictEqual(episodes[0].number, 1);
   });
 
-  await test('episode order exactly follows Yuzuno route-season and source-num ordering', async () => {
+  await test('episode list preserves Yuzuno season-bucket order even when signed href seasons differ', async () => {
     reset();
-    const makeEpisode = (routeSeason, filenameNumber, title, token, number) => {
-      const href = BASE + '/download/mixed-show/' + routeSeason +
-        '/1920%20x%201080/%5BE' + String(filenameNumber).padStart(3, '0') +
-        '%5D%20Mixed%20Show%20%5B1080p%5D.mkv?token=' + token;
-      return { id: href, url: href, number, title };
-    };
-    // Exact Yuzuno behavior: sort route seasons descending and source JSON
-    // num descending within each route, even when the visible label's season
-    // contradicts the route. Never "fix" these labels into chronological order.
-    const s4e1 = makeEpisode(1, 1, 'Season 4 Ep 01 - Mixed Show', 's4e1', 1);
-    const s4e2 = makeEpisode(1, 2, 'Season 4 Ep 02 - Mixed Show', 's4e2', 2);
-    const s2e1 = makeEpisode(2, 1, 'Season 2 Ep 01 - Mixed Show', 's2e1', 1);
-    const s1e1 = makeEpisode(4, 1, 'Season 1 Ep 01 - Mixed Show', 's1e1', 1);
-    const s1e2 = makeEpisode(4, 2, 'Season 1 Ep 02 - Mixed Show', 's1e2', 2);
-    const sorted = P._uniqueEpisodes([s4e1, s4e2, s2e1, s1e1, s1e2]);
+    const detail = '<html><body>' +
+      '<div class="season-tab" data-season="1"></div>' +
+      '<div class="season-tab" data-season="2"></div>' +
+      '<div class="season-tab" data-season="4"></div>' +
+      '</body></html>';
+    route(/^https:\/\/av1please\.com\/anime\/mixed-show$/, () => ok(detail));
+
+    const item = (num, label, hrefSeason, fileNumber, token) => ({
+      num,
+      label,
+      href: '/download/mixed-show/' + hrefSeason +
+        '/1920%20x%201080/%5BE' + String(fileNumber).padStart(3, '0') +
+        '%5D%20Mixed%20Show%20%5B1080p%5D.mkv?token=' + token
+    });
+    const season4 = [
+      item(1, 'Season 4 Ep 01 - Mixed Show', 1, 1, 's4e1'),
+      item(2, 'Season 4 Ep 02 - Mixed Show', 1, 2, 's4e2')
+    ];
+    const season2 = [
+      item(1, 'Season 2 Ep 01 - Mixed Show', 2, 1, 's2e1')
+    ];
+    const season1 = [
+      item(1, 'Season 1 Ep 01 - Mixed Show', 4, 1, 's1e1'),
+      item(2, 'Season 1 Ep 02 - Mixed Show', 4, 2, 's1e2')
+    ];
+    route(/^https:\/\/av1please\.com\/episodes\/mixed-show\/4\/1920%20x%201080$/, () => ok(JSON.stringify(season4)));
+    route(/^https:\/\/av1please\.com\/episodes\/mixed-show\/2\/1920%20x%201080$/, () => ok(JSON.stringify(season2)));
+    route(/^https:\/\/av1please\.com\/episodes\/mixed-show\/1\/1920%20x%201080$/, () => ok(JSON.stringify(season1)));
+
+    const episodes = await P.getEpisodes(BASE + '/anime/mixed-show', {});
+    // Yuzuno flattens route seasons in descending selector order (4, 2, 1),
+    // sorting each JSON result by its original num descending. It does NOT
+    // globally sort by the season segment embedded in href: these can disagree.
     assert.deepStrictEqual(
-      JSON.parse(JSON.stringify(sorted.map(item => item.title))),
+      JSON.parse(JSON.stringify(episodes.map(item => item.title))),
       [
-        'Season 1 Ep 02 - Mixed Show',
-        'Season 1 Ep 01 - Mixed Show',
-        'Season 2 Ep 01 - Mixed Show',
         'Season 4 Ep 02 - Mixed Show',
-        'Season 4 Ep 01 - Mixed Show'
+        'Season 4 Ep 01 - Mixed Show',
+        'Season 2 Ep 01 - Mixed Show',
+        'Season 1 Ep 02 - Mixed Show',
+        'Season 1 Ep 01 - Mixed Show'
       ]
     );
     assert.deepStrictEqual(
-      JSON.parse(JSON.stringify(sorted.map(item => item.url))),
-      [s1e2.url, s1e1.url, s2e1.url, s4e2.url, s4e1.url]
+      JSON.parse(JSON.stringify(episodes.map(item => item.url))),
+      [
+        BASE + season4[1].href,
+        BASE + season4[0].href,
+        BASE + season2[0].href,
+        BASE + season1[1].href,
+        BASE + season1[0].href
+      ]
+    );
+    assert.ok(calls.some(call => call.url === BASE + '/episodes/mixed-show/4/1920%20x%201080'));
+    assert.ok(calls.some(call => call.url === BASE + '/episodes/mixed-show/2/1920%20x%201080'));
+    assert.ok(calls.some(call => call.url === BASE + '/episodes/mixed-show/1/1920%20x%201080'));
+  });
+
+  await test('episode de-duplication preserves the upstream-provided order', async () => {
+    reset();
+    const makeEpisode = (n, token) => {
+      const href = BASE + '/download/mixed-show/1/1920%20x%201080/%5BE' +
+        String(n).padStart(3, '0') + '%5D%20Mixed%20Show.mkv?token=' + token;
+      return { id: href, url: href, number: n, title: 'Episode ' + n };
+    };
+    const later = makeEpisode(2, 'second');
+    const earlier = makeEpisode(1, 'first');
+    const duplicate = Object.assign({}, later);
+    const preserved = P._uniqueEpisodes([later, earlier, duplicate]);
+    assert.deepStrictEqual(
+      JSON.parse(JSON.stringify(preserved.map(item => item.url))),
+      [later.url, earlier.url]
     );
   });
 
+  
   await test('preferred link type prioritizes playable variants through public playback', async () => {
     reset();
     P.__settings.av1encodes.preferred_link_type = 'Direct DL';
