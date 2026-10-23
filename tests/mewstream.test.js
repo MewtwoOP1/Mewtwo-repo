@@ -184,26 +184,27 @@ function g(t) { console.log('\n\x1b[36m' + t + '\x1b[0m'); }
     season: 1, episode: 1, absolute: 1, title: 'Test Anime', isAnime: true
   }), { onSubtitle: function () {} });
   var expectedAdapters = [
-    ['MegaPlay-Direct', /megaplays\\.se\\/stream\\/mal\\/52299\\/1\\/sub/],
-    ['AniKoto', /anikototv\\.to\\/filter\\?keyword=Test%20Anime/],
-    ['AniZone', /anizone\\.to\\/search\\?query=Test%20Anime/],
-    ['AnimeSalt', /animesalt\\.to\\/episode\\/test-anime-1x1/],
-    ['RareAnimes', /rareanimes\\.mov\\//],
-    ['VaPlayer', /streamdata\\.vaplayer\\.ru\\/api\\.php\\?imdb=tt1234567/],
-    ['Vidrock', /vidrock\\.to\\/api\\/tv\\/12345_1_1/],
-    ['Vidfast', /vidfast\\.vc\\/tv\\/12345\\/1\\/1/],
-    ['Hexa', /theemoviedb\\.hexa\\.su\\/api\\/tmdb\\/tv\\/12345/],
-    ['VidZee', /player\\.vidzee\\.wtf\\/api\\/server\\?id=12345/],
-    ['Showbox', /showbox\\.media\\/search\\?keyword=tt1234567/],
-    ['VidSrc', /vidsrc\\.to\\/embed\\/tv\\/12345\\/1\\/1/],
-    ['VidCore', /vidcore\\.org\\/tv\\/12345\\/1\\/1/],
-    ['VidUp', /vidup\\.to\\/tv\\/12345\\/1\\/1/],
-    ['moviesapi', /moviesapi\\.to\\/tv\\/12345\\/1\\/1/],
-    ['VidNest', /vidnest\\.fun\\/embed\\/tv\\/12345\\/1\\/1/]
+    ['MegaPlay-Direct', 'megaplays.se/stream/mal/52299/1/sub'],
+    ['AniKoto', 'anikototv.to/filter?keyword=Test%20Anime'],
+    ['AniZone', 'anizone.to/search?query=Test%20Anime'],
+    ['AnimeSalt', 'animesalt.to/episode/test-anime-1x1'],
+    ['RareAnimes', 'rareanimes.mov/'],
+    ['VaPlayer', 'streamdata.vaplayer.ru/api.php?imdb=tt1234567'],
+    ['Vidrock', 'vidrock.to/api/tv/12345_1_1'],
+    ['Vidfast', 'vidfast.vc/tv/12345/1/1'],
+    ['Hexa', 'theemoviedb.hexa.su/api/tmdb/tv/12345'],
+    ['VidZee', 'player.vidzee.wtf/api/server?id=12345'],
+    ['Showbox', 'showbox.media/search?keyword=tt1234567'],
+    ['VidSrc', 'vidsrc.to/embed/tv/12345/1/1'],
+    ['VidCore', 'vidcore.org/tv/12345/1/1'],
+    ['VidUp', 'vidup.to/tv/12345/1/1'],
+    ['moviesapi', 'moviesapi.to/tv/12345/1/1'],
+    ['VidNest', 'vidnest.fun/embed/tv/12345/1/1']
   ];
   expectedAdapters.forEach(function (entry) {
-    ok('source triggered: ' + entry[0], fanoutCalls.some(function (call) { return entry[1].test(call.url); }),
-      fanoutCalls.map(function (call) { return call.url; }).join('\\n'));
+    ok('source triggered: ' + entry[0], fanoutCalls.some(function (call) {
+      return call.url.indexOf(entry[1]) >= 0;
+    }), fanoutCalls.map(function (call) { return call.url; }).join('\\n'));
   });
   var resultUrls = fanoutStreams.map(function (stream) { return stream.url; });
   ok('all successful source results are aggregated', resultUrls.length >= 8, JSON.stringify(resultUrls));
