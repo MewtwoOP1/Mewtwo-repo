@@ -1,77 +1,190 @@
-# 𝑴𝒆𝒘𝒕𝒘𝒐♡ Repo
+<div align="center">
+  <img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/150.png" alt="Mewtwo" width="112" />
 
-Community-maintained JavaScript providers for the [Zangetsu](https://github.com/Spyou/Zangetsu) app. The catalogue includes TMDB + Stremio for movie/TV metadata and configured add-on streams, plus anime sources and standalone movie providers maintained for Zangetsu.
+  <h1>Mewtwo♡ Repo</h1>
+  <p><strong>Community-maintained sources for Zangetsu</strong></p>
+  <p>One repo. Three focused setup threads. Clear steps from catalogue to playback.</p>
 
-**This repository does not host, upload, store, or serve video files.** Providers request metadata or playback URLs from third-party services. Availability is controlled by those services and may change at any time.
+  <a href="https://github.com/Spyou/Zangetsu"><img src="https://img.shields.io/badge/APP-Zangetsu-7C3AED?style=for-the-badge" alt="For Zangetsu" /></a>
+  <a href="https://raw.githubusercontent.com/MewtwoOP1/Mewtwo-repo/main/index.json"><img src="https://img.shields.io/badge/SOURCE-index.json-0F766E?style=for-the-badge" alt="Source manifest" /></a>
+  <img src="https://img.shields.io/badge/SETUP_GUIDES-3-2563EB?style=for-the-badge" alt="Three setup guides" />
+</div>
 
-## Install
+---
 
-In Zangetsu, open **Settings → Sources → Add repo** and add:
+## Start here
 
+This repository contains JavaScript sources for [Zangetsu](https://github.com/Spyou/Zangetsu). This README documents **only these three integrations**:
+
+| Source | Catalogue and metadata | Playback comes from | What you need |
+| --- | --- | --- | --- |
+| **TMDB + PencariMovie** | TMDB | PencariMovie server | The default server is prefilled |
+| **AIOStreams** | TMDB | Your configured AIOStreams instance | A personalized manifest URL |
+| **TMDB + Stremio** | TMDB | Your Stremio-compatible add-ons | One or more add-on manifest URLs |
+
+> **Important:** TMDB helps Zangetsu find titles and episodes. It does not provide the playable video links for these integrations. Playback depends on the configured provider or add-ons being available.
+
+## Thread 00 — Add this repository
+
+Do this once. Skip to your preferred setup thread if the repository is already added.
+
+1. Open **Zangetsu**.
+2. Go to **Settings → Sources → Add repo**.
+3. Paste this repository's manifest URL:
+
+   ```text
+   https://raw.githubusercontent.com/MewtwoOP1/Mewtwo-repo/main/index.json
+   ```
+
+4. Save/add the repository.
+5. Open its source list and install **only the integration you plan to use**.
+
+---
+
+## Setup threads
+
+<details>
+<summary><strong>Thread 01 — TMDB + PencariMovie</strong> <code>Easy setup · default server included</code></summary>
+
+### What this does
+
+TMDB supplies the movie and series catalogue, search, title details, episode lists, artwork, and ratings. PencariMovie is queried for playback streams.
+
+### Follow the steps
+
+**01.** Add the repository using [Thread 00](#thread-00--add-this-repository), then install **TMDB + PencariMovie**.
+
+**02.** Open **TMDB + PencariMovie → Settings**.
+
+**03.** Check these settings:
+
+| Setting | What to do |
+| --- | --- |
+| **TMDB API Key** | Leave blank to use Zangetsu's built-in TMDB key. A personal v3 API key is optional. |
+| **PencariMovie server manifest URL** | The public default is already filled in. Leave it as-is unless you have your own valid, tokenized `/manifest.json` URL. |
+| **Max streams per add-on** | Starts at **25**. Change it only if you want to consider fewer or more results (up to 100). |
+
+**04.** Save the settings, search for a movie or series, open its detail page, and select a playable item when results appear.
+
+### If nothing appears
+
+- Make sure the PencariMovie manifest URL has not been accidentally cleared or truncated.
+- Try another title, then try again later if the upstream service is unavailable.
+- A title appearing in TMDB confirms the catalogue lookup worked; it does **not** guarantee PencariMovie currently has a playable stream.
+
+</details>
+
+<details>
+<summary><strong>Thread 02 — AIOStreams</strong> <code>Movies · series · TMDB-indexed anime</code></summary>
+
+### What this does
+
+TMDB handles catalogue discovery and episode metadata. AIOStreams is used for stream lookup from your configured instance; this source does not import every Stremio add-on automatically.
+
+### Before opening Zangetsu
+
+**01.** Open your AIOStreams instance and configure the add-ons and stream sources you want to use.
+
+**02.** Copy your **personalized manifest URL**. It should follow this general shape:
+
+```text
+https://YOUR-AIOSTREAMS-HOST/stremio/YOUR-ID/YOUR-CONFIG/manifest.json
 ```
-https://raw.githubusercontent.com/MewtwoOP1/Zangetsu-repo/main/index.json
+
+Use the real URL supplied by your instance. The example above is only a format guide.
+
+### Configure the source
+
+**03.** In Zangetsu, install **AIOStreams**, then open **AIOStreams → Settings**.
+
+**04.** Set the fields:
+
+| Setting | What to do |
+| --- | --- |
+| **AIOStreams Manifest URL** | Paste your full personalized manifest URL. This is required. |
+| **AIOStreams UserData (base64)** | Optional. Add the value only if your instance requires it; it takes precedence over Basic authentication. |
+| **TMDB API key or Read Access Token** | Optional. Leave blank to use Zangetsu's built-in TMDB key. |
+| **Show torrent / P2P streams** | Leave off unless your player supports magnet links. |
+| **Maximum concurrent requests** | The default is **5** simultaneous requests. This is a concurrency limit, not a cap of five returned links. |
+| **AIOStreams request timeout** | Defaults to **7 seconds**. |
+| **Total stream lookup deadline** | Defaults to **8 seconds**. |
+
+**05.** Save the settings. Search for a title through AIOStreams in Zangetsu, open the title from this source, then try playback.
+
+### If results are slow or missing
+
+- Recheck the entire manifest URL, including the `/stremio/.../manifest.json` path.
+- Check that the add-ons are configured and working in your AIOStreams instance.
+- If lookups time out, review the per-add-on timeout settings on the AIOStreams side. Increasing Zangetsu's timeout cannot make an upstream add-on respond faster.
+- Keep manifest URLs and UserData values private if they contain account-specific identifiers or access credentials.
+
+</details>
+
+<details>
+<summary><strong>Thread 03 — TMDB + Stremio</strong> <code>Bring your own add-ons</code></summary>
+
+### What this does
+
+TMDB provides the catalogue, search, title details, and episode metadata. Playback streams are requested from the Stremio-compatible add-ons that you configure.
+
+### Follow the steps
+
+**01.** Add the repository using [Thread 00](#thread-00--add-this-repository), then install **TMDB + Stremio**.
+
+**02.** Open **TMDB + Stremio → Settings**.
+
+**03.** Paste the manifest URL for each Stremio-compatible add-on into **Stremio Add-on URLs**.
+
+You can enter **multiple URLs**, separated by commas or placed on separate lines. Use the complete manifest URL, commonly ending in `/manifest.json`. Keep any required path or query token intact.
+
+Example format only:
+
+```text
+https://addon-one.example/manifest.json
+https://addon-two.example/manifest.json
 ```
 
-Install the sources you want from the repository. For anime metadata with a separate playback source, enable **Zangetsu Mode (Z Mode)** in the app. In that mode, AniList/MyAnimeList supplies catalogue metadata while an installed anime provider supplies playback. This repository cannot change the app's mode for you.
+**04.** Review the remaining settings:
 
-## Active providers
+| Setting | What to do |
+| --- | --- |
+| **TMDB API Key** | Leave blank to use Zangetsu's built-in key. A personal TMDB v3 key is optional. |
+| **Max streams per add-on** | Defaults to **25** streams considered from each add-on. Available options range from 5 to 100. |
 
-### Development and tests
+**05.** Save the settings, search for a movie or series, open it from **TMDB + Stremio**, and choose a returned stream.
 
-Requirements: Node.js 22 or newer. No package installation is required.
+### If no streams are returned
 
-Run the repository checks from the root directory:
+- Confirm each add-on manifest URL opens and belongs to a Stremio-compatible add-on that provides the `stream` resource.
+- Check whether the add-on requires a token, configuration, or specific URL path.
+- Verify the add-on can return streams for the selected title. Catalogue results can appear even when no configured add-on has a matching stream.
+- The source ignores individual failed add-on requests so other configured add-ons can still return results.
 
-```sh
-node scripts/check-and-run.mjs
-```
+</details>
 
-The check validates the manifest, ensures every listed provider file exists and is registered, checks provider metadata/settings and JavaScript syntax, then runs every `tests/*.test.js` file it finds. GitHub Actions uses the same command.
+---
 
-Tests use mocked responses. Passing mock tests verify the tested code paths against fixtures; they do **not** guarantee that a third-party website or its live playback hosts currently work.
+## Quick troubleshooting
 
-## VidFlix
+| Symptom | Check first |
+| --- | --- |
+| Titles load, but there are no playable links | Playback provider/add-on status and manifest URL |
+| AIOStreams times out | AIOStreams per-add-on timeouts, then the source timeout settings |
+| A series opens but an episode has no result | Try the correct season/episode and confirm the selected add-on supports series streams |
+| One add-on fails but others work | Expected: a failing add-on may return no streams while other configured add-ons are still queried |
 
-VidFlix catalogue metadata uses TMDB, while playback resolution is performed in the provider itself against VidCore's embed/session/catalog endpoints. It does not depend on a separately hosted resolver API. VidFlix's other server buttons use independent embed systems and are not reported as playable streams unless their own direct resolution flow is implemented and verified.
+## Project notes
 
-## Disclaimers
-
-- No movies, shows, anime, subtitles, torrents, video files, or streaming servers are hosted by this repository.
-- Third-party websites, add-ons, APIs, metadata, artwork, and playback hosts remain controlled by their respective operators and may have separate terms and policies.
+- This repository does **not** host, upload, store, or serve movies, series, anime, or video files.
+- Metadata, artwork, and playback URLs are supplied by TMDB or third-party providers and remain subject to their availability, terms, and policies.
 - Users are responsible for ensuring their use of third-party services and any content they access complies with applicable laws and service terms.
-- This is an unofficial community project and is not affiliated with or endorsed by Zangetsu, TMDB, Stremio, or any source website.
+- This is an unofficial community project and is not affiliated with or endorsed by Zangetsu, TMDB, Stremio, AIOStreams, or PencariMovie.
+- The repository uses mixed licensing: most code is MIT-licensed; the MovieBox IN port is separately GPL-3.0-only. See [LICENSE](LICENSE) and [LICENSES/GPL-3.0.txt](LICENSES/GPL-3.0.txt).
 
 ## Credits
 
 The provider manifest and JavaScript interface follow the self-contained source model documented by [Spyou/zangetsu-providers](https://github.com/Spyou/zangetsu-providers). This repository is independently maintained and is not the official Zangetsu provider repository.
 
-## License
-
-Most code in this repository is licensed under the MIT License; see [LICENSE](LICENSE). The MovieBox IN port is separately licensed under GPL-3.0-only, with its required source notice preserved; see [LICENSES/GPL-3.0.txt](LICENSES/GPL-3.0.txt). Third-party names, logos, APIs, metadata, and content remain the property of their respective owners and are subject to their own terms.
-
-The active movie/series providers include MovieBox IN, PressPlayX, HDHub4u, and TMDB + Stremio. The active anime providers include AIOStreams, AniKoto, AnimeSalt, DesiDub Anime, AnV, HiAnime, AnimeSuge, AniZone, MegaPlay, and RareAnimes • StreamBeta. StreamBeta is a playback resolver; RareAnimes • StreamBeta combines it with RareAnimes catalog and episode metadata.
-
-## AIOStreams (native video source)
-
-AIOStreams v2.1.1 is a native Zangetsu source for **anime, movies, and TV series**. TMDB is the sole metadata/catalogue API for discovery, title details, and episode metadata. AIOStreams' authenticated `/api/v1/search` endpoint is used only to fetch streams; this is not a generic Stremio add-on importer.
-
-### Setup
-
-1. Add this repository in Zangetsu: `https://raw.githubusercontent.com/MewtwoOP1/Zangetsu-repo/main/index.json`.
-2. Install **AIOStreams** and open its source settings.
-3. Leave the TMDB credential field blank to use Zangetsu's built-in TMDB key. You can optionally enter your own TMDB v3 API key or Read Access Token to override it.
-4. Paste the personalized AIOStreams manifest URL containing `/stremio/<id>/<config>/manifest.json`.
-5. Optionally provide the base64 UserData value for the `x-aiostreams-user-data` header. It takes precedence over Basic authentication.
-6. Enable torrent/P2P results only if the Zangetsu player supports magnet links.
-
-### Resolver behavior
-
-- Uses TMDB for all metadata: popular movies, TV, Japanese animation discovery, multi-search, title details, and season/episode lists. There are no Kitsu, AniZip, or Cinemeta requests.
-- Uses Zangetsu's built-in TMDB API key by default, so no separate key is required. An optional personal API key or Read Access Token is supported; custom credentials are sent through the dedicated TMDB request path.
-- Sends TMDB IDs to AIOStreams: `tmdb:<id>` for films and `tmdb:<id>:<season>:<episode>` for TV episodes. Open titles from this provider so the TMDB ID is preserved.
-- Prioritizes stream requests ahead of queued catalogue requests, keeps up to five requests in flight, and does not retry failed AIOStreams stream lookups.
-- Stream lookup defaults to a **7-second request timeout** and an **8-second total deadline**. Both can be changed in settings.
-- Maps streams into Zangetsu's accepted container/audio-kind fields, preserves supported request headers, and converts subtitle metadata to the expected `url`/`lang` objects.
-- Keeps all distinct playable results; the five-request limit caps concurrent requests, **not** the number of returned links. P2P is opt-in, and invalid/unsupported URLs are skipped.
-
-Faster client-side timeouts cannot make a slow upstream AIOStreams addon respond faster. If results remain slow or incomplete, check the per-addon timeouts configured in your AIOStreams instance. Mock tests do not prove availability of a private instance or live playback.
+<div align="center">
+  <sub>Made for Zangetsu · Keep your manifest URLs private · Check upstream availability if playback stops working</sub>
+</div>
