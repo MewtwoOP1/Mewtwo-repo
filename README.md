@@ -177,7 +177,7 @@ TMDB provides search, title details, catalogue metadata, and episode information
 | A series opens, but an episode has no results | Season and episode selection, plus add-on support for series streams |
 | One Stremio add-on fails while others work | That add-on's URL and configuration; the other add-ons may still return results |
 
-## Third-party sources & responsibility
+## Third-party sources and responsibility
 
 <p align="center">
   <img src="assets/third-party-boundaries.svg" width="100%" alt="Diagram explaining that Mewtwo Repo publishes integration code, while independent third-party services control their own sources, content, and availability." />
