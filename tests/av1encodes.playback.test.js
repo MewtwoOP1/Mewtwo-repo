@@ -151,9 +151,11 @@ function json(value) { return JSON.parse(JSON.stringify(value)); }
       'Season 1 Ep 02 - Mixed Show',
       'Season 1 Ep 01 - Mixed Show'
     ]);
+    // setUrlWithoutDomain() in Aniyomi returns the source-relative href;
+    // Zangetsu keeps that same relative URL in its episode record.
     assert.deepStrictEqual(json(episodes.map(e => e.url)), [
-      BASE + season4[1].href, BASE + season4[0].href,
-      BASE + season2[0].href, BASE + season1[1].href, BASE + season1[0].href
+      season4[1].href, season4[0].href,
+      season2[0].href, season1[1].href, season1[0].href
     ]);
     assert.deepStrictEqual(json(episodes.map(e => e.number)), [2, 1, 1, 2, 1]);
   });
