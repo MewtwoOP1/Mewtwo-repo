@@ -49,4 +49,15 @@ The provider manifest and JavaScript interface follow the self-contained source 
 
 Most code in this repository is licensed under the MIT License; see [LICENSE](LICENSE). The MovieBox IN port is separately licensed under GPL-3.0-only, with its required source notice preserved; see [LICENSES/GPL-3.0.txt](LICENSES/GPL-3.0.txt). Third-party names, logos, APIs, metadata, and content remain the property of their respective owners and are subject to their own terms.
 
-The active movie/series providers include MovieBox IN, PressPlayX, HDHub4u, and TMDB + Stremio. The active anime providers include AniKoto, AnimeSalt, DesiDub Anime, AnV, HiAnime, AnimeSuge, AniZone, MegaPlay, and RareAnimes • StreamBeta. StreamBeta is a playback resolver; RareAnimes • StreamBeta combines it with RareAnimes catalog and episode metadata.
+The active movie/series providers include MovieBox IN, PressPlayX, HDHub4u, and TMDB + Stremio. The active anime providers include AIOStreams, AniKoto, AnimeSalt, DesiDub Anime, AnV, HiAnime, AnimeSuge, AniZone, MegaPlay, and RareAnimes • StreamBeta. StreamBeta is a playback resolver; RareAnimes • StreamBeta combines it with RareAnimes catalog and episode metadata.
+
+## AIOStreams (native anime source)
+
+AIOStreams is available as a native anime source in this repository. It uses Kitsu for anime browsing and search, AniZip for cross-service IDs and episode metadata, and the configured AIOStreams instance's authenticated `/api/v1/search` endpoint for stream aggregation. It is **not** a generic Stremio add-on importer.
+
+1. Add this repository in Zangetsu: `https://raw.githubusercontent.com/MewtwoOP1/Zangetsu-repo/main/index.json`.
+2. Install **AIOStreams** and open its source settings.
+3. Paste your personalized AIOStreams manifest URL (the URL containing `/stremio/<id>/<config>/manifest.json`).
+4. For P2P/torrent playback, enable the torrent setting only if your Zangetsu player supports magnets.
+
+AIOStreams credentials are derived from the personalized manifest URL and sent to the configured AIOStreams instance for the provider's stream-search requests. Do not share the manifest URL publicly. Tests use mocked HTTP responses and do not guarantee a public AIOStreams instance will return playable streams in every region.

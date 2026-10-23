@@ -1,0 +1,35 @@
+'use strict';
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const path=require('node:path');
+const vm=require('node:vm');
+const provider=require('../providers/aiostreams.js');
+const manifest=JSON.parse(fs.readFileSync(path.join(__dirname,'../index.json'),'utf8'));
+const source=manifest.sources.find(x=>x.id==='aiostreams');
+const code=fs.readFileSync(path.join(__dirname,'../providers/aiostreams.js'),'utf8');
+function response(data,status){status=status||200;return{ok:status>=200&&status<300,status,json:()=>Promise.resolve(data)};}
+function load(fetcher,settings){const s={module:{exports:{}},fetch:fetcher,__settings:{aiostreams:settings||{}},Promise,Date,Math,Object,String,Array,Number,RegExp,Error,JSON,parseInt,isNaN,encodeURIComponent,decodeURIComponent};vm.runInNewContext(code,s);return s.module.exports;}
+function anime(){return{id:'123',attributes:{canonicalTitle:'Example',titles:{en:'Example',en_jp:'Example Romaji',ja_jp:'例'},synopsis:'Description',episodeCount:2,subtype:'TV',status:'finished',startDate:'2024-01-01',posterImage:{original:'https://img.example/poster.jpg'}}};}
+function fetchBase(url){url=String(url);if(url.indexOf('kitsu.app/api/edge/anime?')>=0)return Promise.resolve(response({data:[anime()],links:{}}));if(url.indexOf('kitsu.app/api/edge/anime/123?')>=0)return Promise.resolve(response({data:anime(),included:[{type:'mappings',attributes:{externalSite:'myanimelist/anime',externalId:'456'}},{type:'categories',attributes:{title:'Fantasy'}}]}));if(url.indexOf('api.ani.zip/mappings?')>=0)return Promise.resolve(response({mappings:{kitsu_id:123,mal_id:456,anilist_id:789,imdb_id:'tt1234567',themoviedb_id:999},episodes:{'1':{title:{en:'First'},episodeNumber:1},'2':{title:{en:'Second'},episodeNumber:2}}}));if(url.indexOf('kitsu.app/api/edge/anime/123/episodes?')>=0)return Promise.resolve(response({data:[{attributes:{number:1,titles:{en:'First'}}}],links:{}}));if(url==='https://graphql.anilist.co')return Promise.resolve(response({data:{Media:{nextAiringEpisode:null,airingSchedule:{nodes:[]},streamingEpisodes:[]}}}));if(url.indexOf('api.jikan.moe/')>=0)return Promise.resolve(response({data:[]}));if(url.indexOf('releases.moe/')>=0)return Promise.resolve(response({items:[]}));throw new Error('Unexpected request '+url);}
+async function main(){
+assert.ok(source,'AIOStreams is registered');
+assert.equal(provider.version,source.version);
+assert.equal(provider.getInfo().name,source.name);
+assert.equal(provider.getInfo().logo,source.logo);
+for(const method of ['getInfo','getSettings','getHome','popular','search','getDetail','getEpisodes','getVideoSources','getStreams','getLinks'])assert.equal(typeof provider[method],'function',method);
+assert.deepEqual(provider.getSettings().map(x=>x.key),source.settings.map(x=>x.key));
+assert.ok(source.settings.every(x=>x.description&&x.label));
+assert.deepEqual(JSON.parse(JSON.stringify(provider._parseManifestUrl('https://aio.example/stremio/u123/cfg456/manifest.json'))),{baseUrl:'https://aio.example',uuid:'u123',encryptedBlob:'cfg456'});
+assert.equal(provider._parseManifestUrl('https://aio.example/manifest.json'),null);
+const p=load(fetchBase);const home=await p.getHome();assert.equal(home.length,2);assert.equal(home[0].items[0].title,'Example');assert.equal((await p.search('Example',2))[0].url,'aio://anime/123');
+const detail=await p.getDetail('aio://anime/123');assert.equal(detail.genre,'Fantasy');assert.equal(detail.episodes.length,2);assert.match(detail.episodes[0].url,/imdb=tt1234567/);assert.match(detail.episodes[0].url,/anilist=789/);
+let apiUrl='',auth='';
+const play=load((url,init)=>{if(String(url).indexOf('/api/v1/search?')>=0){apiUrl=String(url);auth=init.headers.Authorization;return Promise.resolve(response({data:{results:[{name:'Example 1080p',infoHash:'0123456789abcdef0123456789abcdef01234567',url:'https://cdn.example/episode.m3u8'}]}}));}if(String(url).indexOf('releases.moe/')>=0)return Promise.resolve(response({items:[]}));return fetchBase(url);},{manifestUrl:'https://aio.example/stremio/uuid123/encrypted123/manifest.json',idPriority:'imdb,tmdb,kitsu,anilist,mal'});
+const streams=await play.getVideoSources('aio://episode/123/2?season=1&epInSeason=2&imdb=tt1234567&tmdb=999&anilist=789&mal=456&kitsu=123&title=Example');assert.equal(streams.length,1);assert.equal(streams[0].url,'https://cdn.example/episode.m3u8');assert.equal(streams[0].container,'hls');assert.match(apiUrl,/type=series/);assert.match(decodeURIComponent(apiUrl),/id=tt1234567:1:2/);assert.equal(auth,'Basic '+Buffer.from('uuid123:encrypted123').toString('base64'));
+let calls=0;const noConfig=load(()=>{calls++;return Promise.resolve(response({}));});await assert.rejects(noConfig.getVideoSources('aio://episode/123/1?kitsu=123'),/configure your personalized Manifest URL/);assert.equal(calls,0);
+const torrentFetcher=url=>String(url).indexOf('/api/v1/search?')>=0?Promise.resolve(response({data:{results:[{name:'torrent',infoHash:'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',url:'magnet:?xt=urn:btih:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'}]}})):String(url).indexOf('releases.moe/')>=0?Promise.resolve(response({items:[]})):fetchBase(url);
+const epUrl='aio://episode/123/1?season=1&epInSeason=1&kitsu=123';await assert.rejects(load(torrentFetcher,{manifestUrl:'https://aio.example/stremio/u/e/manifest.json'}).getVideoSources(epUrl),/no playable streams remain/);const torrent=await load(torrentFetcher,{manifestUrl:'https://aio.example/stremio/u/e/manifest.json',showP2P:true}).getVideoSources(epUrl);assert.equal(torrent.length,1);assert.match(torrent[0].url,/^magnet:/);assert.match(torrent[0].url,/tr=/);
+await assert.rejects(load(url=>String(url).indexOf('/api/v1/search?')>=0?Promise.resolve(response({},403)):fetchBase(url),{manifestUrl:'https://aio.example/stremio/u/e/manifest.json'}).getVideoSources('aio://episode/123/1?kitsu=123'),/HTTP 403/);
+console.log('AIOStreams tests passed');
+}
+main().catch(e=>{console.error(e);process.exitCode=1;});
