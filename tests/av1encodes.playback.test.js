@@ -121,8 +121,9 @@ global.fetch = async function (input, options) {
   // Model the site's /r/ redirect route. HEAD returns a redirect header; the
   // provider must walk it without following into a media body.
   if (host === "av1please.com" && pathname === "/r/redirect-ep05") {
-    assert.equal(method, "HEAD");
-    assert.equal(options.followRedirects, false);
+    assert.equal(options.followRedirects, false, "redirect endpoint must never auto-follow");
+    if (method === "HEAD") return { status: 405, body: "", url };
+    assert.equal(method, "GET", "unsupported HEAD should use a no-follow GET");
     return { status: 302, body: "", url, headers: { Location: "https://cdn08.av1encodes.com/stream/.eJwOpaqueStreamToken" } };
   }
   if (host === "av1please.com" && pathname === "/r/redirect-download-ep05") {
@@ -211,8 +212,12 @@ async function main() {
   assert.ok(requests.some((request) => request.url === "https://av1please.com/r/redirect-ep05" &&
     request.method === "HEAD" && request.followRedirects === false),
     "redirect resolution should inspect headers with followRedirects disabled");
-  assert.ok(!requests.some((request) => request.url === "https://av1please.com/r/redirect-ep05" && request.method === "GET"),
-    "a /r/ endpoint must not be fetched with a body-reading GET");
+  assert.ok(requests.some((request) => request.url === "https://av1please.com/r/redirect-ep05" &&
+    request.method === "GET" && request.followRedirects === false),
+    "if HEAD is unsupported, GET must not auto-follow into the media body");
+  assert.ok(!requests.some((request) => request.url === "https://av1please.com/r/redirect-ep05" &&
+    request.method === "GET" && request.followRedirects !== false),
+    "redirect resolution must never use an auto-follow GET");
   assert.ok(!requests.some((request) => /https:\/\/(?:av1encodes\.com|animealpha\.cc|av1please\.com)\/stream\//i.test(request.url)),
     "opaque CDN stream URLs must not be rebased onto site/mirror domains");
 
