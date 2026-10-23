@@ -49,7 +49,7 @@ function getInfo() {
     baseUrl: BASE,
     logo: 'icons/av1encodes.png',
     type: 'anime',
-    version: '1.3.1'
+    version: '1.3.2'
   };
 }
 
@@ -744,17 +744,22 @@ function _episodeMatchKey(filename) {
 }
 
 function _buildEpisodeLabel(filename, season) {
-  var epM = filename.match(EPISODE_NAME_REGEX);
+  // The filename's Sxx marker is the most specific season information. Some
+  // site pages expose a grouped/legacy season route that doesn't match it.
+  var decoded = decodeURIComponent(String(filename || ''));
+  var filenameSeason = (decoded.match(/\[S(\d+)-E\d+\]/i) || [])[1];
+  var labelSeason = filenameSeason ? String(parseInt(filenameSeason, 10)) : String(season || '1');
+  var epM = decoded.match(EPISODE_NAME_REGEX);
   if (epM) {
-    var e = epM[1];
+    var e = String(parseInt(epM[1], 10));
     var titlePart = epM[2].trim();
-    var audioTag = (filename.match(SUBDUB_REGEX) || [])[1] || '';
-    return 'Season ' + season + ' Ep ' + e + ' - ' + titlePart +
+    var audioTag = (decoded.match(SUBDUB_REGEX) || [])[1] || '';
+    return 'Season ' + labelSeason + ' Ep ' + e + ' - ' + titlePart +
       (audioTag ? ' [' + audioTag + ']' : '');
   }
 
-  var cleanName = filename.replace(QUALITY_REGEX, '').replace(/\.[^.]+$/, '').trim();
-  return (season !== '1' && season) ? 'Season ' + season + ' - ' + cleanName : cleanName;
+  var cleanName = decoded.replace(QUALITY_REGEX, '').replace(/\.[^.]+$/, '').trim();
+  return (labelSeason !== '1' && labelSeason) ? 'Season ' + labelSeason + ' - ' + cleanName : cleanName;
 }
 
 function _fetchSeasonEpisodes(slug, season, candidates) {
@@ -1392,7 +1397,7 @@ function getStreams(id, opts) {
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    version: '1.3.1',
+    version: '1.3.2',
     getInfo: getInfo,
     getSettings: getSettings,
     getHome: getHome,
