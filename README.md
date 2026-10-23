@@ -13,6 +13,14 @@
   <sub>Community-maintained JavaScript sources for Zangetsu</sub>
 </p>
 
+<p align="center">
+  <a href="#at-a-glance">Overview</a> &nbsp; · &nbsp;
+  <a href="#add-the-repository">Install</a> &nbsp; · &nbsp;
+  <a href="#choose-your-setup">Integrations</a> &nbsp; · &nbsp;
+  <a href="#third-party-sources-and-responsibility">Third-party notice</a> &nbsp; · &nbsp;
+  <a href="#troubleshooting">Troubleshooting</a>
+</p>
+
 ---
 
 ## At a glance
@@ -30,7 +38,7 @@ This repository includes three integrations documented here. Choose one to get s
 </p>
 
 > [!IMPORTANT]
-> **Metadata is not playback.** TMDB provides title, artwork, and episode information. The configured provider or add-ons supply playback results, and their availability can change independently.
+> **Metadata is not playback.** TMDB provides catalogue information such as titles, artwork, and episodes. Configured providers or add-ons supply playback results independently, and their availability may change at any time.
 
 ## Add the repository
 
@@ -169,17 +177,40 @@ TMDB provides search, title details, catalogue metadata, and episode information
 | A series opens, but an episode has no results | Season and episode selection, plus add-on support for series streams |
 | One Stremio add-on fails while others work | That add-on's URL and configuration; the other add-ons may still return results |
 
-## Notes & licensing
+## Third-party sources and responsibility
 
-- This repository does **not** host, upload, store, or serve movies, series, anime, subtitles, or video files.
-- Metadata, artwork, and playback URLs are provided by TMDB or third-party services. Their availability, terms, and policies are controlled by their respective operators.
-- Users are responsible for ensuring that their use of third-party services and any content they access complies with applicable laws and service terms.
+<p align="center">
+  <img src="assets/third-party-boundaries.svg" width="100%" alt="Diagram explaining that Mewtwo Repo publishes integration code, while independent third-party services control their own sources, content, and availability." />
+</p>
+
+The sources and services referenced by these integrations are third-party projects or endpoints made available by their respective operators. **Mewtwo Repo does not own, operate, maintain, host, or control those third-party sources.** This repository publishes integration code and configuration information only.
+
+| This repository provides | This repository does not provide |
+|:--|:--|
+| Integration code and a source manifest | Hosted, uploaded, stored, or distributed media files |
+| Setup information for supported integrations | Operation or maintenance of third-party source websites and services |
+| References to externally operated services | Guarantees about third-party content, links, stream availability, or uptime |
+
+> [!WARNING]
+> **Third-party services are outside this project's control.** We do not verify, control, or guarantee the content, accuracy, legality, licensing, availability, security, or data-handling practices of external sources. Services, URLs, and returned results may change or stop working without notice. To the extent permitted by applicable law, the maintainers are not responsible for third-party services, their content, outages, or how external services are used.
+>
+> You choose whether to access third-party sources and are responsible for complying with applicable laws and each service's terms. A link or integration listed here is not an endorsement or a guarantee of availability.
+
+## Project boundaries & licensing
+
+- This repository and its maintainers do **not** host, upload, store, proxy, or distribute movies, series, anime, subtitles, or video files.
+- Metadata, artwork, and playback links are returned by TMDB or external services. Those services determine their own availability, access rules, terms, and policies.
 - This is an unofficial community project, not affiliated with or endorsed by Zangetsu, TMDB, Stremio, AIOStreams, or PencariMovie.
+- Most code is licensed under MIT. The MovieBox IN port is separately licensed under GPL-3.0-only. See [LICENSE](LICENSE) and [LICENSES/GPL-3.0.txt](LICENSES/GPL-3.0.txt).
 
 ## Credits
 
 The provider manifest and JavaScript interface follow the self-contained source model documented by [Spyou/zangetsu-providers](https://github.com/Spyou/zangetsu-providers). This repository is independently maintained and is not the official Zangetsu provider repository.
 
 <p align="center">
-  <sub>Built for Zangetsu · Keep personalized manifests private · Check upstream availability if playback stops working</sub>
+  <sub>Unofficial community integrations · Third-party services are independently operated · Keep personalized manifests private</sub>
+</p>
+
+<p align="center">
+  <a href="#at-a-glance">Back to top ↑</a>
 </p>
