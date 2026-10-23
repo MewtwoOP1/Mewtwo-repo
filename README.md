@@ -53,22 +53,24 @@ The active movie/series providers include MovieBox IN, PressPlayX, HDHub4u, and 
 
 ## AIOStreams (native video source)
 
-AIOStreams v2.0.0 is a native Zangetsu source for **anime, movies, and TV series**. Anime discovery and episode mappings use Kitsu and AniZip; movie/series discovery and season/episode metadata use Cinemeta. Stream lookup uses AIOStreams' documented authenticated `/api/v1/search` endpoint. This is a native client for the AIOStreams search API, not a generic Stremio add-on importer.
+AIOStreams v2.1.0 is a native Zangetsu source for **anime, movies, and TV series**. TMDB is the sole metadata/catalogue API for discovery, title details, and episode metadata. AIOStreams' authenticated `/api/v1/search` endpoint is used only to fetch streams; this is not a generic Stremio add-on importer.
 
 ### Setup
 
 1. Add this repository in Zangetsu: `https://raw.githubusercontent.com/MewtwoOP1/Zangetsu-repo/main/index.json`.
 2. Install **AIOStreams** and open its source settings.
-3. Paste the personalized AIOStreams manifest URL containing `/stremio/<id>/<config>/manifest.json`.
-4. To use the alternate `x-aiostreams-user-data` authentication method, paste the base64 UserData value exported by AIOStreams in the optional UserData setting. That setting takes precedence over Basic authentication.
-5. Enable torrent/P2P results only if the Zangetsu player supports magnet links.
+3. Add a TMDB v3 API key or TMDB API Read Access Token in **TMDB API key or Read Access Token**.
+4. Paste the personalized AIOStreams manifest URL containing `/stremio/<id>/<config>/manifest.json`.
+5. Optionally provide the base64 UserData value for the `x-aiostreams-user-data` header. It takes precedence over Basic authentication.
+6. Enable torrent/P2P results only if the Zangetsu player supports magnet links.
 
 ### Resolver behavior
 
-- Supports verified IMDb, TMDB, TVDB, AniList, MAL, and Kitsu identifier formats when those IDs are actually available. Series IDs include season/episode where the API's ID parser requires them; AniList/MAL/Kitsu use a single episode suffix, preferring absolute episode numbering when known.
-- Preserves direct HTTP(S) playback URLs and source-provided request headers. Direct streams do not need an `infoHash`; AIOStreams credentials are only sent to the AIOStreams API.
-- Keeps all playable results; the five-operation ceiling limits concurrent HTTP requests, **not** the number of returned streams.
-- Per-request timeout defaults to **10 seconds**; the total stream-search deadline defaults to **20 seconds**. Both are configurable, with a maximum of 25 seconds to stay within Zangetsu's provider-call ceiling. One transient network/HTTP failure may retry once.
-- Stream results are deduplicated by exact URL. P2P is opt-in. URLs are not preflighted with HEAD requests because signed and one-use links can be invalidated or consumed by probing them.
+- Uses TMDB for all metadata: popular movies, TV, Japanese animation discovery, multi-search, title details, and season/episode lists. There are no Kitsu, AniZip, or Cinemeta requests.
+- Sends TMDB IDs to AIOStreams: `tmdb:<id>` for films and `tmdb:<id>:<season>:<episode>` for TV episodes. Open titles from this provider so the TMDB ID is preserved.
+- Prioritizes stream requests ahead of queued catalogue requests, keeps up to five requests in flight, and does not retry failed AIOStreams stream lookups.
+- Stream lookup defaults to a **7-second request timeout** and an **8-second total deadline**. Both can be changed in settings.
+- Maps streams into Zangetsu's accepted container/audio-kind fields, preserves supported request headers, and converts subtitle metadata to the expected `url`/`lang` objects.
+- Keeps all distinct playable results; the five-request limit caps concurrent requests, **not** the number of returned links. P2P is opt-in, and invalid/unsupported URLs are skipped.
 
-The timeout settings bound how long Zangetsu waits; they cannot make a slow upstream add-on or AIOStreams instance respond faster. If the AIOStreams API itself stalls, check the timeouts of the add-ons configured in your AIOStreams instance. Tests use mocked HTTP responses and do not prove real-world playback against a private instance.
+Faster client-side timeouts cannot make a slow upstream AIOStreams addon respond faster. If results remain slow or incomplete, check the per-addon timeouts configured in your AIOStreams instance. Mock tests do not prove availability of a private instance or live playback.

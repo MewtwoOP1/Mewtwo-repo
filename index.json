@@ -957,7 +957,7 @@
     {
       "id": "aiostreams",
       "name": "AIOStreams",
-      "version": "2.0.0",
+      "version": "2.1.0",
       "type": "movie",
       "lang": "en",
       "file": "providers/aiostreams.js",
@@ -967,81 +967,38 @@
         {
           "key": "manifestUrl",
           "label": "AIOStreams Manifest URL (required)",
-          "description": "Paste your personalized AIOStreams URL ending in /stremio/<id>/<config>/manifest.json.",
+          "description": "Personalized URL ending in /stremio/<id>/<config>/manifest.json.",
           "type": "text",
           "default": ""
         },
         {
           "key": "userDataBase64",
           "label": "Optional AIOStreams UserData (base64)",
-          "description": "Optional x-aiostreams-user-data header exported by AIOStreams. Leave blank to authenticate from the manifest URL.",
+          "description": "Optional x-aiostreams-user-data value. When provided, it takes precedence over Basic authentication.",
           "type": "text",
           "default": ""
         },
         {
-          "key": "titleLanguage",
-          "label": "Anime title language",
-          "description": "Preferred Kitsu title language.",
-          "type": "enum",
-          "default": "english",
-          "options": [
-            {
-              "value": "english",
-              "label": "English"
-            },
-            {
-              "value": "romaji",
-              "label": "Romaji"
-            },
-            {
-              "value": "native",
-              "label": "Native Japanese"
-            }
-          ]
-        },
-        {
-          "key": "idPriority",
-          "label": "Stream ID priority",
-          "description": "First valid identifier is used; unsupported or missing IDs are skipped.",
-          "type": "enum",
-          "default": "imdb,tmdb,tvdb,anilist,mal,kitsu",
-          "options": [
-            {
-              "value": "imdb,tmdb,tvdb,anilist,mal,kitsu",
-              "label": "IMDb → TMDB → TVDB → AniList → MAL → Kitsu"
-            },
-            {
-              "value": "tmdb,imdb,tvdb,anilist,mal,kitsu",
-              "label": "TMDB → IMDb → TVDB → AniList → MAL → Kitsu"
-            },
-            {
-              "value": "anilist,mal,kitsu,imdb,tmdb,tvdb",
-              "label": "AniList → MAL → Kitsu → IMDb → TMDB → TVDB"
-            },
-            {
-              "value": "mal,anilist,kitsu,imdb,tmdb,tvdb",
-              "label": "MAL → AniList → Kitsu → IMDb → TMDB → TVDB"
-            }
-          ]
+          "key": "tmdbApiKey",
+          "label": "TMDB API key or Read Access Token (required)",
+          "description": "Use a TMDB v3 API key or a TMDB API Read Access Token. Metadata and catalogues use TMDB only.",
+          "type": "text",
+          "default": ""
         },
         {
           "key": "showP2P",
           "label": "Show torrent / P2P streams",
-          "description": "Enable only when your Zangetsu player supports magnet links.",
+          "description": "Enable only if your Zangetsu player supports magnet links.",
           "type": "bool",
           "default": false
         },
         {
           "key": "maxConcurrentRequests",
           "label": "Maximum concurrent requests",
-          "description": "Maximum simultaneous metadata/API requests. This is not a cap on returned stream count.",
+          "description": "Maximum simultaneous requests. Playback lookups move ahead of queued metadata requests.",
           "type": "enum",
           "default": "5",
           "options": [
-            {
-              "value": "1",
-              "label": "1 request"
-            },
             {
               "value": "2",
               "label": "2 requests"
@@ -1062,10 +1019,60 @@
         },
         {
           "key": "requestTimeoutMs",
-          "label": "Per-request timeout",
-          "description": "Maximum wait for each HTTP request in milliseconds.",
+          "label": "TMDB request timeout",
+          "description": "Timeout for an individual TMDB metadata request.",
           "type": "enum",
-          "default": "10000",
+          "default": "5000",
+          "options": [
+            {
+              "value": "3000",
+              "label": "3 seconds"
+            },
+            {
+              "value": "5000",
+              "label": "5 seconds"
+            },
+            {
+              "value": "7000",
+              "label": "7 seconds"
+            },
+            {
+              "value": "10000",
+              "label": "10 seconds"
+            }
+          ]
+        },
+        {
+          "key": "streamTimeoutMs",
+          "label": "AIOStreams request timeout",
+          "description": "Maximum wait for the AIOStreams stream API request.",
+          "type": "enum",
+          "default": "7000",
+          "options": [
+            {
+              "value": "4000",
+              "label": "4 seconds"
+            },
+            {
+              "value": "5000",
+              "label": "5 seconds"
+            },
+            {
+              "value": "7000",
+              "label": "7 seconds"
+            },
+            {
+              "value": "9000",
+              "label": "9 seconds"
+            }
+          ]
+        },
+        {
+          "key": "totalTimeoutMs",
+          "label": "Total stream lookup deadline",
+          "description": "Hard maximum wait for one stream lookup, including time waiting for a request slot.",
+          "type": "enum",
+          "default": "8000",
           "options": [
             {
               "value": "5000",
@@ -1080,33 +1087,8 @@
               "label": "10 seconds"
             },
             {
-              "value": "15000",
-              "label": "15 seconds"
-            }
-          ]
-        },
-        {
-          "key": "totalTimeoutMs",
-          "label": "Stream lookup deadline",
-          "description": "Maximum total time for one stream-search operation. Does not cap stream results.",
-          "type": "enum",
-          "default": "20000",
-          "options": [
-            {
-              "value": "8000",
-              "label": "8 seconds"
-            },
-            {
               "value": "12000",
               "label": "12 seconds"
-            },
-            {
-              "value": "20000",
-              "label": "20 seconds"
-            },
-            {
-              "value": "25000",
-              "label": "25 seconds"
             }
           ]
         }
