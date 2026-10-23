@@ -326,41 +326,48 @@ function search(query, page) {
   if (!q) return Promise.resolve([]);
   return _list('/search/multi', { query: q, page: Math.max(1, parseInt(page, 10) || 1), include_adult: false, language: 'en-US' });
 }
+function _episodesForTv(parsed, detail) {
+  var seasons = Array.isArray(detail.seasons) ? detail.seasons.filter(function (s) { return s && Number(s.season_number) >= 0 && Number(s.episode_count) > 0; }) : [];
+  if (!seasons.length) return Promise.resolve([]);
+  return Promise.all(seasons.map(function (season) {
+    var sn = Number(season.season_number);
+    return _tmdbRequest('/tv/' + encodeURIComponent(parsed.id) + '/season/' + sn, { language: 'en-US' }, { timeoutMs: 5000, noRetry: true }).then(function (j) {
+      return (Array.isArray(j && j.episodes) ? j.episodes : []).map(function (ep) {
+        var epNum = Number(ep.episode_number), sNum = Number(ep.season_number != null ? ep.season_number : sn);
+        return {
+          id: sNum + 'x' + epNum,
+          title: 'S' + sNum + ' E' + epNum + ' - ' + (ep.name || ('Episode ' + epNum)),
+          number: epNum,
+          season: sNum,
+          url: _episodeUrl('tv', parsed.id, sNum, epNum, ep.name || detail.name),
+          date: ep.air_date || null,
+          thumbnail: _image(ep.still_path, 'w300'),
+          description: ep.overview || undefined
+        };
+      });
+    }).catch(function () { return []; });
+  })).then(function (lists) {
+    var all = [], seen = {};
+    lists.forEach(function (list) { list.forEach(function (ep) { var key = ep.season + ':' + ep.number; if (!seen[key]) { seen[key] = true; all.push(ep); } }); });
+    all.sort(function (a, b) { return a.season - b.season || a.number - b.number; });
+    return all;
+  });
+}
 function getDetail(url) {
   var parsed = _parseCatalogUrl(url);
   if (!parsed) return Promise.reject(new Error('AIOStreams: invalid TMDB media URL'));
-  return _getTmdbDetail(parsed).then(function (detail) { return _detailToModel(detail, parsed.type); });
+  return _getTmdbDetail(parsed).then(function (detail) {
+    var model = _detailToModel(detail, parsed.type);
+    if (parsed.type === 'movie') return model;
+    return _episodesForTv(parsed, detail).then(function (episodes) { model.episodes = episodes; return model; });
+  });
 }
 function getEpisodes(url) {
   var parsed = _parseCatalogUrl(url);
   if (!parsed) return Promise.reject(new Error('AIOStreams: invalid TMDB media URL'));
   return _getTmdbDetail(parsed).then(function (detail) {
     if (parsed.type === 'movie') return [_movieEpisode(detail)];
-    var seasons = Array.isArray(detail.seasons) ? detail.seasons.filter(function (s) { return s && Number(s.season_number) >= 0 && Number(s.episode_count) > 0; }) : [];
-    if (!seasons.length) return [];
-    return Promise.all(seasons.map(function (season) {
-      var sn = Number(season.season_number);
-      return _tmdbRequest('/tv/' + encodeURIComponent(parsed.id) + '/season/' + sn, { language: 'en-US' }, { timeoutMs: 5000, noRetry: true }).then(function (j) {
-        return (Array.isArray(j && j.episodes) ? j.episodes : []).map(function (ep) {
-          var epNum = Number(ep.episode_number), sNum = Number(ep.season_number != null ? ep.season_number : sn);
-          return {
-            id: sNum + 'x' + epNum,
-            title: 'S' + sNum + ' E' + epNum + ' - ' + (ep.name || ('Episode ' + epNum)),
-            number: epNum,
-            season: sNum,
-            url: _episodeUrl('tv', parsed.id, sNum, epNum, ep.name || detail.name),
-            date: ep.air_date || null,
-            thumbnail: _image(ep.still_path, 'w300'),
-            description: ep.overview || undefined
-          };
-        });
-      }).catch(function () { return []; });
-    })).then(function (lists) {
-      var all = [], seen = {};
-      lists.forEach(function (list) { list.forEach(function (ep) { var key = ep.season + ':' + ep.number; if (!seen[key]) { seen[key] = true; all.push(ep); } }); });
-      all.sort(function (a, b) { return a.season - b.season || a.number - b.number; });
-      return all;
-    });
+    return _episodesForTv(parsed, detail);
   });
 }
 function _selectTmdbId(episode) {
