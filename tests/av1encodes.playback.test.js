@@ -166,7 +166,7 @@ async function main() {
   assert.ok(detail.description.includes("short synopsis"));
   assert.deepEqual(detail.episodes.map((episode) => episode.number), [4, 3, 2, 1]);
   assert.ok(detail.episodes.every((episode) => episode.url.startsWith("/download/")));
-  assert.ok(detail.episodes[2].url.includes("?token=ep01"));
+  assert.ok(detail.episodes[3].url.includes("?token=ep01"));
   assert.ok(requests.some((request) => request.url.startsWith("https://av1please.com/")));
 
   // Embedded DDL should resolve immediately and only produce media URLs.
