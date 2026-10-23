@@ -12,41 +12,41 @@ global.htmlText = function (s) {
 
 // ── Fixtures ───────────────────────────────────────────────────────────────
 
-const HOME = \`
+const HOME = `
 <article class="spotlight-slide">
   <a href="/anime/example-anime">
     <img data-src="https://av1encodes.com/images/example.jpg" />
     <h3>Example Anime</h3>
   </a>
 </article>
-\`;
+`;
 
-const SEARCH = \`
+const SEARCH = `
 <div class="card">
   <a href="/anime/example-anime">
     <img src="https://av1encodes.com/images/example.jpg" />
     <h3>Example Anime</h3>
   </a>
 </div>
-\`;
+`;
 
-const DETAIL = \`
+const DETAIL = `
 <h1>Example Anime</h1>
 <img class="anime-poster" src="https://av1encodes.com/images/example.jpg" />
 <div class="anime-synopsis">A short synopsis for the example anime.</div>
 <a href="/genre/action">Action</a>
 <div data-season="1"></div>
-\`;
+`;
 
-const EPISODES = \`
+const EPISODES = `
 <a href="/download/example-anime/1/1920%20x%201080/Example.Anime.S01E01.1080p.mkv">E01</a>
 <a href="/download/example-anime/1/1920%20x%201080/Example.Anime.S01E02.1080p.mkv">E02</a>
-\`;
+`;
 
-const DOWNLOAD = \`
+const DOWNLOAD = `
 <iframe id="anime-video-player" src="https://av1encodes.com/watch/xyz"></iframe>
 <script>const token = "AAAAabcdefghij12345";</script>
-\`;
+`;
 
 const DDL = JSON.stringify({
   watch_link: "https://av1encodes.com/watch/xyz",
