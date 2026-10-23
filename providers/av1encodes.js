@@ -15,6 +15,9 @@ var DOMAIN_BASES = ['https://av1encodes.com', 'https://animealpha.cc', 'https://
 var BASE = DEFAULT_DOMAIN;
 var EMBEDDED_DDL_CACHE = {};
 var EMBEDDED_DDL_TTL_MS = 5 * 60 * 1000;
+// Playback source calls in Zangetsu carry a ~20s budget. Keep the "fast" path
+// within 8.5s so exhausted DDL pages cannot cause the app to blacklist a source.
+var FAST_VIDEO_BUDGET_MS = 8500;
 var SITE_COOKIES = {};
 var SITE_WARMED_AT = {};
 var SITE_WARM_TTL_MS = 5 * 60 * 1000;
@@ -46,7 +49,7 @@ function getInfo() {
     baseUrl: BASE,
     logo: 'icons/av1encodes.png',
     type: 'anime',
-    version: '1.2.0'
+    version: '1.3.0'
   };
 }
 
@@ -123,12 +126,26 @@ function _isChallengeResponse(response) {
   return /<title[^>]*>\s*(?:just a moment|attention required|access denied)|cf-chl-|verify you are human|cloudflare ray id|connection blacklisted|home\/blocked|ip or browser.identity blacklist|you have been blocked/i.test(body);
 }
 
+function _hasDownloadSignals(body) {
+  var html = String(body || '');
+  return TOKEN_REGEX.test(html) ||
+    /<iframe\b[^>]*(?:id=["']anime-video-player["']|src=["'][^"']*\/r\/[^"']*["'])/i.test(html);
+}
+
+function _isExplicitDownloadFailure(response, path) {
+  var body = String(response && response.body || '');
+  return /^\/download\//i.test(String(path || '')) &&
+    /unable to generate download link|failed to generate download/i.test(body) &&
+    !_hasDownloadSignals(body);
+}
+
 function _isBlockedResponse(response, path) {
   if (!response) return true;
   var status = Number(response.status) || 0;
   if (status >= 400 || _isChallengeResponse(response)) return true;
-  var body = String(response.body || '');
-  if (/^\/download\//i.test(String(path || '')) && /unable to generate download link|failed to generate download/i.test(body)) return true;
+  // Some pages include a fallback "unable to generate" string in scripts even
+  // when a DDL token/player is present. Only reject an actual failure page.
+  if (_isExplicitDownloadFailure(response, path)) return true;
   return false;
 }
 
@@ -226,6 +243,14 @@ function _fetchWithFallback(url, ref, extraHeaders, method, followRedirects) {
       var unsupportedHeadForRedirect = methodName === 'HEAD' && statusCode === 405 && _isRedirectEndpoint(target);
       if (!_isBlockedResponse(response, sitePath) || unsupportedHeadForRedirect) {
         BASE = base;
+        return response;
+      }
+
+      // Once a /download page explicitly reports that the current filename
+      // cannot be generated, trying every mirror produces the same HTML and
+      // adds seconds of latency. Allow one alternate mirror, then fail this
+      // resolution so the caller can move to a lower quality.
+      if (_isExplicitDownloadFailure(response, sitePath) && index >= 1) {
         return response;
       }
 
@@ -1044,20 +1069,32 @@ function _parseSubtitles(subs) {
   return out;
 }
 
+function _sameDownloadPath(a, b) {
+  function pathOnly(value) {
+    return String(value || '').trim()
+      .replace(/^https?:\/\/[^/]+/i, '')
+      .split(/[?#]/)[0];
+  }
+  var aa = pathOnly(a), bb = pathOnly(b);
+  return !!aa && aa === bb;
+}
+
 function _extractDdl(dlPath, resString, baseFilename, slug, season) {
   var encodedFilename = dlPath.split('?')[0].split('/').pop();
   var filename = decodeURIComponent(encodedFilename);
   var downloadPageUrl = _absUrl(dlPath);
 
   return _get(downloadPageUrl).then(function (pageHtml) {
-    if (!pageHtml || pageHtml.indexOf('anime-video-player') === -1) {
+    if (!pageHtml || !_hasDownloadSignals(pageHtml)) {
       var encodedRes = encodeURIComponent(resString);
       return _get(BASE + '/episodes/' + slug + '/' + season + '/' + encodedRes).then(function (epHtml) {
         var fresh = _findDownloadLinkForEpisode(epHtml, encodedFilename, null);
-        if (fresh) {
+        if (fresh && !_sameDownloadPath(fresh, dlPath)) {
           downloadPageUrl = _absUrl(fresh);
           return _get(downloadPageUrl);
         }
+        // The episode API often returns the exact URL we just requested.
+        // Refetching it repeats the same three-host fallback with no new data.
         return pageHtml;
       });
     }
@@ -1173,6 +1210,23 @@ function _resolutionRank(q) {
   return m ? parseInt(m[1], 10) : 0;
 }
 
+function _withDeadline(promise, ms, fallback) {
+  if (typeof setTimeout !== 'function' || !(ms > 0)) {
+    return Promise.resolve(promise).catch(function () { return fallback; });
+  }
+  return new Promise(function (resolve) {
+    var done = false;
+    var timer = setTimeout(function () { finish(fallback); }, ms);
+    function finish(value) {
+      if (done) return;
+      done = true;
+      if (typeof clearTimeout === 'function') clearTimeout(timer);
+      resolve(value);
+    }
+    Promise.resolve(promise).then(finish, function () { finish(fallback); });
+  });
+}
+
 function _videoGroupForResolution(episodeUrl, slug, season, originalRes, filename, epNum, resString) {
   if (resString === originalRes) {
     return _extractDdl(episodeUrl, resString, filename, slug, season).then(function (info) {
@@ -1219,6 +1273,7 @@ function _isDirectMediaUrl(url) {
 }
 
 function getVideoSources(episodeUrl, fast) {
+  var playbackDeadline = fast === true ? Date.now() + FAST_VIDEO_BUDGET_MS : null;
   var originalUrl = String(episodeUrl || '');
   if (!originalUrl) return Promise.resolve([]);
 
@@ -1253,18 +1308,26 @@ function getVideoSources(episodeUrl, fast) {
   }
 
   function runSequential(resolutions, index) {
-    if (index >= resolutions.length) return Promise.resolve([]);
-    return resolveAt(resolutions[index]).then(function (group) {
+    if (index >= resolutions.length ||
+        (playbackDeadline !== null && Date.now() >= playbackDeadline)) {
+      return Promise.resolve([]);
+    }
+    var remaining = playbackDeadline === null ? 0 : playbackDeadline - Date.now();
+    var attempt = resolveAt(resolutions[index]);
+    if (playbackDeadline !== null) attempt = _withDeadline(attempt, remaining, []);
+    return attempt.then(function (group) {
       if (group && group.length) return group;
+      if (playbackDeadline !== null && Date.now() >= playbackDeadline) return [];
       return runSequential(resolutions, index + 1);
     }).catch(function () {
+      if (playbackDeadline !== null && Date.now() >= playbackDeadline) return [];
       return runSequential(resolutions, index + 1);
     });
   }
 
   var cachedDdl = _getCachedDdl(url);
   if (cachedDdl) {
-    return fromDdl(cachedDdl).then(function (group) {
+    var cachedFlow = fromDdl(cachedDdl).then(function (group) {
       if (group && group.length) return _finalizeStreams([group]);
       // Embedded DDL can be incomplete or expired; use the normal page flow.
       return null;
@@ -1274,6 +1337,9 @@ function getVideoSources(episodeUrl, fast) {
     }).catch(function () {
       return resolveNormally();
     });
+    return playbackDeadline === null
+      ? cachedFlow
+      : _withDeadline(cachedFlow, Math.max(1, playbackDeadline - Date.now()), []);
   }
 
   function resolveNormally() {
@@ -1298,7 +1364,10 @@ function getVideoSources(episodeUrl, fast) {
     });
   }
 
-  return resolveNormally();
+  var resultPromise = resolveNormally();
+  return playbackDeadline === null
+    ? resultPromise
+    : _withDeadline(resultPromise, Math.max(1, playbackDeadline - Date.now()), []);
 }
 
 function getStreams(id, opts) {
@@ -1308,7 +1377,7 @@ function getStreams(id, opts) {
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    version: '1.2.0',
+    version: '1.3.0',
     getInfo: getInfo,
     getSettings: getSettings,
     getHome: getHome,
