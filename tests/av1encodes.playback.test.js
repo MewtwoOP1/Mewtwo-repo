@@ -169,7 +169,7 @@ async function main() {
   const failedStreams = await provider.getVideoSources(ep3.url, true);
   assert.deepEqual(failedStreams, []);
 
-  // Legacy alias takes an options object and stays compatible.
+  // Legacy alias accepts an options object.
   const alias = await provider.getStreams(ep1.url, {});
   assert.equal(alias.length, streams1.length);
 
