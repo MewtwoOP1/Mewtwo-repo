@@ -9,7 +9,7 @@
 var AIO_ID = 'aiostreams', KITSU_API = 'https://kitsu.app/api/edge',
     ANIZIP_API = 'https://api.ani.zip/mappings', ANILIST_API = 'https://graphql.anilist.co',
     JIKAN_API = 'https://api.jikan.moe/v4', SEADEX_API = 'https://releases.moe/api/collections/entries/records',
-    AIO_VERSION = '1.0.2', AIO_PAGE_SIZE = 20, AIO_UA = 'Zangetsu-AIOStreams/1.0';
+    AIO_VERSION = '1.0.3', AIO_PAGE_SIZE = 20, AIO_UA = 'Zangetsu-AIOStreams/1.0';
 var AIO_TRACKERS = ['udp://tracker.opentrackr.org:1337/announce','udp://nyaa.tracker.wf:7777/announce','udp://open.demonii.com:1337/announce','udp://tracker.torrent.eu.org:451/announce'];
 var _aioDetailCache = {}, _aioMappingCache = {}, _aioAiringCache = {}, _aioSeaDexCache = {};
 
