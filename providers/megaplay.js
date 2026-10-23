@@ -7,7 +7,7 @@ var API = 'https://anikotoapi.site';
 var BASE = 'https://megaplays.se';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 
-function getInfo() { return { name: 'MegaPlay', lang: 'en', baseUrl: BASE, logo: BASE + '/favicon.ico', type: 'anime', version: VERSION }; }
+function getInfo() { return { name: 'MegaPlay', lang: 'en', baseUrl: BASE, logo: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/150.png', type: 'anime', version: VERSION }; }
 function getSettings() { return []; }
 function _get(url, ref, xhr) {
   var headers = { 'User-Agent': UA, 'Referer': ref || CATALOG + '/' };
