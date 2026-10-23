@@ -957,7 +957,7 @@
     {
       "id": "aiostreams",
       "name": "AIOStreams",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "type": "anime",
       "lang": "en",
       "file": "providers/aiostreams.js",
@@ -967,7 +967,7 @@
         {
           "key": "manifestUrl",
           "label": "AIOStreams Manifest URL (required)",
-          "description": "Paste your personalized URL ending in /stremio/<id>/<config>/manifest.json from your AIOStreams instance.",
+          "description": "Personalized AIOStreams URL ending in /stremio/<id>/<config>/manifest.json.",
           "type": "text",
           "default": ""
         },
@@ -995,7 +995,7 @@
         {
           "key": "idPriority",
           "label": "Stream ID Priority",
-          "description": "Which available ID is sent first to AIOStreams search.",
+          "description": "Select which available ID is used for stream lookup.",
           "type": "enum",
           "default": "kitsu,imdb,mal,anilist,tmdb",
           "options": [
@@ -1022,16 +1022,9 @@
           ]
         },
         {
-          "key": "markFillers",
-          "label": "Mark filler and recap episodes",
-          "description": "Show filler/recap markers when available.",
-          "type": "bool",
-          "default": false
-        },
-        {
           "key": "showP2P",
           "label": "Show torrent / P2P streams",
-          "description": "Enable only if your player supports magnet/torrent playback.",
+          "description": "Enable if the installed player supports magnet links.",
           "type": "bool",
           "default": false
         },
@@ -1045,23 +1038,9 @@
         {
           "key": "sortSeaDex",
           "label": "Move SeaDex best releases to the top",
-          "description": "Order matching SeaDex releases first.",
+          "description": "Sort SeaDex matches first.",
           "type": "bool",
           "default": true
-        },
-        {
-          "key": "tvdbApiKey",
-          "label": "TVDB API Key (optional)",
-          "description": "Reserved for optional TVDB episode metadata enrichment.",
-          "type": "text",
-          "default": ""
-        },
-        {
-          "key": "useAniDB",
-          "label": "Use AniDB title fallback",
-          "description": "Reserved for optional AniDB episode-title fallback.",
-          "type": "bool",
-          "default": false
         }
       ]
     }
