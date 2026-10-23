@@ -162,6 +162,7 @@ async function main() {
   const show = await mainProvider.getDetail('aio://tmdb/tv/601');
   assert.equal(show.tmdbIsTv, true);
   assert.deepEqual(JSON.parse(JSON.stringify(show.genres)), ['Animation']);
+  assert.equal(show.episodes.length, 2, 'TV detail contains episodes for the app detail screen');
   const eps = await mainProvider.getEpisodes('aio://tmdb/tv/601');
   assert.deepEqual(JSON.parse(JSON.stringify(eps.map((e) => [e.season, e.number, e.title]))), [
     [1, 1, 'S1 E1 - Pilot'], [2, 1, 'S2 E1 - Return']
