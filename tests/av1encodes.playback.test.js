@@ -49,6 +49,11 @@ const EPISODES = JSON.stringify([
     num: 3,
     label: "Episode 3 [Sub]",
     href: "/download/example-anime/1/1920%20x%201080/Example.Anime.%5BE03%5D%20%5B1080p%5D%20%5BSub%5D.mkv?token=ep03"
+  },
+  {
+    num: 4,
+    label: "Episode 4 [Sub]",
+    href: "/download/example-anime/1/1920%20x%201080/Example.Anime.%5BE04%5D%20%5B1080p%5D%20%5BSub%5D.mkv?token=ep04"
   }
 ]);
 
@@ -114,6 +119,7 @@ global.fetch = async function (input, options) {
   }
   if (/^\/download\//.test(pathname)) {
     const decodedPath = decodeURIComponent(pathname);
+    if (/E04/i.test(decodedPath)) return { status: 200, body: DOWNLOAD_FAILED, url };
     if (/E03/i.test(decodedPath) && decodedPath.includes("/1920 x 1080/")) {
       return { status: 200, body: DOWNLOAD_FAILED, url };
     }
@@ -158,13 +164,13 @@ async function main() {
   assert.equal(detail.title, "Example Anime");
   assert.equal(detail.cover, "https://av1please.com/images/example.jpg");
   assert.ok(detail.description.includes("short synopsis"));
-  assert.deepEqual(detail.episodes.map((episode) => episode.number), [3, 2, 1]);
+  assert.deepEqual(detail.episodes.map((episode) => episode.number), [4, 3, 2, 1]);
   assert.ok(detail.episodes.every((episode) => episode.url.startsWith("/download/")));
   assert.ok(detail.episodes[2].url.includes("?token=ep01"));
   assert.ok(requests.some((request) => request.url.startsWith("https://av1please.com/")));
 
   // Embedded DDL should resolve immediately and only produce media URLs.
-  const ep1 = detail.episodes[2];
+  const ep1 = detail.episodes[3];
   const streams1 = await provider.getVideoSources(ep1.url, true);
   assert.ok(streams1.some((stream) => stream.url === "https://cdn.example/ep01.m3u8"));
   assert.ok(streams1.some((stream) => stream.url === "https://cdn.example/ep01.mkv"));
@@ -175,7 +181,7 @@ async function main() {
 
   // Regular download-page -> token -> get_ddl flow for an episode without
   // embedded JSON DDL.
-  const ep2 = detail.episodes[1];
+  const ep2 = detail.episodes[2];
   const streams2 = await provider.getVideoSources(ep2.url, true);
   assert.ok(streams2.some((stream) => stream.url === "https://cdn.example/ep02.m3u8"));
   assert.ok(streams2.some((stream) => stream.url === "https://cdn.example/ep02.mkv"));
@@ -189,7 +195,7 @@ async function main() {
 
   // Episode 3 fails at preferred 1080p, but its JSON episode item resolves
   // to a lower-resolution URL. This specifically guards JSON-aware fallback.
-  const ep3 = detail.episodes[0];
+  const ep3 = detail.episodes[1];
   const fallbackStreams = await provider.getVideoSources(ep3.url, true);
   assert.ok(
     fallbackStreams.some((stream) => stream.url === "https://cdn.example/ep03-fallback.m3u8"),
@@ -198,6 +204,11 @@ async function main() {
   assert.ok(fallbackStreams.some((stream) => stream.url === "https://cdn.example/ep03-fallback.mkv"));
   assert.ok(fallbackStreams.every((stream) => !stream.url.includes("/download/")));
 
+  // Episode 4 fails at every available resolution. The provider must not return
+  // the site's HTML download page disguised as an MKV stream.
+  const ep4 = detail.episodes[0];
+  const noStreams = await provider.getVideoSources(ep4.url, true);
+  assert.deepEqual(noStreams, []);
 
   // Legacy alias accepts an options object.
   const alias = await provider.getStreams(ep1.url, {});
