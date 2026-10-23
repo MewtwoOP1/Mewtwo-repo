@@ -145,7 +145,7 @@
     {
       "id": "tmdb-stremio",
       "name": "TMDB + Stremio",
-      "version": "3.1.0",
+      "version": "3.1.1",
       "type": "movie",
       "lang": "en",
       "file": "providers/tmdb-stremio.js",
