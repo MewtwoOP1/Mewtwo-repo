@@ -169,7 +169,7 @@ global.fetch = async function (input, options) {
 
 async function main() {
   // Zangetsu source contract.
-  assert.equal(provider.version, "1.2.0");
+  assert.equal(provider.version, "1.3.0");
   const info = provider.getInfo();
   assert.equal(info.name, "AV1Encodes");
   assert.equal(info.logo, "icons/av1encodes.png");
@@ -258,8 +258,15 @@ async function main() {
   // Episode 4 fails at every available resolution. The provider must not return
   // the site's HTML download page disguised as an MKV stream.
   const ep4 = detail.episodes[1];
+  const beforeEp4 = requests.length;
   const noStreams = await provider.getVideoSources(ep4.url, true);
   assert.deepEqual(noStreams, []);
+  const ep4Requests = requests.slice(beforeEp4).filter((request) =>
+    /\/download\/example-anime\/1\//i.test(request.url) &&
+    /E04/i.test(decodeURIComponent(new URL(request.url).pathname))
+  );
+  assert.ok(ep4Requests.length <= 8,
+    "failed download pages should not be fetched again after the episode API returns the same link");
 
   // Legacy alias accepts an options object.
   const alias = await provider.getStreams(ep1.url, {});
