@@ -957,7 +957,7 @@
     {
       "id": "av1encodes",
       "name": "AV1Encodes",
-      "version": "1.1.8",
+      "version": "1.1.9",
       "type": "anime",
       "lang": "en",
       "file": "providers/av1encodes.js",
@@ -967,14 +967,10 @@
         {
           "key": "preferred_domain",
           "label": "Domain",
-          "description": "Choose an official mirror. Auto tries the official domains and preserves the mirror that served the title.",
+          "description": "Switch to the mirror if the default domain is unreachable. Restart the app after changing.",
           "type": "enum",
-          "default": "auto",
+          "default": "https://av1encodes.com",
           "options": [
-            {
-              "value": "auto",
-              "label": "Auto (recommended)"
-            },
             {
               "value": "https://av1encodes.com",
               "label": "av1encodes.com (default)"
@@ -992,7 +988,7 @@
         {
           "key": "preferred_quality",
           "label": "Preferred Resolution",
-          "description": "Episode discovery falls back to other resolutions when needed.",
+          "description": "If a season shows no episodes, try a lower resolution.",
           "type": "enum",
           "default": "1920 x 1080",
           "options": [
@@ -1017,7 +1013,7 @@
         {
           "key": "preferred_link_type",
           "label": "Preferred Server / Hoster",
-          "description": "Prefer this server type when multiple playable variants are available.",
+          "description": "This hoster will appear first in the server list.",
           "type": "enum",
           "default": "Stream",
           "options": [
@@ -1042,7 +1038,7 @@
         {
           "key": "show_torrent",
           "label": "Show Torrent Link",
-          "description": "Include a torrent link as a source when AV1Encodes provides one.",
+          "description": "Include the torrent link as a server option.",
           "type": "bool",
           "default": false
         }
