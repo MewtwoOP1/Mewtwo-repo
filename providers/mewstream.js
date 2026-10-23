@@ -80,7 +80,7 @@ var RRL = /watch\s*now|stream|play|hubcloud|multiquality|download/i;
 // ── Info / Settings ────────────────────────────────────────────────────
 function getInfo() {
   return { name: 'Mewstream', lang: 'en', baseUrl: 'https://www.themoviedb.org',
-    logo: 'https://www.google.com/s2/favicons?sz=256&domain=mewstream.to', type: 'movie', version: VERSION };
+    logo: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/150.png', type: 'movie', version: VERSION };
 }
 function getSettings() {
   return [
