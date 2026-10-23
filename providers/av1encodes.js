@@ -5,7 +5,7 @@
 
 const SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID)
   ? String(__SOURCE_ID) : 'av1encodes';
-const VERSION = '1.1.7';
+const VERSION = '1.1.8';
 const DEFAULT_DOMAIN = 'https://av1encodes.com';
 const SITE_DOMAINS = [
   'https://av1encodes.com',
@@ -984,7 +984,8 @@ function _seasonList(html) {
     if (seasons.indexOf(m[1]) < 0) seasons.push(m[1]);
   }
   if (!seasons.length) seasons.push('1');
-  return seasons.sort((a, b) => (parseInt(b, 10) || 0) - (parseInt(a, 10) || 0));
+  // Preserve the source page's selector order; do not impose a season sort.
+  return seasons;
 }
 
 function _episodeNumber(value) {
@@ -1076,15 +1077,8 @@ function _parseEpisodeJson(body, base, slug, season, resolution) {
     else return [];
   }
 
-  // Mirror Yuzuno's items.sortedByDescending { it.num } within the selected
-  // season route. Keep stable input order when num values are equal or missing.
-  data = data.map((item, index) => ({ item, index }))
-    .sort((a, b) => {
-      const aNum = Number(a.item && a.item.num) || 0;
-      const bNum = Number(b.item && b.item.num) || 0;
-      return (bNum - aNum) || (a.index - b.index);
-    })
-    .map(entry => entry.item);
+  // Keep API items in the exact order returned by the source. Their labels,
+  // num values, and visible season names can be irregular; do not normalize.
 
   const out = [];
   for (const item of data) {
@@ -1131,26 +1125,14 @@ function _parseEpisodePage(html, base, slug, season, resolution) {
     const ep = _episodeFromLink(a.href, a.inner, base, season, slug, resolution);
     if (ep) out.push(ep);
   }
-  if (out.length) {
-    // Yuzuno's HTML fallback sorts links by E(\\d+) in the original href.
-    out.sort((a, b) => _sourceEpisodeNumber(b.url) - _sourceEpisodeNumber(a.url));
-    return _uniqueEpisodes(out);
-  }
-  const filenames = _extractFilenames(text).sort((a, b) =>
-    _episodeNumber(b) - _episodeNumber(a)
-  );
+  if (out.length) return _uniqueEpisodes(out);
+  const filenames = _extractFilenames(text);
   for (const name of filenames) {
     const ep = _episodeFromLink(_makeEpisodeUrl(base, slug, season, resolution, name),
       '', base, season, slug, resolution);
     if (ep) out.push(ep);
   }
   return _uniqueEpisodes(out);
-}
-
-function _sourceEpisodeNumber(value) {
-  // Yuzuno's fallback path sorts download links by Regex("E(\\d+)") in href.
-  const match = _decode(String(value || '')).match(/E(\d+)/i);
-  return match ? (parseInt(match[1], 10) || 0) : 0;
 }
 
 function _uniqueEpisodes(items) {
