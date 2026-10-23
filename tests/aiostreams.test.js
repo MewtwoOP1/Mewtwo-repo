@@ -110,8 +110,9 @@ async function main() {
   const mainProvider = load((url, init) => {
     const parsed = new URL(String(url));
     urls.push({ url: String(url), headers: init.headers || {} });
-    assert.equal(parsed.hostname === 'api.themoviedb.org' || parsed.hostname === 'aio.example', true, 'only TMDB metadata and AIOStreams stream hosts are called');
-    if (parsed.hostname === 'api.themoviedb.org') {
+    assert.equal(['api.themoviedb.org', 'api.themoviedb.org.', 'aio.example'].includes(parsed.hostname), true, 'only TMDB metadata and AIOStreams stream hosts are called');
+    if (parsed.hostname === 'api.themoviedb.org.') {
+      assert.equal(init.headers.Host, 'api.themoviedb.org', 'custom TMDB credentials keep canonical Host header');
       assert.equal(parsed.searchParams.get('api_key'), 'TEST_TMDB_KEY');
       if (parsed.pathname === '/3/movie/popular') return Promise.resolve(response({ results: [tmdbMovie] }));
       if (parsed.pathname === '/3/tv/popular') return Promise.resolve(response({ results: [tmdbTv] }));
