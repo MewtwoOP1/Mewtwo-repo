@@ -1,5 +1,32 @@
 # Changelog
 
+## TMDB + Stremio 3.2.1
+
+- Cache successful TMDB API responses and use recent cached data during transient DNS, connection, and server failures.
+- Retry custom-key requests on TMDB's alternate API hostname when the trailing-dot primary hostname cannot be reached.
+- Treat an empty `append_to_response=external_ids` object as complete, avoiding an unnecessary second request.
+- Add regression tests for alternate-host retry and empty external-ID responses.
+
+
+## AIOStreams 2.2.0
+
+- When a valid TMDB search yields no playable streams, resolve the TV episode through AIOStreams' anime database and retry with available anime-native, IMDb, or TVDB IDs.
+- Convert TMDB episode offsets to anime-cour episode numbering and filter returned files against the resolved episode coordinates.
+- Cache anime mapping lookups, keep existing network/auth failures visible, and only trigger fallback after a valid empty stream response.
+- Increase new-install stream search and total fallback deadlines to 9 and 12 seconds respectively.
+- Add regression coverage for episode-offset mapping and fallback behavior.
+
+
+## TMDB + Stremio 3.2.0
+
+- Preserve available IMDb, TMDB, TVDB, MAL, AniList, Kitsu, and AniDB identifiers, including episode-aware variants when supplied.
+- Respect Stremio manifest stream resource types and ID prefixes to avoid unsupported requests.
+- Add opt-in support for valid magnet and infoHash torrent results; P2P stays disabled by default.
+- Cache add-on manifests for five minutes and try preferred identifiers before lower-priority fallbacks.
+- Limit TMDB season metadata lookups to five concurrent requests.
+- Add regression tests for P2P opt-in, external IDs, ID-prefix filtering, and season-fetch concurrency.
+
+
 ## AIOStreams 2.1.1
 
 - Fix dead/empty catalogue behavior by using Zangetsu's built-in TMDB key when no per-source credential is supplied.

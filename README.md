@@ -115,14 +115,15 @@ Use the real URL from your instance. The URL above is only an example format.
    | **TMDB API key or Read Access Token** | Optional. Leave blank to use Zangetsu's built-in TMDB key. |
    | **Show torrent / P2P streams** | Keep off unless your player supports magnet links. |
    | **Maximum concurrent requests** | Defaults to **5 simultaneous requests**. This limits concurrent requests, not the number of links returned. |
-   | **AIOStreams request timeout** | Defaults to **7 seconds**. |
-   | **Total stream lookup deadline** | Defaults to **8 seconds**. |
+   | **AIOStreams request timeout** | Defaults to **9 seconds** for each stream search, including ID fallback attempts. |
+   | **Total stream lookup deadline** | Defaults to **12 seconds** across stream lookup and anime ID mapping. |
 
 3. Save your settings, search through AIOStreams in Zangetsu, open a title from this source, and try playback.
 
 ### If results are slow or missing
 
 - Recheck the manifest URL, including the `/stremio/.../manifest.json` path.
+- If TMDB returns no streams for an anime episode, the provider now checks AIOStreams' anime database mapping and retries with available MAL, AniList, Kitsu, AniDB, IMDb, or TVDB IDs.
 - Confirm the relevant add-ons are enabled and working inside your AIOStreams instance.
 - Review per-add-on timeout settings in AIOStreams. A longer client-side timeout cannot make a slow upstream add-on respond faster.
 - Treat personalized manifest URLs and UserData values as private if they contain account-specific identifiers or access credentials. **Do not publish them.**
@@ -154,6 +155,7 @@ TMDB provides search, title details, catalogue metadata, and episode information
    |:--|:--|
    | **TMDB API Key** | Leave blank to use Zangetsu's built-in key. A personal TMDB v3 API key is optional. |
    | **Max streams per add-on** | Defaults to **25** streams considered per add-on; the available range is 5–100. |
+   | **Show torrent / P2P streams** | Off by default. Enable only if Zangetsu's player supports magnet links. |
 
 4. Save your settings, search for a movie or series, open it from **TMDB + Stremio**, and choose a returned stream.
 
@@ -162,6 +164,8 @@ TMDB provides search, title details, catalogue metadata, and episode information
 - Confirm each URL is valid and points to a Stremio-compatible add-on that provides the `stream` resource.
 - Check whether the add-on requires a specific configuration, access token, or URL path.
 - Confirm the add-on supports streams for that title and episode. Catalogue entries can appear even when no configured add-on has a matching stream.
+- Anime add-ons may require MAL, AniList, Kitsu, IMDb, TVDB, or their own ID format. The resolver uses only identifiers present in metadata and does not invent missing anime-ID mappings.
+- Torrent results are hidden by default. Enable **Show torrent / P2P streams** only when the player supports magnet links.
 - One failed add-on request does not necessarily stop other configured add-ons from returning results.
 
 </details>
@@ -176,6 +180,8 @@ TMDB provides search, title details, catalogue metadata, and episode information
 | AIOStreams times out | AIOStreams per-add-on timeouts, then the source timeout settings |
 | A series opens, but an episode has no results | Season and episode selection, plus add-on support for series streams |
 | One Stremio add-on fails while others work | That add-on's URL and configuration; the other add-ons may still return results |
+| TMDB fails after previously working | Recent API responses can be served from cache during transient network failures; check DNS/network access if all requests still fail |
+| The app says AniList is having an error | AniList is the app's built-in metadata service, not this repository's stream provider. If AniList is unavailable, switch the anime metadata provider to MyAnimeList if available, or retry when the service/network recovers |
 
 ## Third-party sources and responsibility
 

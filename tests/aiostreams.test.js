@@ -96,7 +96,7 @@ async function main() {
   assert.ok(registered, 'AIOStreams stays registered');
   const provider = load(() => Promise.reject(new Error('unexpected fetch')), settings);
   assert.equal(provider.version, registered.version);
-  assert.equal(provider.getInfo().version, '2.1.1');
+  assert.equal(provider.getInfo().version, '2.2.0');
   assert.equal(provider.getInfo().type, 'movie');
   assert.deepEqual(JSON.parse(JSON.stringify(provider.getSettings().map((x) => x.key))), registered.settings.map((x) => x.key));
   assert.ok(provider.getSettings().some((x) => x.key === 'tmdbApiKey'), 'TMDB credential setting exists');
@@ -206,6 +206,44 @@ async function main() {
   }, settings);
   await assert.rejects(noRetry.getVideoSources('aio://episode/series/601?season=1&episode=1'), /HTTP 503/);
   assert.equal(failedSearches, 1, 'stream fetching does not spend time retrying a failed API request');
+
+  const animeFallbackCalls = [];
+  const animeFallback = load((url, init) => {
+    const parsed = new URL(String(url));
+    animeFallbackCalls.push({ url: String(url), path: parsed.pathname, params: parsed.searchParams, headers: init.headers || {} });
+    if (parsed.pathname === '/api/v1/search') {
+      const id = parsed.searchParams.get('id');
+      if (id === 'tmdb:601:2:13') return Promise.resolve(response({ success: true, data: { results: [], errors: [] } }));
+      if (id === 'mal:30831:1') return Promise.resolve(response({ success: true, data: { results: [{
+        name: 'Mapped anime episode 1080p',
+        url: 'https://cdn.example/mapped-anime.mp4',
+        parsedFile: { seasons: [1], episodes: [1] }
+      }], errors: [] } }));
+      throw new Error('Unexpected fallback search ID ' + id);
+    }
+    if (parsed.pathname === '/api/v1/anime') {
+      assert.equal(parsed.searchParams.get('idType'), 'themoviedbId');
+      assert.equal(parsed.searchParams.get('idValue'), '601');
+      assert.equal(parsed.searchParams.get('season'), '2');
+      assert.equal(parsed.searchParams.get('episode'), '13');
+      assert.equal(init.headers.Authorization, undefined, 'mapping endpoint does not need the personalized stream credentials');
+      return Promise.resolve(response({ success: true, detail: 'OK', data: {
+        mappings: { malId: 30831, anilistId: 21202, imdbId: 'tt00601', thetvdbId: 888 },
+        tmdb: { seasonNumber: 2, fromEpisode: 13 },
+        imdb: { id: 'tt00601', seasonNumber: 2, fromEpisode: 13 },
+        tvdb: { seasonNumber: 2, fromEpisode: 13 }
+      } }));
+    }
+    throw new Error('Unexpected fallback endpoint ' + parsed.pathname);
+  }, settings);
+  const mappedStreams = await animeFallback.getVideoSources('aio://episode/series/601?season=2&episode=13');
+  assert.equal(mappedStreams.length, 1, 'empty TMDB lookup falls back to anime database identifiers');
+  assert.equal(mappedStreams[0].url, 'https://cdn.example/mapped-anime.mp4');
+  assert.ok(animeFallbackCalls.some((call) => call.path === '/api/v1/anime'), 'anime mapping endpoint is requested after an empty TMDB lookup');
+  assert.ok(animeFallbackCalls.some((call) => call.path === '/api/v1/search' && call.params.get('id') === 'mal:30831:1'),
+    'TMDB episode offset maps episode 13 to the anime cour episode 1');
+  assert.ok(animeFallbackCalls.filter((call) => call.path === '/api/v1/search').length === 2,
+    'fallback stops after first valid stream response');
 
   let running = 0, peak = 0;
   const manySeasonFetch = load((url) => {
