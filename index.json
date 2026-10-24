@@ -145,7 +145,7 @@
     {
       "id": "tmdb-stremio",
       "name": "TMDB + Stremio",
-      "version": "3.1.1",
+      "version": "3.2.0",
       "type": "movie",
       "lang": "en",
       "file": "providers/tmdb-stremio.js",
@@ -170,6 +170,13 @@
           "key": "enableAddonCatalogs",
           "label": "Use configured add-on catalogues and metadata",
           "description": "When enabled, browse configured add-on catalogues and prefer their metadata. Disable to use TMDB catalogues only.",
+          "type": "bool",
+          "default": false
+        },
+        {
+          "key": "showP2P",
+          "label": "Show torrent / P2P streams",
+          "description": "Allow magnet and infoHash results from configured add-ons. Enable only if the Zangetsu player supports torrent links.",
           "type": "bool",
           "default": false
         },

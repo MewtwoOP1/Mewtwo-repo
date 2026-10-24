@@ -7,6 +7,7 @@ var TMDB_POSTER = 'https://image.tmdb.org/t/p/w500';
 var TMDB_BACKDROP = 'https://image.tmdb.org/t/p/w780';
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID) ? String(__SOURCE_ID) : 'tmdb-stremio';
 var ADDON_CATALOG_META_CACHE = {};
+var ADDON_MANIFEST_CACHE = {};
 
 function getInfo() {
   return {
@@ -15,7 +16,7 @@ function getInfo() {
     baseUrl: 'https://www.themoviedb.org',
     logo: 'https://www.google.com/s2/favicons?sz=256&domain=strem.io',
     type: 'movie',
-    version: '3.1.1'
+    version: '3.2.0'
   };
 }
 
@@ -39,6 +40,13 @@ function getSettings() {
       key: 'enableAddonCatalogs',
       label: 'Use configured add-on catalogues and metadata',
       description: 'When enabled, browse configured add-on catalogues and prefer the add-on metadata for those items. Disable to use TMDB catalogues only.',
+      type: 'bool',
+      default: false
+    },
+    {
+      key: 'showP2P',
+      label: 'Show torrent / P2P streams',
+      description: 'Allow magnet and infoHash results from configured add-ons. Enable only if the Zangetsu player supports torrent links.',
       type: 'bool',
       default: false
     },
@@ -74,6 +82,7 @@ function _combinedSettings() {
     tmdbApiKey: _trim(_readSetting('tmdbApiKey')),
     urls: _parseAddonUrls(_readSetting('addonUrls')),
     useAddonCatalogs: _readSetting('enableAddonCatalogs') === true || String(_readSetting('enableAddonCatalogs')).toLowerCase() === 'true',
+    showP2P: _readSetting('showP2P') === true || String(_readSetting('showP2P')).toLowerCase() === 'true',
     max: max
   };
 }
@@ -214,7 +223,7 @@ async function _addonCatalogRows(query) {
   if (!config.useAddonCatalogs || !config.urls.length) return [];
   var groups = await Promise.all(config.urls.map(async function (base) {
     try {
-      var manifest = await _json(_catalogManifestUrl(base));
+      var manifest = await _addonManifest(base);
       if (!manifest || !Array.isArray(manifest.catalogs)) return [];
       var catalogs = manifest.catalogs.filter(function (catalog) {
         if (!catalog || !catalog.id || !catalog.type) return false;
@@ -252,22 +261,32 @@ function _parseAddonItem(value) {
 
 function _addonCanonicalIds(meta, fallbackId) {
   meta = meta || {};
-  var rawId = String(meta.id || fallbackId || '');
-  var external = meta.external_ids || meta.externalIds || {};
-  var ids = meta.ids || {};
-  var imdb = meta.imdb_id || meta.imdbId || external.imdb_id || external.imdbId || ids.imdb || '';
-  var tmdb = meta.moviedb_id || meta.tmdb_id || meta.tmdbId || external.tmdb_id || external.tmdbId || ids.tmdb || '';
+  var rawId = String(meta.id || fallbackId || ''), external = meta.external_ids || meta.externalIds || {}, ids = meta.ids || {};
+  function first(values) { for (var i = 0; i < values.length; i++) if (values[i] != null && String(values[i]).trim()) return String(values[i]).trim(); return ''; }
+  var imdb = first([meta.imdb_id, meta.imdbId, external.imdb_id, external.imdbId, ids.imdb]);
+  var tmdb = first([meta.moviedb_id, meta.tmdb_id, meta.tmdbId, external.tmdb_id, external.tmdbId, ids.tmdb]);
+  var tvdb = first([meta.tvdb_id, meta.tvdbId, meta.theTVDBId, external.tvdb_id, external.tvdbId, ids.tvdb, ids.tvdb_id]);
+  var mal = first([meta.mal_id, meta.malId, meta.myanimelist_id, external.mal_id, external.malId, ids.mal, ids.myanimelist, ids.myanimelist_id]);
+  var anilist = first([meta.anilist_id, meta.anilistId, external.anilist_id, external.anilistId, ids.anilist]);
+  var kitsu = first([meta.kitsu_id, meta.kitsuId, external.kitsu_id, external.kitsuId, ids.kitsu]);
+  var anidb = first([meta.anidb_id, meta.anidbId, external.anidb_id, external.anidbId, ids.anidb]);
   if (!imdb && /^tt\d+$/i.test(rawId)) imdb = rawId;
-  if (!tmdb) {
-    var m = rawId.match(/^(?:tmdb:)?(?:movie|tv|series):(\d+)$/i) || rawId.match(/^tmdb:(\d+)$/i);
-    if (m) tmdb = m[1];
+  if (!tmdb) { var m = rawId.match(/^(?:tmdb:)?(?:movie|tv|series):(\d+)$/i) || rawId.match(/^tmdb:(\d+)$/i); if (m) tmdb = m[1]; }
+  var native = rawId.match(/^(mal|myanimelist|anilist|kitsu|anidb|tvdb)[:-](\d+)$/i);
+  if (native) {
+    var ns = native[1].toLowerCase();
+    if ((ns === 'mal' || ns === 'myanimelist') && !mal) mal = native[2];
+    else if (ns === 'anilist' && !anilist) anilist = native[2];
+    else if (ns === 'kitsu' && !kitsu) kitsu = native[2];
+    else if (ns === 'anidb' && !anidb) anidb = native[2];
+    else if (ns === 'tvdb' && !tvdb) tvdb = native[2];
   }
-  return { imdbId: imdb ? String(imdb) : null, tmdbId: tmdb ? String(tmdb) : null };
+  return { imdbId: imdb || null, tmdbId: tmdb || null, tvdbId: tvdb || null, malId: mal || null, anilistId: anilist || null, kitsuId: kitsu || null, anidbId: anidb || null };
 }
 
 function _addonDetail(parsed) {
   var catalogMeta = ADDON_CATALOG_META_CACHE[parsed.url] || null;
-  return _json(_catalogManifestUrl(parsed.base)).then(function (manifest) {
+  return _addonManifest(parsed.base).then(function (manifest) {
     if (!manifest || !Array.isArray(manifest.resources)) return null;
     var supportsMeta = manifest.resources.some(function (resource) {
       return resource === 'meta' || (resource && resource.name === 'meta' &&
@@ -299,13 +318,13 @@ function _addonDetail(parsed) {
             id: String(season) + 'x' + String(episode),
             title: 'S' + _pad(season) + ' E' + _pad(episode) + ' - ' + String(video.title || video.name || ''),
             number: episode, season: season,
-            url: _episodeId('tv', Number(ids.tmdbId) || 0, ids.imdbId, season, episode),
+            url: _episodeId('tv', Number(ids.tmdbId) || 0, ids.imdbId, season, episode, undefined, ids),
             date: video.released || video.firstAired || video.releaseInfo || null,
             thumbnail: video.thumbnail || null
           });
         });
       } else if (!isTv) {
-        episodes.push({ id: 'movie', title: name, number: 1, url: _episodeId('movie', Number(ids.tmdbId) || 0, ids.imdbId, 0, 0) });
+        episodes.push({ id: 'movie', title: name, number: 1, url: _episodeId('movie', Number(ids.tmdbId) || 0, ids.imdbId, 0, 0, undefined, ids) });
       }
       var genres = Array.isArray(meta.genres) ? meta.genres : (Array.isArray(meta.genre) ? meta.genre : []);
       var result = {
@@ -387,7 +406,7 @@ function _addonPreviewDetail(parsed, meta, ids) {
       id: 'movie',
       title: title,
       number: 1,
-      url: _episodeId('movie', Number(ids.tmdbId) || 0, ids.imdbId, 0, 0)
+      url: _episodeId('movie', Number(ids.tmdbId) || 0, ids.imdbId, 0, 0, undefined, ids)
     });
   }
   return {
@@ -474,9 +493,9 @@ function _parseTmdbUrl(value) {
 
 function _externalIds(type, id, detail) {
   var embedded = detail && detail.external_ids;
-  if (embedded && embedded.imdb_id) return Promise.resolve(embedded.imdb_id);
+  if (embedded && (embedded.imdb_id || embedded.tvdb_id || embedded.mal_id || embedded.anilist_id || embedded.kitsu_id || embedded.anidb_id)) return Promise.resolve(embedded);
   var path = type === 'tv' ? '/tv/' + id + '/external_ids' : '/movie/' + id + '/external_ids';
-  return _tmdbJson(path).then(function (json) { return json && json.imdb_id ? json.imdb_id : null; });
+  return _tmdbJson(path).then(function (json) { return json && typeof json === 'object' ? json : {}; });
 }
 
 function _pad(value) {
@@ -484,31 +503,37 @@ function _pad(value) {
   return n < 10 ? '0' + n : String(n);
 }
 
-function _episodeId(type, id, imdbId, season, episode, absoluteEpisode) {
-  return JSON.stringify({
-    id: _tmdbUrl(type, id),
-    videoId: _tmdbUrl(type, id),
-    type: type === 'tv' ? 'series' : 'movie',
-    tmdbId: id,
-    tmdbIsTv: type === 'tv',
-    imdbId: imdbId || undefined,
-    season: season || 0,
-    episode: episode || 0,
-    absoluteEpisode: absoluteEpisode || undefined
-  });
+function _episodeId(type, id, imdbId, season, episode, absoluteEpisode, externalIds) {
+  var numericId = Number(id), validTmdbId = isFinite(numericId) && numericId > 0 ? numericId : undefined;
+  var identity = externalIds || {}, nested = identity.ids || {};
+  function first(values) { for (var i = 0; i < values.length; i++) if (values[i] != null && String(values[i]).trim()) return String(values[i]).trim(); return undefined; }
+  var result = { id: _tmdbUrl(type, validTmdbId || 0), videoId: _tmdbUrl(type, validTmdbId || 0), type: type === 'tv' ? 'series' : 'movie', tmdbId: validTmdbId, tmdbIsTv: type === 'tv', imdbId: first([imdbId, identity.imdb_id, identity.imdbId, nested.imdb]), season: season || 0, episode: episode || 0, absoluteEpisode: absoluteEpisode || undefined };
+  [
+    ['tvdbId', [identity.tvdbId, identity.tvdb_id, identity.thetvdb_id, nested.tvdb, nested.tvdb_id]],
+    ['malId', [identity.malId, identity.mal_id, identity.myanimelist_id, nested.mal, nested.myanimelist, nested.myanimelist_id]],
+    ['anilistId', [identity.anilistId, identity.anilist_id, nested.anilist]],
+    ['kitsuId', [identity.kitsuId, identity.kitsu_id, nested.kitsu]],
+    ['anidbId', [identity.anidbId, identity.anidb_id, nested.anidb]]
+  ].forEach(function (entry) { var value = first(entry[1]); if (value) result[entry[0]] = value; });
+  return JSON.stringify(result);
 }
 
-function _tvEpisodes(id, imdbId, seasonCount) {
-  var count = Math.min(Math.max(1, parseInt(seasonCount, 10) || 1), 40);
-  var jobs = [];
-  for (var season = 1; season <= count; season++) {
-    (function (seasonNumber) {
-      jobs.push(_tmdbJson('/tv/' + id + '/season/' + seasonNumber).then(function (json) {
-        return { season: seasonNumber, episodes: json && Array.isArray(json.episodes) ? json.episodes : [] };
-      }));
-    })(season);
+function _mapWithConcurrency(items, limit, mapper) {
+  var results = new Array(items.length), nextIndex = 0, workerCount = Math.min(items.length, Math.max(1, Number(limit) || 1));
+  function worker() {
+    if (nextIndex >= items.length) return Promise.resolve();
+    var index = nextIndex++;
+    return Promise.resolve().then(function () { return mapper(items[index], index); }).then(function (v) { results[index] = v; return worker(); }, function () { results[index] = null; return worker(); });
   }
-  return Promise.all(jobs).then(function (seasons) {
+  var workers = []; for (var i = 0; i < workerCount; i++) workers.push(worker());
+  return Promise.all(workers).then(function () { return results; });
+}
+function _tvEpisodes(id, imdbId, seasonCount, externalIds) {
+  var count = Math.min(Math.max(1, parseInt(seasonCount, 10) || 1), 40), jobs = [];
+  for (var season = 1; season <= count; season++) jobs.push(season);
+  return _mapWithConcurrency(jobs, 5, function (seasonNumber) {
+    return _tmdbJson('/tv/' + id + '/season/' + seasonNumber).then(function (json) { return { season: seasonNumber, episodes: json && Array.isArray(json.episodes) ? json.episodes : [] }; });
+  }).then(function (seasons) {
     var out = [];
     seasons.sort(function (a, b) { return a.season - b.season; });
     seasons.forEach(function (row) {
@@ -531,7 +556,7 @@ function _tvEpisodes(id, imdbId, seasonCount) {
           title: 'S' + _pad(seasonNumber) + ' E' + _pad(relativeNumber) + ' - ' + (episode.name || ('Episode ' + (absoluteNumber || tmdbNumber))),
           number: absoluteNumber || tmdbNumber,
           season: seasonNumber,
-          url: _episodeId('tv', id, imdbId, seasonNumber, relativeNumber, absoluteNumber),
+          url: _episodeId('tv', id, imdbId, seasonNumber, relativeNumber, absoluteNumber, externalIds),
           date: episode.air_date || null,
           thumbnail: episode.still_path ? 'https://image.tmdb.org/t/p/w300' + episode.still_path : null
         });
@@ -560,13 +585,14 @@ function getDetail(url, opts) {
     : '/movie/' + id + '?append_to_response=external_ids';
   return _tmdbJson(path).then(function (info) {
     if (!info || info.success === false || info.id == null) return null;
-    return _externalIds(type, id, info).then(function (imdbId) {
+    return _externalIds(type, id, info).then(function (externalIds) {
+      var imdbId = externalIds && (externalIds.imdb_id || externalIds.imdbId) || null;
       var title = _trim(info.title || info.name || 'Untitled');
       var year = _year(info);
       var genres = (info.genres || []).map(function (genre) { return genre && genre.name; }).filter(Boolean);
       var episodes;
       if (type === 'tv') {
-        return _tvEpisodes(id, imdbId, info.number_of_seasons || (info.seasons || []).length || 1).then(function (tvEpisodes) {
+        return _tvEpisodes(id, imdbId, info.number_of_seasons || (info.seasons || []).length || 1, externalIds).then(function (tvEpisodes) {
           episodes = tvEpisodes;
           return _detailResult();
         });
@@ -575,7 +601,7 @@ function getDetail(url, opts) {
         id: 'movie',
         title: title,
         number: 1,
-        url: _episodeId('movie', id, imdbId, 0, 0)
+        url: _episodeId('movie', id, imdbId, 0, 0, undefined, externalIds)
       }];
       return _detailResult();
 
@@ -596,6 +622,11 @@ function getDetail(url, opts) {
           tmdbId: id,
           tmdbIsTv: type === 'tv',
           imdbId: imdbId || null,
+          tvdbId: externalIds && (externalIds.tvdb_id || externalIds.tvdbId) || null,
+          malId: externalIds && (externalIds.mal_id || externalIds.malId) || null,
+          anilistId: externalIds && (externalIds.anilist_id || externalIds.anilistId) || null,
+          kitsuId: externalIds && (externalIds.kitsu_id || externalIds.kitsuId) || null,
+          anidbId: externalIds && (externalIds.anidb_id || externalIds.anidbId) || null,
           episodes: episodes,
           subCount: episodes.length,
           dubCount: 0
@@ -667,97 +698,85 @@ function _streamEndpoint(base, type, id) {
 
 function _parseStreamId(raw) {
   var item = raw && typeof raw === 'object' ? raw : null;
-  if (!item) {
-    var value = String(raw || '');
-    if (value.charAt(0) === '{') {
-      try { item = JSON.parse(value); } catch (e) {}
-    }
-    if (!item) item = { id: value };
+  if (!item) { var value = String(raw || ''); if (value.charAt(0) === '{') { try { item = JSON.parse(value); } catch (e) {} } if (!item) item = { id: value }; }
+  var originalId = String(item.videoId || item.id || '');
+  var routeMatch = originalId.match(/^zm:\/\/(anime|movie|tv|series)\/([^/?#]+)/i);
+  var tmdbRoute = originalId.match(/^(?:tmdb|torbox):\/\/(movie|tv|series)\/(\d+)(?:\/season\/(\d+))?(?:\/(?:ep|episode)\/(\d+))?/i);
+  var kind = String(item.type || (item.season || item.episode ? 'series' : '')).toLowerCase(), id = originalId;
+  if (routeMatch) { id = routeMatch[2]; var rk=routeMatch[1].toLowerCase(); if (rk==='anime'||rk==='tv'||rk==='series') kind='series'; else if(!kind)kind='movie'; }
+  else if(tmdbRoute) kind=tmdbRoute[1].toLowerCase()==='movie'?'movie':'series';
+  var type = kind==='series'||kind==='tv'||kind==='anime'?'series':'movie';
+  var season = parseInt(item.season,10)||(tmdbRoute&&parseInt(tmdbRoute[3],10))||0, episode=parseInt(item.episode,10)||(tmdbRoute&&parseInt(tmdbRoute[4],10))||0;
+  var routeEpisode=originalId.match(/\/(?:ep|episode)\/(\d+)/i);
+  if(!episode&&routeEpisode)episode=parseInt(routeEpisode[1],10)||0;
+  if(!season&&episode>0&&type==='series'&&routeMatch&&routeMatch[1].toLowerCase()==='anime')season=1;
+  var external=item.externalIds||item.external_ids||{}, nested=item.ids||external.ids||{};
+  var imdb=item.imdbId||item.imdb_id||external.imdb_id||external.imdbId||nested.imdb||'';
+  var tmdb=item.tmdbId||item.tmdb_id||item.moviedb_id||external.tmdb_id||external.tmdbId||nested.tmdb||(tmdbRoute&&tmdbRoute[2])||null;
+  var tvdb=item.tvdbId||item.tvdb_id||item.thetvdb_id||external.tvdb_id||external.tvdbId||nested.tvdb||nested.tvdb_id||null;
+  var mal=item.malId||item.mal_id||item.myanimelist_id||external.mal_id||external.malId||nested.mal||nested.myanimelist||nested.myanimelist_id||null;
+  var anilist=item.anilistId||item.anilist_id||external.anilist_id||external.anilistId||nested.anilist||null;
+  var kitsu=item.kitsuId||item.kitsu_id||external.kitsu_id||external.kitsuId||nested.kitsu||null;
+  var anidb=item.anidbId||item.anidb_id||external.anidb_id||external.anidbId||nested.anidb||null;
+  var ids=[],seen={};
+  function add(v){v=String(v==null?'':v).trim();if(v&&!seen[v]){seen[v]=true;ids.push(v);}}
+  function addIdentity(ns,v){
+    var clean=String(v==null?'':v).trim().replace(new RegExp('^'+ns+'[:-]','i'),'');if(!clean)return;
+    if(type==='series'&&episode>0){add(ns+':'+clean+':'+episode);if(season>0)add(ns+':'+clean+':'+season+':'+episode);if(ns==='mal'||ns==='anilist'){add(ns+'-'+clean+':'+episode);if(season>0)add(ns+'-'+clean+':'+season+':'+episode);}}
+    add(ns+':'+clean);if(ns==='mal'||ns==='anilist')add(ns+'-'+clean);
   }
-
-  var id = String(item.videoId || item.id || '');
-  var kind = String(item.type || (item.season || item.episode ? 'series' : 'movie')).toLowerCase();
-  var type = kind === 'series' || kind === 'tv' ? 'series' : 'movie';
-  var season = parseInt(item.season, 10) || 0;
-  var episode = parseInt(item.episode, 10) || 0;
-  var imdb = String(item.imdbId || item.imdb_id || '');
-  var tmdb = item.tmdbId || item.tmdb_id || item.moviedb_id || null;
-  var ids = [], seen = {};
-
-  function add(value) {
-    var candidate = String(value == null ? '' : value);
-    if (candidate && !seen[candidate]) { seen[candidate] = true; ids.push(candidate); }
-  }
-
-  if (!/^tmdb:\/\/(?:movie|tv|series)\//i.test(id)) add(id);
-  if (imdb) {
-    if (type === 'series' && season > 0 && episode > 0) add(imdb + ':' + season + ':' + episode);
-    add(imdb);
-  }
-  if (tmdb) {
-    add(String(tmdb));
-    add('tmdb:' + (type === 'series' ? 'series' : 'movie') + ':' + String(tmdb));
-    if (type === 'series' && season > 0 && episode > 0) {
-      add('tmdb:series:' + String(tmdb) + ':' + season + ':' + episode);
-    }
-  }
-  return { ids: ids, type: type };
+  var native=id.match(/^(mal|myanimelist|anilist|kitsu|anidb|tvdb)[:-](\d+)(?::\d+){0,2}$/i);
+  if(!routeMatch&&!tmdbRoute&&!/^tmdb:\/\/(?:movie|tv|series)\//i.test(originalId))add(originalId);
+  if(native&&(routeMatch||(type==='series'&&episode>0)))addIdentity(native[1].toLowerCase()==='myanimelist'?'mal':native[1].toLowerCase(),native[2]);
+  // Never infer missing anime IDs from a TMDB number.
+  if(mal)addIdentity('mal',mal);if(anilist)addIdentity('anilist',anilist);if(kitsu)addIdentity('kitsu',kitsu);if(anidb)addIdentity('anidb',anidb);
+  if(imdb){if(type==='series'&&season>0&&episode>0)add(String(imdb)+':'+season+':'+episode);add(imdb);}
+  if(tvdb){if(type==='series'&&season>0&&episode>0)add('tvdb:'+String(tvdb)+':'+season+':'+episode);add('tvdb:'+String(tvdb));}
+  if(tmdb){var n=String(tmdb);if(/^\d+$/.test(n)){add(n);add('tmdb:'+(type==='series'?'series':'movie')+':'+n);if(type==='series'&&season>0&&episode>0)add('tmdb:series:'+n+':'+season+':'+episode);}else add(n);}
+  return {ids:ids,type:type};
 }
 
+function _validMagnetUrl(url) {
+  if (!/^magnet:\?/i.test(url)) return false;
+  return url.substring(url.indexOf('?')+1).split('&').some(function (part) { return /^xt=urn:btih:(?:[a-f0-9]{40}|[a-z2-7]{32})$/i.test(part); });
+}
 function _stream(raw, base, config) {
-  if (!raw || typeof raw !== 'object') return null;
-  var url = typeof raw.url === 'string' && /^https?:\/\//i.test(raw.url) ? raw.url : '';
-  if (!url) return null;
-  var text = String(raw.name || '') + ' ' + String(raw.title || '') + ' ' + String(raw.description || '');
-  var qualityMatch = text.match(/(2160p|4k|1080p|720p|480p|360p)/i);
-  var container = /\.m3u8(?:[?#]|$)/i.test(url) ? 'hls' :
-    /\.(mp4|m4v|mov|webm)(?:[?#]|$)/i.test(url) ? 'mp4' : 'unknown';
-  return {
-    url: url,
-    quality: qualityMatch ? (qualityMatch[1].toLowerCase() === '4k' ? '2160p' : qualityMatch[1]) : 'Auto',
-    label: (raw.name || 'Stremio') + (raw.title ? ' · ' + raw.title : ''),
-    container: container,
-    headers: raw.behaviorHints && raw.behaviorHints.proxyHeaders && raw.behaviorHints.proxyHeaders.request || {},
-    kind: 'raw'
-  };
+  if(!raw||typeof raw!=='object')return null;config=config||{};
+  var rawUrl=typeof raw.url==='string'?raw.url.trim():'',url='',torrent=false;
+  if(/^https?:\/\//i.test(rawUrl))url=rawUrl;
+  else if(/^magnet:\?/i.test(rawUrl)){if(!config.showP2P||!_validMagnetUrl(rawUrl))return null;url=rawUrl;torrent=true;}
+  else if(config.showP2P){var hash=String(raw.infoHash||raw.info_hash||raw.btih||'').trim();if(!/^(?:[a-f0-9]{40}|[a-z2-7]{32})$/i.test(hash))return null;url='magnet:?xt=urn:btih:'+hash;torrent=true;}
+  else return null;
+  var text=String(raw.name||'')+' '+String(raw.title||'')+' '+String(raw.description||''),q=text.match(/(2160p|4k|1080p|720p|480p|360p)/i);
+  var container=torrent?'torrent':(/\.m3u8(?:[?#]|$)/i.test(url)?'hls':/\.(mp4|m4v|mov|webm)(?:[?#]|$)/i.test(url)?'mp4':'unknown');
+  var headers=!torrent&&raw.behaviorHints&&raw.behaviorHints.proxyHeaders&&raw.behaviorHints.proxyHeaders.request&&typeof raw.behaviorHints.proxyHeaders.request==='object'?raw.behaviorHints.proxyHeaders.request:{};
+  return {url:url,quality:q?(q[1].toLowerCase()==='4k'?'2160p':q[1]):'Auto',label:(raw.name||'Stremio')+(raw.title?' · '+raw.title:''),container:container,headers:headers,kind:'raw'};
 }
-
-function getVideoSources(episodeUrl, opts) {
-  var config = _combinedSettings();
-  if (!config.urls.length) return Promise.resolve([]);
-  var parsed = _parseStreamId(episodeUrl);
-  if (!parsed.ids.length) return Promise.resolve([]);
-
-  var jobs = config.urls.map(function (base) {
-    return _json(_manifestUrl(base)).then(function (manifest) {
-      var resources = manifest && manifest.resources;
-      var hasStreams = !Array.isArray(resources) || resources.some(function (resource) {
-        return resource === 'stream' || (resource && resource.name === 'stream');
-      });
-      if (!hasStreams) return [];
-      return Promise.all(parsed.ids.map(function (id) {
-        return _json(_streamEndpoint(base, parsed.type, id)).then(function (data) {
-          var streams = data && Array.isArray(data.streams) ? data.streams : [];
-          return streams.map(function (stream) { return _stream(stream, base, config); }).filter(Boolean);
-        }).catch(function () { return []; });
-      })).then(function (lists) {
-        var out = [];
-        lists.forEach(function (list) { out = out.concat(list); });
-        return out.slice(0, config.max);
-      });
-    }).catch(function () { return []; });
-  });
-
-  return Promise.all(jobs).then(function (lists) {
-    var out = [], seen = {};
-    lists.forEach(function (list) {
-      list.forEach(function (stream) {
-        var key = stream.url;
-        if (!seen[key]) { seen[key] = true; out.push(stream); }
-      });
-    });
-    return out;
-  });
+function _addonManifest(base){
+  var cached=ADDON_MANIFEST_CACHE[base],now=Date.now();
+  if(cached&&cached.manifest&&now-cached.at<300000)return Promise.resolve(cached.manifest);
+  return _json(_manifestUrl(base)).then(function(manifest){ADDON_MANIFEST_CACHE[base]={at:Date.now(),manifest:manifest};return manifest;}).catch(function(error){delete ADDON_MANIFEST_CACHE[base];throw error;});
+}
+function _streamResourceSupports(manifest,type,id){
+  if(!manifest||!Array.isArray(manifest.resources))return true;
+  for(var i=0;i<manifest.resources.length;i++){
+    var r=manifest.resources[i],name=typeof r==='string'?r:(r&&r.name);if(name!=='stream')continue;
+    var types=r&&typeof r==='object'&&Array.isArray(r.types)?r.types:manifest.types;
+    if(Array.isArray(types)&&types.length&&types.indexOf(type)<0)continue;
+    var prefixes=r&&typeof r==='object'&&Array.isArray(r.idPrefixes)?r.idPrefixes:manifest.idPrefixes;
+    if(Array.isArray(prefixes)&&prefixes.length&&!prefixes.some(function(p){return String(id).indexOf(String(p))===0;}))continue;
+    return true;
+  }return false;
+}
+function _queryAddonIds(base,type,ids,manifest,config){
+  var supported=ids.filter(function(id){return _streamResourceSupports(manifest,type,id);});if(!supported.length)return Promise.resolve([]);
+  function query(candidates){return Promise.all(candidates.map(function(id){return _json(_streamEndpoint(base,type,id)).then(function(data){var streams=data&&Array.isArray(data.streams)?data.streams:[];return streams.map(function(x){return _stream(x,base,config);}).filter(Boolean);}).catch(function(){return[];});})).then(function(lists){var out=[],seen={};lists.forEach(function(list){list.forEach(function(x){if(!seen[x.url]&&out.length<config.max){seen[x.url]=true;out.push(x);}});});return out;});}
+  var preferred=supported.slice(0,2),fallback=supported.slice(2);return query(preferred).then(function(rows){return rows.length||!fallback.length?rows:query(fallback);});
+}
+function getVideoSources(episodeUrl,opts){
+  var config=_combinedSettings();if(!config.urls.length)return Promise.resolve([]);
+  var parsed=_parseStreamId(episodeUrl);if(!parsed.ids.length)return Promise.resolve([]);
+  return Promise.all(config.urls.map(function(base){return _addonManifest(base).then(function(manifest){if(!parsed.ids.some(function(id){return _streamResourceSupports(manifest,parsed.type,id);}))return[];return _queryAddonIds(base,parsed.type,parsed.ids,manifest,config);}).catch(function(){return[];});})).then(function(lists){var out=[],seen={};lists.forEach(function(list){list.forEach(function(x){if(!seen[x.url]){seen[x.url]=true;out.push(x);}});});return out;});
 }
 
 
@@ -766,7 +785,7 @@ function getLinks(id, opts) { return getVideoSources(id, opts); }
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    version: '3.1.1',
+    version: '3.2.0',
     getInfo: getInfo, getSettings: getSettings, getHome: getHome,
     popular: popular, search: search, getDetail: getDetail,
     getEpisodes: getEpisodes, getVideoSources: getVideoSources,
@@ -774,6 +793,6 @@ if (typeof module !== 'undefined' && module.exports) {
     _item: _item, _parseTmdbUrl: _parseTmdbUrl, _episodeId: _episodeId,
     _combinedSettings: _combinedSettings, _tmdbRequestUrl: _tmdbRequestUrl,
     _parseAddonUrls: _parseAddonUrls, _manifestUrl: _manifestUrl,
-    _parseStreamId: _parseStreamId
+    _parseStreamId: _parseStreamId, _stream: _stream
   };
 }

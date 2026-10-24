@@ -1,5 +1,15 @@
 # Changelog
 
+## TMDB + Stremio 3.2.0
+
+- Preserve available IMDb, TMDB, TVDB, MAL, AniList, Kitsu, and AniDB identifiers, including episode-aware variants when supplied.
+- Respect Stremio manifest stream resource types and ID prefixes to avoid unsupported requests.
+- Add opt-in support for valid magnet and infoHash torrent results; P2P stays disabled by default.
+- Cache add-on manifests for five minutes and try preferred identifiers before lower-priority fallbacks.
+- Limit TMDB season metadata lookups to five concurrent requests.
+- Add regression tests for P2P opt-in, external IDs, ID-prefix filtering, and season-fetch concurrency.
+
+
 ## AIOStreams 2.1.1
 
 - Fix dead/empty catalogue behavior by using Zangetsu's built-in TMDB key when no per-source credential is supplied.

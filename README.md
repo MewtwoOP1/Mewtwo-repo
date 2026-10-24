@@ -154,6 +154,7 @@ TMDB provides search, title details, catalogue metadata, and episode information
    |:--|:--|
    | **TMDB API Key** | Leave blank to use Zangetsu's built-in key. A personal TMDB v3 API key is optional. |
    | **Max streams per add-on** | Defaults to **25** streams considered per add-on; the available range is 5–100. |
+   | **Show torrent / P2P streams** | Off by default. Enable only if Zangetsu's player supports magnet links. |
 
 4. Save your settings, search for a movie or series, open it from **TMDB + Stremio**, and choose a returned stream.
 
@@ -162,6 +163,8 @@ TMDB provides search, title details, catalogue metadata, and episode information
 - Confirm each URL is valid and points to a Stremio-compatible add-on that provides the `stream` resource.
 - Check whether the add-on requires a specific configuration, access token, or URL path.
 - Confirm the add-on supports streams for that title and episode. Catalogue entries can appear even when no configured add-on has a matching stream.
+- Anime add-ons may require MAL, AniList, Kitsu, IMDb, TVDB, or their own ID format. The resolver uses only identifiers present in metadata and does not invent missing anime-ID mappings.
+- Torrent results are hidden by default. Enable **Show torrent / P2P streams** only when the player supports magnet links.
 - One failed add-on request does not necessarily stop other configured add-ons from returning results.
 
 </details>

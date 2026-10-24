@@ -8,6 +8,7 @@ global.__settings = {
     tmdbApiKey: "test-user-key",
     addonUrls: "https://addon.example/manifest.json?token=secret\nhttps://second.example/manifest.json",
     enableAddonCatalogs: false,
+    showP2P: false,
     maxStreamsPerAddon: "10",
   },
 };
@@ -81,11 +82,13 @@ async function main() {
     "tmdbApiKey",
     "addonUrls",
     "enableAddonCatalogs",
+    "showP2P",
     "maxStreamsPerAddon",
   ]);
   assert.ok(settings.every((setting) => setting.description && setting.label));
   assert.equal(settings.find((setting) => setting.key === "enableAddonCatalogs").default, false);
   assert.equal(provider._combinedSettings().useAddonCatalogs, false);
+  assert.equal(provider._combinedSettings().showP2P, false);
   assert.equal(provider._combinedSettings().max, 10);
   assert.deepEqual(provider._parseAddonUrls(global.__settings["tmdb-stremio"].addonUrls).map(provider._manifestUrl), [
     "https://addon.example/manifest.json?token=secret",
@@ -156,7 +159,71 @@ async function main() {
   assert.ok(addOnCalls.every((url) => !url.includes("test-user-key")));
   assert.ok(addOnCalls.some((url) => url.includes("?token=secret")));
 
-  global.__settings["tmdb-stremio"].tmdbApiKey = "";
+  // Honor manifest ID prefixes, rather than query unsupported identifier variants.
+  global.__settings["tmdb-stremio"].addonUrls = "https://prefix.example/manifest.json";
+  global.fetch = async (url) => {
+    const u = String(url); calls.push(u); let body = {};
+    if (u.includes("prefix.example/manifest.json")) body = { id:"prefix-addon", types:["movie","series"], resources:[{name:"stream",types:["series"],idPrefixes:["tt"]}] };
+    else if (u.includes("/stream/series/tt222%3A1%3A1.json")) body = { streams:[{name:"Prefix match",url:"https://cdn.example/prefix.m3u8"}] };
+    return {status:200,body:JSON.stringify(body)};
+  };
+  const prefixStart = calls.length;
+  const prefixStreams = await provider.getVideoSources(detail.episodes[0].url, {});
+  assert.equal(prefixStreams.length,1);
+  const prefixRequests = calls.slice(prefixStart).filter((url)=>url.includes("/stream/series/"));
+  assert.ok(prefixRequests.length>0);
+  assert.ok(prefixRequests.every((url)=>/\/stream\/series\/tt/.test(decodeURIComponent(url))));
+
+  // P2P results require explicit opt-in and valid content hashes.
+  global.__settings["tmdb-stremio"].addonUrls = "https://torrent.example/manifest.json";
+  global.fetch = async (url) => {
+    const u=String(url); calls.push(u); let body={};
+    if(u.includes("torrent.example/manifest.json"))body={id:"torrent-addon",types:["movie","series"],resources:["stream"]};
+    else if(u.includes("/stream/series/tt222%3A1%3A1.json"))body={streams:[
+      {name:"Torrent magnet",title:"1080p",url:"magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567"},
+      {name:"Torrent hash",infoHash:"abcdef0123456789abcdef0123456789abcdef01"},
+      {name:"Bad magnet",url:"magnet:?xt=urn:btih:not-a-valid-hash"}
+    ]};
+    return {status:200,body:JSON.stringify(body)};
+  };
+  global.__settings["tmdb-stremio"].showP2P=false;
+  assert.equal((await provider.getVideoSources(detail.episodes[0].url,{})).length,0);
+  global.__settings["tmdb-stremio"].showP2P=true;
+  const torrentStreams=await provider.getVideoSources(detail.episodes[0].url,{});
+  assert.equal(torrentStreams.length,2);
+  assert.ok(torrentStreams.every((row)=>row.container==="torrent"));
+  assert.ok(torrentStreams.some((row)=>row.url==="magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567"));
+  assert.ok(torrentStreams.some((row)=>row.url==="magnet:?xt=urn:btih:abcdef0123456789abcdef0123456789abcdef01"));
+  assert.ok(torrentStreams.every((row)=>!row.headers||Object.keys(row.headers).length===0));
+
+  const animeIds=provider._parseStreamId(JSON.stringify({id:"tmdb://tv/22",type:"anime",tmdbId:22,imdbId:"tt222",malId:30831,anilistId:21202,kitsuId:10941,anidbId:11261,tvdbId:333,season:1,episode:2}));
+  assert.equal(animeIds.type,"series");
+  assert.ok(animeIds.ids.includes("mal:30831:2"));
+  assert.ok(animeIds.ids.includes("mal:30831:1:2"));
+  assert.ok(animeIds.ids.includes("anilist:21202:2"));
+  assert.ok(animeIds.ids.includes("kitsu:10941:1:2"));
+  assert.ok(animeIds.ids.includes("anidb:11261:1:2"));
+  assert.ok(animeIds.ids.includes("tvdb:333:1:2"));
+  const routeIds=provider._parseStreamId("zm://anime/mal:61469/ep/2");
+  assert.equal(routeIds.type,"series");
+  assert.ok(routeIds.ids.includes("mal:61469:2"));
+
+  // Bound TMDB season lookup fan-out on long-running shows.
+  global.__settings["tmdb-stremio"].addonUrls="";
+  global.__settings["tmdb-stremio"].tmdbApiKey="";
+  let running=0,peak=0;
+  global.fetch=async(url)=>{
+    const u=new URL(String(url));
+    if(u.pathname==="/3/tv/777")return{status:200,body:JSON.stringify({id:777,name:"Long Running Show",number_of_seasons:8,external_ids:{imdb_id:"tt777",tvdb_id:"777"},seasons:Array.from({length:8},(_,i)=>({season_number:i+1,episode_count:1}))})};
+    const m=u.pathname.match(/^\/3\/tv\/777\/season\/(\d+)$/);
+    if(m){running++;peak=Math.max(peak,running);await new Promise(r=>setTimeout(r,5));running--;return{status:200,body:JSON.stringify({episodes:[{episode_number:1,season_number:Number(m[1]),name:"Episode"}]})};}
+    return{status:200,body:JSON.stringify({})};
+  };
+  const longShow=await provider.getDetail("tmdb://tv/777",{});
+  assert.equal(longShow.episodes.length,8);
+  assert.ok(peak<=5);
+
+  global.__settings["tmdb-stremio"].tmdbApiKey="";
   assert.ok(provider._tmdbRequestUrl("/trending/movie/week").startsWith("https://api.themoviedb.org/3/"));
   console.log("TMDB + Stremio combined provider tests passed.");
 }
