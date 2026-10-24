@@ -128,6 +128,12 @@ function main() {
     execFileSync(process.execPath, [testPath], { stdio: "inherit" });
     console.log("[PASS] " + path.basename(testPath));
   }
+  const luciferLiveTest = path.join(testsDir, "lucifer-donghua.live.js");
+  execFileSync(process.execPath, ["--check", luciferLiveTest], { stdio: "inherit" });
+  console.log("[PASS] Lucifer Donghua live test syntax");
+  if (process.env.RUN_LUCIFER_DONGHUA_LIVE === "1") {
+    execFileSync(process.execPath, [luciferLiveTest], { stdio: "inherit", env: process.env });
+  }
   console.log("\nAll repository checks passed.");
 }
 
