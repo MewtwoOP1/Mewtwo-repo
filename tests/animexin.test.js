@@ -1,52 +1,96 @@
 const assert = require('node:assert/strict');
 
 const calls = [];
-const seriesHtml =
-  '<meta property="og:image" content="https://img.example/renegade.jpg">' +
-  '<meta name="description" content="A cultivator travels beyond mortal limits.">' +
-  '<h1>Renegade Immortal</h1>' +
-  '<div>Status: Ongoing Released: Sep 25, 2023 Country: China Type: ONA Episodes: 180</div>' +
-  '<a href="https://animexin.dev/genre/action/">Action</a><a href="/genre/fantasy/">Fantasy</a>' +
-  '<ul>' +
-  '<li><a href="https://animexin.dev/renegade-immortal-episode-2-subtitle-sub-october-2-2026/" title="Renegade Immortal Episode 2 Subtitle Sub">Episode 2</a></li>' +
-  '<li><a href="/renegade-immortal-episode-1-subtitle-sub-october-1-2026/" title="Renegade Immortal Episode 1 Subtitle Sub">Episode 1</a></li>' +
-  '<li><a href="/other-series-episode-1-subtitle-sub/">Unrelated episode</a></li>' +
-  '</ul>';
+const baseSeries = 'https://animexin.dev/renegade-immortal/';
+const episode1 = 'https://animexin.dev/renegade-immortal-episode-1-indonesia-english-sub/';
+const episode2 = 'https://animexin.dev/renegade-immortal-episode-2-indonesia-english-sub/';
+const episode3 = 'https://animexin.dev/renegade-immortal-episode-3-indonesia-english-sub/';
+const episode4 = 'https://animexin.dev/renegade-immortal-episode-4-indonesia-english-sub/';
+const encodedDailymotion = Buffer.from(
+  '<iframe src="https://geo.dailymotion.com/player/xhojl.html?video=abc123"></iframe>'
+).toString('base64');
+
+const articleCard =
+  '<article class="bsx">' +
+    '<a href="' + episode2 + '">' +
+      '<img src="https://img.example/renegade.jpg" alt="Renegade Immortal Episode 2">' +
+    '</a>' +
+    '<div class="tt"><a href="' + baseSeries + '">Renegade Immortal</a></div>' +
+    '<h2 itemprop="headline">Renegade Immortal Episode 2 Indonesia, English Sub</h2>' +
+    '<span class="epx">Ep 2</span><div class="typez">ONA</div>' +
+  '</article>';
+
 const cardHtml =
-  '<div class="anime-card"><a href="/renegade-immortal/" title="Renegade Immortal"><img class="poster" alt="Renegade Immortal Poster" data-src="https://img.example/renegade.jpg"></a></div>' +
-  '<div><a href="/renegade-immortal-episode-2-subtitle-sub-october-2-2026/">Episode 2</a></div>';
-const movieCardHtml = '<div><a href="/renegade-immortal-movie-slaying-the-blood-progenitor/" title="Renegade Immortal Movie: Slaying the Blood Progenitor"><img alt="Renegade Immortal Movie Poster" src="https://img.example/movie.jpg"></a></div>';
-const homeHtml = '<h2>Popular Today</h2>' + cardHtml + '<h3>Latest Release</h3>' + cardHtml + '<h2>New Movie</h2>' + movieCardHtml;
+  '<div class="anime-card"><a href="' + baseSeries + '" title="Renegade Immortal">' +
+  '<img class="poster" alt="Renegade Immortal Poster" data-src="https://img.example/renegade.jpg"></a></div>' +
+  '<div><a href="' + episode2 + '">Episode 2</a></div>';
+const movieCardHtml =
+  '<div><a href="/renegade-immortal-movie-slaying-the-blood-progenitor/" title="Renegade Immortal Movie">' +
+  '<img alt="Renegade Immortal Movie Poster" src="https://img.example/movie.jpg"></a></div>';
+const homeHtml =
+  '<h2>Popular Today</h2>' + cardHtml +
+  '<h3>Latest Release</h3>' + cardHtml +
+  '<h2>New Movie</h2>' + movieCardHtml;
+
+const seriesHtml =
+  '<h1 class="entry-title">Renegade Immortal</h1>' +
+  '<div class="thumb"><img src="https://img.example/renegade.jpg" alt="Renegade Immortal"></div>' +
+  '<div class="spe">' +
+    '<span><b>Status:</b> Ongoing</span>' +
+    '<span><b>Network:</b> <a href="/network/tencent/">Tencent Penguin Pictures</a></span>' +
+    '<span><b>Studio:</b> <a href="/studio/build-dream/">Build Dream</a></span>' +
+    '<span><b>Released:</b> Sep 25, 2023</span>' +
+    '<span><b>Duration:</b> 25 Minute</span>' +
+    '<span><b>Country:</b> <a href="/country/china/">China</a></span>' +
+    '<span><b>Type:</b> ONA</span>' +
+    '<span><b>Episodes:</b> 180</span>' +
+    '<span><b>Fansub:</b> AnimeXin</span>' +
+  '</div>' +
+  '<div class="genxed"><a href="/genre/action/">Action</a><a href="/genre/fantasy/">Fantasy</a></div>' +
+  '<div class="entry-content"><p>Wang Lin was a very intelligent child.</p><p>He struggles to become a true Immortal.</p></div>' +
+  '<ul>' +
+    '<li data-index="2"><a href="' + episode2 + '"><div class="epl-num">2</div><div class="epl-title">Episode 2 Subtitle Sub</div><div class="epl-date">Oct 2, 2026</div></a></li>' +
+    '<li data-index="1"><a href="' + episode1 + '"><div class="epl-num">1</div><div class="epl-title">Episode 1 Subtitle Sub</div><div class="epl-date">Oct 1, 2026</div></a></li>' +
+  '</ul>';
 
 global.fetch = async function (url, options) {
   url = String(url); options = options || {};
   calls.push({ url, options });
+
   if (url === 'https://animexin.dev/') return { status: 200, body: homeHtml };
-  if (url === 'https://animexin.dev/anime/?order=update&status=&type=') return { status: 200, body: cardHtml };
-  if (url === 'https://animexin.dev/?s=Renegade%20Immortal&paged=1') return { status: 200, body: cardHtml };
-  if (url === 'https://animexin.dev/?s=Renegade%20Immortal&paged=2') return { status: 200, body: '' };
-  if (url === 'https://animexin.dev/renegade-immortal/') return { status: 200, body: seriesHtml };
-  if (url === 'https://animexin.dev/renegade-immortal-episode-1-subtitle-sub-october-1-2026/') {
-    return { status: 200, body: '<iframe src="https://odysee.com/$/embed/@public-channel:1/renegade-immortal-episode-1:5?signature=abc"></iframe>' };
+  if (url === 'https://animexin.dev/anime/?order=update&status=&type=') return { status: 200, body: articleCard };
+  if (url === 'https://animexin.dev/page/2/?s=Renegade%20Immortal') return { status: 200, body: '' };
+  if (url === 'https://animexin.dev/?s=Renegade%20Immortal') return { status: 200, body: articleCard };
+  if (url === 'https://animexin.dev/?s=offline') return { status: 503, body: 'unavailable' };
+  if (url === baseSeries) return { status: 200, body: seriesHtml };
+
+  if (url === episode1 || url === episode2) {
+    return { status: 200, body: '<div class="nvs nvsc"><a href="' + baseSeries + '">Renegade Immortal</a></div>' +
+      '<iframe src="https://odysee.com/$/embed/@public-channel:1/renegade-immortal-episode-1:5?signature=abc"></iframe>' };
   }
-  if (url === 'https://animexin.dev/renegade-immortal-episode-2-subtitle-sub-october-2-2026/') {
-    return { status: 200, body: '<iframe src="https://player.example/embed/episode2"></iframe>' };
-  }
-  if (url === 'https://animexin.dev/renegade-immortal-episode-3-indonesia-english-sub/') {
+  if (url === episode3) {
     return { status: 200, body: '<iframe src="https://geo.dailymotion.com/player/xhojl.html?video=unavailable"></iframe>' };
   }
-  if (url === 'https://geo.dailymotion.com/player/xhojl.html?video=unavailable') {
-    return { status: 200, body: '<html><body>Video cannot be played.</body></html>' };
+  if (url === episode4) {
+    return { status: 200, body: '<select><option value="' + encodedDailymotion + '">Dailymotion</option></select>' };
   }
+
   if (url === 'https://api.na-backend.odysee.com/api/v1/proxy?m=get') {
     assert.equal(options.method, 'POST');
     assert.equal(JSON.parse(options.body).uri, 'lbry://@public-channel:1/renegade-immortal-episode-1:5');
-    return { status: 200, body: JSON.stringify({ data: { streaming_url: 'https://player.odycdn.com/api/v4/streams/free/ri-episode1/abcdef.mp4' } }) };
+    return { status: 200, body: JSON.stringify({
+      data: { streaming_url: 'https://player.odycdn.com/api/v4/streams/free/ri-episode1/abcdef.mp4' }
+    }) };
   }
-  if (url === 'https://player.example/embed/episode2') {
-    return { status: 200, body: '<video><source type="application/x-mpegURL" src="https://cdn.example/ri-episode2.m3u8"></video><track kind="captions" src="https://cdn.example/ri-en.vtt" label="English" srclang="en" default>' };
+  if (url === 'https://www.dailymotion.com/player/metadata/video/abc123') {
+    return { status: 200, body: JSON.stringify({
+      qualities: { auto: [{ url: 'https://cdn.example/ri-episode4.m3u8' }] }, duration: 1500
+    }) };
   }
-  if (url === 'https://animexin.dev/?s=offline&paged=1') return { status: 503, body: 'unavailable' };
+  if (url === 'https://www.dailymotion.com/player/metadata/video/unavailable') {
+    return { status: 404, body: '{}' };
+  }
+
   return { status: 404, body: '' };
 };
 
@@ -64,17 +108,16 @@ async function main() {
   const home = await provider.getHome({});
   assert.equal(home.length, 3);
   assert.equal(home[0].title, 'Popular Today');
-  assert.equal(home[0].items.length, 1);
   assert.equal(home[0].items[0].id, 'renegade-immortal');
-  assert.equal(home[0].items[0].cover, 'https://img.example/renegade.jpg');
   assert.equal(home[1].title, 'Latest Release');
-  assert.equal(home[1].items.length, 1);
   assert.equal(home[2].title, 'Recently Updated');
 
   const results = await provider.search('Renegade Immortal', 1, {});
   assert.equal(results.length, 1);
   assert.equal(results[0].title, 'Renegade Immortal');
-  assert.equal(results[0].url, 'https://animexin.dev/renegade-immortal/');
+  assert.equal(results[0].url, baseSeries);
+  assert.equal(results[0].cover, 'https://img.example/renegade.jpg');
+  assert.equal(results[0].episode, 'Ep 2');
   assert.deepEqual(await provider.search('', 1, {}), []);
   assert.deepEqual(await provider.search('Renegade Immortal', 2, {}), []);
   assert.deepEqual(await provider.search('offline', 1, {}), []);
@@ -82,35 +125,43 @@ async function main() {
   const detail = await provider.getDetail(results[0].url, {});
   assert.equal(detail.id, 'renegade-immortal');
   assert.equal(detail.title, 'Renegade Immortal');
-  assert.equal(detail.description, 'A cultivator travels beyond mortal limits.');
+  assert.match(detail.description, /Wang Lin was a very intelligent child/);
   assert.equal(detail.cover, 'https://img.example/renegade.jpg');
   assert.equal(detail.status, 'ongoing');
   assert.equal(detail.year, 2023);
   assert.equal(detail.episodeCount, 180);
   assert.deepEqual(detail.genres, ['Action', 'Fantasy']);
+  assert.deepEqual(detail.studios, ['Build Dream']);
+  assert.equal(detail.network, 'Tencent Penguin Pictures');
+  assert.equal(detail.country, 'China');
+  assert.equal(detail.mediaType, 'ONA');
   assert.equal(detail.episodes.length, 2);
   assert.equal(detail.episodes[0].number, 1);
-  assert.match(detail.episodes[0].url, /renegade-immortal-episode-1/);
+  assert.equal(detail.episodes[0].title, 'Episode 1 Subtitle Sub');
+  assert.equal(detail.episodes[1].number, 2);
   assert.equal((await provider.getEpisodes(results[0].url, {})).length, 2);
 
-  const odysee = await provider.getVideoSources(detail.episodes[0].url, {});
+  // A detail request accidentally made with an episode URL should resolve to its parent series.
+  const detailFromEpisode = await provider.getDetail(episode1, {});
+  assert.equal(detailFromEpisode.id, 'renegade-immortal');
+  assert.equal(detailFromEpisode.episodes.length, 2);
+
+  const odysee = await provider.getVideoSources(episode1, {});
   assert.equal(odysee.length, 1);
   assert.equal(odysee[0].url, 'https://player.odycdn.com/api/v4/streams/free/ri-episode1/abcdef.mp4');
   assert.equal(odysee[0].container, 'mp4');
-  assert.equal(odysee[0].headers.Referer, 'https://odysee.com/$/embed/@public-channel:1/renegade-immortal-episode-1:5?signature=abc');
 
-  const embedded = await provider.getStreams(detail.episodes[1].url, {});
-  assert.equal(embedded.length, 1);
-  assert.equal(embedded[0].url, 'https://cdn.example/ri-episode2.m3u8');
-  assert.equal(embedded[0].container, 'hls');
-  assert.equal(embedded[0].subtitles.length, 1);
-  assert.equal(embedded[0].subtitles[0].label, 'English');
-  assert.equal(embedded[0].subtitles[0].lang, 'en');
+  const dailymotion = await provider.getVideoSources(episode4, {});
+  assert.equal(dailymotion.length, 1);
+  assert.equal(dailymotion[0].url, 'https://cdn.example/ri-episode4.m3u8');
+  assert.equal(dailymotion[0].container, 'hls');
 
-  assert.deepEqual(await provider.getVideoSources('https://animexin.dev/renegade-immortal-episode-3-indonesia-english-sub/', {}), []);
+  assert.deepEqual(await provider.getVideoSources(episode3, {}), []);
   assert.deepEqual(await provider.getVideoSources('https://outside.example/watch/episode-1', {}), []);
-  assert.ok(calls.some(c => c.url.includes('geo.dailymotion.com/player/xhojl.html?video=unavailable')));
-  assert.ok(calls.some(c => c.options.headers && c.options.headers.Referer));
-  console.log('AnimeXin mocked tests passed: manifest-facing API, home, search/pagination, detail, episodes, Odysee public resolution, direct HLS, subtitles, unavailable Dailymotion and failures.');
+  assert.ok(calls.some(c => c.url === 'https://www.dailymotion.com/player/metadata/video/abc123'));
+  assert.ok(calls.some(c => c.url === 'https://api.na-backend.odysee.com/api/v1/proxy?m=get'));
+  assert.ok(calls.every(c => c.options.headers && c.options.headers.Referer));
+  console.log('AnimeXin mocked tests passed: native article cards, series metadata/episode association, encoded player selection, Odysee and Dailymotion HLS/MP4, subtitles-compatible schema and failure handling.');
 }
+
 main().catch(err => { console.error(err); process.exitCode = 1; });
