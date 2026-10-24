@@ -1,5 +1,13 @@
 # Changelog
 
+## Lucifer Donghua 1.0.3
+
+- Bump the source version so clients can fetch the corrected provider build.
+- Keep current-site search fallback and title/episode parsing fixes.
+- Keep the canonical embedded-player URL ahead of advertising iframes.
+- Require live verification to confirm a series, episode list, extracted host streams, and real media/HLS content.
+
+
 ## Lucifer Donghua 1.0.0
 
 - Port the Yuzono Lucifer Donghua source to Zangetsu's JavaScript provider interface.

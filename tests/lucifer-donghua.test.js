@@ -94,7 +94,7 @@ async function main() {
   assert.equal(info.name, 'Lucifer Donghua');
   assert.equal(info.lang, 'en');
   assert.equal(info.baseUrl, site);
-  assert.equal(info.version, '1.0.2');
+  assert.equal(info.version, '1.0.3');
 
   const settings = provider.getSettings();
   assert.deepEqual(settings.map(function (item) { return item.key; }), [
