@@ -6,7 +6,7 @@ function getInfo(){return {name:'Lucifer Donghua',lang:'en',baseUrl:SITE,logo:'h
 function getSettings(){return [];}
 function req(url, referer, json){return fetch(url,{headers:{'User-Agent':UA,'Accept':json?'application/json,text/plain,*/*':'text/html,application/xhtml+xml,*/*','Referer':referer||SITE+'/'},timeoutMs:15000}).then(function(r){var s=Number(r&&r.status||200);if(s>=400)throw Error('Lucifer Donghua HTTP '+s+' '+url);if(r&&typeof r.body==='string')return r.body;if(r&&typeof r.text==='function')return r.text();if(r&&r.body&&typeof r.body.text==='function')return r.body.text();throw Error('Empty response: '+url);});}
 function text(s){return String(s||'').replace(/<script\b[\s\S]*?<\/script\s*>/gi,' ').replace(/<style\b[\s\S]*?<\/style\s*>/gi,' ').replace(/<[^>]+>/g,' ').replace(/&amp;/gi,'&').replace(/&quot;/gi,'"').replace(/&#39;|&apos;/gi,"'").replace(/&lt;/gi,'<').replace(/&gt;/gi,'>').replace(/&#(\d+);/g,function(_,n){return String.fromCharCode(+n);}).replace(/\s+/g,' ').trim();}
-function attr(s,k){var re=new RegExp('(?:^|\\s)'+k+'\\s*=\\s*(?:"([^"]*)"|\\'([^\\']*)\\'|([^\\s>]+))','i'),m=String(s||'').match(re);return m?(m[1]!=null?m[1]:m[2]!=null?m[2]:m[3]):'';}
+function attr(s,k){var re=new RegExp("(?:^|\\s)"+k+"\\s*=\\s*(?:\"([^\"]*)\"|'([^']*)'|([^\\s>]+))","i"),m=String(s||"").match(re);return m?(m[1]!=null?m[1]:m[2]!=null?m[2]:m[3]):"";}
 function abs(s,b){try{return new URL(String(s||'').replace(/&amp;/g,'&').replace(/\\\//g,'/'),b||SITE+'/').href;}catch(e){return '';}}
 function path(u){try{return new URL(u,SITE+'/').pathname;}catch(e){return '';}}
 function slug(u){return path(u).replace(/\/+$/,'').split('/').pop().toLowerCase();}
