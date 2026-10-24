@@ -1,7 +1,7 @@
 // AnimeXin provider for Zangetsu. Site pages are server-rendered HTML;
 // resolve episode embeds at request time because third-party URLs can expire.
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID) ? String(__SOURCE_ID) : 'animexin';
-var VERSION = '1.0.0';
+var VERSION = '1.0.1';
 var SITE = 'https://animexin.dev';
 var ARCHIVE = SITE + '/anime/?order=update&status=&type=';
 var ODYSEE_API = 'https://api.na-backend.odysee.com/api/v1/proxy?m=get';
