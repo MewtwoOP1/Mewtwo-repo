@@ -88,7 +88,41 @@ async function main() {
       ' -> ' + streams.length + ' streams; provider requests: ' + calls.slice(before).join(' | '));
     if (streams.length) break;
   }
-  assert.ok(streams.length, 'no enabled host returned stream candidates from the first five episodes');
+  if (!streams.length && viaEpisodeMethod[0] && viaEpisodeMethod[0].url) {
+    const episodeUrl = viaEpisodeMethod[0].url;
+    try {
+      const response = await nativeFetch(episodeUrl, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140.0.0.0 Safari/537.36', 'Referer': 'https://luciferdonghua.in/' },
+        redirect: 'follow',
+        signal: AbortSignal.timeout(12000)
+      });
+      const body = await response.text();
+      console.log('[DIAG] episode-page status=' + response.status + ' final=' + response.url +
+        ' content-type=' + response.headers.get('content-type'));
+      console.log('[DIAG] episode-page markers=' + JSON.stringify({
+        iframes: (body.match(/<iframe\\b/gi) || []).length,
+        options: (body.match(/<option\\b/gi) || []).length,
+        dataIndex: (body.match(/data-index/gi) || []).length,
+        dataEm: (body.match(/data-em/gi) || []).length,
+        playerScript: /playerInstance|jwplayer|video-js|embedUrl/i.test(body),
+        vRoutes: (body.match(/href=["'][^"']+\\/v\\/\\d+\\/?["']/gi) || []).slice(0, 8),
+        iframeSources: (body.match(/<iframe\\b[^>]*(?:src|data-src)=["'][^"']+["'][^>]*>/gi) || []).slice(0, 5)
+      }));
+      const route = episodeUrl.replace(/\\/+$/, '') + '/v/1/';
+      try {
+        const mirrorResponse = await nativeFetch(route, {
+          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140.0.0.0 Safari/537.36', 'Referer': episodeUrl },
+          redirect: 'follow',
+          signal: AbortSignal.timeout(12000)
+        });
+        const mirrorBody = await mirrorResponse.text();
+        console.log('[DIAG] mirror-page status=' + mirrorResponse.status + ' final=' + mirrorResponse.url +
+          ' content-type=' + mirrorResponse.headers.get('content-type'));
+        console.log('[DIAG] mirror-page body=' + mirrorBody.slice(0, 2600).replace(/\\s+/g, ' '));
+      } catch (error) { console.log('[DIAG] mirror-page failure=' + error.message); }
+    } catch (error) { console.log('[DIAG] episode-page failure=' + error.message); }
+  }
+    assert.ok(streams.length, 'no enabled host returned stream candidates from the first five episodes');
   pass('host extractors returned ' + streams.length + ' candidate(s)');
 
   let playable = false, last = '';
