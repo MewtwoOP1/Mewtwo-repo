@@ -1,7 +1,7 @@
 // AnimeXin provider for Zangetsu. Site pages are server-rendered HTML;
 // resolve episode embeds at request time because third-party URLs can expire.
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID) ? String(__SOURCE_ID) : 'animexin';
-var VERSION = '1.0.1';
+var VERSION = '1.0.2';
 var SITE = 'https://animexin.dev';
 var ARCHIVE = SITE + '/anime/?order=update&status=&type=';
 var ODYSEE_API = 'https://api.na-backend.odysee.com/api/v1/proxy?m=get';
@@ -132,64 +132,90 @@ function _seriesFromEpisodeUrl(raw) {
   var m = path.match(/^(.*?)-episode-\d+.*$/i);
   return m ? _absolute(m[1] + '/', SITE + '/') : _seriesUrl(url);
 }
+function _makeCard(rawUrl, titleRaw, imgTag, baseUrl, allowTextOnly, episodeText, typeText) {
+  if (!rawUrl) return null;
+  var articleUrl = _absolute(rawUrl, baseUrl || SITE + '/');
+  if (!_validSiteUrl(articleUrl)) return null;
+  var path = _path(articleUrl).replace(/\/+$/, '');
+  if (!path || path === '/' || /\/(?:genre|category|tag|author|page|wp-content|wp-admin|wp-json|search|anime)(?:\/|$)/i.test(path)) return null;
+  if (/\.(?:jpg|jpeg|png|gif|webp|svg|ico|css|js)$/i.test(path)) return null;
+  var canonicalUrl = _seriesFromEpisodeUrl(articleUrl);
+  var slug = _slug(canonicalUrl);
+  if (!slug) return null;
+  var title = _cleanTitle(titleRaw);
+  title = _titleFromEpisode(title) || title;
+  if (!title) title = slug.replace(/[-_]+/g, ' ').replace(/\b\w/g, function (c) { return c.toUpperCase(); });
+  if (!title || /^(?:image|view all|next|previous|random|home|search|text mode|schedule|monday|tuesday|wednesday|thursday|friday|saturday|sunday)$/i.test(title)) return null;
+  if (/^\d+$/.test(title) || title.length > 160) return null;
+  var image = imgTag
+    ? (_tagValue(imgTag, 'img', 'data-src') || _tagValue(imgTag, 'img', 'data-lazy-src')
+      || _tagValue(imgTag, 'img', 'data-original') || _tagValue(imgTag, 'img', 'data-lazy-srcset')
+      || _tagValue(imgTag, 'img', 'src'))
+    : '';
+  if (!image && !allowTextOnly && !_isEpisodePath(_path(articleUrl))) return null;
+  var yearMatch = title.match(/\b(19|20)\d{2}\b/);
+  return {
+    id: slug, title: title, englishTitle: title, url: canonicalUrl,
+    cover: image ? _absolute(image, articleUrl) : null,
+    episode: _text(episodeText), typeLabel: _text(typeText),
+    year: yearMatch ? Number(yearMatch[0]) : null, type: 'anime', sourceId: SOURCE_ID
+  };
+}
+
+// AnimeXin's catalogue has used several card variants (bsx divs, article items,
+// and headline-only search results). Parse each shape instead of assuming one
+// exact theme class; search results commonly omit the poster from the heading.
 function _articleCards(html) {
   var input = String(html || ''), out = [], seen = Object.create(null);
-  var re = /<article\b[^>]*class=["']bs[^"']*["'][^>]*>[\s\S]*?<\/article\s*>/gi, match;
+  var re = /<article\b[^>]*>([\s\S]*?)<\/article\s*>/gi, match;
   while ((match = re.exec(input)) !== null) {
-    var card = match[0];
-    var rawUrl = (card.match(/\bhref=["']([^"']+)["']/i) || [])[1] || '';
+    var card = match[1];
+    var rawUrl = (card.match(/<a\b([^>]*)>/i) || [])[1] || '';
+    rawUrl = _attr(rawUrl, 'href');
     if (!rawUrl) continue;
-    var articleUrl = _absolute(rawUrl, SITE + '/');
-    if (!_validSiteUrl(articleUrl)) continue;
-    var cardTitle = (card.match(/<h2\b[^>]*itemprop=["']headline["'][^>]*>([\s\S]*?)<\/h2\s*>/i) || [])[1]
-      || (card.match(/<h2\b[^>]*>([\s\S]*?)<\/h2\s*>/i) || [])[1]
-      || (card.match(/\btitle=["']([^"']+)["']/i) || [])[1] || '';
-    var seriesTitleRaw = (card.match(/<div\b[^>]*class=["']tt["'][^>]*>([\s\S]*?)<\/div\s*>/i) || [])[1] || '';
-    var title = _cleanTitle(_text(seriesTitleRaw) || _titleFromEpisode(cardTitle) || cardTitle);
-    var imgTag = (card.match(/<img\b[^>]*>/i) || [])[0] || '';
-    var image = _tagValue(imgTag, 'img', 'data-src') || _tagValue(imgTag, 'img', 'data-lazy-src')
-      || _tagValue(imgTag, 'img', 'data-original') || _tagValue(imgTag, 'img', 'src');
-    var canonicalUrl = _seriesFromEpisodeUrl(articleUrl);
-    var slug = _slug(canonicalUrl);
-    if (!slug || !title || seen[slug] || /^(?:image|view all|next|previous|random|home|search|text mode)$/i.test(title)) continue;
-    seen[slug] = true;
-    var yearMatch = title.match(/\b(19|20)\d{2}\b/);
-    var ep = (card.match(/<span\b[^>]*class=["']epx["'][^>]*>([\s\S]*?)<\/span>/i) || [])[1] || '';
-    var type = (card.match(/<div\b[^>]*class=["']typez[^"']*["'][^>]*>([\s\S]*?)<\/div>/i) || [])[1] || '';
-    out.push({ id: slug, title: title, englishTitle: title, url: canonicalUrl,
-      cover: image ? _absolute(image, articleUrl) : null, episode: _text(ep), typeLabel: _text(type),
-      year: yearMatch ? Number(yearMatch[0]) : null, type: 'anime', sourceId: SOURCE_ID });
+    var h2 = (card.match(/<h[1-4]\b[^>]*>([\s\S]*?)<\/h[1-4]\s*>/i) || [])[1] || '';
+    var titleRaw = (card.match(/<div\b[^>]*class=["'][^"']*\btt\b[^"']*["'][^>]*>([\s\S]*?)<\/div\s*>/i) || [])[1]
+      || (h2.match(/<a\b[^>]*>([\s\S]*?)<\/a\s*>/i) || [])[1] || h2
+      || _attr((card.match(/<a\b([^>]*)>/i) || [])[1] || '', 'title');
+    var imageTag = (card.match(/<img\b[^>]*>/i) || [])[0] || '';
+    var ep = (card.match(/<span\b[^>]*class=["'][^"']*\bepx\b[^"']*["'][^>]*>([\s\S]*?)<\/span\s*>/i) || [])[1] || '';
+    var type = (card.match(/<div\b[^>]*class=["'][^"']*\btypez\b[^"']*["'][^>]*>([\s\S]*?)<\/div\s*>/i) || [])[1] || '';
+    var item = _makeCard(rawUrl, titleRaw, imageTag, SITE + '/', true, ep, type);
+    if (item && !seen[item.id]) { seen[item.id] = true; out.push(item); }
   }
   return out;
 }
 function _cards(html) {
-  var input = String(html || '');
-  var articles = _articleCards(input);
-  if (articles.length) return articles;
-  var out = [], seen = Object.create(null);
-  var re = /<a\b([^>]*)>([\s\S]*?)<\/a\s*>/gi, m;
-  while ((m = re.exec(input)) !== null) {
-    var attrs = m[1], inner = m[2], href = _attr(attrs, 'href');
+  var input = String(html || ''), out = [], seen = Object.create(null);
+  function add(item) {
+    if (!item) return;
+    var old = seen[item.id];
+    if (old == null) { seen[item.id] = out.length; out.push(item); }
+    else if (!out[old].cover && item.cover) out[old].cover = item.cover;
+  }
+  _articleCards(input).forEach(add);
+
+  // Many search templates render only a linked heading and omit the poster.
+  var headings = /<h[1-4]\b[^>]*>([\s\S]*?)<\/h[1-4]\s*>/gi, h;
+  while ((h = headings.exec(input)) !== null) {
+    var a = (h[1].match(/<a\b([^>]*)>([\s\S]*?)<\/a\s*>/i) || []);
+    if (!a.length) continue;
+    var img = (a[2].match(/<img\b[^>]*>/i) || [])[0] || '';
+    var item = _makeCard(_attr(a[1], 'href'), _attr(a[1], 'title') || _text(a[2]), img, SITE + '/', true, '', '');
+    add(item);
+  }
+
+  // Fall back to ordinary image/title links, including an episode link when
+  // the site has removed the poster or its lazy-loading image attribute.
+  var links = /<a\b([^>]*)>([\s\S]*?)<\/a\s*>/gi, m;
+  while ((m = links.exec(input)) !== null) {
+    var attrs = m[1], inner = m[2], imgTag = (inner.match(/<img\b[^>]*>/i) || [])[0] || '';
+    var href = _attr(attrs, 'href');
     if (!href) continue;
-    var articleUrl = _absolute(href, SITE + '/');
-    if (!_validSiteUrl(articleUrl)) continue;
-    var path = _path(articleUrl).replace(/\/+$/, '');
-    if (!path || /\/(?:genre|category|tag|author|page|wp-content|wp-admin|wp-json)(?:\/|$)/i.test(path)) continue;
-    var canonicalUrl = _seriesFromEpisodeUrl(articleUrl);
-    var slug = _slug(canonicalUrl);
-    if (!slug || seen[slug]) continue;
-    var imgTag = (inner.match(/<img\b[^>]*>/i) || [])[0] || '';
-    var image = _tagValue(imgTag, 'img', 'data-src') || _tagValue(imgTag, 'img', 'data-lazy-src')
-      || _tagValue(imgTag, 'img', 'data-original') || _tagValue(imgTag, 'img', 'src');
-    var title = _cleanTitle(_attr(attrs, 'title') || _tagValue(imgTag, 'img', 'alt') || _text(inner));
-    title = _titleFromEpisode(title) || title;
-    if (!title || /^(?:image|view all|next|previous|random|home|search|text mode)$/i.test(title)) continue;
-    if (!image && !_attr(attrs, 'title') && !imgTag) continue;
-    if (/^\d+$/.test(title) || title.length > 160) continue;
-    seen[slug] = true;
-    var yearMatch = title.match(/\b(19|20)\d{2}\b/);
-    out.push({ id: slug, title: title, englishTitle: title, url: canonicalUrl, cover: image ? _absolute(image, articleUrl) : null,
-      year: yearMatch ? Number(yearMatch[0]) : null, type: 'anime', sourceId: SOURCE_ID });
+    var fullUrl = _absolute(href, SITE + '/');
+    var title = _attr(attrs, 'title') || _tagValue(imgTag, 'img', 'alt') || _text(inner);
+    var allow = !!imgTag || !!_attr(attrs, 'title') || _isEpisodePath(_path(fullUrl));
+    add(_makeCard(href, title, imgTag, SITE + '/', allow, '', ''));
   }
   return out;
 }
@@ -231,15 +257,47 @@ function getHome(opts) {
     return sections;
   }).catch(function () { return []; });
 }
+function _searchRelevant(items, query) {
+  var normalized = String(query || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  if (!normalized) return [];
+  var tokens = normalized.split(/\s+/).filter(function (token) { return token.length >= 3; });
+  return (items || []).filter(function (item) {
+    var title = String(item && (item.englishTitle || item.title) || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    if (!title) return false;
+    if (title.indexOf(normalized) >= 0 || normalized.indexOf(title) >= 0) return true;
+    return tokens.some(function (token) { return title.indexOf(token) >= 0; });
+  });
+}
 function search(query, page, opts) {
-  var q = String(query || '').trim(), p = Number(page || 1);
+  var q = String(query || '').trim(), p = Math.max(1, Math.floor(Number(page || 1)));
   if (!q) return Promise.resolve([]);
-  var url = p > 1
-    ? SITE + '/page/' + Math.floor(p) + '/?s=' + encodeURIComponent(q)
-    : SITE + '/?s=' + encodeURIComponent(q);
-  return _get(url, SITE + '/').then(function (html) {
-    return _dedupe(_cards(html));
-  }).catch(function () { return []; });
+  var encoded = encodeURIComponent(q);
+  var urls = p > 1
+    ? [
+      SITE + '/page/' + p + '/?s=' + encoded,
+      SITE + '/anime/page/' + p + '/?s=' + encoded,
+      SITE + '/?s=' + encoded + '&paged=' + p
+    ]
+    : [
+      SITE + '/?s=' + encoded,
+      SITE + '/anime/?s=' + encoded,
+      SITE + '/?s=' + encoded + '&post_type=anime'
+    ];
+  function attempt(index) {
+    if (index >= urls.length) {
+      // Last-resort catalogue search: query pages can be unavailable or return
+      // a layout this theme does not use. The archive is still server-rendered.
+      var archiveUrl = _archiveUrl(p);
+      return _get(archiveUrl, SITE + '/').then(function (html) {
+        return _searchRelevant(_dedupe(_cards(html)), q);
+      }).catch(function () { return []; });
+    }
+    return _get(urls[index], SITE + '/').then(function (html) {
+      var found = _searchRelevant(_dedupe(_cards(html)), q);
+      return found.length ? found : attempt(index + 1);
+    }).catch(function () { return attempt(index + 1); });
+  }
+  return attempt(0);
 }
 function _episodeNumber(path, label) {
   var m = String(path || '').match(/-episode-(\d+)(?:-|\/|$)/i);
