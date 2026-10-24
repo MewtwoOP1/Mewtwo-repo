@@ -97,12 +97,12 @@ global.fetch = async function (url, options) {
 const provider = require('../providers/animexin.js');
 
 async function main() {
-  assert.equal(provider.version, '1.0.0');
+  assert.equal(provider.version, '1.0.1');
   assert.deepEqual(provider.getSettings(), []);
   assert.deepEqual(provider.getInfo(), {
     name: 'AnimeXin', lang: 'en', baseUrl: 'https://animexin.dev',
     logo: 'https://www.google.com/s2/favicons?sz=256&domain=animexin.dev',
-    type: 'anime', version: '1.0.0'
+    type: 'anime', version: '1.0.1'
   });
 
   const home = await provider.getHome({});
