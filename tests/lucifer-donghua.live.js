@@ -99,16 +99,20 @@ async function main() {
       const body = await response.text();
       console.log('[DIAG] episode-page status=' + response.status + ' final=' + response.url +
         ' content-type=' + response.headers.get('content-type'));
+      const iframeTags = body.match(/<iframe[^>]*>/gi) || [];
+      const optionTags = body.match(/<option[^>]*>/gi) || [];
+      const hrefs = body.match(/href=["'][^"']{1,180}["']/gi) || [];
       console.log('[DIAG] episode-page markers=' + JSON.stringify({
-        iframes: (body.match(/<iframe\\b/gi) || []).length,
-        options: (body.match(/<option\\b/gi) || []).length,
+        iframes: iframeTags.length,
+        iframeTags: iframeTags.slice(0, 5),
+        options: optionTags.length,
+        optionTags: optionTags.slice(0, 8),
         dataIndex: (body.match(/data-index/gi) || []).length,
         dataEm: (body.match(/data-em/gi) || []).length,
-        playerScript: /playerInstance|jwplayer|video-js|embedUrl/i.test(body),
-        vRoutes: (body.match(/href=["'][^"']+\\/v\\/\\d+\\/?["']/gi) || []).slice(0, 8),
-        iframeSources: (body.match(/<iframe\\b[^>]*(?:src|data-src)=["'][^"']+["'][^>]*>/gi) || []).slice(0, 5)
+        v1Route: body.indexOf('/v/1/') >= 0,
+        hrefs: hrefs.slice(0, 20)
       }));
-      const route = episodeUrl.replace(/\\/+$/, '') + '/v/1/';
+      const route = episodeUrl.replace(/\/+$/, '') + '/v/1/';
       try {
         const mirrorResponse = await nativeFetch(route, {
           headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140.0.0.0 Safari/537.36', 'Referer': episodeUrl },
@@ -116,9 +120,18 @@ async function main() {
           signal: AbortSignal.timeout(12000)
         });
         const mirrorBody = await mirrorResponse.text();
+        const mirrorFrames = mirrorBody.match(/<iframe[^>]*>/gi) || [];
+        const mirrorLinks = mirrorBody.match(/href=["'][^"']{1,180}["']/gi) || [];
         console.log('[DIAG] mirror-page status=' + mirrorResponse.status + ' final=' + mirrorResponse.url +
           ' content-type=' + mirrorResponse.headers.get('content-type'));
-        console.log('[DIAG] mirror-page body=' + mirrorBody.slice(0, 2600).replace(/\\s+/g, ' '));
+        console.log('[DIAG] mirror-page markers=' + JSON.stringify({
+          frames: mirrorFrames.slice(0, 5),
+          dataIndex: (mirrorBody.match(/data-index/gi) || []).length,
+          dataEm: (mirrorBody.match(/data-em/gi) || []).length,
+          meta: (mirrorBody.match(/<meta[^>]*>/gi) || []).filter(function (item) { return /embedUrl|og:video|og:title/i.test(item); }).slice(0, 5),
+          links: mirrorLinks.slice(0, 15),
+          body: mirrorBody.slice(0, 1200).replace(/\s+/g, ' ')
+        }));
       } catch (error) { console.log('[DIAG] mirror-page failure=' + error.message); }
     } catch (error) { console.log('[DIAG] episode-page failure=' + error.message); }
   }
