@@ -160,11 +160,30 @@ function _archiveUrl(page) {
   var p = Number(page || 1);
   return p > 1 ? SITE + '/anime/page/' + Math.floor(p) + '/?order=update&status=&type=' : ARCHIVE;
 }
+function _homeSections(html) {
+  var input = String(html || ''), headings = [], re = /<h([2-4])\b[^>]*>([\s\S]*?)<\/h\1\s*>/gi, m;
+  var allowed = { 'popular today': 'Popular Today', 'latest release': 'Latest Release', 'latest episode': 'Latest Episode', 'popular anime': 'Popular Anime' };
+  while ((m = re.exec(input)) !== null) {
+    var label = _text(m[2]).trim().toLowerCase();
+    if (allowed[label]) headings.push({ title: allowed[label], at: m.index });
+  }
+  var rows = [];
+  for (var i = 0; i < headings.length; i++) {
+    var end = i + 1 < headings.length ? headings[i + 1].at : input.length;
+    var items = _cards(input.substring(headings[i].at, end));
+    if (items.length) rows.push({ title: headings[i].title, items: items });
+  }
+  return rows;
+}
 function getHome(opts) {
   var page = opts && (opts.page || opts.currentPage) || 1;
-  return _get(_archiveUrl(page), SITE + '/').then(function (html) {
-    var items = _cards(html);
-    return items.length ? [{ title: 'Recently Updated', items: items }] : [];
+  return Promise.all([
+    _get(SITE + '/', SITE + '/').then(_homeSections).catch(function () { return []; }),
+    _get(_archiveUrl(page), SITE + '/').then(function (html) { return _cards(html); }).catch(function () { return []; })
+  ]).then(function (result) {
+    var sections = result[0], recent = result[1];
+    if (recent.length) sections.push({ title: 'Recently Updated', items: recent });
+    return sections;
   }).catch(function () { return []; });
 }
 function search(query, page, opts) {
