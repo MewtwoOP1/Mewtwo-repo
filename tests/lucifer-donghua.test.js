@@ -28,7 +28,7 @@ function encodedIframe(url) {
 }
 function episodeHtml() {
   return '<div class="mirror"><select class="mirror">' +
-    '<option data-index="1" value="' + encodedIframe('https://www.dailymotion.com/embed/video/x1testabc') + '">Dailymotion</option>' +
+    '<option data-index="1" value="https://luciferdonghua.in/soul-land-2-episode-3/v/1/">Dailymotion</option>' +
     '<option data-index="2" value="' + encodedIframe('https://rumble.com/embed/vabc123/') + '">Rumble</option>' +
     '<option data-index="3" value="' + encodedIframe('https://ok.ru/videoembed/123') + '">Ok.ru</option>' +
     '</select></div>';
@@ -65,7 +65,14 @@ global.fetch = async function (input, options) {
   if (parsed.hostname === 'luciferdonghua.in' && parsed.pathname === seriesPath) return response(url, detailHtml());
   if (parsed.hostname === 'luciferdonghua.in' && parsed.pathname === episodePath) return response(url, episodeHtml());
 
-  if (parsed.hostname === 'www.dailymotion.com' && parsed.pathname === '/embed/video/x1testabc') {
+  if (parsed.hostname === 'luciferdonghua.in' && parsed.pathname === '/soul-land-2-episode-3/v/1/') {
+    // Current live-site shape: advertising iframes precede the player, which is
+    // published in meta[itemprop=embedUrl].
+    return response(url, '<iframe src="https://t.co/ad-redirect"></iframe>' +
+      '<iframe src="https://nblmoviess.blogspot.com/hidden-ad"></iframe>' +
+      '<meta itemprop="embedUrl" content="https://geo.dailymotion.com/player/xdcdz.html?video=x1testabc">');
+  }
+  if (parsed.hostname === 'geo.dailymotion.com' && parsed.pathname === '/player/xdcdz.html') {
     return response(url, '<script>var dmInternalData = {"ts":"12345","v1st":"visitor-test"};</script>');
   }
   if (parsed.hostname === 'www.dailymotion.com' && parsed.pathname === '/player/metadata/video/x1testabc') {

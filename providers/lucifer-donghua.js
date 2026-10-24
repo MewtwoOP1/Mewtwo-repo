@@ -399,14 +399,39 @@ function _b64decode(value) {
   return out;
 }
 function _iframe(html, base) {
-  var found = String(html || '').match(/<iframe\b([^>]*)>/i);
-  if (found) {
-    var url = _abs(_attr(found[1], 'src') || _attr(found[1], 'data-src') || _attr(found[1], 'data-lazy-src'), base);
-    if (url) return url;
+  var source = String(html || '');
+  // Yuzono's mirror route publishes the actual player here. Check it before
+  // arbitrary iframes because current pages place ad iframes before the player.
+  var meta = /<meta\b([^>]*\bitemprop=["']embedUrl["'][^>]*)>/i.exec(source);
+  if (meta) {
+    var metaUrl = _abs(_attr(meta[1], 'content'), base);
+    if (metaUrl) return metaUrl;
   }
-  var meta = /<meta\b([^>]*\bitemprop=["']embedUrl["'][^>]*)>/i.exec(String(html || ''));
-  if (meta) return _abs(_attr(meta[1], 'content'), base);
-  var text = String(html || '').trim();
+
+  // Exact upstream preference: #embed_holder iframe[src~=.] .
+  var holder = /<(?:div|section)\b([^>]*\bid=["']embed_holder["'][^>]*)>/i.exec(source);
+  if (holder) {
+    var fromHolder = source.slice(holder.index + holder[0].length);
+    var holderFrame = fromHolder.match(/<iframe\b([^>]*)>/i);
+    if (holderFrame) {
+      var holderUrl = _abs(_attr(holderFrame[1], 'src') || _attr(holderFrame[1], 'data-src') || _attr(holderFrame[1], 'data-lazy-src'), base);
+      if (holderUrl) return holderUrl;
+    }
+  }
+
+  // Theme fallback: consider other iframe elements but filter obvious ads.
+  var frames = /<iframe\b([^>]*)>/gi, match;
+  while ((match = frames.exec(source))) {
+    var attrs = match[1];
+    var candidate = _abs(_attr(attrs, 'src') || _attr(attrs, 'data-src') || _attr(attrs, 'data-lazy-src'), base);
+    if (!candidate) continue;
+    var host = '';
+    try { host = new URL(candidate).hostname.toLowerCase(); } catch (_) {}
+    if (host === 't.co' || host.endsWith('.t.co') || host.endsWith('.blogspot.com')) continue;
+    if (/width\s*:\s*0|height\s*:\s*0|visibility\s*:\s*hidden|position\s*:\s*absolute/i.test(_attr(attrs, 'style'))) continue;
+    return candidate;
+  }
+  var text = source.trim();
   return /^https:\/\/[^\s"'<>]+$/i.test(text) ? text : '';
 }
 function _mirrors(html) {
