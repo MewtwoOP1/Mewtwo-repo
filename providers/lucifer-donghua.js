@@ -94,6 +94,22 @@ function _inner(html, tag, className) {
   var match = String(html || '').match(rx);
   return match ? match[2] : '';
 }
+function _balancedInner(html, tag, className) {
+  var source = String(html || '');
+  var open = new RegExp('<' + tag + '\\b([^>]*class=["\\x27][^"\\x27]*\\b' + className + '\\b[^"\\x27]*["\\x27][^>]*)>', 'i');
+  var match = open.exec(source);
+  if (!match) return '';
+  var start = match.index + match[0].length;
+  var tags = new RegExp('<\\/?' + tag + '\\b[^>]*>', 'gi');
+  tags.lastIndex = start;
+  var depth = 1, item;
+  while ((item = tags.exec(source))) {
+    if (/^<\//.test(item[0])) depth--;
+    else if (!/\/\s*>$/.test(item[0])) depth++;
+    if (depth === 0) return source.slice(start, item.index);
+  }
+  return '';
+}
 function _meta(html, key) {
   var rx = /<meta\b([^>]*)>/gi, match;
   while ((match = rx.exec(String(html || '')))) {
@@ -289,22 +305,43 @@ function _detail(html, url, options) {
   var titleHtml = _inner(source, 'h1', 'entry-title') || (h1 ? h1[2] : '') ||
     _meta(source, 'og:title') || _meta(source, 'twitter:title') ||
     ((source.match(/<title\b[^>]*>([\s\S]*?)<\/title\s*>/i) || [])[1] || '') || _slug(url);
-  var fullText = _text(source), genres = Object.create(null);
+
+  // Scope metadata to the title's own info panel so recommendations/comments
+  // cannot pollute genres or status. Balanced parsing avoids truncating nested divs.
+  var info = _balancedInner(source, 'div', 'info-content') ||
+    _balancedInner(source, 'ul', 'data') ||
+    _inner(source, 'div', 'info-content') || '';
+  var fullText = _text(info || source), genres = Object.create(null);
+  var genreScope = _balancedInner(source, 'div', 'genxed') || info || source;
   var genreRx = /<a\b([^>]*)>([\s\S]*?)<\/a\s*>/gi, match;
-  while ((match = genreRx.exec(source))) {
-    if (/\/genre\//i.test(_attr(match[1], 'href'))) {
-      var genre = _text(match[2]);
-      if (genre) genres[genre] = true;
+  while ((match = genreRx.exec(genreScope))) {
+    var href = _attr(match[1], 'href'), label = _text(match[2]);
+    if ((/\/genre\//i.test(href) || /\/(?:tag|genre)\//i.test(href)) && label) genres[label] = true;
+  }
+  if (!Object.keys(genres).length) {
+    var genreList = /<li\b[^>]*>\s*(?:<b[^>]*>)?\s*Genre\s*:\s*([\s\S]*?)<\/li\s*>/i.exec(info);
+    if (genreList) {
+      var links = /<a\b[^>]*>([\s\S]*?)<\/a\s*>/gi, genreMatch;
+      while ((genreMatch = links.exec(genreList[1]))) {
+        var genre = _text(genreMatch[1]);
+        if (genre) genres[genre] = true;
+      }
     }
   }
-  var description = _inner(source, 'div', 'entry-content') ||
-    _inner(source, 'div', 'desc') || _inner(source, 'div', 'synopsis') ||
+
+  var description = _balancedInner(source, 'div', 'entry-content') ||
+    _balancedInner(source, 'div', 'desc') ||
+    _balancedInner(source, 'div', 'synopsis') ||
+    _inner(source, 'div', 'entry-content') ||
+    _inner(source, 'div', 'desc') ||
     _meta(source, 'description') || _meta(source, 'og:description') || _meta(source, 'twitter:description');
   var descriptionText = _text(description);
   if (!descriptionText || (/watch full episodes|lucifer donghua/i.test(descriptionText) && descriptionText.length < 180)) {
-    descriptionText = _text(_inner(source, 'div', 'synopsis') || _inner(source, 'div', 'desc') || description);
+    descriptionText = _text(_balancedInner(source, 'div', 'synopsis') || _balancedInner(source, 'div', 'desc') || description);
   }
-  var sm = fullText.match(/\bStatus:\s*(Ongoing|Completed|Complete|Hiatus|Upcoming|Airing)\b/i);
+
+  var sm = fullText.match(/\bStatus\s*:\s*(Ongoing|Completed|Complete|Hiatus|Upcoming|Airing)\b/i);
+  if (!sm) sm = _text(source).match(/\bStatus\s*:\s*(Ongoing|Completed|Complete|Hiatus|Upcoming|Airing)\b/i);
   var status = sm && /completed|complete/i.test(sm[1]) ? 'completed' :
     sm && /ongoing|airing/i.test(sm[1]) ? 'ongoing' :
     sm && /hiatus/i.test(sm[1]) ? 'hiatus' :
@@ -313,12 +350,16 @@ function _detail(html, url, options) {
     if (/\bcompleted\b/i.test(fullText)) status = 'completed';
     else if (/\bongoing\b/i.test(fullText)) status = 'ongoing';
   }
+
   var episodes = _episodes(source, url, options);
   var year = (_text(source).match(/\b(?:19|20)\d{2}\b/) || [])[0] || null;
-  return { id: _slug(url), title: _cleanTitle(titleHtml), englishTitle: _cleanTitle(titleHtml),
-    url: url, cover: _image(source, url), description: descriptionText, status: status,
-    genres: Object.keys(genres), year: year, type: 'anime', sourceId: 'luciferdonghua',
-    episodes: episodes, episodeCount: episodes.length, subCount: episodes.length, dubCount: 0 };
+  return {
+    id: _slug(url), title: _cleanTitle(titleHtml), englishTitle: _cleanTitle(titleHtml),
+    url: url, cover: _image(source, url), description: descriptionText,
+    status: status, genres: Object.keys(genres), year: year, type: 'anime',
+    sourceId: 'luciferdonghua', episodes: episodes, episodeCount: episodes.length,
+    subCount: episodes.length, dubCount: 0
+  };
 }
 function getDetail(input, options) {
   var url = _titleUrl(input);
