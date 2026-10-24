@@ -207,6 +207,8 @@ async function main() {
   const routeIds=provider._parseStreamId("zm://anime/mal:61469/ep/2");
   assert.equal(routeIds.type,"series");
   assert.ok(routeIds.ids.includes("mal:61469:2"));
+  const noTmdbIds = provider._parseStreamId(JSON.stringify({ id:"tmdb://tv/0", type:"series", season:1, episode:1 }));
+  assert.equal(noTmdbIds.ids.length, 0, "placeholder TMDB ID 0 must not be queried");
 
   // Bound TMDB season lookup fan-out on long-running shows.
   global.__settings["tmdb-stremio"].addonUrls="";

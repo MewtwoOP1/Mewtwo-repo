@@ -712,7 +712,7 @@ function _parseStreamId(raw) {
   if(!season&&episode>0&&type==='series'&&routeMatch&&routeMatch[1].toLowerCase()==='anime')season=1;
   var external=item.externalIds||item.external_ids||{}, nested=item.ids||external.ids||{};
   var imdb=item.imdbId||item.imdb_id||external.imdb_id||external.imdbId||nested.imdb||'';
-  var tmdb=item.tmdbId||item.tmdb_id||item.moviedb_id||external.tmdb_id||external.tmdbId||nested.tmdb||(tmdbRoute&&tmdbRoute[2])||null;
+  var tmdb=item.tmdbId||item.tmdb_id||item.moviedb_id||external.tmdb_id||external.tmdbId||nested.tmdb||(tmdbRoute&&Number(tmdbRoute[2])>0?tmdbRoute[2]:null)||null;
   var tvdb=item.tvdbId||item.tvdb_id||item.thetvdb_id||external.tvdb_id||external.tvdbId||nested.tvdb||nested.tvdb_id||null;
   var mal=item.malId||item.mal_id||item.myanimelist_id||external.mal_id||external.malId||nested.mal||nested.myanimelist||nested.myanimelist_id||null;
   var anilist=item.anilistId||item.anilist_id||external.anilist_id||external.anilistId||nested.anilist||null;
