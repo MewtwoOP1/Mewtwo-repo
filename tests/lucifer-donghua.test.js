@@ -53,10 +53,22 @@ global.fetch = async function (input, options) {
   requests.push({ url: url, options: options || {} });
 
   if (parsed.hostname === 'luciferdonghua.in' && parsed.pathname === '/page/1/' && parsed.searchParams.has('s')) {
+    if (parsed.searchParams.get('s') === 'REST fallback probe') return response(url, '<html><body>No series cards here</body></html>');
     return response(url, 'primary search route unavailable', 404);
   }
   if (parsed.hostname === 'luciferdonghua.in' && parsed.pathname === '/' && parsed.searchParams.has('s')) {
+    if (parsed.searchParams.get('s') === 'REST fallback probe') return response(url, '<html><body>No series cards here</body></html>');
     return response(url, '<html><body><div class="listupd">' + seriesCard() + '</div></body></html>');
+  }
+  if (parsed.hostname === 'luciferdonghua.in' && parsed.pathname === '/anime/' && parsed.searchParams.has('s')) {
+    return response(url, '<html><body>No series cards here</body></html>');
+  }
+  if (parsed.hostname === 'luciferdonghua.in' && parsed.pathname === '/wp-json/wp/v2/search' &&
+      parsed.searchParams.get('search') === 'REST fallback probe') {
+    return response(url, JSON.stringify([{
+      id: 731, title: 'REST Recovery Donghua', url: site + '/anime/rest-recovery-donghua/',
+      type: 'post', subtype: 'anime'
+    }]));
   }
   if (parsed.hostname === 'luciferdonghua.in' && parsed.pathname === '/anime/' &&
       (parsed.searchParams.get('order') === 'popular' || parsed.searchParams.get('order') === 'update')) {
@@ -94,7 +106,7 @@ async function main() {
   assert.equal(info.name, 'Lucifer Donghua');
   assert.equal(info.lang, 'en');
   assert.equal(info.baseUrl, site);
-  assert.equal(info.version, '1.0.3');
+  assert.equal(info.version, '1.0.4');
 
   const settings = provider.getSettings();
   assert.deepEqual(settings.map(function (item) { return item.key; }), [
@@ -112,6 +124,14 @@ async function main() {
   assert.equal(results[0].cover, 'https://img.example/poster.jpg');
   assert.ok(requests.some(function (r) { return r.url.indexOf('/page/1/?s=Soul%20Land') >= 0; }));
   assert.ok(requests.some(function (r) { return r.url.indexOf('/?s=Soul%20Land') >= 0; }));
+
+  // If HTML card selectors yield no series, REST search can still recover a
+  // canonical anime detail page. Episode URLs and non-anime posts are filtered.
+  const restResults = await provider.search('REST fallback probe', 1);
+  assert.equal(restResults.length, 1);
+  assert.equal(restResults[0].id, 'rest-recovery-donghua');
+  assert.equal(restResults[0].title, 'REST Recovery Donghua');
+  assert.ok(requests.some(function (r) { return r.url.indexOf('/wp-json/wp/v2/search?search=REST%20fallback%20probe') >= 0; }));
 
   const home = await provider.getHome({});
   assert.equal(home.length, 2);

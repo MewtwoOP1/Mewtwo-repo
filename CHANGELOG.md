@@ -1,12 +1,11 @@
 # Changelog
 
-## Lucifer Donghua 1.0.3
+## Lucifer Donghua 1.0.4
 
-- Bump the source version so clients can fetch the corrected provider build.
-- Keep current-site search fallback and title/episode parsing fixes.
-- Keep the canonical embedded-player URL ahead of advertising iframes.
-- Require live verification to confirm a series, episode list, extracted host streams, and real media/HLS content.
-
+- Bump the manifest and provider versions so Zangetsu refreshes the installed 1.0.3 build.
+- Add a WordPress REST API fallback when the site's HTML search routes stop exposing parseable anime cards.
+- Keep Yuzuno's HTML search route first and restrict REST results to canonical series pages, never episode posts.
+- Strengthen regression coverage for REST-backed search and exact-title live search before metadata, episodes, and stream verification.
 
 ## Lucifer Donghua 1.0.0
 

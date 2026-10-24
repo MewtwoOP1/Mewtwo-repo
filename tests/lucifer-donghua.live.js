@@ -5,7 +5,7 @@
 
 const assert = require('node:assert/strict');
 const provider = require('../providers/lucifer-donghua.js');
-const query = process.env.LUCIFER_DONGHUA_QUERY || 'soul land';
+const query = process.env.LUCIFER_DONGHUA_QUERY || 'Soul Land 2: The Peerless Tang Sect';
 const nativeFetch = global.fetch;
 
 function within(promise, ms, label) {
@@ -47,7 +47,10 @@ async function main() {
 
   const results = await within(provider.search(query, 1), 60000, 'live search');
   assert.ok(Array.isArray(results) && results.length, 'search returned no results for ' + query);
-  pass('real HTTP search returned ' + results.length + ' title(s)');
+  assert.ok(results.some(function (result) {
+    return /Soul Land 2.*Peerless Tang Sect/i.test(String(result && result.title || ''));
+  }), 'known live title was not present in search results; site response or card parsing may have changed');
+  pass('real HTTP search returned ' + results.length + ' title(s), including Soul Land 2');
 
   // Search can return a movie first (e.g. a Soul Land film). Find a result
   // whose own detail page actually advertises episodes before testing series flow.

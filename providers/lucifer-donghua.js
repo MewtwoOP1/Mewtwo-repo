@@ -6,7 +6,7 @@
 // https://github.com/yuzono/anime-extensions. Kotlin/AnimeStream behavior is
 // translated to Zangetsu's JavaScript provider contract.
 
-var VERSION = '1.0.3';
+var VERSION = '1.0.4';
 var SITE = 'https://luciferdonghua.in';
 var LOGO = 'https://www.google.com/s2/favicons?sz=256&domain=luciferdonghua.in';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';
@@ -230,12 +230,61 @@ function getHome(options) {
     _request(SITE + '/anime/?page=1&order=update', SITE + '/').then(function (html) { return { title: 'Latest Updates', items: _cards(html) }; }).catch(function () { return { title: 'Latest Updates', items: [] }; })
   ]).then(function (sections) { return sections.filter(function (section) { return section.items.length; }); });
 }
+function _wordpressCards(payload, page) {
+  var rows = Array.isArray(payload) ? payload :
+    (payload && Array.isArray(payload.results) ? payload.results :
+      (payload && Array.isArray(payload.items) ? payload.items : []));
+  var output = [], seen = Object.create(null);
+  rows.forEach(function (row) {
+    if (!row || typeof row !== 'object') return;
+    var url = _siteUrl(_abs(row.url || row.link || '', SITE + '/'));
+    if (!url || _isEpisode(url) || !/^\/anime\/[^/]+\/?$/i.test(_path(url)) || seen[url]) return;
+    var rawTitle = row.title;
+    if (rawTitle && typeof rawTitle === 'object') rawTitle = rawTitle.rendered || rawTitle.raw || '';
+    var title = _cleanTitle(rawTitle || row.name || '');
+    if (!title || title.length > 180) return;
+    var cover = row.cover || row.featured_image_url || row.thumbnail || null;
+    if (!cover && row._embedded && Array.isArray(row._embedded['wp:featuredmedia'])) {
+      cover = row._embedded['wp:featuredmedia'][0] && row._embedded['wp:featuredmedia'][0].source_url;
+    }
+    seen[url] = true;
+    output.push({
+      id: _slug(url), title: title, englishTitle: title, url: url,
+      cover: cover ? _abs(cover, url) : null, type: 'anime', sourceId: 'luciferdonghua', page: page
+    });
+  });
+  return output;
+}
+
+function _wordpressSearch(query, page) {
+  var encoded = encodeURIComponent(String(query || '').trim());
+  var p = Math.max(1, Number(page) || 1);
+  var urls = [
+    SITE + '/wp-json/wp/v2/search?search=' + encoded + '&per_page=50&page=' + p,
+    SITE + '/wp-json/wp/v2/anime?search=' + encoded + '&per_page=50&page=' + p + '&_embed=1',
+    SITE + '/wp-json/wp/v2/posts?search=' + encoded + '&per_page=50&page=' + p + '&_embed=1'
+  ];
+  function attempt(index) {
+    if (index >= urls.length) return Promise.resolve([]);
+    return _request(urls[index], SITE + '/', 'application/json,application/*+json;q=0.9,*/*;q=0.5')
+      .then(function (body) {
+        var payload;
+        try { payload = JSON.parse(body); } catch (_) { return attempt(index + 1); }
+        var items = _wordpressCards(payload, p);
+        return items.length ? items : attempt(index + 1);
+      })
+      .catch(function () { return attempt(index + 1); });
+  }
+  return attempt(0);
+}
+
 function search(query, page, options) {
   var q = String(query || '').trim(), p = Math.max(1, Number(page) || 1);
   if (!q) return Promise.resolve([]);
   var encoded = encodeURIComponent(q);
-  // First URL matches Yuzono's AnimeStream base. WordPress can serve search at
-  // the root or catalogue route after a theme/site update; fall back as needed.
+  // Primary route mirrors Yuzuno's AnimeStream source. Retain alternate HTML
+  // routes, then use public WordPress REST JSON only when the card parser finds
+  // no series at all. REST fallback admits canonical anime-detail pages only.
   var urls = [
     SITE + '/page/' + p + '/?s=' + encoded,
     SITE + '/?s=' + encoded + (p > 1 ? '&paged=' + p : ''),
@@ -245,7 +294,7 @@ function search(query, page, options) {
   ];
   var seen = Object.create(null);
   function attempt(index) {
-    if (index >= urls.length) return Promise.resolve([]);
+    if (index >= urls.length) return _wordpressSearch(q, p);
     var url = urls[index];
     if (seen[url]) return attempt(index + 1);
     seen[url] = true;
