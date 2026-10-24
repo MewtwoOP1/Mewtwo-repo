@@ -6,7 +6,7 @@
 // https://github.com/yuzono/anime-extensions. Kotlin/AnimeStream behavior is
 // translated to Zangetsu's JavaScript provider contract.
 
-var VERSION = '1.0.1';
+var VERSION = '1.0.2';
 var SITE = 'https://luciferdonghua.in';
 var LOGO = 'https://www.google.com/s2/favicons?sz=256&domain=luciferdonghua.in';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';

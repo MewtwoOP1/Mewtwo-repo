@@ -775,7 +775,7 @@
     {
       "id": "luciferdonghua",
       "name": "Lucifer Donghua",
-      "version": "1.0.0",
+      "version": "1.0.2",
       "type": "anime",
       "lang": "en",
       "file": "providers/lucifer-donghua.js",
