@@ -61,6 +61,12 @@ global.fetch = async function (url, options) {
   if (url === 'https://animexin.dev/anime/?order=update&status=&type=') return { status: 200, body: articleCard };
   if (url === 'https://animexin.dev/page/2/?s=Renegade%20Immortal') return { status: 200, body: '' };
   if (url === 'https://animexin.dev/?s=Renegade%20Immortal') return { status: 200, body: articleCard };
+  // Real AnimeXin search templates can render a title link without an image.
+  if (url === 'https://animexin.dev/?s=Solo%20Leveling') return { status: 200, body:
+    '<main class="search-results"><h2 class="entry-title"><a href="https://animexin.dev/solo-leveling/">Solo Leveling</a></h2></main>' };
+  if (url === 'https://animexin.dev/?s=Fallback%20Series') return { status: 200, body: '<main>No results found</main>' };
+  if (url === 'https://animexin.dev/anime/?s=Fallback%20Series') return { status: 200, body:
+    '<article class="search-result"><h2><a href="https://animexin.dev/fallback-series/">Fallback Series</a></h2></article>' };
   if (url === 'https://animexin.dev/?s=offline') return { status: 503, body: 'unavailable' };
   if (url === baseSeries) return { status: 200, body: seriesHtml };
 
@@ -97,12 +103,12 @@ global.fetch = async function (url, options) {
 const provider = require('../providers/animexin.js');
 
 async function main() {
-  assert.equal(provider.version, '1.0.1');
+  assert.equal(provider.version, '1.0.2');
   assert.deepEqual(provider.getSettings(), []);
   assert.deepEqual(provider.getInfo(), {
     name: 'AnimeXin', lang: 'en', baseUrl: 'https://animexin.dev',
     logo: 'https://www.google.com/s2/favicons?sz=256&domain=animexin.dev',
-    type: 'anime', version: '1.0.1'
+    type: 'anime', version: '1.0.2'
   });
 
   const home = await provider.getHome({});
@@ -118,6 +124,19 @@ async function main() {
   assert.equal(results[0].url, baseSeries);
   assert.equal(results[0].cover, 'https://img.example/renegade.jpg');
   assert.equal(results[0].episode, 'Ep 2');
+
+  // Headline-only results are parsed even without a poster and are normalized
+  // to a usable series URL.
+  const titleOnly = await provider.search('Solo Leveling', 1, {});
+  assert.equal(titleOnly.length, 1);
+  assert.equal(titleOnly[0].title, 'Solo Leveling');
+  assert.equal(titleOnly[0].url, 'https://animexin.dev/solo-leveling/');
+
+  // If the root search renders no results, the provider tries the anime archive.
+  const archiveFallback = await provider.search('Fallback Series', 1, {});
+  assert.equal(archiveFallback.length, 1);
+  assert.equal(archiveFallback[0].title, 'Fallback Series');
+  assert.ok(calls.some(c => c.url === 'https://animexin.dev/anime/?s=Fallback%20Series'));
   assert.deepEqual(await provider.search('', 1, {}), []);
   assert.deepEqual(await provider.search('Renegade Immortal', 2, {}), []);
   assert.deepEqual(await provider.search('offline', 1, {}), []);
