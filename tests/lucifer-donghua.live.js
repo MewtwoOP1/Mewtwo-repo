@@ -80,9 +80,12 @@ async function main() {
 
   let streams = [];
   for (let i = 0; i < Math.min(5, viaEpisodeMethod.length); i++) {
-    if (viaEpisodeMethod[i] && viaEpisodeMethod[i].url) {
-      streams = await within(provider.getVideoSources(viaEpisodeMethod[i].url), 60000, 'live stream extraction');
-    }
+    const episode = viaEpisodeMethod[i];
+    if (!episode || !episode.url) continue;
+    const before = calls.length;
+    streams = await within(provider.getVideoSources(episode.url), 60000, 'live stream extraction');
+    console.log('[DIAG] episode ' + episode.number + ' ' + episode.url +
+      ' -> ' + streams.length + ' streams; provider requests: ' + calls.slice(before).join(' | '));
     if (streams.length) break;
   }
   assert.ok(streams.length, 'no enabled host returned stream candidates from the first five episodes');
