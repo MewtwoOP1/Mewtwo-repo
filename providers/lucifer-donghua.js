@@ -146,35 +146,67 @@ function _cleanTitle(value) {
     .replace(/\s+(?:Episode|Ep)\s*#?\d+.*$/i, '').trim();
 }
 function _image(html, base) {
-  var img = (String(html || '').match(/<img\b[^>]*>/i) || [''])[0];
-  var src = _attr(img, 'data-src') || _attr(img, 'data-lazy-src') || _attr(img, 'srcset').split(/\s*,\s*/)[0].split(/\s+/)[0] ||
-    _attr(img, 'src') || _meta(html, 'og:image');
-  return src ? _abs(src, base) : null;
+  var social = _meta(html, 'og:image') || _meta(html, 'twitter:image');
+  if (social) return _abs(social, base);
+  var regions = [_inner(html, 'div', 'thumb'), _inner(html, 'div', 'limage'), html];
+  for (var i = 0; i < regions.length; i++) {
+    var img = (String(regions[i] || '').match(/<img\b[^>]*>/i) || [''])[0];
+    var src = _attr(img, 'data-src') || _attr(img, 'data-lazy-src') ||
+      _attr(img, 'data-original') || _attr(img, 'srcset').split(/\s*,\s*/)[0].split(/\s+/)[0] || _attr(img, 'src');
+    if (src) { var resolved = _abs(src, base); if (resolved) return resolved; }
+  }
+  return null;
 }
 function _card(block) {
-  var match = String(block || '').match(/<a\b([^>]*\bclass=["'][^"']*\btip\b[^"']*["'][^>]*)>([\s\S]*?)<\/a\s*>/i);
-  if (!match) match = String(block || '').match(/<a\b([^>]*)>([\s\S]*?)<\/a\s*>/i);
-  if (!match) return null;
-  var url = _siteUrl(_abs(_attr(match[1], 'href'), SITE + '/'));
-  if (!url || _isEpisode(url) || /^\/(?:genre|category|tag|page|wp-)/i.test(_path(url))) return null;
-  var title = _cleanTitle(_inner(match[2], 'div', 'tt') || _inner(match[2], 'div', 'ttl') ||
-    _attr(match[1], 'title') || match[2] || _attr((match[2].match(/<img\b[^>]*>/i) || [''])[0], 'alt'));
-  if (!title || title.length > 180 || /^(home|next|previous|view all|\d+)$/i.test(title)) return null;
-  return { id: _slug(url), title: title, englishTitle: title, url: url, cover: _image(match[2], url), type: 'anime', sourceId: 'luciferdonghua' };
+  var raw = String(block || ''), links = [], rx = /<a\b([^>]*)>([\s\S]*?)<\/a\s*>/gi, match;
+  while ((match = rx.exec(raw))) {
+    links.push({ attrs: match[1], html: match[2] });
+    if (links.length >= 10) break;
+  }
+  var chosen = null, chosenUrl = '';
+  for (var i = 0; i < links.length; i++) {
+    var candidateUrl = _siteUrl(_abs(_attr(links[i].attrs, 'href'), SITE + '/'));
+    if (!candidateUrl || _isEpisode(candidateUrl) || !/^\/anime\/[^/]+\/?$/i.test(_path(candidateUrl))) continue;
+    chosen = links[i];
+    chosenUrl = candidateUrl;
+    if (/\btip\b/i.test(_attr(chosen.attrs, 'class'))) break;
+  }
+  if (!chosen) return null;
+  var img = (chosen.html.match(/<img\b[^>]*>/i) || [''])[0];
+  var titleHtml = _inner(chosen.html, 'div', 'tt') ||
+    _inner(chosen.html, 'div', 'ttl') ||
+    _inner(chosen.html, 'h2', 'title') ||
+    _inner(chosen.html, 'h3', 'title') ||
+    _inner(chosen.html, 'span', 'tt') ||
+    _inner(chosen.html, 'div', 'title') ||
+    _attr(chosen.attrs, 'title') || _attr(chosen.attrs, 'aria-label') ||
+    _attr(img, 'alt') || chosen.html;
+  var title = _cleanTitle(titleHtml);
+  var imageAlt = _cleanTitle(_attr(img, 'alt'));
+  if (imageAlt && (!title || title.length > 130 || /^(?:DONGHUA|ONA|TV|MOVIE|EPISODE)\b/i.test(title))) title = imageAlt;
+  if (!title || title.length > 180 || /^(home|next|previous|view all|search|\d+)$/i.test(title)) return null;
+  return { id: _slug(chosenUrl), title: title, englishTitle: title, url: chosenUrl,
+    cover: _image(chosen.html, chosenUrl) || _abs(_attr(img, 'data-src') || _attr(img, 'data-lazy-src') || _attr(img, 'src'), chosenUrl) || null,
+    type: 'anime', sourceId: 'luciferdonghua' };
 }
 function _cards(html) {
-  var out = [], seen = {}, rx = /<article\b[^>]*>[\s\S]*?<\/article\s*>/gi, match;
-  while ((match = rx.exec(String(html || '')))) {
-    var item = _card(match[0]);
-    if (item && !seen[item.url]) { seen[item.url] = true; out.push(item); }
+  var output = [], seen = Object.create(null), source = String(html || '');
+  function add(fragment) {
+    var item = _card(fragment);
+    if (item && item.url && !seen[item.url]) { seen[item.url] = true; output.push(item); }
   }
-  if (out.length) return out;
-  rx = /<a\b[^>]*>([\s\S]*?)<\/a\s*>/gi;
-  while ((match = rx.exec(String(html || '')))) {
-    var fallback = _card(match[0]);
-    if (fallback && !seen[fallback.url]) { seen[fallback.url] = true; out.push(fallback); }
+  var articles = /<article\b[^>]*>[\s\S]*?<\/article\s*>/gi, match;
+  while ((match = articles.exec(source))) add(match[0]);
+  if (output.length) return output;
+  // Yuzono's selector is div.listupd article a.tip; tolerate theme changes
+  // where the same series anchors are returned without an article wrapper.
+  var links = /<a\b([^>]*)>([\s\S]*?)<\/a\s*>/gi;
+  while ((match = links.exec(source))) {
+    var url = _siteUrl(_abs(_attr(match[1], 'href'), SITE + '/'));
+    if (!url || _isEpisode(url) || !/^\/anime\/[^/]+\/?$/i.test(_path(url))) continue;
+    add(match[0]);
   }
-  return out;
+  return output;
 }
 function getHome(options) {
   return Promise.all([
@@ -185,59 +217,108 @@ function getHome(options) {
 function search(query, page, options) {
   var q = String(query || '').trim(), p = Math.max(1, Number(page) || 1);
   if (!q) return Promise.resolve([]);
-  return _request(SITE + '/page/' + p + '/?s=' + encodeURIComponent(q), SITE + '/')
-    .then(function (html) {
-      var lower = q.toLowerCase(), words = lower.split(/\s+/).filter(function (word) { return word.length > 2; });
-      return _cards(html).filter(function (item) {
-        var title = item.title.toLowerCase();
-        return title.indexOf(lower) >= 0 || words.some(function (word) { return title.indexOf(word) >= 0; });
-      }).map(function (item) { item.page = p; return item; });
-    }).catch(function () { return []; });
+  var encoded = encodeURIComponent(q);
+  // First URL matches Yuzono's AnimeStream base. WordPress can serve search at
+  // the root or catalogue route after a theme/site update; fall back as needed.
+  var urls = [
+    SITE + '/page/' + p + '/?s=' + encoded,
+    SITE + '/?s=' + encoded + (p > 1 ? '&paged=' + p : ''),
+    SITE + '/anime/?s=' + encoded + (p > 1 ? '&paged=' + p : ''),
+    SITE + '/?s=' + encoded,
+    SITE + '/anime/?s=' + encoded
+  ];
+  var seen = Object.create(null);
+  function attempt(index) {
+    if (index >= urls.length) return Promise.resolve([]);
+    var url = urls[index];
+    if (seen[url]) return attempt(index + 1);
+    seen[url] = true;
+    return _request(url, SITE + '/', 'text/html,application/xhtml+xml,*/*')
+      .then(function (html) {
+        var items = _cards(html);
+        if (!items.length) return attempt(index + 1);
+        return items.map(function (item) { item.page = p; return item; });
+      })
+      .catch(function () { return attempt(index + 1); });
+  }
+  return attempt(0);
 }
 function _date(value) { var parsed = Date.parse(_text(value)); return isFinite(parsed) ? parsed : 0; }
 function _episodes(html, base, options) {
-  var out = [], seen = {}, rx = /<li\b[^>]*>[\s\S]*?<\/li\s*>/gi, match;
-  while ((match = rx.exec(String(html || '')))) {
-    var block = match[0], anchor = block.match(/<a\b([^>]*)>([\s\S]*?)<\/a\s*>/i);
-    if (!anchor) continue;
-    var url = _siteUrl(_abs(_attr(anchor[1], 'href'), base));
-    if (!url || !_isEpisode(url) || seen[url]) continue;
-    var numText = _text(_inner(block, 'span', 'epl-num') || _inner(block, 'div', 'epl-num') || _attr(anchor[1], 'title') || anchor[2]).replace(/\[4K\]/ig, '').trim();
-    var number = Number(numText.split(/\s+/)[0]);
-    if (!isFinite(number)) {
-      var numMatch = numText.match(/(?:episode|ep)\s*#?\s*(\d+(?:\.\d+)?)/i);
-      number = numMatch ? Number(numMatch[1]) : 0;
-    }
+  var source = String(html || ''), output = [], seen = Object.create(null);
+  function add(href, attrs, anchorHtml, block) {
+    var url = _siteUrl(_abs(href, base));
+    if (!url || !_isEpisode(url) || seen[url]) return;
+    var numText = _text(_inner(block, 'span', 'epl-num') || _inner(block, 'div', 'epl-num') ||
+      _attr(attrs, 'title') || anchorHtml).replace(/\[4K\]/ig, '').trim();
+    var numeric = numText.match(/(?:episode|ep(?:isode)?)\s*#?\s*(\d+(?:\.\d+)?)/i) ||
+      numText.match(/^\s*(\d+(?:\.\d+)?)/);
+    var number = numeric ? Number(numeric[1]) : 0;
+    var extra = _text(_inner(block, 'span', 'epl-title') || _inner(block, 'div', 'epl-title'));
     var title = 'Episode ' + number;
-    var titleExtra = _text(_inner(block, 'span', 'epl-title') || _inner(block, 'div', 'epl-title'));
-    if (titleExtra && /preview/i.test(titleExtra)) title += ' - ' + titleExtra;
+    if (extra && /preview/i.test(extra)) title += ' - ' + extra;
     var dateText = _text(_inner(block, 'span', 'epl-date') || _inner(block, 'div', 'epl-date'));
+    if (!dateText) {
+      var date = _text(block).match(/\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+\d{1,2},?\s+\d{4}\b/i);
+      if (date) dateText = date[0];
+    }
     seen[url] = true;
-    out.push({ id: url, title: title, name: title, number: number, episodeNumber: number, url: url,
-      date_upload: _date(dateText), date: dateText || null, type: 'anime', category: 'sub', sourceId: 'luciferdonghua' });
+    output.push({ id: url, title: title, name: title, number: number, episodeNumber: number,
+      url: url, date_upload: _date(dateText), date: dateText || null, type: 'anime', category: 'sub', sourceId: 'luciferdonghua' });
   }
-  // Mirrors upstream episodeListParse: only apply the date-based preview rule
-  // for lists with more than two episodes, sorting newest numbers first.
-  if (_skipPreview(options) && out.length > 2) {
-    out = out.slice().sort(function (a, b) { return b.number - a.number; });
-    if (out[0].date_upload < out[1].date_upload) out = out.slice(1);
+  var listItems = /<li\b[^>]*>[\s\S]*?<\/li\s*>/gi, item;
+  while ((item = listItems.exec(source))) {
+    var block = item[0], anchor = block.match(/<a\b([^>]*)>([\s\S]*?)<\/a\s*>/i);
+    if (anchor) add(_attr(anchor[1], 'href'), anchor[1], anchor[2], block);
   }
-  return out;
+  // Fallback for theme changes where episode links remain but eplister <li>
+  // markup changes. Only URLs that match the source's episode URL scheme pass.
+  if (!output.length) {
+    var anchors = /<a\b([^>]*)>([\s\S]*?)<\/a\s*>/gi, match;
+    while ((match = anchors.exec(source))) add(_attr(match[1], 'href'), match[1], match[2], match[0]);
+  }
+  if (_skipPreview(options) && output.length > 2) {
+    output = output.slice().sort(function (a, b) { return b.number - a.number; });
+    if (output[0].date_upload < output[1].date_upload) output = output.slice(1);
+  }
+  return output;
 }
 function _detail(html, url, options) {
-  var titleHtml = _inner(html, 'h1', 'entry-title') || _inner(html, 'h1', 'title') || _meta(html, 'og:title') || _slug(url);
-  var info = (String(html || '').match(/<div\b[^>]*class=["'][^"']*\binfo-content\b[^"']*["'][^>]*>([\s\S]*?)<\/div\s*>/i) || [])[1] || html;
-  var description = _inner(html, 'div', 'entry-content') || _inner(html, 'div', 'desc') || _meta(html, 'description') || _meta(html, 'og:description');
-  var genres = {}, rx = /<a\b([^>]*)>([\s\S]*?)<\/a\s*>/gi, match;
-  while ((match = rx.exec(String(info || '')))) {
-    if (/\/genre\//i.test(_attr(match[1], 'href'))) { var genre = _text(match[2]); if (genre) genres[genre] = true; }
+  var source = String(html || '');
+  var h1 = source.match(/<h1\b([^>]*)>([\s\S]*?)<\/h1\s*>/i);
+  var titleHtml = _inner(source, 'h1', 'entry-title') || (h1 ? h1[2] : '') ||
+    _meta(source, 'og:title') || _meta(source, 'twitter:title') ||
+    ((source.match(/<title\b[^>]*>([\s\S]*?)<\/title\s*>/i) || [])[1] || '') || _slug(url);
+  var fullText = _text(source), genres = Object.create(null);
+  var genreRx = /<a\b([^>]*)>([\s\S]*?)<\/a\s*>/gi, match;
+  while ((match = genreRx.exec(source))) {
+    if (/\/genre\//i.test(_attr(match[1], 'href'))) {
+      var genre = _text(match[2]);
+      if (genre) genres[genre] = true;
+    }
   }
-  var infoText = _text(info);
-  var status = /completed|complete/i.test(infoText) ? 'completed' : /ongoing|airing/i.test(infoText) ? 'ongoing' : 'unknown';
-  var eps = _episodes(html, url, options), year = (_text(html).match(/\b(?:19|20)\d{2}\b/) || [])[0] || null;
-  return { id: _slug(url), title: _cleanTitle(titleHtml), englishTitle: _cleanTitle(titleHtml), url: url,
-    cover: _image(html, url), description: _text(description), status: status, genres: Object.keys(genres), year: year,
-    type: 'anime', sourceId: 'luciferdonghua', episodes: eps, episodeCount: eps.length, subCount: eps.length, dubCount: 0 };
+  var description = _inner(source, 'div', 'entry-content') ||
+    _inner(source, 'div', 'desc') || _inner(source, 'div', 'synopsis') ||
+    _meta(source, 'description') || _meta(source, 'og:description') || _meta(source, 'twitter:description');
+  var descriptionText = _text(description);
+  if (!descriptionText || (/watch full episodes|lucifer donghua/i.test(descriptionText) && descriptionText.length < 180)) {
+    descriptionText = _text(_inner(source, 'div', 'synopsis') || _inner(source, 'div', 'desc') || description);
+  }
+  var sm = fullText.match(/\bStatus:\s*(Ongoing|Completed|Complete|Hiatus|Upcoming|Airing)\b/i);
+  var status = sm && /completed|complete/i.test(sm[1]) ? 'completed' :
+    sm && /ongoing|airing/i.test(sm[1]) ? 'ongoing' :
+    sm && /hiatus/i.test(sm[1]) ? 'hiatus' :
+    sm && /upcoming/i.test(sm[1]) ? 'upcoming' : 'unknown';
+  if (status === 'unknown') {
+    if (/\bcompleted\b/i.test(fullText)) status = 'completed';
+    else if (/\bongoing\b/i.test(fullText)) status = 'ongoing';
+  }
+  var episodes = _episodes(source, url, options);
+  var year = (_text(source).match(/\b(?:19|20)\d{2}\b/) || [])[0] || null;
+  return { id: _slug(url), title: _cleanTitle(titleHtml), englishTitle: _cleanTitle(titleHtml),
+    url: url, cover: _image(source, url), description: descriptionText, status: status,
+    genres: Object.keys(genres), year: year, type: 'anime', sourceId: 'luciferdonghua',
+    episodes: episodes, episodeCount: episodes.length, subCount: episodes.length, dubCount: 0 };
 }
 function getDetail(input, options) {
   var url = _titleUrl(input);
