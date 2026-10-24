@@ -162,14 +162,15 @@ function _archiveUrl(page) {
 }
 function _homeSections(html) {
   var input = String(html || ''), headings = [], re = /<h([2-4])\b[^>]*>([\s\S]*?)<\/h\1\s*>/gi, m;
-  var allowed = { 'popular today': 'Popular Today', 'latest release': 'Latest Release', 'latest episode': 'Latest Episode', 'popular anime': 'Popular Anime' };
+  var allowed = { 'popular today': 'Popular Today', 'latest release': 'Latest Release', 'latest episode': 'Latest Episode', 'popular anime': 'Popular Anime', 'new movie': null, 'next': null, 'anime lists': null, 'anime list': null };
   while ((m = re.exec(input)) !== null) {
     var label = _text(m[2]).trim().toLowerCase();
-    if (allowed[label]) headings.push({ title: allowed[label], at: m.index });
+    if (Object.prototype.hasOwnProperty.call(allowed, label)) headings.push({ title: allowed[label], at: m.index });
   }
   var rows = [];
   for (var i = 0; i < headings.length; i++) {
     var end = i + 1 < headings.length ? headings[i + 1].at : input.length;
+    if (!headings[i].title) continue;
     var items = _cards(input.substring(headings[i].at, end));
     if (items.length) rows.push({ title: headings[i].title, items: items });
   }
