@@ -1,0 +1,18 @@
+'use strict';
+// Explicit live integration test. Run: node tests/lucifer-donghua.live.js
+// Override LUCIFER_DONGHUA_QUERY to test a known title from the site.
+const assert=require('node:assert/strict');
+const provider=require('../providers/lucifer-donghua.js');
+const query=process.env.LUCIFER_DONGHUA_QUERY||'soul land';
+const nativeFetch=global.fetch;
+function timeout(p,ms,label){return Promise.race([p,new Promise((_,rej)=>setTimeout(()=>rej(new Error(label+' timed out after '+ms+'ms')),ms))]);}
+function pass(s){console.log('[PASS] '+s);}
+function fail(s,e){console.error('[FAIL] '+s+': '+(e&&e.stack||e));process.exitCode=1;}
+async function run(){assert.equal(provider.getInfo().name,'Lucifer Donghua');pass('Zangetsu provider contract');let calls=[];global.fetch=async function(input,init){let url=typeof input==='string'?input:input.url;let u=new URL(url);assert.equal(u.protocol,'https:','provider attempted non-HTTPS request: '+url);calls.push({url:url,method:(init&&init.method)||'GET'});return nativeFetch(input,Object.assign({},init||{},{signal:(init&&init.signal)||AbortSignal.timeout(15000)}));};try{
+const results=await timeout(provider.search(query,1),60000,'search');assert.ok(Array.isArray(results),'search must return array');assert.ok(results.length,'live search returned no results for '+query);pass('live HTTP search returned '+results.length+' results');
+const item=results.find(x=>x&&x.url&&/^https:\/\/(www\.)?luciferdonghua\.org\//i.test(x.url));assert.ok(item,'search results contained no title URL');
+const detail=await timeout(provider.getDetail(item.url),60000,'detail');assert.ok(detail&&detail.title,'detail title missing');pass('live detail request: '+detail.title);
+const episodes=await timeout(provider.getEpisodes(item.url),60000,'episodes');assert.ok(Array.isArray(episodes),'episodes must return array');assert.ok(episodes.length,'detail page returned no episodes; stream test cannot proceed');pass('live episode request returned '+episodes.length+' episodes');
+let streamResult=[];for(const ep of episodes.slice(-3).reverse()){if(ep.url)streamResult=await timeout(provider.getVideoSources(ep.url),60000,'stream resolution');if(streamResult.length)break;}assert.ok(streamResult.length,'no playable stream URLs resolved from three episode candidates');pass('Zangetsu getVideoSources resolved '+streamResult.length+' candidates');
+let playable=false,last='';for(const stream of streamResult.slice(0,3)){try{const response=await timeout(nativeFetch(stream.url,{headers:Object.assign({},stream.headers||{},{Range:'bytes=0-2047'}),redirect:'follow',signal:AbortSignal.timeout(12000)}),15000,'stream probe');const ct=String(response.headers.get('content-type')||'').toLowerCase();let body='';if(ct.includes('mpegurl')||/\.m3u8(?:[?#]|$)/i.test(stream.url)){body=(await response.text()).slice(0,8192);playable=response.ok&&/#EXTM3U/i.test(body);}else{const buf=Buffer.from(await response.arrayBuffer());body=buf.subarray(0,32).toString('hex');playable=response.ok&&buf.length>0&&!ct.includes('text/html');}last=stream.url+' status='+response.status+' type='+ct+' sample='+body.slice(0,100);if(playable)break;}catch(e){last=stream.url+' '+e.message;}}assert.ok(playable,'stream URL did not pass HTTP media-content probe: '+last);pass('stream endpoint served media/HLS content');pass('observed '+calls.length+' real provider HTTP requests');
+}finally{global.fetch=nativeFetch;}}run().catch(e=>fail('Lucifer Donghua live integration',e));
