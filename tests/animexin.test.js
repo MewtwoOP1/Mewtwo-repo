@@ -15,10 +15,12 @@ const seriesHtml =
 const cardHtml =
   '<div class="anime-card"><a href="/renegade-immortal/" title="Renegade Immortal"><img class="poster" alt="Renegade Immortal Poster" data-src="https://img.example/renegade.jpg"></a></div>' +
   '<div><a href="/renegade-immortal-episode-2-subtitle-sub-october-2-2026/">Episode 2</a></div>';
+const homeHtml = '<h2>Popular Today</h2>' + cardHtml + '<h3>Latest Release</h3>' + cardHtml + '<h2>New Movie</h2>' + cardHtml;
 
 global.fetch = async function (url, options) {
   url = String(url); options = options || {};
   calls.push({ url, options });
+  if (url === 'https://animexin.dev/') return { status: 200, body: homeHtml };
   if (url === 'https://animexin.dev/anime/?order=update&status=&type=') return { status: 200, body: cardHtml };
   if (url === 'https://animexin.dev/?s=Renegade%20Immortal&paged=1') return { status: 200, body: cardHtml };
   if (url === 'https://animexin.dev/?s=Renegade%20Immortal&paged=2') return { status: 200, body: '' };
@@ -53,11 +55,13 @@ async function main() {
   });
 
   const home = await provider.getHome({});
-  assert.equal(home.length, 1);
-  assert.equal(home[0].title, 'Recently Updated');
+  assert.equal(home.length, 3);
+  assert.equal(home[0].title, 'Popular Today');
   assert.equal(home[0].items.length, 1);
   assert.equal(home[0].items[0].id, 'renegade-immortal');
   assert.equal(home[0].items[0].cover, 'https://img.example/renegade.jpg');
+  assert.equal(home[1].title, 'Latest Release');
+  assert.equal(home[2].title, 'Recently Updated');
 
   const results = await provider.search('Renegade Immortal', 1, {});
   assert.equal(results.length, 1);
