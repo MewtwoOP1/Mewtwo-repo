@@ -32,6 +32,12 @@ global.fetch = async function (url, options) {
   if (url === 'https://animexin.dev/renegade-immortal-episode-2-subtitle-sub-october-2-2026/') {
     return { status: 200, body: '<iframe src="https://player.example/embed/episode2"></iframe>' };
   }
+  if (url === 'https://animexin.dev/renegade-immortal-episode-3-indonesia-english-sub/') {
+    return { status: 200, body: '<iframe src="https://geo.dailymotion.com/player/xhojl.html?video=unavailable"></iframe>' };
+  }
+  if (url === 'https://geo.dailymotion.com/player/xhojl.html?video=unavailable') {
+    return { status: 200, body: '<html><body>Video cannot be played.</body></html>' };
+  }
   if (url === 'https://api.na-backend.odysee.com/api/v1/proxy?m=get') {
     assert.equal(options.method, 'POST');
     assert.equal(JSON.parse(options.body).uri, 'lbry://@public-channel:1/renegade-immortal-episode-1:5');
@@ -101,8 +107,10 @@ async function main() {
   assert.equal(embedded[0].subtitles[0].label, 'English');
   assert.equal(embedded[0].subtitles[0].lang, 'en');
 
+  assert.deepEqual(await provider.getVideoSources('https://animexin.dev/renegade-immortal-episode-3-indonesia-english-sub/', {}), []);
   assert.deepEqual(await provider.getVideoSources('https://outside.example/watch/episode-1', {}), []);
+  assert.ok(calls.some(c => c.url.includes('geo.dailymotion.com/player/xhojl.html?video=unavailable')));
   assert.ok(calls.some(c => c.options.headers && c.options.headers.Referer));
-  console.log('AnimeXin mocked tests passed: manifest-facing API, home, search/pagination, detail, episodes, Odysee public resolution, direct HLS, subtitles and failures.');
+  console.log('AnimeXin mocked tests passed: manifest-facing API, home, search/pagination, detail, episodes, Odysee public resolution, direct HLS, subtitles, unavailable Dailymotion and failures.');
 }
 main().catch(err => { console.error(err); process.exitCode = 1; });
