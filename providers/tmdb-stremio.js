@@ -8,6 +8,7 @@ var TMDB_BACKDROP = 'https://image.tmdb.org/t/p/w780';
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID) ? String(__SOURCE_ID) : 'tmdb-stremio';
 var ADDON_CATALOG_META_CACHE = {};
 var ADDON_MANIFEST_CACHE = {};
+var TMDB_RESPONSE_CACHE = {};
 
 function getInfo() {
   return {
@@ -16,7 +17,7 @@ function getInfo() {
     baseUrl: 'https://www.themoviedb.org',
     logo: 'https://www.google.com/s2/favicons?sz=256&domain=strem.io',
     type: 'movie',
-    version: '3.2.0'
+    version: '3.2.1'
   };
 }
 
@@ -102,23 +103,67 @@ function _trim(value) {
 }
 
 function _tmdbJson(path) {
-  var customKey = _combinedSettings().tmdbApiKey;
+  var config = _combinedSettings();
+  var customKey = config.tmdbApiKey;
+  var primaryUrl = _tmdbRequestUrl(path);
+  var cacheKey = primaryUrl;
+  var cached = TMDB_RESPONSE_CACHE[cacheKey];
+  if (cached && cached.expiresAt > Date.now()) return Promise.resolve(cached.value);
+
   var headers = { Accept: 'application/json' };
-  // Keep the HTTP Host canonical while using the trailing-dot DNS form to
-  // avoid Zangetsu's built-in TMDB-key interceptor replacing a custom key.
   if (customKey) headers.Host = 'api.themoviedb.org';
-  return fetch(_tmdbRequestUrl(path), {
-    headers: headers,
-    timeoutMs: 15000
-  }).then(function (response) {
+
+  function _responseJson(response) {
     if (response && response.status && response.status >= 400) {
-      throw new Error('TMDB HTTP ' + response.status);
+      var httpError = new Error('TMDB HTTP ' + response.status);
+      httpError.status = response.status;
+      throw httpError;
     }
     var body = response && response.body != null ? response.body : '';
     return typeof body === 'string' ? JSON.parse(body || 'null') : body;
-  }).catch(function (error) {
-    console.warn('TMDB request failed:', path, String(error));
+  }
+
+  function _remember(value) {
+    if (value && typeof value === 'object') {
+      TMDB_RESPONSE_CACHE[cacheKey] = {
+        value: value,
+        expiresAt: Date.now() + 120000,
+        staleUntil: Date.now() + 21600000
+      };
+      var keys = Object.keys(TMDB_RESPONSE_CACHE);
+      while (keys.length > 160) delete TMDB_RESPONSE_CACHE[keys.shift()];
+    }
+    return value;
+  }
+
+  function _request(url, requestHeaders) {
+    return fetch(url, { headers: requestHeaders, timeoutMs: 15000 }).then(_responseJson);
+  }
+
+  function _staleOrNull(error) {
+    var entry = TMDB_RESPONSE_CACHE[cacheKey];
+    var status = Number(error && error.status) || 0;
+    var retryable = !status || status === 429 || status >= 500;
+    if (entry && entry.staleUntil > Date.now() && retryable) {
+      console.warn('TMDB request failed; using cached metadata:', path, String(error));
+      return entry.value;
+    }
     return null;
+  }
+
+  return _request(primaryUrl, headers).then(_remember).catch(function (error) {
+    console.warn('TMDB request failed:', path, String(error));
+    // Custom credentials bypass Zangetsu's primary-host API-key interceptor.
+    // Retry on TMDB's alternate API hostname when the trailing-dot host is unavailable.
+    var canUseAlternateHost = !!customKey &&
+      /^https:\/\/api\.themoviedb\.org\.\/3(?:\/|\?)/i.test(primaryUrl) &&
+      (!error.status || error.status === 429 || error.status >= 500);
+    if (!canUseAlternateHost) return _staleOrNull(error);
+    var fallbackUrl = primaryUrl.replace(/^https:\/\/api\.themoviedb\.org\.\/3/i, 'https://api.tmdb.org/3');
+    return _request(fallbackUrl, { Accept: 'application/json' }).then(_remember).catch(function (fallbackError) {
+      console.warn('TMDB alternate-host request failed:', path, String(fallbackError));
+      return _staleOrNull(fallbackError);
+    });
   });
 }
 
@@ -492,8 +537,10 @@ function _parseTmdbUrl(value) {
 }
 
 function _externalIds(type, id, detail) {
+  // An empty object from append_to_response is still a complete result and
+  // must not trigger a redundant second request for external IDs.
   var embedded = detail && detail.external_ids;
-  if (embedded && (embedded.imdb_id || embedded.tvdb_id || embedded.mal_id || embedded.anilist_id || embedded.kitsu_id || embedded.anidb_id)) return Promise.resolve(embedded);
+  if (embedded && typeof embedded === 'object' && !Array.isArray(embedded)) return Promise.resolve(embedded);
   var path = type === 'tv' ? '/tv/' + id + '/external_ids' : '/movie/' + id + '/external_ids';
   return _tmdbJson(path).then(function (json) { return json && typeof json === 'object' ? json : {}; });
 }
@@ -785,7 +832,7 @@ function getLinks(id, opts) { return getVideoSources(id, opts); }
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    version: '3.2.0',
+    version: '3.2.1',
     getInfo: getInfo, getSettings: getSettings, getHome: getHome,
     popular: popular, search: search, getDetail: getDetail,
     getEpisodes: getEpisodes, getVideoSources: getVideoSources,

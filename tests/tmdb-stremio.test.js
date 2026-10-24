@@ -225,6 +225,44 @@ async function main() {
   assert.equal(longShow.episodes.length,8);
   assert.ok(peak<=5);
 
+  // Retry custom-key requests on TMDB's alternate host when the trailing-dot host is unreachable.
+  global.__settings["tmdb-stremio"].addonUrls = "";
+  global.__settings["tmdb-stremio"].tmdbApiKey = "personal-key";
+  const tmdbHostCalls = [];
+  global.fetch = async (url) => {
+    const u = new URL(String(url));
+    tmdbHostCalls.push({ host: u.hostname, path: u.pathname, key: u.searchParams.get("api_key") });
+    if (u.hostname === "api.themoviedb.org.") throw new Error("Failed host lookup");
+    if (u.hostname === "api.tmdb.org") return { status: 200, body: JSON.stringify({
+      results: [{ id: 41, title: "Fallback Film", release_date: "2025-01-01", media_type: "movie" }]
+    }) };
+    throw new Error("Unexpected TMDB host " + u.hostname);
+  };
+  const fallbackSearch = await provider.search("fallback", 1, {});
+  assert.equal(fallbackSearch[0].title, "Fallback Film (2025)");
+  assert.ok(tmdbHostCalls.some((call) => call.host === "api.themoviedb.org." && call.key === "personal-key"));
+  assert.ok(tmdbHostCalls.some((call) => call.host === "api.tmdb.org" && call.key === "personal-key"));
+
+  // Empty append_to_response external_ids must not cause a duplicate request.
+  global.__settings["tmdb-stremio"].tmdbApiKey = "";
+  const emptyExternalCalls = [];
+  global.fetch = async (url) => {
+    const u = new URL(String(url));
+    emptyExternalCalls.push(u.pathname);
+    if (u.pathname === "/3/tv/888") return { status: 200, body: JSON.stringify({
+      id: 888, name: "No External IDs", number_of_seasons: 1,
+      external_ids: {}, seasons: [{ season_number: 1, episode_count: 1 }]
+    }) };
+    if (u.pathname === "/3/tv/888/season/1") return { status: 200, body: JSON.stringify({
+      episodes: [{ episode_number: 1, season_number: 1, name: "Pilot" }]
+    }) };
+    throw new Error("Unexpected TMDB request " + u.pathname);
+  };
+  const noExternalIds = await provider.getDetail("tmdb://tv/888", {});
+  assert.equal(noExternalIds.episodes.length, 1);
+  assert.equal(emptyExternalCalls.includes("/3/tv/888/external_ids"), false,
+    "empty append_to_response external_ids must not cause a duplicate API call");
+
   global.__settings["tmdb-stremio"].tmdbApiKey="";
   assert.ok(provider._tmdbRequestUrl("/trending/movie/week").startsWith("https://api.themoviedb.org/3/"));
   console.log("TMDB + Stremio combined provider tests passed.");

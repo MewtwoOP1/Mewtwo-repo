@@ -1,5 +1,13 @@
 # Changelog
 
+## TMDB + Stremio 3.2.1
+
+- Cache successful TMDB API responses and use recent cached data during transient DNS, connection, and server failures.
+- Retry custom-key requests on TMDB's alternate API hostname when the trailing-dot primary hostname cannot be reached.
+- Treat an empty `append_to_response=external_ids` object as complete, avoiding an unnecessary second request.
+- Add regression tests for alternate-host retry and empty external-ID responses.
+
+
 ## AIOStreams 2.2.0
 
 - When a valid TMDB search yields no playable streams, resolve the TV episode through AIOStreams' anime database and retry with available anime-native, IMDb, or TVDB IDs.

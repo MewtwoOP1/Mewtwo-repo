@@ -180,6 +180,8 @@ TMDB provides search, title details, catalogue metadata, and episode information
 | AIOStreams times out | AIOStreams per-add-on timeouts, then the source timeout settings |
 | A series opens, but an episode has no results | Season and episode selection, plus add-on support for series streams |
 | One Stremio add-on fails while others work | That add-on's URL and configuration; the other add-ons may still return results |
+| TMDB fails after previously working | Recent API responses can be served from cache during transient network failures; check DNS/network access if all requests still fail |
+| The app says AniList is having an error | AniList is the app's built-in metadata service, not this repository's stream provider. If AniList is unavailable, switch the anime metadata provider to MyAnimeList if available, or retry when the service/network recovers |
 
 ## Third-party sources and responsibility
 
