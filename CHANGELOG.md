@@ -1,5 +1,14 @@
 # Changelog
 
+## AIOStreams 2.2.0
+
+- When a valid TMDB search yields no playable streams, resolve the TV episode through AIOStreams' anime database and retry with available anime-native, IMDb, or TVDB IDs.
+- Convert TMDB episode offsets to anime-cour episode numbering and filter returned files against the resolved episode coordinates.
+- Cache anime mapping lookups, keep existing network/auth failures visible, and only trigger fallback after a valid empty stream response.
+- Increase new-install stream search and total fallback deadlines to 9 and 12 seconds respectively.
+- Add regression coverage for episode-offset mapping and fallback behavior.
+
+
 ## TMDB + Stremio 3.2.0
 
 - Preserve available IMDb, TMDB, TVDB, MAL, AniList, Kitsu, and AniDB identifiers, including episode-aware variants when supplied.

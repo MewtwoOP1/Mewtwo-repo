@@ -5,7 +5,7 @@
     {
       "id": "aiostreams",
       "name": "AIOStreams",
-      "version": "2.1.1",
+      "version": "2.2.0",
       "type": "movie",
       "lang": "en",
       "file": "providers/aiostreams.js",
@@ -93,9 +93,9 @@
         {
           "key": "streamTimeoutMs",
           "label": "AIOStreams request timeout",
-          "description": "Maximum wait for the AIOStreams stream API request.",
+          "description": "Maximum wait for each AIOStreams stream search, including anime ID fallback searches.",
           "type": "enum",
-          "default": "7000",
+          "default": "9000",
           "options": [
             {
               "value": "4000",
@@ -118,9 +118,9 @@
         {
           "key": "totalTimeoutMs",
           "label": "Total stream lookup deadline",
-          "description": "Hard maximum wait for one stream lookup, including time waiting for a request slot.",
+          "description": "Hard maximum wait for TMDB lookup, anime ID mapping, fallback searches, and waiting for a request slot.",
           "type": "enum",
-          "default": "8000",
+          "default": "12000",
           "options": [
             {
               "value": "5000",

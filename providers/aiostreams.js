@@ -4,17 +4,17 @@
  * Playback lookup is priority-queued, bounded, and does not retry slow searches.
  */
 var AIO_ID = 'aiostreams';
-var AIO_VERSION = '2.1.1';
+var AIO_VERSION = '2.2.0';
 var AIO_LOGO = 'https://aiostreams.viren070.me/logo.png';
 var TMDB = 'https://api.themoviedb.org/3';
 var TMDB_IMAGE = 'https://image.tmdb.org/t/p/';
 var AIO_UA = 'Zangetsu-AIOStreams/2.1';
 var DEFAULT_CONCURRENCY = 5;
 var DEFAULT_REQUEST_TIMEOUT = 5000;
-var DEFAULT_STREAM_TIMEOUT = 7000;
-var DEFAULT_TOTAL_TIMEOUT = 8000;
+var DEFAULT_STREAM_TIMEOUT = 9000;
+var DEFAULT_TOTAL_TIMEOUT = 12000;
 var MAX_QUEUE = 40;
-var _active = 0, _queue = [], _httpCache = {}, _detailCache = {};
+var _active = 0, _queue = [], _httpCache = {}, _detailCache = {}, _animeMapCache = {};
 
 function getInfo() {
   return { name: 'AIOStreams', lang: 'en', baseUrl: 'https://www.themoviedb.org', logo: AIO_LOGO, type: 'movie', version: AIO_VERSION };
@@ -27,8 +27,8 @@ function getSettings() {
     { key: 'showP2P', label: 'Show torrent / P2P streams', description: 'Enable only if your Zangetsu player supports magnet links.', type: 'bool', default: false },
     { key: 'maxConcurrentRequests', label: 'Maximum concurrent requests', description: 'Maximum simultaneous requests. Playback lookups move ahead of queued metadata requests.', type: 'enum', default: '5', options: [{ value: '2', label: '2 requests' }, { value: '3', label: '3 requests' }, { value: '4', label: '4 requests' }, { value: '5', label: '5 requests' }] },
     { key: 'requestTimeoutMs', label: 'TMDB request timeout', description: 'Timeout for an individual TMDB metadata request.', type: 'enum', default: '5000', options: [{ value: '3000', label: '3 seconds' }, { value: '5000', label: '5 seconds' }, { value: '7000', label: '7 seconds' }, { value: '10000', label: '10 seconds' }] },
-    { key: 'streamTimeoutMs', label: 'AIOStreams request timeout', description: 'Maximum wait for the AIOStreams stream API request.', type: 'enum', default: '7000', options: [{ value: '4000', label: '4 seconds' }, { value: '5000', label: '5 seconds' }, { value: '7000', label: '7 seconds' }, { value: '9000', label: '9 seconds' }] },
-    { key: 'totalTimeoutMs', label: 'Total stream lookup deadline', description: 'Hard maximum wait for one stream lookup, including time waiting for a request slot.', type: 'enum', default: '8000', options: [{ value: '5000', label: '5 seconds' }, { value: '8000', label: '8 seconds' }, { value: '10000', label: '10 seconds' }, { value: '12000', label: '12 seconds' }] }
+    { key: 'streamTimeoutMs', label: 'AIOStreams request timeout', description: 'Maximum wait for each AIOStreams stream search, including anime ID fallback searches.', type: 'enum', default: '9000', options: [{ value: '4000', label: '4 seconds' }, { value: '5000', label: '5 seconds' }, { value: '7000', label: '7 seconds' }, { value: '9000', label: '9 seconds' }] },
+    { key: 'totalTimeoutMs', label: 'Total stream lookup deadline', description: 'Hard maximum wait for TMDB lookup, anime ID mapping, fallback searches, and waiting for a request slot.', type: 'enum', default: '12000', options: [{ value: '5000', label: '5 seconds' }, { value: '8000', label: '8 seconds' }, { value: '10000', label: '10 seconds' }, { value: '12000', label: '12 seconds' }] }
   ];
 }
 function _settings() { try { return typeof __settings !== 'undefined' && __settings ? (__settings[AIO_ID] || {}) : {}; } catch (e) { return {}; } }
@@ -490,6 +490,144 @@ function _parseStreams(json, episode) {
   }
   return out;
 }
+function _lookupTimedOut(error) {
+  return /request timeout|deadline exceeded|timed out/i.test(String(error && (error.message || error) || ''));
+}
+
+function _getAnimeMapping(config, episode, timeoutMs, deadlineAt) {
+  var key = config.baseUrl + '|tmdb:' + episode.id + (episode.movie ? '|movie' : '|' + episode.season + ':' + episode.episode);
+  var cached = _animeMapCache[key], now = Date.now();
+  if (cached && cached.expires > now) return Promise.resolve(cached.value);
+  var remaining = deadlineAt - now;
+  if (remaining <= 0) return Promise.reject(new Error('AIOStreams: stream lookup deadline exceeded before anime ID mapping'));
+  var params = { idType: 'themoviedbId', idValue: episode.id };
+  if (!episode.movie) {
+    params.season = episode.season;
+    params.episode = episode.episode;
+  }
+  var url = config.baseUrl.replace(/\/$/, '') + '/api/v1/anime?' + _query(params);
+  // AIOStreams documents this mapping endpoint as public; do not send the personalized manifest credentials.
+  return _requestJson(url, {
+    headers: { Accept: 'application/json' },
+    timeoutMs: Math.max(1, Math.min(timeoutMs, remaining)),
+    deadlineAt: deadlineAt,
+    noRetry: true,
+    priority: true
+  }).then(function (json) {
+    if (!json || json.success === false) throw new Error('AIOStreams anime ID mapping failed');
+    var data = json.data && json.data.mappings ? json.data : null;
+    _animeMapCache[key] = { value: data, expires: Date.now() + (data ? 21600000 : 300000) };
+    return data;
+  });
+}
+
+function _animeFallbackCandidates(episode, entry) {
+  if (!entry || !entry.mappings) return [];
+  var mappings = entry.mappings || {}, tmdb = entry.tmdb || {}, imdb = entry.imdb || {}, tvdb = entry.tvdb || {};
+  var season = Number(episode.season) || 1, episodeNumber = Number(episode.episode) || 1;
+  var localEpisode = episodeNumber;
+  var mappedTmdbSeason = Number(tmdb.seasonNumber), mappedTmdbFrom = Number(tmdb.fromEpisode);
+  if (!episode.movie && mappedTmdbSeason === season && mappedTmdbFrom > 1) {
+    localEpisode = episodeNumber - mappedTmdbFrom + 1;
+  }
+  if (!episode.movie && localEpisode < 1) return [];
+  var matchAnime = episode.movie ? episode : { movie: false, season: 1, episode: localEpisode };
+  var candidates = [], seen = {};
+  function add(id, matchEpisode) {
+    id = String(id || '').trim();
+    if (!id || seen[id]) return;
+    seen[id] = true;
+    candidates.push({ id: id, episode: matchEpisode || episode });
+  }
+  function baseId(prefix, value) {
+    if (value === undefined || value === null || String(value).trim() === '') return;
+    add(prefix + ':' + String(value), matchAnime);
+  }
+
+  if (episode.movie) {
+    baseId('mal', mappings.malId);
+    baseId('anilist', mappings.anilistId);
+    baseId('kitsu', mappings.kitsuId);
+    baseId('anidb', mappings.anidbId);
+    baseId('animeplanet', mappings.animePlanetId);
+    baseId('acd', mappings.animecountdownId);
+    baseId('anisearch', mappings.anisearchId);
+    baseId('notifymoe', mappings.notifyMoeId);
+    baseId('simkl', mappings.simklId);
+    baseId('tvdb', mappings.thetvdbId);
+    if (mappings.imdbId) add(String(mappings.imdbId), episode);
+    return candidates;
+  }
+
+  var nativeIds = [
+    ['mal', mappings.malId], ['anilist', mappings.anilistId],
+    ['kitsu', mappings.kitsuId], ['anidb', mappings.anidbId]
+  ];
+  nativeIds.forEach(function (pair) {
+    if (pair[1] !== undefined && pair[1] !== null && String(pair[1]).trim()) {
+      add(pair[0] + ':' + String(pair[1]) + ':' + localEpisode, matchAnime);
+    }
+  });
+  // These mappings identify a show but the current AIOStreams parser accepts no episode suffix for them.
+  baseId('animeplanet', mappings.animePlanetId);
+  baseId('acd', mappings.animecountdownId);
+  baseId('anisearch', mappings.anisearchId);
+  baseId('notifymoe', mappings.notifyMoeId);
+  baseId('simkl', mappings.simklId);
+
+  var tvdbId = mappings.thetvdbId;
+  var tvdbSeason = Number(tvdb.seasonNumber);
+  if (tvdbId !== undefined && tvdbId !== null && String(tvdbId).trim()) {
+    if (!tvdbSeason || !isFinite(tvdbSeason) || tvdb.seasonNumber === 'a') tvdbSeason = Number(tmdb.seasonNumber) || season;
+    var tvdbFrom = Number(tvdb.fromEpisode);
+    var tvdbEpisode = tvdbFrom > 0 ? tvdbFrom + localEpisode - 1 : localEpisode;
+    add('tvdb:' + String(tvdbId) + ':' + tvdbSeason + ':' + tvdbEpisode,
+      { movie: false, season: tvdbSeason, episode: tvdbEpisode });
+    add('tvdb:' + String(tvdbId), { movie: false, season: tvdbSeason, episode: tvdbEpisode });
+  }
+
+  var imdbId = imdb.id || mappings.imdbId;
+  if (imdbId && !(Array.isArray(imdb.nonImdbEpisodes) && imdb.nonImdbEpisodes.indexOf(localEpisode) >= 0)) {
+    var imdbSeason = Number(imdb.seasonNumber) || season;
+    var imdbFrom = Number(imdb.fromEpisode);
+    var imdbEpisode = imdbFrom > 0 ? imdbFrom + localEpisode - 1 : localEpisode;
+    add(String(imdbId) + ':' + imdbSeason + ':' + imdbEpisode,
+      { movie: false, season: imdbSeason, episode: imdbEpisode });
+    add(String(imdbId), { movie: false, season: imdbSeason, episode: imdbEpisode });
+  }
+  return candidates;
+}
+
+function _searchAlternativeIds(config, headers, type, candidates, timeoutMs, deadlineAt, originalError) {
+  function next(index) {
+    if (index >= candidates.length) return Promise.resolve(null);
+    var remaining = deadlineAt - Date.now();
+    if (remaining <= 0) return Promise.reject(new Error('AIOStreams: stream lookup deadline exceeded during anime ID fallback'));
+    var candidate = candidates[index];
+    var url = config.baseUrl.replace(/\/$/, '') + '/api/v1/search?' + _query({ type: type, id: candidate.id, format: 'true' });
+    return _requestJson(url, {
+      headers: headers,
+      timeoutMs: Math.max(1, Math.min(timeoutMs, remaining)),
+      deadlineAt: deadlineAt,
+      noRetry: true,
+      priority: true
+    }).then(function (json) {
+      if (Date.now() > deadlineAt) throw new Error('AIOStreams: stream lookup deadline exceeded');
+      return _parseStreams(json, candidate.episode);
+    }).catch(function (error) {
+      if (_lookupTimedOut(error)) throw error;
+      if (String(error && error.message || '').indexOf('no playable streams returned') >= 0 || (error && error.status >= 400 && error.status < 500)) {
+        return next(index + 1);
+      }
+      throw error;
+    });
+  }
+  return next(0).then(function (streams) {
+    if (streams) return streams;
+    throw originalError;
+  });
+}
+
 function getVideoSources(episodeUrl) {
   var ep = _parseEpisodeUrl(episodeUrl);
   if (!ep) return Promise.reject(new Error('AIOStreams: invalid episode URL'));
@@ -511,6 +649,20 @@ function getVideoSources(episodeUrl) {
   return _requestJson(searchUrl, { headers: headers, timeoutMs: Math.min(timeout, deadline), deadlineAt: deadlineAt, noRetry: true, priority: true }).then(function (json) {
     if (Date.now() > deadlineAt) throw new Error('AIOStreams: stream lookup deadline exceeded');
     return _parseStreams(json, ep);
+  }).catch(function (primaryError) {
+    // Only a valid empty stream response triggers anime ID mapping. Authentication,
+    // network errors, HTTP failures and timeouts should remain visible as-is.
+    if (String(primaryError && primaryError.message || '').indexOf('no playable streams returned') < 0) throw primaryError;
+    return _getAnimeMapping(config, ep, timeout, deadlineAt).then(function (entry) {
+      var candidates = _animeFallbackCandidates(ep, entry);
+      if (!candidates.length) throw primaryError;
+      return _searchAlternativeIds(config, headers, selected.type, candidates, timeout, deadlineAt, primaryError);
+    }).catch(function (fallbackError) {
+      if (fallbackError === primaryError) throw primaryError;
+      if (_lookupTimedOut(fallbackError)) throw fallbackError;
+      // A missing or unavailable mapping must not mask the more useful primary result.
+      throw primaryError;
+    });
   });
 }
 function getStreams(url, options) { return getVideoSources(url, options); }

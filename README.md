@@ -115,14 +115,15 @@ Use the real URL from your instance. The URL above is only an example format.
    | **TMDB API key or Read Access Token** | Optional. Leave blank to use Zangetsu's built-in TMDB key. |
    | **Show torrent / P2P streams** | Keep off unless your player supports magnet links. |
    | **Maximum concurrent requests** | Defaults to **5 simultaneous requests**. This limits concurrent requests, not the number of links returned. |
-   | **AIOStreams request timeout** | Defaults to **7 seconds**. |
-   | **Total stream lookup deadline** | Defaults to **8 seconds**. |
+   | **AIOStreams request timeout** | Defaults to **9 seconds** for each stream search, including ID fallback attempts. |
+   | **Total stream lookup deadline** | Defaults to **12 seconds** across stream lookup and anime ID mapping. |
 
 3. Save your settings, search through AIOStreams in Zangetsu, open a title from this source, and try playback.
 
 ### If results are slow or missing
 
 - Recheck the manifest URL, including the `/stremio/.../manifest.json` path.
+- If TMDB returns no streams for an anime episode, the provider now checks AIOStreams' anime database mapping and retries with available MAL, AniList, Kitsu, AniDB, IMDb, or TVDB IDs.
 - Confirm the relevant add-ons are enabled and working inside your AIOStreams instance.
 - Review per-add-on timeout settings in AIOStreams. A longer client-side timeout cannot make a slow upstream add-on respond faster.
 - Treat personalized manifest URLs and UserData values as private if they contain account-specific identifiers or access credentials. **Do not publish them.**
