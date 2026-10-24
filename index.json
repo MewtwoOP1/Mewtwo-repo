@@ -771,6 +771,16 @@
           "default": true
         }
       ]
+    },
+    {
+      "id": "animexin",
+      "name": "AnimeXin",
+      "version": "1.0.0",
+      "type": "anime",
+      "lang": "en",
+      "file": "providers/animexin.js",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=animexin.dev",
+      "nsfw": false
     }
   ]
 }
