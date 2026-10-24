@@ -123,28 +123,72 @@ function _cleanTitle(title) {
 
 // Archive cards and home cards share links and poster images. Keep the parser
 // independent of optional theme classes so small layout changes are survivable.
-function _cards(html) {
+function _titleFromEpisode(title) {
+  return _cleanTitle(title).replace(/\s+(?:Episode|Ep)\s*#?\s*\d+.*$/i, '').trim();
+}
+function _seriesFromEpisodeUrl(raw) {
+  var url = _absolute(raw, SITE + '/');
+  var path = _path(url).replace(/\/+$/, '');
+  var m = path.match(/^(.*?)-episode-\d+.*$/i);
+  return m ? _absolute(m[1] + '/', SITE + '/') : _seriesUrl(url);
+}
+function _articleCards(html) {
   var input = String(html || ''), out = [], seen = Object.create(null);
+  var re = /<article\b[^>]*class=["']bs[^"']*["'][^>]*>[\s\S]*?<\/article\s*>/gi, match;
+  while ((match = re.exec(input)) !== null) {
+    var card = match[0];
+    var rawUrl = (card.match(/\bhref=["']([^"']+)["']/i) || [])[1] || '';
+    if (!rawUrl) continue;
+    var articleUrl = _absolute(rawUrl, SITE + '/');
+    if (!_validSiteUrl(articleUrl)) continue;
+    var cardTitle = (card.match(/<h2\b[^>]*itemprop=["']headline["'][^>]*>([\s\S]*?)<\/h2\s*>/i) || [])[1]
+      || (card.match(/<h2\b[^>]*>([\s\S]*?)<\/h2\s*>/i) || [])[1]
+      || (card.match(/\btitle=["']([^"']+)["']/i) || [])[1] || '';
+    var seriesTitleRaw = (card.match(/<div\b[^>]*class=["']tt["'][^>]*>([\s\S]*?)<\/div\s*>/i) || [])[1] || '';
+    var title = _cleanTitle(_text(seriesTitleRaw) || _titleFromEpisode(cardTitle) || cardTitle);
+    var imgTag = (card.match(/<img\b[^>]*>/i) || [])[0] || '';
+    var image = _tagValue(imgTag, 'img', 'data-src') || _tagValue(imgTag, 'img', 'data-lazy-src')
+      || _tagValue(imgTag, 'img', 'data-original') || _tagValue(imgTag, 'img', 'src');
+    var canonicalUrl = _seriesFromEpisodeUrl(articleUrl);
+    var slug = _slug(canonicalUrl);
+    if (!slug || !title || seen[slug] || /^(?:image|view all|next|previous|random|home|search|text mode)$/i.test(title)) continue;
+    seen[slug] = true;
+    var yearMatch = title.match(/\b(19|20)\d{2}\b/);
+    var ep = (card.match(/<span\b[^>]*class=["']epx["'][^>]*>([\s\S]*?)<\/span>/i) || [])[1] || '';
+    var type = (card.match(/<div\b[^>]*class=["']typez[^"']*["'][^>]*>([\s\S]*?)<\/div>/i) || [])[1] || '';
+    out.push({ id: slug, title: title, englishTitle: title, url: canonicalUrl,
+      cover: image ? _absolute(image, articleUrl) : null, episode: _text(ep), typeLabel: _text(type),
+      year: yearMatch ? Number(yearMatch[0]) : null, type: 'anime', sourceId: SOURCE_ID });
+  }
+  return out;
+}
+function _cards(html) {
+  var input = String(html || '');
+  var articles = _articleCards(input);
+  if (articles.length) return articles;
+  var out = [], seen = Object.create(null);
   var re = /<a\b([^>]*)>([\s\S]*?)<\/a\s*>/gi, m;
   while ((m = re.exec(input)) !== null) {
     var attrs = m[1], inner = m[2], href = _attr(attrs, 'href');
     if (!href) continue;
-    var url = _absolute(href, SITE + '/');
-    if (!_validSiteUrl(url)) continue;
-    var path = _path(url).replace(/\/+$/, '');
-    if (!path || path === '/anime' || /\/(?:genre|category|tag|author|page|wp-content|wp-admin|wp-json)(?:\/|$)/i.test(path)) continue;
-    var slug = path.replace(/^\/+/, '').toLowerCase();
-    if (!slug || _isEpisodePath(slug) || seen[slug]) continue;
+    var articleUrl = _absolute(href, SITE + '/');
+    if (!_validSiteUrl(articleUrl)) continue;
+    var path = _path(articleUrl).replace(/\/+$/, '');
+    if (!path || /\/(?:genre|category|tag|author|page|wp-content|wp-admin|wp-json)(?:\/|$)/i.test(path)) continue;
+    var canonicalUrl = _seriesFromEpisodeUrl(articleUrl);
+    var slug = _slug(canonicalUrl);
+    if (!slug || seen[slug]) continue;
     var imgTag = (inner.match(/<img\b[^>]*>/i) || [])[0] || '';
     var image = _tagValue(imgTag, 'img', 'data-src') || _tagValue(imgTag, 'img', 'data-lazy-src')
       || _tagValue(imgTag, 'img', 'data-original') || _tagValue(imgTag, 'img', 'src');
     var title = _cleanTitle(_attr(attrs, 'title') || _tagValue(imgTag, 'img', 'alt') || _text(inner));
-    if (!title || /^(?:image|view all|next|previous|random|home|search)$/i.test(title)) continue;
+    title = _titleFromEpisode(title) || title;
+    if (!title || /^(?:image|view all|next|previous|random|home|search|text mode)$/i.test(title)) continue;
     if (!image && !_attr(attrs, 'title') && !imgTag) continue;
     if (/^\d+$/.test(title) || title.length > 160) continue;
     seen[slug] = true;
     var yearMatch = title.match(/\b(19|20)\d{2}\b/);
-    out.push({ id: slug, title: title, englishTitle: title, url: _seriesUrl(url), cover: image ? _absolute(image, url) : null,
+    out.push({ id: slug, title: title, englishTitle: title, url: canonicalUrl, cover: image ? _absolute(image, articleUrl) : null,
       year: yearMatch ? Number(yearMatch[0]) : null, type: 'anime', sourceId: SOURCE_ID });
   }
   return out;
@@ -190,8 +234,12 @@ function getHome(opts) {
 function search(query, page, opts) {
   var q = String(query || '').trim(), p = Number(page || 1);
   if (!q) return Promise.resolve([]);
-  var url = SITE + '/?s=' + encodeURIComponent(q) + '&paged=' + (p > 0 ? Math.floor(p) : 1);
-  return _get(url, SITE + '/').then(function (html) { return _cards(html); }).catch(function () { return []; });
+  var url = p > 1
+    ? SITE + '/page/' + Math.floor(p) + '/?s=' + encodeURIComponent(q)
+    : SITE + '/?s=' + encodeURIComponent(q);
+  return _get(url, SITE + '/').then(function (html) {
+    return _dedupe(_cards(html));
+  }).catch(function () { return []; });
 }
 function _episodeNumber(path, label) {
   var m = String(path || '').match(/-episode-(\d+)(?:-|\/|$)/i);
@@ -228,38 +276,117 @@ function _genres(html) {
   }
   return out;
 }
-function getDetail(url, opts) {
-  var pageUrl = _seriesUrl(url);
-  if (!pageUrl || !_validSiteUrl(pageUrl)) return Promise.reject(new Error('AnimeXin: invalid anime URL'));
-  return _get(pageUrl, SITE + '/').then(function (html) {
-    var slug = _slug(pageUrl);
-    var h1 = (html.match(/<h1\b[^>]*>([\s\S]*?)<\/h1\s*>/i) || [])[1] || '';
-    var title = _cleanTitle(h1 || _meta(html, 'og:title') || (html.match(/<title\b[^>]*>([\s\S]*?)<\/title\s*>/i) || [])[1] || slug);
-    title = title.replace(/\s*[|–-]\s*AnimeXin\s*$/i, '').trim();
-    var cover = _meta(html, 'og:image') || _meta(html, 'twitter:image') || '';
-    if (!cover) cover = _tagValue(html, 'img', 'data-src') || _tagValue(html, 'img', 'src');
-    var desc = _meta(html, 'description') || _meta(html, 'og:description') || '';
-    if (!desc) {
-      var synopsis = (html.match(/<(?:div|section)[^>]*class=["'][^"']*(?:synopsis|description|summary)[^"']*["'][^>]*>([\s\S]*?)<\/(?:div|section)>/i) || [])[1];
-      desc = _text(synopsis || '');
+function _episodeListFromHtml(html, seriesSlug) {
+  var input = String(html || ''), out = [], seen = Object.create(null);
+  var liRe = /<li\b([^>]*\bdata-index=["']\d+["'][^>]*)>([\s\S]*?)<\/li\s*>/gi, m;
+  while ((m = liRe.exec(input)) !== null) {
+    var href = _tagValue(m[2], 'a', 'href') || _attr((m[2].match(/<a\b([^>]*)>/i) || [])[1] || '', 'href');
+    if (!href) continue;
+    var url = _absolute(href, SITE + '/');
+    if (!_validSiteUrl(url)) continue;
+    var path = _path(url).toLowerCase();
+    if (path.indexOf('/' + String(seriesSlug || '').toLowerCase() + '-episode-') !== 0) continue;
+    var numText = (m[2].match(/<div\b[^>]*class=["']epl-num["'][^>]*>([\s\S]*?)<\/div>/i) || [])[1] || '';
+    var titleText = (m[2].match(/<div\b[^>]*class=["']epl-title["'][^>]*>([\s\S]*?)<\/div>/i) || [])[1] || '';
+    var dateText = (m[2].match(/<div\b[^>]*class=["']epl-date["'][^>]*>([\s\S]*?)<\/div>/i) || [])[1] || '';
+    var number = _episodeNumber(path, _text(numText));
+    if (!number) {
+      var indexMatch = String(m[1]).match(/\bdata-index=["'](\d+)["']/i);
+      number = indexMatch ? Number(indexMatch[1]) : 0;
     }
-    var pageText = _text(html);
-    var statusMatch = pageText.match(/\bStatus\s*:\s*(Ongoing|Completed|Upcoming|Hiatus|Finished)\b/i);
-    var yearMatch = pageText.match(/\bReleased\s*:\s*[^.]{0,40}?\b((?:19|20)\d{2})\b/i)
-      || pageText.match(/\b(?:Released on|Release Date)\s*:\s*[^.]{0,40}?\b((?:19|20)\d{2})\b/i);
-    var epCountMatch = pageText.match(/\bEpisodes?\s*:\s*(\d+)/i);
-    var episodes = _extractEpisodes(html, slug);
-    return { id: slug, title: title || slug, englishTitle: title || slug, url: pageUrl,
-      cover: cover ? _absolute(cover, pageUrl) : null, description: desc, status: statusMatch ? statusMatch[1].toLowerCase() : 'unknown',
-      genres: _genres(html), studios: [], year: yearMatch ? Number(yearMatch[1]) : null,
-      type: 'anime', sourceId: SOURCE_ID, episodes: episodes, subCount: episodes.length,
-      dubCount: 0, episodeCount: epCountMatch ? Number(epCountMatch[1]) : episodes.length };
+    if (!number || seen[url]) continue;
+    seen[url] = true;
+    out.push({ id: url, title: _text(titleText) || ('Episode ' + number), number: number,
+      url: url, releaseDate: _text(dateText), type: 'anime', category: 'sub', sourceId: SOURCE_ID });
+  }
+  if (out.length) out.sort(function (a, b) { return a.number - b.number; });
+  return out;
+}
+function _seriesMetadata(html) {
+  var block = (String(html || '').match(/<div\b[^>]*class=["']spe["'][^>]*>([\s\S]*?)<\/div>/i) || [])[1] || '';
+  var data = Object.create(null);
+  var re = /<span\b[^>]*>\s*<b[^>]*>([^<:]+):<\/b>\s*([\s\S]*?)<\/span>/gi, m;
+  while ((m = re.exec(block)) !== null) {
+    var key = String(m[1] || '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+    if (key) data[key] = _text(m[2]);
+  }
+  return data;
+}
+function _firstImageInThumb(html) {
+  var thumb = (String(html || '').match(/<div\b[^>]*class=["']thumb["'][^>]*>[\s\S]*?<\/div>/i) || [])[0] || '';
+  var img = (thumb.match(/<img\b[^>]*>/i) || [])[0] || '';
+  return _tagValue(img, 'img', 'data-src') || _tagValue(img, 'img', 'src')
+    || _tagValue(img, 'img', 'data-lazy-src') || '';
+}
+function _parseDetail(html, pageUrl) {
+  var slug = _slug(pageUrl);
+  var h1 = (html.match(/<h1\b[^>]*class=["'][^"']*entry-title[^"']*["'][^>]*>([\s\S]*?)<\/h1\s*>/i) || [])[1]
+    || (html.match(/<h1\b[^>]*>([\s\S]*?)<\/h1\s*>/i) || [])[1] || '';
+  var title = _cleanTitle(h1 || _meta(html, 'og:title') || (html.match(/<title\b[^>]*>([\s\S]*?)<\/title\s*>/i) || [])[1] || slug);
+  title = title.replace(/\s*[|–-]\s*AnimeXin\s*$/i, '').trim();
+  var cover = _firstImageInThumb(html) || _meta(html, 'og:image') || _meta(html, 'twitter:image') || '';
+  if (!cover) cover = _tagValue(html, 'img', 'data-src') || _tagValue(html, 'img', 'src');
+  var synopsisBlock = (html.match(/<div\b[^>]*class=["'][^"']*entry-content[^"']*["'][^>]*>([\s\S]*?)<\/div>/i) || [])[1]
+    || (html.match(/<(?:div|section)\b[^>]*class=["'][^"']*(?:synopsis|description|summary)[^"']*["'][^>]*>([\s\S]*?)<\/(?:div|section)>/i) || [])[1]
+    || '';
+  var desc = _text(synopsisBlock) || _meta(html, 'description') || _meta(html, 'og:description') || '';
+  var meta = _seriesMetadata(html);
+  var pageText = _text(html);
+  var statusText = meta.status || ((pageText.match(/\bStatus\s*:\s*(Ongoing|Completed|Upcoming|Hiatus|Finished)\b/i) || [])[1] || '');
+  var released = meta.released || '';
+  var yearMatch = String(released).match(/\b(19|20)\d{2}\b/)
+    || pageText.match(/\bReleased\s*:\s*[^.]{0,40}?\b((?:19|20)\d{2})\b/i)
+    || pageText.match(/\b(?:Released on|Release Date)\s*:\s*[^.]{0,40}?\b((?:19|20)\d{2})\b/i);
+  var episodeList = _episodeListFromHtml(html, slug);
+  var episodes = episodeList.length ? episodeList : _extractEpisodes(html, slug);
+  var countText = meta.episodes || '';
+  var countMatch = countText.match(/\d+/) || pageText.match(/\bEpisodes?\s*:\s*(\d+)/i);
+  var genres = _genres(html);
+  var detail = {
+    id: slug, title: title || slug, englishTitle: title || slug, url: pageUrl,
+    cover: cover ? _absolute(cover, pageUrl) : null, description: desc,
+    status: String(statusText || 'unknown').toLowerCase(),
+    genres: genres, studios: meta.studio ? [meta.studio] : [],
+    year: yearMatch ? Number(yearMatch[1] || yearMatch[0]) : null,
+    type: 'anime', sourceId: SOURCE_ID, episodes: episodes,
+    subCount: episodes.length, dubCount: 0,
+    episodeCount: countMatch ? Number(countMatch[1] || countMatch[0]) : episodes.length
+  };
+  if (meta.network) detail.network = meta.network;
+  if (meta.country) detail.country = meta.country;
+  if (meta.type) detail.mediaType = meta.type;
+  if (meta.duration) detail.duration = meta.duration;
+  return detail;
+}
+function getDetail(url, opts) {
+  var requestedUrl = _seriesUrl(url);
+  if (!requestedUrl || !_validSiteUrl(requestedUrl)) return Promise.reject(new Error('AnimeXin: invalid anime URL'));
+  return _get(requestedUrl, SITE + '/').then(function (html) {
+    var parent = (html.match(/<div\b[^>]*class=["']nvs\s+nvsc["'][^>]*>[\s\S]*?<a\b[^>]*href=["']([^"']+)["']/i) || [])[1] || '';
+    if (_isEpisodePath(_path(requestedUrl)) && parent) {
+      var seriesUrl = _absolute(parent, requestedUrl);
+      if (_validSiteUrl(seriesUrl) && _slug(seriesUrl) !== _slug(requestedUrl)) {
+        return _get(seriesUrl, requestedUrl).then(function (seriesHtml) { return _parseDetail(seriesHtml, seriesUrl); });
+      }
+    }
+    if (_isEpisodePath(_path(requestedUrl))) {
+      var derived = _seriesFromEpisodeUrl(requestedUrl);
+      if (_validSiteUrl(derived) && _slug(derived) !== _slug(requestedUrl)) {
+        return _get(derived, requestedUrl).then(function (seriesHtml) { return _parseDetail(seriesHtml, derived); });
+      }
+    }
+    return _parseDetail(html, requestedUrl);
   });
 }
 function getEpisodes(url, opts) {
   var pageUrl = _seriesUrl(url);
   if (!pageUrl || !_validSiteUrl(pageUrl)) return Promise.resolve([]);
-  return _get(pageUrl, SITE + '/').then(function (html) { return _extractEpisodes(html, _slug(pageUrl)); }).catch(function () { return []; });
+  if (_isEpisodePath(_path(pageUrl))) pageUrl = _seriesFromEpisodeUrl(pageUrl);
+  return _get(pageUrl, SITE + '/').then(function (html) {
+    var slug = _slug(pageUrl);
+    var episodes = _episodeListFromHtml(html, slug);
+    return episodes.length ? episodes : _extractEpisodes(html, slug);
+  }).catch(function () { return []; });
 }
 
 function _safeWebUrl(raw, base) {
