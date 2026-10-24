@@ -347,7 +347,7 @@ function _parseDetail(html, pageUrl) {
     cover: cover ? _absolute(cover, pageUrl) : null, description: desc,
     status: String(statusText || 'unknown').toLowerCase(),
     genres: genres, studios: meta.studio ? [meta.studio] : [],
-    year: yearMatch ? Number(yearMatch[1] || yearMatch[0]) : null,
+    year: yearMatch ? Number((String(yearMatch[0]).match(/(?:19|20)\d{2}/) || [''])[0]) || null : null,
     type: 'anime', sourceId: SOURCE_ID, episodes: episodes,
     subCount: episodes.length, dubCount: 0,
     episodeCount: countMatch ? Number(countMatch[1] || countMatch[0]) : episodes.length
@@ -454,6 +454,87 @@ function _iframes(html, base) {
   }
   return out;
 }
+function _base64Decode(raw) {
+  var s = String(raw || '').replace(/-/g, '+').replace(/_/g, '/').replace(/[^A-Za-z0-9+/=]/g, '');
+  var alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/', out = '';
+  var buffer = 0, bits = 0;
+  for (var i = 0; i < s.length; i++) {
+    var ch = s.charAt(i);
+    if (ch === '=') break;
+    var value = alphabet.indexOf(ch);
+    if (value < 0) continue;
+    buffer = (buffer << 6) | value; bits += 6;
+    if (bits >= 8) { bits -= 8; out += String.fromCharCode((buffer >> bits) & 255); }
+  }
+  return out;
+}
+function _serverEmbeds(html, base) {
+  var out = [], seen = Object.create(null), re = /<option\b([^>]*)>([\s\S]*?)<\/option\s*>/gi, m;
+  while ((m = re.exec(String(html || ''))) !== null) {
+    var value = _attr(m[1], 'value');
+    if (!value) continue;
+    var decoded = value;
+    if (!/^https?:\/\//i.test(decoded) && !/^\/\//.test(decoded)) {
+      var possible = _base64Decode(value);
+      if (possible && (/<iframe\b/i.test(possible) || /^https?:\/\//i.test(possible.trim()) || /^\/\//.test(possible.trim()))) decoded = possible;
+    }
+    decoded = _decodeEntities(decoded).replace(/\\\//g, '/');
+    var raw = _attr((decoded.match(/<iframe\b([^>]*)>/i) || [])[1] || '', 'src')
+      || _attr((decoded.match(/<embed\b([^>]*)>/i) || [])[1] || '', 'src')
+      || decoded.trim();
+    var url = _safeWebUrl(raw, base);
+    if (!url || seen[url]) continue;
+    seen[url] = true;
+    out.push({ url: url, name: _text(m[2]) || 'AnimeXin server' });
+  }
+  return out;
+}
+function _resolveDailymotion(embedUrl) {
+  var idMatch = String(embedUrl || '').match(/[?&]video=([a-z0-9]+)/i)
+    || String(embedUrl || '').match(/\/(?:embed\/)?video\/([a-z0-9]+)/i);
+  var id = idMatch ? idMatch[1] : '';
+  if (!id) return Promise.resolve([]);
+  var endpoint = 'https://www.dailymotion.com/player/metadata/video/' + encodeURIComponent(id);
+  return _request(endpoint, { headers: {
+    'Accept': 'application/json,text/plain,*/*',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Referer': embedUrl
+  }}).then(function (body) {
+    var data;
+    try { data = JSON.parse(body); } catch (e) { return []; }
+    var qualities = data && data.qualities || {};
+    var auto = qualities.auto;
+    var selected = Array.isArray(auto) ? auto[0] : auto;
+    var raw = selected && (selected.url || selected.src) || '';
+    var url = _safeWebUrl(raw, embedUrl);
+    if (!url || !(_isMediaUrl(url) || /(?:\.m3u8|mpegurl)(?:[?#]|$)/i.test(url))) return [];
+    var hls = /\.m3u8(?:[?#]|$)/i.test(url) || /mpegurl/i.test(String(selected && selected.type || ''));
+    return [{ url: url, quality: 'Auto', label: 'AnimeXin | Dailymotion', container: hls ? 'hls' : 'mp4', hls: hls,
+      kind: 'sub', audioLang: 'zh',
+      headers: { 'User-Agent': UA, 'Referer': embedUrl, 'Origin': 'https://www.dailymotion.com' },
+      subtitles: [] }];
+  }).catch(function () { return []; });
+}
+function _resolveOkRu(embedUrl) {
+  return _get(embedUrl, SITE + '/').then(function (html) {
+    var raw = (html.match(/\bdata-options=["']([^"']+)["']/i) || [])[1] || '';
+    if (!raw) return [];
+    var parsed;
+    try { parsed = JSON.parse(_decodeEntities(raw)); } catch (e) { return []; }
+    var vars = parsed && parsed.flashvars && parsed.flashvars.metadata;
+    var meta = vars;
+    if (typeof vars === 'string') { try { meta = JSON.parse(vars); } catch (e) { return []; } }
+    var videos = meta && Array.isArray(meta.videos) ? meta.videos : [];
+    return videos.map(function (video) {
+      var url = _safeWebUrl(video && video.url, embedUrl);
+      if (!url || !/^https?:\/\//i.test(url)) return null;
+      var hls = /\.m3u8(?:[?#]|$)/i.test(url);
+      return { url: url, quality: String(video.name || 'Auto'), label: 'AnimeXin | OK.ru ' + String(video.name || ''),
+        container: hls ? 'hls' : 'mp4', hls: hls, kind: 'sub', audioLang: 'zh',
+        headers: { 'User-Agent': UA, 'Referer': embedUrl, 'Origin': 'https://ok.ru' }, subtitles: [] };
+    }).filter(Boolean);
+  }).catch(function () { return []; });
+}
 function _odyseeUri(embedUrl) {
   var path = _path(embedUrl), decoded = path;
   try { decoded = decodeURIComponent(path); } catch (e) { /* retain escaped path */ }
@@ -486,6 +567,8 @@ function _resolveOdysee(embedUrl) {
 function _resolvePlayer(url, referer, depth, seen) {
   if (depth > 2 || seen[url]) return Promise.resolve([]);
   seen[url] = true;
+  if (/dailymotion\.com\//i.test(url)) return _resolveDailymotion(url);
+  if (/\/\/(?:www\.)?ok\.ru\//i.test(url)) return _resolveOkRu(url);
   if (/^https?:\/\/(?:www\.)?odysee\.com\//i.test(url)) {
     return _resolveOdysee(url).then(function (sources) {
       if (sources.length) return sources;
@@ -512,12 +595,16 @@ function getVideoSources(episodeUrl, opts) {
   return _get(pageUrl, SITE + '/').then(function (html) {
     var direct = _directSources(html, pageUrl, pageUrl);
     if (direct.length) return direct;
-    var frames = _iframes(html, pageUrl).slice(0, 6);
+    var entries = _iframes(html, pageUrl);
+    var servers = _serverEmbeds(html, pageUrl);
+    servers.forEach(function (server) {
+      if (entries.indexOf(server.url) < 0) entries.push(server.url);
+    });
     var chain = Promise.resolve([]), seen = Object.create(null);
-    frames.forEach(function (frame) {
+    entries.slice(0, 10).forEach(function (playerUrl) {
       chain = chain.then(function (found) {
         if (found.length) return found;
-        return _resolvePlayer(frame, pageUrl, 0, seen);
+        return _resolvePlayer(playerUrl, pageUrl, 0, seen);
       });
     });
     return chain;
