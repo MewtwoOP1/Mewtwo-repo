@@ -7,5 +7,6 @@ The following providers are adaptations of source implementations from the Apach
 - `providers/yuzono-animeonsen.js` — adapted from `src/all/animeonsen`
 - `providers/reanime.js` — adapted from `src/en/reanime` (catalogue, episode and FlixCloud server flow)
 - `providers/av1encodes.js` — adapted from `src/en/av1encodes`, following the current AnimeAlpha/AV1Encodes source flow
+- `providers/lucifer-donghua.js` — adapted from `src/en/luciferdonghua/LuciferDonghua.kt` and the `lib-multisrc/animestream` base implementation
 
 Copyright and license notices for the upstream project are retained in the source headers. The ports are adapted to Zangetsu's JavaScript provider interface and have not been represented as verified live playback unless stated in testing notes.

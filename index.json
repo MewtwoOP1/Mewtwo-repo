@@ -771,6 +771,91 @@
           "default": true
         }
       ]
+    },
+    {
+      "id": "luciferdonghua",
+      "name": "Lucifer Donghua",
+      "version": "1.0.0",
+      "type": "anime",
+      "lang": "en",
+      "file": "providers/lucifer-donghua.js",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=luciferdonghua.in",
+      "nsfw": false,
+      "settings": [
+        {
+          "key": "preferred_quality",
+          "label": "Preferred quality",
+          "description": "Prefer this quality when sorting extracted streams.",
+          "type": "enum",
+          "default": "720p",
+          "options": [
+            {
+              "value": "2160p",
+              "label": "2160p"
+            },
+            {
+              "value": "1440p",
+              "label": "1440p"
+            },
+            {
+              "value": "1080p",
+              "label": "1080p"
+            },
+            {
+              "value": "720p",
+              "label": "720p"
+            },
+            {
+              "value": "480p",
+              "label": "480p"
+            },
+            {
+              "value": "360p",
+              "label": "360p"
+            },
+            {
+              "value": "240p",
+              "label": "240p"
+            },
+            {
+              "value": "144p",
+              "label": "144p"
+            }
+          ]
+        },
+        {
+          "key": "luciferdonghua_hoster_selection",
+          "label": "Enable/Disable Hosts",
+          "description": "Only extract links from selected video hosts.",
+          "type": "multiEnum",
+          "default": [
+            "dailymotion",
+            "rumble",
+            "ok.ru"
+          ],
+          "options": [
+            {
+              "value": "dailymotion",
+              "label": "Dailymotion"
+            },
+            {
+              "value": "rumble",
+              "label": "Rumble"
+            },
+            {
+              "value": "ok.ru",
+              "label": "Ok.ru"
+            }
+          ]
+        },
+        {
+          "key": "luciferdonghua_ignore_preview",
+          "label": "Skip Preview episodes",
+          "description": "Skip a detected preview episode when episode dates identify it.",
+          "type": "bool",
+          "default": true
+        }
+      ]
     }
   ]
 }

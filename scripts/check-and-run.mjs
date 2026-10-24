@@ -117,6 +117,15 @@ function main() {
   }
   console.log("[PASS] Every providers/*.js file is registered");
 
+  const luciferLiveTestPath = path.join(testsDir, "lucifer-donghua.live.js");
+  if (fs.existsSync(luciferLiveTestPath)) {
+    execFileSync(process.execPath, ["--check", luciferLiveTestPath], { stdio: "inherit" });
+    console.log("[PASS] Lucifer Donghua live-test syntax");
+    if (process.env.RUN_LUCIFER_DONGHUA_LIVE === "1") {
+      execFileSync(process.execPath, [luciferLiveTestPath], { stdio: "inherit", env: process.env });
+    }
+  }
+
   console.log("\n=== Mocked integration tests ===");
   assert(fs.existsSync(testsDir), "tests/ directory is missing");
   const testPaths = fs.readdirSync(testsDir)

@@ -1,5 +1,12 @@
 # Changelog
 
+## Lucifer Donghua 1.0.0
+
+- Port the Yuzono Lucifer Donghua source to Zangetsu's JavaScript provider interface.
+- Preserve preferred-quality sorting, host selection (Dailymotion, Rumble, Ok.ru), and preview-episode settings.
+- Add deterministic HTTP-mocked tests and an opt-in real-network stream smoke test.
+- Retain Apache-2.0 upstream attribution and license notices.
+
 ## AIOStreams 2.1.1
 
 - Fix dead/empty catalogue behavior by using Zangetsu's built-in TMDB key when no per-source credential is supplied.
