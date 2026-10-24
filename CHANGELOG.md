@@ -1,5 +1,19 @@
 # Changelog
 
+## Lucifer Donghua 1.0.4
+
+- Bump the manifest and provider versions so Zangetsu refreshes the installed 1.0.3 build.
+- Add a WordPress REST API fallback when the site's HTML search routes stop exposing parseable anime cards.
+- Keep Yuzuno's HTML search route first and restrict REST results to canonical series pages, never episode posts.
+- Strengthen regression coverage for REST-backed search and exact-title live search before metadata, episodes, and stream verification.
+
+## Lucifer Donghua 1.0.0
+
+- Port the Yuzono Lucifer Donghua source to Zangetsu's JavaScript provider interface.
+- Preserve preferred-quality sorting, host selection (Dailymotion, Rumble, Ok.ru), and preview-episode settings.
+- Add deterministic HTTP-mocked tests and an opt-in real-network stream smoke test.
+- Retain Apache-2.0 upstream attribution and license notices.
+
 ## AIOStreams 2.1.1
 
 - Fix dead/empty catalogue behavior by using Zangetsu's built-in TMDB key when no per-source credential is supplied.
