@@ -17,7 +17,7 @@ function getInfo() {
     baseUrl: 'https://www.themoviedb.org',
     logo: 'https://www.google.com/s2/favicons?sz=256&domain=strem.io',
     type: 'movie',
-    version: '3.2.1'
+    version: '3.3.0'
   };
 }
 
@@ -32,15 +32,22 @@ function getSettings() {
     },
     {
       key: 'addonUrls',
-      label: 'Stremio Add-on URLs (manifest URLs; comma/newline separated)',
-      description: 'One or more Stremio-compatible add-on manifest URLs. The add-ons provide streams; this repo does not host video.',
+      label: 'Streaming Add-on URLs (manifest URLs; comma/newline separated)',
+      description: 'Stremio-compatible add-on manifest URLs used to fetch playback streams. Keep each add-on’s required URL path and token intact.',
+      type: 'text',
+      default: ''
+    },
+    {
+      key: 'metadataAddonUrls',
+      label: 'Metadata Add-on URLs (manifest URLs; comma/newline separated)',
+      description: 'Optional separate add-ons for catalogue rows and title metadata. If blank, catalogue lookup falls back to Streaming Add-on URLs for backwards compatibility.',
       type: 'text',
       default: ''
     },
     {
       key: 'enableAddonCatalogs',
-      label: 'Use configured add-on catalogues and metadata',
-      description: 'When enabled, browse configured add-on catalogues and prefer the add-on metadata for those items. Disable to use TMDB catalogues only.',
+      label: 'Use metadata add-on catalogues',
+      description: 'When enabled, browse catalogues from Metadata Add-on URLs and prefer their metadata for those titles. Disable to use TMDB catalogues only.',
       type: 'bool',
       default: false
     },
@@ -79,11 +86,16 @@ function _combinedSettings() {
   var max = parseInt(_readSetting('maxStreamsPerAddon'), 10);
   if (!max || max < 1) max = 25;
   if (max > 100) max = 100;
+  var urls = _parseAddonUrls(_readSetting('addonUrls'));
+  var metadataUrls = _parseAddonUrls(_readSetting('metadataAddonUrls'));
   return {
     tmdbApiKey: _trim(_readSetting('tmdbApiKey')),
-    urls: _parseAddonUrls(_readSetting('addonUrls')),
+    urls: urls,
+    // Keep existing configurations working when the new, separate metadata
+    // URL setting has not been populated.
+    catalogUrls: metadataUrls.length ? metadataUrls : urls,
     useAddonCatalogs: _readSetting('enableAddonCatalogs') === true || String(_readSetting('enableAddonCatalogs')).toLowerCase() === 'true',
-    showP2P: _readSetting('showP2P') === true || String(_readSetting('showP2P')).toLowerCase() === 'true',
+    showP2P: _readSetting('showP2P') === true || String(_readSetting('enableAddonCatalogs')).toLowerCase() === 'true',
     max: max
   };
 }
@@ -266,7 +278,7 @@ function _catalogItem(meta, base, fallbackType) {
 async function _addonCatalogRows(query) {
   var config = _combinedSettings();
   if (!config.useAddonCatalogs || !config.urls.length) return [];
-  var groups = await Promise.all(config.urls.map(async function (base) {
+  var groups = await Promise.all(config.catalogUrls.map(async function (base) {
     try {
       var manifest = await _addonManifest(base);
       if (!manifest || !Array.isArray(manifest.catalogs)) return [];
@@ -832,7 +844,7 @@ function getLinks(id, opts) { return getVideoSources(id, opts); }
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    version: '3.2.1',
+    version: '3.3.0',
     getInfo: getInfo, getSettings: getSettings, getHome: getHome,
     popular: popular, search: search, getDetail: getDetail,
     getEpisodes: getEpisodes, getVideoSources: getVideoSources,
