@@ -95,7 +95,7 @@ function _combinedSettings() {
     // URL setting has not been populated.
     catalogUrls: metadataUrls.length ? metadataUrls : urls,
     useAddonCatalogs: _readSetting('enableAddonCatalogs') === true || String(_readSetting('enableAddonCatalogs')).toLowerCase() === 'true',
-    showP2P: _readSetting('showP2P') === true || String(_readSetting('enableAddonCatalogs')).toLowerCase() === 'true',
+    showP2P: _readSetting('showP2P') === true || String(_readSetting('showP2P')).toLowerCase() === 'true',
     max: max
   };
 }
