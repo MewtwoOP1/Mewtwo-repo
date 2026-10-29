@@ -162,6 +162,14 @@ async function main() {
   assert.ok(calls.some((url) => url.includes("/find/tt222?external_source=imdb_id")));
   assert.ok(calls.some((url) => url.includes("/stream/series/tt222%3A1%3A1.json")));
 
+  // Metadata/catalogue add-ons must work even when no streaming add-on is configured.
+  const savedStreamingUrls = global.__settings["tmdb-stremio"].addonUrls;
+  global.__settings["tmdb-stremio"].addonUrls = "";
+  const metadataOnlyHome = await provider.getHome({});
+  assert.equal(metadataOnlyHome.length, 1);
+  assert.equal(metadataOnlyHome[0].title, "Catalog Add-on · Popular");
+  global.__settings["tmdb-stremio"].addonUrls = savedStreamingUrls;
+
   const tmdbCalls = calls.filter((url) => url.includes("themoviedb.org"));
   assert.ok(tmdbCalls.length > 0);
   assert.ok(tmdbCalls.every((url) => url.includes("api_key=test-user-key")));
