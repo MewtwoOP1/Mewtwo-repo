@@ -145,7 +145,7 @@
     {
       "id": "tmdb-stremio",
       "name": "TMDB + Stremio",
-      "version": "3.2.1",
+      "version": "3.3.0",
       "type": "movie",
       "lang": "en",
       "file": "providers/tmdb-stremio.js",
@@ -161,15 +161,22 @@
         },
         {
           "key": "addonUrls",
-          "label": "Stremio Add-on URLs (manifest URLs; comma/newline separated)",
-          "description": "One or more Stremio-compatible add-on manifest URLs. The add-ons provide streams; this repo does not host video.",
+          "label": "Streaming Add-on URLs (manifest URLs; comma/newline separated)",
+          "description": "Stremio-compatible add-on manifest URLs used to fetch playback streams. Keep each add-on’s required URL path and token intact.",
+          "type": "text",
+          "default": ""
+        },
+        {
+          "key": "metadataAddonUrls",
+          "label": "Metadata Add-on URLs (manifest URLs; comma/newline separated)",
+          "description": "Optional separate add-ons for catalogue rows and title metadata. If blank, catalogue lookup falls back to Streaming Add-on URLs for backwards compatibility.",
           "type": "text",
           "default": ""
         },
         {
           "key": "enableAddonCatalogs",
-          "label": "Use configured add-on catalogues and metadata",
-          "description": "When enabled, browse configured add-on catalogues and prefer their metadata. Disable to use TMDB catalogues only.",
+          "label": "Use metadata add-on catalogues",
+          "description": "When enabled, browse catalogues from Metadata Add-on URLs and prefer their metadata for those titles. Disable to use TMDB catalogues only.",
           "type": "bool",
           "default": false
         },

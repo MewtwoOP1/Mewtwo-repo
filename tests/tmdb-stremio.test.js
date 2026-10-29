@@ -7,6 +7,7 @@ global.__settings = {
   "tmdb-stremio": {
     tmdbApiKey: "test-user-key",
     addonUrls: "https://addon.example/manifest.json?token=secret\nhttps://second.example/manifest.json",
+    metadataAddonUrls: "",
     enableAddonCatalogs: false,
     showP2P: false,
     maxStreamsPerAddon: "10",
@@ -81,6 +82,7 @@ async function main() {
   assert.deepEqual(settings.map((setting) => setting.key), [
     "tmdbApiKey",
     "addonUrls",
+    "metadataAddonUrls",
     "enableAddonCatalogs",
     "showP2P",
     "maxStreamsPerAddon",
@@ -88,6 +90,8 @@ async function main() {
   assert.ok(settings.every((setting) => setting.description && setting.label));
   assert.equal(settings.find((setting) => setting.key === "enableAddonCatalogs").default, false);
   assert.equal(provider._combinedSettings().useAddonCatalogs, false);
+  assert.deepEqual(provider._combinedSettings().catalogUrls, provider._combinedSettings().urls,
+    "empty metadata URLs should preserve the legacy catalogue URL fallback");
   assert.equal(provider._combinedSettings().showP2P, false);
   assert.equal(provider._combinedSettings().max, 10);
   assert.deepEqual(provider._parseAddonUrls(global.__settings["tmdb-stremio"].addonUrls).map(provider._manifestUrl), [
@@ -123,9 +127,16 @@ async function main() {
   // Regression: a Stremio add-on with catalog + stream resources but no meta
   // resource must still open from its cached catalogue item and resolve episodes
   // from TMDB using the catalogue item's IMDb ID.
-  global.__settings["tmdb-stremio"].addonUrls = "https://catalog.example/manifest.json";
+  global.__settings["tmdb-stremio"].metadataAddonUrls = "https://catalog.example/manifest.json";
   global.__settings["tmdb-stremio"].enableAddonCatalogs = true;
   assert.equal(provider._combinedSettings().useAddonCatalogs, true);
+  assert.deepEqual(provider._combinedSettings().catalogUrls.map(provider._manifestUrl), [
+    "https://catalog.example/manifest.json",
+  ]);
+  assert.deepEqual(provider._combinedSettings().urls.map(provider._manifestUrl), [
+    "https://addon.example/manifest.json?token=secret",
+    "https://second.example/manifest.json",
+  ], "metadata add-ons must not replace the streaming add-on list");
 
   const addonHome = await provider.getHome({});
   assert.equal(addonHome.length, 1);
@@ -151,6 +162,14 @@ async function main() {
   assert.ok(calls.some((url) => url.includes("/find/tt222?external_source=imdb_id")));
   assert.ok(calls.some((url) => url.includes("/stream/series/tt222%3A1%3A1.json")));
 
+  // Metadata/catalogue add-ons must work even when no streaming add-on is configured.
+  const savedStreamingUrls = global.__settings["tmdb-stremio"].addonUrls;
+  global.__settings["tmdb-stremio"].addonUrls = "";
+  const metadataOnlyHome = await provider.getHome({});
+  assert.equal(metadataOnlyHome.length, 1);
+  assert.equal(metadataOnlyHome[0].title, "Catalog Add-on · Popular");
+  global.__settings["tmdb-stremio"].addonUrls = savedStreamingUrls;
+
   const tmdbCalls = calls.filter((url) => url.includes("themoviedb.org"));
   assert.ok(tmdbCalls.length > 0);
   assert.ok(tmdbCalls.every((url) => url.includes("api_key=test-user-key")));
@@ -158,6 +177,7 @@ async function main() {
   assert.ok(addOnCalls.length > 0);
   assert.ok(addOnCalls.every((url) => !url.includes("test-user-key")));
   assert.ok(addOnCalls.some((url) => url.includes("?token=secret")));
+  global.__settings["tmdb-stremio"].metadataAddonUrls = "";
 
   // Honor manifest ID prefixes, rather than query unsupported identifier variants.
   global.__settings["tmdb-stremio"].addonUrls = "https://prefix.example/manifest.json";

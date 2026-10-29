@@ -1,5 +1,11 @@
 # Changelog
 
+## TMDB + Stremio 3.3.0
+
+- Add a separate Metadata Add-on URLs setting so catalogue/metadata add-ons can be configured independently from streaming add-ons.
+- Keep the catalogue toggle opt-in and preserve legacy behavior by falling back to Streaming Add-on URLs when the metadata URL list is blank.
+- Add regression coverage verifying catalogue metadata and playback streams use their respective add-on lists.
+
 ## TMDB + Stremio 3.2.1
 
 - Cache successful TMDB API responses and use recent cached data during transient DNS, connection, and server failures.
