@@ -140,24 +140,33 @@ TMDB provides search, title details, catalogue metadata, and episode information
 ### Setup
 
 1. Install **TMDB + Stremio** from this repository, then open **TMDB + Stremio → Settings**.
-2. In **Stremio Add-on URLs**, paste the manifest URL for each compatible add-on. Enter multiple URLs separated by commas or on separate lines. Keep required URL paths and query tokens intact.
+2. In **Streaming Add-on URLs**, paste the manifest URL for each compatible add-on that provides playback streams. Enter multiple URLs separated by commas or on separate lines. Keep required URL paths and query tokens intact.
 
-   Example format — replace these with your actual add-on URLs:
+   Example format — replace these with your actual streaming add-on URLs:
 
    ```text
    https://addon-one.example/manifest.json
    https://addon-two.example/manifest.json
    ```
 
-3. Review the remaining options:
+3. To use a separate catalogue or metadata add-on, paste its manifest URL into **Metadata Add-on URLs**. Enable **Use metadata add-on catalogues** to browse those catalogues and prefer their title metadata. This is independent of Streaming Add-on URLs. If Metadata Add-on URLs is blank, the provider falls back to the streaming list for compatibility.
+
+   Example format:
+
+   ```text
+   https://metadata-addon.example/manifest.json
+   ```
+
+4. Review the remaining options:
 
    | Setting | Recommended value |
    |:--|:--|
    | **TMDB API Key** | Leave blank to use Zangetsu's built-in key. A personal TMDB v3 API key is optional. |
-   | **Max streams per add-on** | Defaults to **25** streams considered per add-on; the available range is 5–100. |
+   | **Use metadata add-on catalogues** | Off by default. Enable it to use catalogues from configured metadata add-ons instead of TMDB catalogues. |
+   | **Max streams per add-on** | Defaults to **25** streams considered per streaming add-on; the available range is 5–100. |
    | **Show torrent / P2P streams** | Off by default. Enable only if Zangetsu's player supports magnet links. |
 
-4. Save your settings, search for a movie or series, open it from **TMDB + Stremio**, and choose a returned stream.
+5. Save your settings, search for a movie or series, open it from **TMDB + Stremio**, and choose a returned stream.
 
 ### If no streams are returned
 
