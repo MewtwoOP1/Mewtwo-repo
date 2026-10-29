@@ -277,7 +277,7 @@ function _catalogItem(meta, base, fallbackType) {
 
 async function _addonCatalogRows(query) {
   var config = _combinedSettings();
-  if (!config.useAddonCatalogs || !config.urls.length) return [];
+  if (!config.useAddonCatalogs || !config.catalogUrls.length) return [];
   var groups = await Promise.all(config.catalogUrls.map(async function (base) {
     try {
       var manifest = await _addonManifest(base);
