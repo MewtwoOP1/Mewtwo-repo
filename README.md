@@ -14,6 +14,7 @@
 </p>
 
 <p align="center">
+  <a href="#about-zangetsu">About Zangetsu</a> &nbsp; · &nbsp;
   <a href="#at-a-glance">Overview</a> &nbsp; · &nbsp;
   <a href="#add-the-repository">Install</a> &nbsp; · &nbsp;
   <a href="#choose-your-setup">Integrations</a> &nbsp; · &nbsp;
@@ -22,6 +23,14 @@
 </p>
 
 ---
+
+## About Zangetsu
+
+**Zangetsu** is a free, open-source media player for anime, movies, TV, manga, and light novels. It is designed for Android phones and Android TV, with a TV-friendly remote interface, high-quality playback, offline downloads, subtitle customization, watch parties, and optional progress tracking.
+
+Zangetsu is a player rather than a preloaded media library. A fresh installation intentionally starts without sources, and the app does not host or distribute the media it plays. You choose and manage compatible sources separately.
+
+For the complete product overview, platform details, feature descriptions, usage guide, privacy notes, and troubleshooting, see **[Zangetsu: Complete App Overview](ZANGETSU.md)**.
 
 ## At a glance
 
