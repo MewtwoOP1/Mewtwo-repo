@@ -1,6 +1,8 @@
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
+const { createCipheriv } = require("node:crypto");
+global.base64ToBytes = (value) => Array.from(Buffer.from(value, "base64"));
 
 const requestLog = [];
 let graphQlFallbackCalls = 0;
@@ -199,6 +201,35 @@ global.fetch = async (url, options = {}) => {
     });
   }
 
+  if (requestUrl === "https://megaplay.buzz/stream/ani/195604/1/sub?s=bcdn") {
+    return { status: 200, body: '<div data-id="7788"></div>' };
+  }
+  if (requestUrl === "https://megaplay.buzz/stream/getSources?id=7788&s=bcdn") {
+    return json(200, {
+      sources: { file: "https://cdn.example/solo-leveling-sub.m3u8" },
+      tracks: [
+        { file: "https://cdn.example/english.vtt", label: "English", kind: "captions", default: true },
+        { file: "https://cdn.example/thumbs.vtt", label: "Thumbnails", kind: "thumbnails" }
+      ]
+    });
+  }
+  if (requestUrl === "https://megaplay.buzz/stream/ani/195604/2/dub?s=vidstream") {
+    return { status: 200, body: '<div data-id="8899"></div>' };
+  }
+  if (requestUrl === "https://megaplay.buzz/stream/getSources?id=8899&s=vidstream") {
+    const payload = JSON.stringify({
+      sources: [{ file: "https://cdn.example/solo-leveling-dub.m3u8" }],
+      tracks: [{ file: "https://cdn.example/dub-en.vtt", label: "English", kind: "captions" }]
+    });
+    const key = Buffer.alloc(32); Buffer.from("i?LMTAx0Q6,:}50U").copy(key);
+    const iv = Buffer.from("W0;27ToaUpl_P%'c");
+    const cipher = createCipheriv("aes-256-cbc", key, iv);
+    const encrypted = Buffer.concat([cipher.update(payload, "utf8"), cipher.final()]);
+    return json(200, { enc: encrypted.toString("base64url") });
+  }
+  if (requestUrl === "https://megaplay.buzz/stream/ani/195604/3/sub?s=bcdn") {
+    return { status: 200, body: "<html>not available</html>" };
+  }
   if (requestUrl === "https://graphql.anilist.co") {
     const request = JSON.parse(options.body || "{}");
     const vars = request.variables || {};
@@ -306,8 +337,8 @@ async function main() {
   assert.equal(source.name, provider.getInfo().name);
   assert.equal(source.logo, provider.getInfo().logo);
   assert.equal(source.type, provider.getInfo().type);
-  assert.equal(source.version, "1.2.4");
-  assert.equal(provider.getInfo().version, "1.2.4");
+  assert.equal(source.version, "1.3.0");
+  assert.equal(provider.getInfo().version, "1.3.0");
 
   const settings = provider.getSettings();
   assert.deepEqual(settings.map((x) => x.key), ["server", "audio"]);
@@ -374,33 +405,58 @@ async function main() {
   const parsedEpisode = JSON.parse(detail.episodes[0].url);
   assert.equal(parsedEpisode.anilistId, 195604);
   assert.equal(parsedEpisode.episode, 1);
-  assert.equal(parsedEpisode.providerVersion, "1.2.4",
+  assert.equal(parsedEpisode.providerVersion, "1.3.0",
     "Versioned episode URLs must invalidate any stale cached HTML embed source");
 
   const episodeList = await provider.getEpisodes("195604", {});
   assert.equal(episodeList.length, 12);
 
-  // The iframe URL is retained for a browser/WebView-capable host, but it
-  // must never be handed to Zangetsu's native media decoder as a video source.
+  // Official public MegaPlay direct route, resolved using the same data-id ->
+  // getSources -> AES-CBC decode flow as the repository's MegaPlay provider.
   assert.equal(provider.getEmbedUrl(detail.episodes[0].url),
     "https://zenkaii.pages.dev/embed?id=195604&ep=1&server=megaplay&audio=sub");
-  assert.deepEqual(await provider.getVideoSources(detail.episodes[0].url, []), []);
-  assert.deepEqual(await provider.getStreams(detail.episodes[0].url, []), []);
-  assert.deepEqual(await provider.getLinks(detail.episodes[0].url, []), []);
+  const subSources = await provider.getVideoSources(detail.episodes[0].url, {});
+  assert.equal(subSources.length, 1);
+  assert.equal(subSources[0].url, "https://cdn.example/solo-leveling-sub.m3u8");
+  assert.equal(subSources[0].container, "hls");
+  assert.equal(subSources[0].kind, "sub");
+  assert.equal(subSources[0].audioLang, "ja");
+  assert.equal(subSources[0].headers.Referer, "https://megaplay.buzz/");
+  assert.equal(subSources[0].subtitles.length, 1);
+  assert.equal(subSources[0].subtitles[0].url, "https://cdn.example/english.vtt");
+  assert.ok(requestLog.some((x) => x.url === "https://megaplay.buzz/stream/ani/195604/1/sub?s=bcdn"));
+  assert.ok(requestLog.some((x) => x.url === "https://megaplay.buzz/stream/getSources?id=7788&s=bcdn"));
+
+  // VidStream's direct route can return encrypted AES-CBC sources. Ensure the
+  // local decrypter yields an actual media URL and subtitle tracks.
+  global.__settings.zenkaii = { server: "vidstream", audio: "dub" };
+  const dubSources = await provider.getVideoSources(detail.episodes[1].url, {});
+  assert.equal(dubSources.length, 1);
+  assert.equal(dubSources[0].url, "https://cdn.example/solo-leveling-dub.m3u8");
+  assert.equal(dubSources[0].container, "hls");
+  assert.equal(dubSources[0].kind, "dub");
+  assert.equal(dubSources[0].audioLang, "en");
+  assert.equal(dubSources[0].subtitles.length, 1);
+  assert.ok(requestLog.some((x) => x.url === "https://megaplay.buzz/stream/ani/195604/2/dub?s=vidstream"));
+
+  // FlixCloud/ACDN settings currently fall back to the two public direct
+  // resolver servers; the returned label must expose the actual server used.
+  global.__settings.zenkaii = { server: "flixcloud", audio: "sub" };
+  const fallback = await provider.getVideoSources(detail.episodes[0].url, {});
+  assert.equal(fallback.length, 1);
+  assert.ok(fallback[0].label.includes("fallback from flixcloud"));
+
+  // The API's private /api/stream route is not used. HTML player pages are
+  // never returned to Zangetsu as native media sources.
+  assert.deepEqual(await provider.getStreams("invalid", {}), []);
+  assert.deepEqual(await provider.getLinks("invalid", {}), []);
+  assert.equal(requestLog.some((x) => x.url.includes("zenkaii.pages.dev/api/stream")), false);
+  assert.equal(requestLog.some((x) => x.url.includes("zenkaii.pages.dev/embed")), false);
+  assert.equal(requestLog.some((x) => x.url.includes("megaplay.buzz") && x.url.includes("getSources")), true);
 
   const availability = await provider.getServerAvailability(195604, 1, "Solo Leveling");
   assert.equal(availability.megaplay.sub, true);
   assert.equal(availability.acdn.multi, true);
-
-  global.__settings.zenkaii = { server: "acdn", audio: "dub" };
-  assert.equal(provider.getEmbedUrl(detail.episodes[1].url),
-    "https://zenkaii.pages.dev/embed?id=195604&ep=2&server=acdn&audio=dub");
-  assert.deepEqual(await provider.getVideoSources(detail.episodes[1].url, {}), []);
-  assert.equal(
-    requestLog.some((x) => x.url.includes("zenkaii.pages.dev/api/stream")),
-    false,
-    "Never call Zenkai's private same-origin stream endpoint"
-  );
 
   // Long-running anime: AniList can leave its total episodes unset. The
   // provider now fills it from the mapped MAL record and can exceed 500 eps.
