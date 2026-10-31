@@ -119,7 +119,7 @@ global.fetch = async (url, options = {}) => {
       mal_id: 21,
       title: "One Piece",
       title_english: "One Piece",
-      episodes: 1242,
+      episodes: 0,
       status: "Currently Airing",
       genres: ["Action", "Adventure"],
       studios: ["Toei Animation"],
@@ -136,6 +136,7 @@ global.fetch = async (url, options = {}) => {
     return json(200, {
       id: 21,
       idMal: 21,
+      title: { english: "One Piece", romaji: "One Piece" },
       nextAiringEpisode: { episode: 1243 },
       averageScore: 83
     });
@@ -305,8 +306,8 @@ async function main() {
   assert.equal(source.name, provider.getInfo().name);
   assert.equal(source.logo, provider.getInfo().logo);
   assert.equal(source.type, provider.getInfo().type);
-  assert.equal(source.version, "1.2.2");
-  assert.equal(provider.getInfo().version, "1.2.2");
+  assert.equal(source.version, "1.2.3");
+  assert.equal(provider.getInfo().version, "1.2.3");
 
   const settings = provider.getSettings();
   assert.deepEqual(settings.map((x) => x.key), ["server", "audio"]);
@@ -406,8 +407,12 @@ async function main() {
   const onePiece = await provider.getDetail(onePieceSearch[0].url, {});
   assert.equal(onePiece.anilistId, 21);
   assert.equal(onePiece.malId, 21);
-  assert.equal(onePiece.episodes.length, 1242);
+  assert.equal(onePiece.episodes.length, 1242,
+    "When AniList and MAL totals are unknown, use the raw next-airing episode");
+  assert.equal(onePiece.score, 83);
   assert.equal(JSON.parse(onePiece.episodes[1241].url).episode, 1242);
+  assert.ok(requestLog.some((x) => x.url === "https://animap.id/api/anilist/21/raw"),
+    "Fetch the raw AniList snapshot only for unresolved episode totals");
   assert.equal(provider._episodeCount({
     id: 21, format: "TV", episodes: null,
     nextAiringEpisode: { episode: 1243 }
