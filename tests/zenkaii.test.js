@@ -201,8 +201,9 @@ global.fetch = async (url, options = {}) => {
       server: "ACDN",
       audio: "multi",
       multiAudio: true,
-      streamUrl: "/proxy?url=" + encodeURIComponent("https://as-cdn1.top/video/master.m3u8") +
-        "&referer=" + encodeURIComponent("https://animesalt.cx/") + "&seg=1",
+      streamUrl: "https://proxy-publish-pilot.lovable.app/api/public/proxy?url=" +
+        encodeURIComponent("https://ravok.buzz/cdn/hls/test/master.m3u8?md5=fixture-token&expires=1793469632") +
+        "&referer=" + encodeURIComponent("https://ravok.buzz/") + "&seg=1",
       subtitles: [],
       intro: null,
       outro: null
@@ -492,16 +493,23 @@ async function main() {
   assert.ok(fallback[0].label.includes("fallback from flixcloud"));
 
   // ACDN is a separate multi-audio route in Zenkai. It must call the official
-  // /api/stream?server=acdn endpoint with the same X-Zenkai-Embed marker used
-  // by the upstream embed client and preserve the returned proxy URL.
+  // /api/stream?server=acdn endpoint with the X-Zenkai-Embed marker. If the
+  // returned proxy wraps a signed CDN URL, try that URL directly first with
+  // its upstream Referer, while keeping the proxy as a fallback.
   global.__settings.zenkaii = { server: "acdn", audio: "dub" };
   const acdnSources = await provider.getVideoSources(detail.episodes[0].url, {});
-  assert.equal(acdnSources.length, 1);
-  assert.equal(acdnSources[0].url.startsWith("https://zenkaii.pages.dev/proxy?url="), true);
+  assert.equal(acdnSources.length, 2);
+  assert.equal(acdnSources[0].url,
+    "https://ravok.buzz/cdn/hls/test/master.m3u8?md5=fixture-token&expires=1793469632");
   assert.equal(acdnSources[0].container, "hls");
   assert.equal(acdnSources[0].kind, "dub");
   assert.equal(acdnSources[0].audioLang, "multi");
   assert.ok(acdnSources[0].label.includes("ACDN"));
+  assert.equal(acdnSources[0].headers.Referer, "https://ravok.buzz/");
+  assert.equal(acdnSources[0].headers.Origin, "https://ravok.buzz");
+  assert.equal(acdnSources[1].url.startsWith(
+    "https://proxy-publish-pilot.lovable.app/api/public/proxy?url="), true);
+  assert.ok(acdnSources[1].label.includes("Proxy fallback"));
   const acdnRequest = requestLog.find((x) => x.url.startsWith("https://zenkaii.pages.dev/api/stream?"));
   assert.ok(acdnRequest, "ACDN selection must call the ACDN resolver route");
   assert.equal(acdnRequest.options.headers["X-Zenkai-Embed"], "1");
