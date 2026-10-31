@@ -181,6 +181,25 @@ TMDB provides search, title details, catalogue metadata, and episode information
 
 ---
 
+
+<details>
+<summary><strong>Zenkai Player</strong> · AniList catalogue and Zenkaii web-player embed</summary>
+
+### What it does
+
+AniList supplies anime search, catalogue metadata, title details, and episode numbering. Playback links are generated using Zenkaii's documented player embed:
+
+```text
+https://zenkaii.pages.dev/embed?id={ANILIST_ID}&ep={EPISODE}&server={SERVER}&audio={AUDIO}
+```
+
+Configure the preferred server (MegaPlay, VidStream, FlixCloud, or ACDN) and audio (SUB or DUB) in **Zenkai Player → Settings**. The player page handles its own source failover.
+
+> [!IMPORTANT]
+> Zenkaii documents this as an HTML iframe/player embed, not a direct HLS or MP4 stream. The current Zangetsu provider contract returns native media URLs (HLS, MP4, torrent, or unknown) and does not define an iframe/WebView source type. This repository-only integration exposes the embed URL, but playback inside the app requires the host app to support opening HTML player embeds. This provider does not modify or patch the Zangetsu app and cannot guarantee native in-app playback.
+
+</details>
+
 ## Troubleshooting
 
 | Symptom | First thing to check |
