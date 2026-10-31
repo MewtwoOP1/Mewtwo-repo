@@ -371,8 +371,8 @@ async function main() {
   assert.equal(source.name, provider.getInfo().name);
   assert.equal(source.logo, provider.getInfo().logo);
   assert.equal(source.type, provider.getInfo().type);
-  assert.equal(source.version, "1.4.0");
-  assert.equal(provider.getInfo().version, "1.4.0");
+  assert.equal(source.version, "1.4.1");
+  assert.equal(provider.getInfo().version, "1.4.1");
 
   const settings = provider.getSettings();
   assert.deepEqual(settings.map((x) => x.key), ["server", "audio"]);
@@ -439,7 +439,7 @@ async function main() {
   const parsedEpisode = JSON.parse(detail.episodes[0].url);
   assert.equal(parsedEpisode.anilistId, 195604);
   assert.equal(parsedEpisode.episode, 1);
-  assert.equal(parsedEpisode.providerVersion, "1.4.0",
+  assert.equal(parsedEpisode.providerVersion, "1.4.1",
     "Versioned episode URLs must invalidate previous stream cache entries");
   assert.equal(parsedEpisode.format, "TV", "Store AniList format for ACDN movie/series routing");
 
