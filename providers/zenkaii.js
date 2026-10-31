@@ -1,7 +1,5 @@
-// Zenkai Player — AniList catalogue + Zenkaii's hosted player embed.
-// Important: Zenkaii's documented endpoint is an HTML iframe player, not a
-// direct HLS/MP4 URL. This provider exposes the embed URL as an unknown source;
-// the consuming app must support opening web-player URLs to play it.
+// Zenkai Player — AniList catalogue + native MegaPlay, VidStream and ACDN playback.
+// ACDN exposes a multi-audio HLS playlist through Zenkai's embed API route.
 
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID)
   ? String(__SOURCE_ID) : 'zenkaii';
@@ -27,7 +25,7 @@ function getInfo() {
     baseUrl: 'https://zenkaii.pages.dev',
     logo: 'https://www.google.com/s2/favicons?sz=256&domain=zenkaii.pages.dev',
     type: 'anime',
-    version: '1.4.0'
+    version: '1.4.1'
   };
 }
 
@@ -1053,8 +1051,7 @@ function _resolveAcdn(parsed, config) {
   var requestUrl = 'https://zenkaii.pages.dev/api/stream?' + params.join('&');
 
   // Match the official Zenkai embed client's getJson() request. The upstream
-  // handler explicitly recognizes X-Zenkai-Embed and uses this route to call
-  // its own ACDN resolver, then returns the proxied multi-audio playlist.
+  // handler recognizes X-Zenkai-Embed and invokes its ACDN multi-audio resolver.
   return fetch(requestUrl, {
     headers: {
       'Accept': 'application/json',
@@ -1084,48 +1081,89 @@ function _resolveAcdn(parsed, config) {
       throw new Error('Zenkai ACDN returned an invalid stream URL');
     }
 
-    // The upstream ACDN resolver emits an HLS master playlist behind its
-    // segment-aware proxy. Preserve its proxy URL instead of wrapping it in a
-    // second proxy or extracting the upstream CDN URL.
-    var targetUrl = streamUrl;
+    // Zenkai currently returns a segment-proxy URL. Zangetsu's playback log
+    // shows that this proxy serves the master playlist (HTTP 200) but times
+    // out when the native player reads media data (FFmpeg -110). If the proxy
+    // wraps a signed HTTPS playlist, expose that CDN URL first with its required
+    // upstream Referer and retain the original proxy as a fallback.
+    var directUrl = '';
+    var directReferer = '';
+    var directOrigin = '';
     try {
-      var outer = new URL(streamUrl);
-      var nested = outer.searchParams.get('url');
-      if (nested) targetUrl = nested;
+      var outerUrl = new URL(streamUrl);
+      var nested = outerUrl.searchParams.get('url');
+      if (nested) {
+        var direct = new URL(nested);
+        if (direct.protocol === 'https:' && direct.hostname !== outerUrl.hostname) {
+          directUrl = direct.toString();
+          directOrigin = direct.origin;
+          var referer = outerUrl.searchParams.get('referer') || outerUrl.searchParams.get('ref');
+          if (referer) {
+            try {
+              var parsedReferer = new URL(referer);
+              if (parsedReferer.protocol === 'https:') directReferer = parsedReferer.toString();
+            } catch (e) {}
+          }
+          if (!directReferer) directReferer = direct.origin + '/';
+        }
+      }
     } catch (e) {}
-    var targetPath = String(targetUrl).split(/[?#]/)[0].toLowerCase();
-    var container = /\.mp4$/i.test(targetPath) ? 'mp4' :
-      /\.m3u8$/i.test(targetPath) ? 'hls' : 'hls';
 
-    return [{
+    var containerUrl = directUrl || streamUrl;
+    var targetPath = String(containerUrl).split(/[?#]/)[0].toLowerCase();
+    var container = /\.mp4$/i.test(targetPath) ? 'mp4' : 'hls';
+    var subtitles = Array.isArray(json.subtitles) ? json.subtitles.map(function (subtitle) {
+      var file = subtitle && (subtitle.file || subtitle.url);
+      if (!file) return null;
+      if (String(file).charAt(0) === '/') file = 'https://zenkaii.pages.dev' + file;
+      return {
+        url: String(file),
+        lang: String(subtitle.label || subtitle.lang || 'Subtitle'),
+        label: String(subtitle.label || subtitle.lang || 'Subtitle'),
+        format: /\.srt(?:[?#]|$)/i.test(String(file)) ? 'srt' : 'vtt',
+        default: !!subtitle.default
+      };
+    }).filter(Boolean) : [];
+
+    var sources = [];
+    if (directUrl && directUrl !== streamUrl) {
+      sources.push({
+        url: directUrl,
+        quality: 'Auto',
+        label: 'Zenkai Player · ACDN · Multi-audio · Direct CDN',
+        container: container,
+        kind: config.audio,
+        audioLang: 'multi',
+        headers: {
+          'Referer': directReferer,
+          'Origin': directOrigin,
+          'User-Agent': MEGA_DIRECT_UA
+        },
+        subtitles: subtitles
+      });
+    }
+
+    // Retain Zenkai's proxy as a fallback for hosts that reject direct requests
+    // or require proxy-side segment rewriting.
+    sources.push({
       url: streamUrl,
       quality: 'Auto',
-      label: 'Zenkai Player · ACDN · Multi-audio',
+      label: directUrl
+        ? 'Zenkai Player · ACDN · Multi-audio · Proxy fallback'
+        : 'Zenkai Player · ACDN · Multi-audio',
       container: container,
-      // Zangetsu's AudioKind enum is sub/dub/raw/unknown. Keep the source in
-      // the selected audio bucket; the HLS master keeps its separate renditions.
       kind: config.audio,
       audioLang: 'multi',
       headers: {
         'Referer': 'https://zenkaii.pages.dev/',
         'User-Agent': MEGA_DIRECT_UA
       },
-      subtitles: Array.isArray(json.subtitles) ? json.subtitles.map(function (subtitle) {
-        var file = subtitle && (subtitle.file || subtitle.url);
-        if (!file) return null;
-        if (String(file).charAt(0) === '/') file = 'https://zenkaii.pages.dev' + file;
-        return {
-          url: String(file),
-          lang: String(subtitle.label || subtitle.lang || 'Subtitle'),
-          label: String(subtitle.label || subtitle.lang || 'Subtitle'),
-          format: /\.srt(?:[?#]|$)/i.test(String(file)) ? 'srt' : 'vtt',
-          default: !!subtitle.default
-        };
-      }).filter(Boolean) : []
-    }];
+      subtitles: subtitles
+    });
+
+    return sources;
   });
 }
-
 function _resolveDirectServers(parsed, config) {
   var order = _directServerOrder(config.server);
   function attempt(index) {
@@ -1182,7 +1220,7 @@ function getLinks(id, opts) { return getVideoSources(id, opts); }
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    version: '1.4.0',
+    version: '1.4.1',
     getInfo: getInfo,
     getSettings: getSettings,
     getHome: getHome,
