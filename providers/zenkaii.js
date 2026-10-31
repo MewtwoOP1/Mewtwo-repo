@@ -27,7 +27,7 @@ function getInfo() {
     baseUrl: 'https://zenkaii.pages.dev',
     logo: 'https://www.google.com/s2/favicons?sz=256&domain=zenkaii.pages.dev',
     type: 'anime',
-    version: '1.2.1'
+    version: '1.2.2'
   };
 }
 
@@ -502,34 +502,12 @@ function _animapSearch(query, page) {
       });
     });
     var start = (p - 1) * 20;
-    var pageRows = mapped.slice(start, start + 20);
-    // Enrich only the first five ranked matches. The remaining rows already
-    // have title/ID mappings, and do not need their own metadata HTTP call
-    // just to participate in title matching.
-    var enrichedRows = pageRows.slice(0, 5);
-    var basicRows = pageRows.slice(enrichedRows.length).map(function (entry) {
+    // AniMap search already contains the ordered title aliases, year and
+    // AniList/MAL IDs. Do not issue N metadata lookups for the result cards:
+    // Zangetsu immediately performs getDetail() for the selected match.
+    return mapped.slice(start, start + 20).map(function (entry) {
       return _animapFallbackItem(entry.mapping, entry.id, null);
-    });
-    return _mapLimit(enrichedRows, 2, function (entry) {
-      return _animapMedia(entry.id).then(function (media) {
-        var item = _mediaItem(media);
-        if (item) {
-          if (!item.malId && Number(entry.mapping.mal_id) > 0) item.malId = Number(entry.mapping.mal_id);
-          return item;
-        }
-        throw new Error('AniMap has no AniList metadata snapshot');
-      }).catch(function () {
-        var malId = Number(entry.mapping && entry.mapping.mal_id);
-        if (!(malId > 0)) return _animapFallbackItem(entry.mapping, entry.id, null);
-        return _animapMal(malId).then(function (mal) {
-          return _animapFallbackItem(entry.mapping, entry.id, mal);
-        }).catch(function () {
-          return _animapFallbackItem(entry.mapping, entry.id, null);
-        });
-      });
-    }).then(function (items) {
-      return items.concat(basicRows).filter(Boolean);
-    });
+    }).filter(Boolean);
   });
 }
 
@@ -630,15 +608,9 @@ function _episodes(media) {
   return out;
 }
 
-function _mergeAnimapFallbacks(media, mal, raw) {
+function _mergeAnimapFallbacks(media, mal) {
   var merged = {};
   Object.keys(media || {}).forEach(function (key) { merged[key] = media[key]; });
-  // The parsed AniMap record has lightweight display metadata; /raw retains
-  // additional AniList fields such as averageScore and richer studio nodes.
-  if (raw && merged.averageScore == null && raw.averageScore != null) {
-    merged.averageScore = raw.averageScore;
-  }
-  if (raw && raw.idMal && !merged.idMal) merged.idMal = raw.idMal;
   if (!(Number(merged.episodes) > 0) && mal && Number(mal.episodes) > 0) {
     merged.episodes = Number(mal.episodes);
   }
@@ -654,7 +626,6 @@ function _mergeAnimapFallbacks(media, mal, raw) {
   if ((!merged.studios || !merged.studios.length) && mal && Array.isArray(mal.studios)) {
     merged.studios = mal.studios;
   }
-  if (raw && raw.nextAiringEpisode) merged.nextAiringEpisode = raw.nextAiringEpisode;
   return merged;
 }
 
@@ -703,21 +674,36 @@ function _detailFromMedia(media) {
 
 function _animapDetail(id) {
   return _animapMedia(id).catch(function () { return null; }).then(function (media) {
-    return _animapMap(id).catch(function () { return null; }).then(function (map) {
+    // The parsed AniList snapshot already has artwork, synopsis, genres,
+    // studios, MAL ID and episode count for most titles. Return immediately
+    // instead of paying for /map and /raw on every detail page.
+    if (media && (Number(media.episodes) > 0 ||
+        String(media.format || '').toUpperCase() === 'MOVIE')) {
+      return _detailFromMedia(media);
+    }
+
+    // Only request a cross-service mapping when the parsed snapshot is absent
+    // or lacks a MAL ID needed to recover an unknown episode count.
+    var mapPromise = (!media || !(Number(media.idMal) > 0))
+      ? _animapMap(id).catch(function () { return null; })
+      : Promise.resolve(null);
+
+    return mapPromise.then(function (map) {
       if (!media) media = _mediaFromMap(map, id);
-      else media = _mergeAnimapMap(media, map);
+      else if (map) media = _mergeAnimapMap(media, map);
       if (!media) return null;
-      var needsMal = !(Number(media.episodes) > 0) &&
-        String(media.format || '').toUpperCase() !== 'MOVIE';
+
+      if (Number(media.episodes) > 0 ||
+          String(media.format || '').toUpperCase() === 'MOVIE') {
+        return _detailFromMedia(media);
+      }
+
+      // Long-running shows (e.g. One Piece) can have episodes=0 in AniList.
+      // Use the mapped MAL count only for these unresolved cases.
       var malId = Number(media.idMal);
-      var jobs = [
-        needsMal && malId > 0
-          ? _animapMal(malId).catch(function () { return null; })
-          : Promise.resolve(null),
-        _animapRaw(id).catch(function () { return null; })
-      ];
-      return Promise.all(jobs).then(function (results) {
-        return _detailFromMedia(_mergeAnimapFallbacks(media, results[0], results[1]));
+      if (!(malId > 0)) return _detailFromMedia(media);
+      return _animapMal(malId).catch(function () { return null; }).then(function (mal) {
+        return _detailFromMedia(_mergeAnimapFallbacks(media, mal));
       });
     });
   });
@@ -781,21 +767,51 @@ function buildEmbedUrl(anilistId, episode, server, audio) {
     '&audio=' + encodeURIComponent(lang);
 }
 
-function getVideoSources(episodeUrl, opts) {
+function getServerAvailability(anilistId, episode, title) {
+  var id = Number(anilistId);
+  var ep = Number(episode);
+  if (!Number.isInteger(id) || id < 1 || !Number.isInteger(ep) || ep < 1) {
+    return Promise.resolve(null);
+  }
+  var query = '?id=' + encodeURIComponent(id) +
+    '&ep=' + encodeURIComponent(ep) +
+    (title ? '&title=' + encodeURIComponent(String(title)) : '');
+  return fetch('https://zenkaii.pages.dev/api/servers' + query, {
+    headers: { 'Accept': 'application/json' },
+    timeoutMs: 12000
+  }).then(function (response) {
+    var status = Number(response && response.status) || 0;
+    if (status >= 400) throw new Error('Zenkai server availability HTTP ' + status);
+    var body = response && response.body != null ? response.body : '';
+    var json = typeof body === 'string' ? JSON.parse(body || 'null') : body;
+    if (!json || json.success !== true || !json.servers || typeof json.servers !== 'object') {
+      throw new Error('Zenkai returned an invalid server availability response');
+    }
+    return json.servers;
+  }).catch(function (error) {
+    console.warn('Zenkai server availability unavailable:', String(error));
+    return null;
+  });
+}
+
+// This is a browser page, not a media stream. Keep the URL available for
+// clients that can open an unsandboxed WebView, but never return it from
+// getVideoSources(): Zangetsu's current VideoSource contract is native media
+// (HLS/MP4/torrent). Returning HTML as container=unknown makes its media
+// sniffer fetch the page and fail with "Failed to recognize file format".
+function getEmbedUrl(episodeUrl) {
   var parsed = _parseEpisode(episodeUrl);
-  if (!parsed) return Promise.resolve([]);
+  if (!parsed) return null;
   var config = _config();
-  var embedUrl = buildEmbedUrl(parsed.anilistId, parsed.episode, config.server, config.audio);
-  if (!embedUrl) return Promise.resolve([]);
-  var isDub = config.audio === 'dub';
-  return Promise.resolve([{
-    url: embedUrl,
-    quality: 'Auto',
-    label: 'Zenkai Player · ' + config.server + ' · ' + config.audio.toUpperCase(),
-    container: 'unknown',
-    kind: config.audio,
-    audioLang: isDub ? 'en' : 'ja'
-  }]);
+  return buildEmbedUrl(parsed.anilistId, parsed.episode, config.server, config.audio);
+}
+
+function getVideoSources(episodeUrl, opts) {
+  // Zenkai's public API intentionally exposes its playback only through
+  // /embed. /api/stream is same-origin/private and must not be called by an
+  // external provider. Without host WebView support this source has no native
+  // playable URL, so return [] and allow other installed providers to win.
+  return Promise.resolve([]);
 }
 
 function getStreams(id, opts) { return getVideoSources(id, opts); }
@@ -815,6 +831,8 @@ if (typeof module !== 'undefined' && module.exports) {
     getStreams: getStreams,
     getLinks: getLinks,
     buildEmbedUrl: buildEmbedUrl,
+    getEmbedUrl: getEmbedUrl,
+    getServerAvailability: getServerAvailability,
     _config: _config,
     _parseAniListId: _parseAniListId,
     _parseEpisode: _parseEpisode,
