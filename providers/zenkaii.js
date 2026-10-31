@@ -34,7 +34,7 @@ function getSettings() {
     {
       key: 'server',
       label: 'Zenkai Player server',
-      description: 'Choose MegaPlay, VidStream, FlixCloud fallback, or native ACDN multi-audio playback.',
+      description: 'Choose MegaPlay, VidStream, FlixCloud fallback, or ACDN multi-audio (direct CDN with proxy fallback).',
       type: 'enum',
       default: 'megaplay',
       options: [
@@ -577,7 +577,7 @@ function _episodeUrl(anilistId, episode, title, format) {
     // Zangetsu caches resolved streams by sourceId|episodeUrl for up to
     // 20 minutes. A versioned episode URL invalidates old HTML-embed results
     // after this provider changes away from returning an iframe as video.
-    providerVersion: '1.4.0',
+    providerVersion: '1.4.1',
     anilistId: Number(anilistId),
     episode: Number(episode),
     title: String(title || ''),
