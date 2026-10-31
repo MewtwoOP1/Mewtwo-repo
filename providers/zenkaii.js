@@ -465,7 +465,19 @@ function _animapFallbackItem(mapping, id, mal) {
     anilistId: Number(id)
   };
   if (isFinite(malId) && malId > 0) item.malId = malId;
-  if (mal && Array.isArray(mal.title_synonyms)) item.synonyms = mal.title_synonyms.slice(0, 20);
+  var synonyms = titles.slice(1, 20);
+  if (mal && Array.isArray(mal.title_synonyms)) synonyms = synonyms.concat(mal.title_synonyms);
+  if (synonyms.length) {
+    var unique = [], seen = {};
+    synonyms.forEach(function (name) {
+      var value = _trim(name);
+      var key = value.toLowerCase();
+      if (value && key !== title.toLowerCase() && !seen[key]) {
+        seen[key] = true; unique.push(value);
+      }
+    });
+    if (unique.length) item.synonyms = unique.slice(0, 20);
+  }
   return item;
 }
 
@@ -491,7 +503,14 @@ function _animapSearch(query, page) {
     });
     var start = (p - 1) * 20;
     var pageRows = mapped.slice(start, start + 20);
-    return _mapLimit(pageRows, 4, function (entry) {
+    // Enrich only the first five ranked matches. The remaining rows already
+    // have title/ID mappings, and do not need their own metadata HTTP call
+    // just to participate in title matching.
+    var enrichedRows = pageRows.slice(0, 5);
+    var basicRows = pageRows.slice(enrichedRows.length).map(function (entry) {
+      return _animapFallbackItem(entry.mapping, entry.id, null);
+    });
+    return _mapLimit(enrichedRows, 2, function (entry) {
       return _animapMedia(entry.id).then(function (media) {
         var item = _mediaItem(media);
         if (item) {
@@ -509,7 +528,7 @@ function _animapSearch(query, page) {
         });
       });
     }).then(function (items) {
-      return items.filter(Boolean);
+      return items.concat(basicRows).filter(Boolean);
     });
   });
 }
