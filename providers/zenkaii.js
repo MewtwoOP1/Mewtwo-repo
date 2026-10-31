@@ -27,7 +27,7 @@ function getInfo() {
     baseUrl: 'https://zenkaii.pages.dev',
     logo: 'https://www.google.com/s2/favicons?sz=256&domain=zenkaii.pages.dev',
     type: 'anime',
-    version: '1.3.0'
+    version: '1.4.0'
   };
 }
 
@@ -36,20 +36,20 @@ function getSettings() {
     {
       key: 'server',
       label: 'Zenkai Player server',
-      description: 'Preferred native resolver. MegaPlay and VidStream resolve to direct HLS/MP4 media URLs; FlixCloud/ACDN use these as fallbacks.',
+      description: 'Choose MegaPlay, VidStream, FlixCloud fallback, or native ACDN multi-audio playback.',
       type: 'enum',
       default: 'megaplay',
       options: [
         { value: 'megaplay', label: 'MegaPlay (HD-1)' },
         { value: 'vidstream', label: 'VidStream (HD-2)' },
         { value: 'flixcloud', label: 'FlixCloud (fallback)' },
-        { value: 'acdn', label: 'ACDN (fallback)' }
+        { value: 'acdn', label: 'ACDN (Multi-audio)' }
       ]
     },
     {
       key: 'audio',
       label: 'Preferred audio',
-      description: 'Preferred audio track for direct MegaPlay/VidStream resolution.',
+      description: 'Preferred source category. ACDN returns a multi-audio HLS playlist.',
       type: 'enum',
       default: 'sub',
       options: [
@@ -573,16 +573,17 @@ function _parseAniListId(value) {
   return match && Number(match[1]) > 0 ? Number(match[1]) : null;
 }
 
-function _episodeUrl(anilistId, episode, title) {
+function _episodeUrl(anilistId, episode, title, format) {
   return JSON.stringify({
     provider: 'zenkaii',
     // Zangetsu caches resolved streams by sourceId|episodeUrl for up to
     // 20 minutes. A versioned episode URL invalidates old HTML-embed results
     // after this provider changes away from returning an iframe as video.
-    providerVersion: '1.3.0',
+    providerVersion: '1.4.0',
     anilistId: Number(anilistId),
     episode: Number(episode),
-    title: String(title || '')
+    title: String(title || ''),
+    format: String(format || '')
   });
 }
 
@@ -607,7 +608,7 @@ function _episodes(media) {
       id: String(ep),
       title: title + ' · Episode ' + ep,
       number: ep,
-      url: _episodeUrl(id, ep, title),
+      url: _episodeUrl(id, ep, title, media.format),
       embedUrl: buildEmbedUrl(id, ep, config.server, config.audio)
     });
   }
@@ -788,7 +789,12 @@ function _parseEpisode(value) {
   var id = _parseAniListId(item.anilistId || item.anilist_id || item.id);
   var ep = Number(item.episode || item.ep || item.number);
   if (!id || !Number.isInteger(ep) || ep < 1 || ep > 20000) return null;
-  return { anilistId: id, episode: ep, title: _trim(item.title || '') };
+  return {
+    anilistId: id,
+    episode: ep,
+    title: _trim(item.title || ''),
+    format: _trim(item.format || '').toUpperCase()
+  };
 }
 
 function buildEmbedUrl(anilistId, episode, server, audio) {
@@ -1033,6 +1039,93 @@ function _directServerOrder(preferred) {
   return ['bcdn', 'vidstream'];
 }
 
+function _resolveAcdn(parsed, config) {
+  var params = [
+    'id=' + encodeURIComponent(parsed.anilistId),
+    'ep=' + encodeURIComponent(parsed.episode),
+    'server=acdn',
+    'audio=' + encodeURIComponent(config.audio),
+    'title=' + encodeURIComponent(parsed.title || '')
+  ];
+  if (parsed.format) params.push('format=' + encodeURIComponent(parsed.format));
+
+  var embedUrl = buildEmbedUrl(parsed.anilistId, parsed.episode, 'acdn', config.audio);
+  var requestUrl = 'https://zenkaii.pages.dev/api/stream?' + params.join('&');
+
+  // Match the official Zenkai embed client's getJson() request. The upstream
+  // handler explicitly recognizes X-Zenkai-Embed and uses this route to call
+  // its own ACDN resolver, then returns the proxied multi-audio playlist.
+  return fetch(requestUrl, {
+    headers: {
+      'Accept': 'application/json',
+      'X-Zenkai-Embed': '1',
+      'Referer': embedUrl || 'https://zenkaii.pages.dev/embed'
+    },
+    timeoutMs: 45000
+  }).then(function (response) {
+    var status = Number(response && response.status) || 0;
+    var body = response && response.body != null ? response.body : '';
+    var json = typeof body === 'string' ? JSON.parse(body || 'null') : body;
+
+    if (status >= 400) {
+      var reason = json && (json.error || json.message);
+      throw new Error('Zenkai ACDN HTTP ' + status + (reason ? ': ' + reason : ''));
+    }
+    if (!json || json.success !== true || !json.streamUrl) {
+      var message = json && (json.error || json.message);
+      throw new Error(message || 'Zenkai ACDN returned no multi-audio stream');
+    }
+
+    var streamUrl = String(json.streamUrl);
+    if (streamUrl.charAt(0) === '/') {
+      streamUrl = 'https://zenkaii.pages.dev' + streamUrl;
+    }
+    if (!/^https:\/\//i.test(streamUrl)) {
+      throw new Error('Zenkai ACDN returned an invalid stream URL');
+    }
+
+    // The upstream ACDN resolver emits an HLS master playlist behind its
+    // segment-aware proxy. Preserve its proxy URL instead of wrapping it in a
+    // second proxy or extracting the upstream CDN URL.
+    var targetUrl = streamUrl;
+    try {
+      var outer = new URL(streamUrl);
+      var nested = outer.searchParams.get('url');
+      if (nested) targetUrl = nested;
+    } catch (e) {}
+    var targetPath = String(targetUrl).split(/[?#]/)[0].toLowerCase();
+    var container = /\.mp4$/i.test(targetPath) ? 'mp4' :
+      /\.m3u8$/i.test(targetPath) ? 'hls' : 'hls';
+
+    return [{
+      url: streamUrl,
+      quality: 'Auto',
+      label: 'Zenkai Player · ACDN · Multi-audio',
+      container: container,
+      // Zangetsu's AudioKind enum is sub/dub/raw/unknown. Keep the source in
+      // the selected audio bucket; the HLS master keeps its separate renditions.
+      kind: config.audio,
+      audioLang: 'multi',
+      headers: {
+        'Referer': 'https://zenkaii.pages.dev/',
+        'User-Agent': MEGA_DIRECT_UA
+      },
+      subtitles: Array.isArray(json.subtitles) ? json.subtitles.map(function (subtitle) {
+        var file = subtitle && (subtitle.file || subtitle.url);
+        if (!file) return null;
+        if (String(file).charAt(0) === '/') file = 'https://zenkaii.pages.dev' + file;
+        return {
+          url: String(file),
+          lang: String(subtitle.label || subtitle.lang || 'Subtitle'),
+          label: String(subtitle.label || subtitle.lang || 'Subtitle'),
+          format: /\.srt(?:[?#]|$)/i.test(String(file)) ? 'srt' : 'vtt',
+          default: !!subtitle.default
+        };
+      }).filter(Boolean) : []
+    }];
+  });
+}
+
 function _resolveDirectServers(parsed, config) {
   var order = _directServerOrder(config.server);
   function attempt(index) {
@@ -1071,7 +1164,14 @@ function getEmbedUrl(episodeUrl) {
 function getVideoSources(episodeUrl, opts) {
   var parsed = _parseEpisode(episodeUrl);
   if (!parsed) return Promise.resolve([]);
-  return _resolveDirectServers(parsed, _config()).catch(function (error) {
+  var config = _config();
+  if (config.server === 'acdn') {
+    return _resolveAcdn(parsed, config).catch(function (error) {
+      console.warn('Zenkai ACDN playback failed:', String(error));
+      return [];
+    });
+  }
+  return _resolveDirectServers(parsed, config).catch(function (error) {
     console.warn('Zenkai native playback failed:', String(error));
     return [];
   });
@@ -1082,7 +1182,7 @@ function getLinks(id, opts) { return getVideoSources(id, opts); }
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    version: '1.3.0',
+    version: '1.4.0',
     getInfo: getInfo,
     getSettings: getSettings,
     getHome: getHome,
