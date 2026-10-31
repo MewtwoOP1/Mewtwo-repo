@@ -202,7 +202,7 @@ https://zenkaii.pages.dev/embed?id={ANILIST_ID}&ep={EPISODE}&server={SERVER}&aud
 - Search uses one AniMap title-index request and maps its returned AniList IDs locally. It does not fan out into one metadata request per result.
 - Detail pages normally need one AniMap parsed-record request. A second mapping/MAL lookup occurs only when the parsed record is missing or has no usable episode count.
 - AniList GraphQL is a fallback only when AniMap cannot resolve the title or detail. Requests are cached, deduplicated, serialized, and cooled down after 429 or host-side rate-limit errors.
-- MAL supplies missing episode totals for ongoing long-running anime. Episode lists are capped at 20,000.
+- MAL supplies missing episode totals for ongoing long-running anime. If MAL also has no total, the raw AniList snapshot can provide the next-airing episode; the last known aired number is used instead of inventing a count. Episode lists are capped at 20,000.
 - AniMap documents [title search](https://animap.id/docs/search), [AniList records](https://animap.id/docs/anilist), and [AniList/MAL mappings](https://animap.id/docs/map).
 
 ### Playback compatibility (important)
