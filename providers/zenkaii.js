@@ -831,19 +831,6 @@ function getServerAvailability(anilistId, episode, title) {
   });
 }
 
-// This is a browser page, not a media stream. Keep the URL available for
-// clients that can open an unsandboxed WebView, but never return it from
-// getVideoSources(): Zangetsu's current VideoSource contract is native media
-// (HLS/MP4/torrent). Returning HTML as container=unknown makes its media
-// sniffer fetch the page and fail with "Failed to recognize file format".
-function getEmbedUrl(episodeUrl) {
-  var parsed = _parseEpisode(episodeUrl);
-  if (!parsed) return null;
-  var config = _config();
-  return buildEmbedUrl(parsed.anilistId, parsed.episode, config.server, config.audio);
-}
-
-function
 var MEGA_AES_KEY = 'i?LMTAx0Q6,:}50U';
 var MEGA_AES_IV = "W0;27ToaUpl_P%'c";
 
@@ -1090,7 +1077,7 @@ function getVideoSources(episodeUrl, opts) {
   });
 }
 
- getStreams(id, opts) { return getVideoSources(id, opts); }
+function getStreams(id, opts) { return getVideoSources(id, opts); }
 function getLinks(id, opts) { return getVideoSources(id, opts); }
 
 if (typeof module !== 'undefined' && module.exports) {
