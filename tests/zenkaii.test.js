@@ -190,6 +190,11 @@ global.fetch = async (url, options = {}) => {
     const parsed = new URL(requestUrl);
     assert.equal(parsed.searchParams.get("server"), "acdn");
     assert.equal(parsed.searchParams.get("id"), "195604");
+    assert.equal(parsed.searchParams.get("title"), "Solo Leveling");
+    assert.equal(parsed.searchParams.get("format"), "TV");
+    if (parsed.searchParams.get("ep") === "4") {
+      return json(404, { error: "No multi-audio stream found on ACDN for this episode" });
+    }
     assert.equal(parsed.searchParams.get("ep"), "1");
     return json(200, {
       success: true,
@@ -501,6 +506,17 @@ async function main() {
   assert.ok(acdnRequest, "ACDN selection must call the ACDN resolver route");
   assert.equal(acdnRequest.options.headers["X-Zenkai-Embed"], "1");
   assert.ok(acdnRequest.options.headers.Referer.includes("/embed?id=195604&ep=1&server=acdn"));
+
+  // ACDN can legitimately have no mapping/source for a particular episode.
+  // It must return no source rather than silently substituting MegaPlay or
+  // VidStream while the user has explicitly selected ACDN.
+  const directCallsBeforeMissingAcdn = requestLog.filter((x) =>
+    x.url.startsWith("https://megaplay.buzz/stream/ani/195604/4/")).length;
+  const missingAcdn = await provider.getVideoSources(detail.episodes[3].url, {});
+  assert.deepEqual(missingAcdn, []);
+  const directCallsAfterMissingAcdn = requestLog.filter((x) =>
+    x.url.startsWith("https://megaplay.buzz/stream/ani/195604/4/")).length;
+  assert.equal(directCallsAfterMissingAcdn, directCallsBeforeMissingAcdn);
 
   // The API's private /api/stream route is not used. HTML player pages are
   // never returned to Zangetsu as native media sources.
