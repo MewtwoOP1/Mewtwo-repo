@@ -27,7 +27,7 @@ function getInfo() {
     baseUrl: 'https://zenkaii.pages.dev',
     logo: 'https://www.google.com/s2/favicons?sz=256&domain=zenkaii.pages.dev',
     type: 'anime',
-    version: '1.2.2'
+    version: '1.2.3'
   };
 }
 
@@ -610,12 +610,42 @@ function _episodes(media) {
   return out;
 }
 
-function _mergeAnimapFallbacks(media, mal) {
+function _mergeAnimapFallbacks(media, mal, raw) {
   var merged = {};
   Object.keys(media || {}).forEach(function (key) { merged[key] = media[key]; });
+
+  // MAL's parsed record is the preferred episode-count fallback.
   if (!(Number(merged.episodes) > 0) && mal && Number(mal.episodes) > 0) {
     merged.episodes = Number(mal.episodes);
   }
+
+  // AniMap's raw snapshot includes AniList's nextAiringEpisode. This is useful
+  // for long-running titles whose parsed AniList and MAL episode totals are
+  // both missing or zero. _episodeCount() derives the latest known aired
+  // episode as nextAiringEpisode.episode - 1; it never guesses a total.
+  if (raw && raw.nextAiringEpisode) {
+    merged.nextAiringEpisode = raw.nextAiringEpisode;
+  }
+  if (raw && merged.averageScore == null && raw.averageScore != null) {
+    merged.averageScore = raw.averageScore;
+  }
+  if (raw && (!merged.description || !String(merged.description).trim()) && raw.description) {
+    merged.description = raw.description;
+  }
+  if (raw && (!merged.coverImage || !(merged.coverImage.extraLarge || merged.coverImage.large)) && raw.coverImage) {
+    merged.coverImage = raw.coverImage;
+  }
+  if (raw && (!merged.bannerImage || !String(merged.bannerImage).trim()) && raw.bannerImage) {
+    merged.bannerImage = raw.bannerImage;
+  }
+  if (raw && (!merged.genres || !merged.genres.length) && Array.isArray(raw.genres)) {
+    merged.genres = raw.genres;
+  }
+  if (raw && (!merged.studios || !merged.studios.length) && raw.studios) {
+    merged.studios = raw.studios;
+  }
+
+  // Fill only missing display fields from MAL.
   if ((!merged.description || !String(merged.description).trim()) && mal && mal.synopsis) {
     merged.description = mal.synopsis;
   }
@@ -676,16 +706,14 @@ function _detailFromMedia(media) {
 
 function _animapDetail(id) {
   return _animapMedia(id).catch(function () { return null; }).then(function (media) {
-    // The parsed AniList snapshot already has artwork, synopsis, genres,
-    // studios, MAL ID and episode count for most titles. Return immediately
-    // instead of paying for /map and /raw on every detail page.
+    // Most records are complete and need only one metadata request.
     if (media && (Number(media.episodes) > 0 ||
         String(media.format || '').toUpperCase() === 'MOVIE')) {
       return _detailFromMedia(media);
     }
 
-    // Only request a cross-service mapping when the parsed snapshot is absent
-    // or lacks a MAL ID needed to recover an unknown episode count.
+    // Ask for a mapping only when the parsed AniList record is missing or has
+    // no MAL ID. The mapping is cached separately from parsed records.
     var mapPromise = (!media || !(Number(media.idMal) > 0))
       ? _animapMap(id).catch(function () { return null; })
       : Promise.resolve(null);
@@ -700,12 +728,15 @@ function _animapDetail(id) {
         return _detailFromMedia(media);
       }
 
-      // Long-running shows (e.g. One Piece) can have episodes=0 in AniList.
-      // Use the mapped MAL count only for these unresolved cases.
+      // Only unresolved episode totals pay for fallback requests. MAL and the
+      // AniList raw snapshot run in parallel to avoid adding sequential latency.
       var malId = Number(media.idMal);
-      if (!(malId > 0)) return _detailFromMedia(media);
-      return _animapMal(malId).catch(function () { return null; }).then(function (mal) {
-        return _detailFromMedia(_mergeAnimapFallbacks(media, mal));
+      var jobs = [
+        malId > 0 ? _animapMal(malId).catch(function () { return null; }) : Promise.resolve(null),
+        _animapRaw(id).catch(function () { return null; })
+      ];
+      return Promise.all(jobs).then(function (results) {
+        return _detailFromMedia(_mergeAnimapFallbacks(media, results[0], results[1]));
       });
     });
   });
@@ -821,7 +852,7 @@ function getLinks(id, opts) { return getVideoSources(id, opts); }
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    version: '1.2.2',
+    version: '1.2.3',
     getInfo: getInfo,
     getSettings: getSettings,
     getHome: getHome,
