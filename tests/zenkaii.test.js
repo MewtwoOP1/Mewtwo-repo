@@ -128,6 +128,10 @@ global.fetch = async (url, options = {}) => {
     });
   }
 
+  if (requestUrl === "https://animap.id/api/anilist/195604/raw") {
+    return json(200, { id: 195604, idMal: 52299, averageScore: 86 });
+  }
+
   if (requestUrl === "https://animap.id/api/anilist/21/raw") {
     return json(200, {
       id: 21,
@@ -135,6 +139,44 @@ global.fetch = async (url, options = {}) => {
       nextAiringEpisode: { episode: 1243 },
       averageScore: 83
     });
+  }
+
+  if (requestUrl === "https://animap.id/api/anilist/777") {
+    return { status: 404, body: JSON.stringify({ error: "Not fetched" }) };
+  }
+
+  if (requestUrl === "https://animap.id/api/v1/map/anilist/777") {
+    return json(200, {
+      sources: [
+        "https://anilist.co/anime/777",
+        "https://myanimelist.net/anime/777"
+      ],
+      title: "Mapped Detail",
+      type: "TV",
+      status: "FINISHED",
+      episodes: 0,
+      animeSeason: { season: "SPRING", year: 2019 },
+      picture: "https://img.example/mapped-detail.jpg",
+      thumbnail: "https://img.example/mapped-detail.jpg",
+      synonyms: ["Mapped Alias"],
+      studios: ["Mapped Studio"],
+      tags: ["Mystery"]
+    });
+  }
+
+  if (requestUrl === "https://animap.id/api/mal/777") {
+    return json(200, {
+      mal_id: 777,
+      title: "Mapped Detail",
+      episodes: 24,
+      synopsis: "Description from MAL metadata.",
+      image_url: "https://img.example/mal-mapped-detail.jpg",
+      genres: ["Mystery"]
+    });
+  }
+
+  if (requestUrl === "https://animap.id/api/anilist/777/raw") {
+    return json(200, { id: 777, idMal: 777, averageScore: 81 });
   }
 
   if (requestUrl === "https://graphql.anilist.co") {
@@ -334,6 +376,23 @@ async function main() {
     id: 21, format: "TV", episodes: null,
     nextAiringEpisode: { episode: 1243 }
   }), 1242);
+
+  // If the parsed AniList snapshot is missing, the v1 map lookup recovers
+  // the MAL ID, title, art and season metadata, and MAL supplies episode count.
+  const mappedDetail = await provider.getDetail("anilist://777", {});
+  assert.equal(mappedDetail.title, "Mapped Detail");
+  assert.equal(mappedDetail.malId, 777);
+  assert.equal(mappedDetail.cover, "https://img.example/mapped-detail.jpg");
+  assert.equal(mappedDetail.episodes.length, 24);
+  assert.equal(mappedDetail.score, 81);
+  assert.equal(mappedDetail.studios[0], "Mapped Studio");
+
+  // When neither AniMap parsed metadata nor a cross-service map is available,
+  // the official AniList detail query remains the final fallback.
+  const directAniListDetail = await provider.getDetail("anilist://333", {});
+  assert.equal(directAniListDetail.title, "AniList Detail Fallback");
+  assert.equal(directAniListDetail.episodes.length, 3);
+  assert.equal(directAniListDetail.score, 75);
 
   // If AniMap has no mapping and AniList returns HTTP 429, the provider must
   // respect the cooldown instead of retrying each alias immediately.
