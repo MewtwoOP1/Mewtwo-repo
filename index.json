@@ -785,6 +785,60 @@
           "default": true
         }
       ]
+    },
+    {
+      "id": "zenkaii",
+      "name": "Zenkai Player",
+      "version": "1.0.0",
+      "type": "anime",
+      "lang": "en",
+      "file": "providers/zenkaii.js",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=zenkaii.pages.dev",
+      "nsfw": false,
+      "settings": [
+        {
+          "key": "server",
+          "label": "Zenkai Player server",
+          "description": "Preferred Zenkai player server. The embed player can fail over when a source is unavailable.",
+          "type": "enum",
+          "default": "megaplay",
+          "options": [
+            {
+              "value": "megaplay",
+              "label": "MegaPlay (HD-1)"
+            },
+            {
+              "value": "vidstream",
+              "label": "VidStream (HD-2)"
+            },
+            {
+              "value": "flixcloud",
+              "label": "FlixCloud"
+            },
+            {
+              "value": "acdn",
+              "label": "ACDN (multi-audio HLS)"
+            }
+          ]
+        },
+        {
+          "key": "audio",
+          "label": "Preferred audio",
+          "description": "SUB uses the original audio with subtitles. DUB selects the English dub when the title has one.",
+          "type": "enum",
+          "default": "sub",
+          "options": [
+            {
+              "value": "sub",
+              "label": "SUB · Original audio"
+            },
+            {
+              "value": "dub",
+              "label": "DUB · English audio"
+            }
+          ]
+        }
+      ]
     }
   ]
 }
