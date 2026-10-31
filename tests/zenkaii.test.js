@@ -408,6 +408,10 @@ async function main() {
   assert.equal(malFallback[0].cover, "https://img.example/fallback-sample.jpg");
   assert.equal(malFallback[0].malId, 999);
 
+  // Clear the cooldown from the preceding simulated HTTP 429 so this
+  // separate case can verify a successful AniList fallback request.
+  provider._debug.reset();
+
   // If AniMap is temporarily unavailable, a successful AniList GraphQL search
   // remains usable as a fallback.
   const graphQlFallback = await provider.search("GraphQL Fallback", 1, {});
