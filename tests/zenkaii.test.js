@@ -181,6 +181,7 @@ global.fetch = async (url, options = {}) => {
 
   if (requestUrl === "https://graphql.anilist.co") {
     const request = JSON.parse(options.body || "{}");
+    const vars = request.variables || {};
     if (request.query && request.query.includes("Page(page: 1")) {
       return json(200, {
         data: {
@@ -286,7 +287,6 @@ async function main() {
   assert.equal(source.logo, provider.getInfo().logo);
   assert.equal(source.type, provider.getInfo().type);
   assert.equal(source.version, "1.1.0");
-  assert.equal(provider.getInfo().version, "1.1.0");
   assert.equal(provider.getInfo().version, "1.1.0");
 
   const settings = provider.getSettings();
