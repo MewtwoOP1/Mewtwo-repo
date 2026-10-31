@@ -5,7 +5,7 @@
 <p align="center">
   <a href="https://github.com/Spyou/Zangetsu"><img src="https://img.shields.io/badge/BUILT_FOR-Zangetsu-8B5CF6?style=for-the-badge&logo=github&logoColor=white" alt="Built for Zangetsu" /></a>
   <a href="https://raw.githubusercontent.com/MewtwoOP1/Mewtwo-repo/main/index.json"><img src="https://img.shields.io/badge/SOURCE-Manifest-0F766E?style=for-the-badge" alt="Source manifest" /></a>
-  <img src="https://img.shields.io/badge/INTEGRATIONS-03-4F46E5?style=for-the-badge" alt="Three integrations" />
+  <img src="https://img.shields.io/badge/INTEGRATIONS-04-4F46E5?style=for-the-badge" alt="Three integrations" />
 </p>
 
 <p align="center">
@@ -25,7 +25,7 @@
 
 ## At a glance
 
-This repository includes three integrations documented here. Choose one to get started; **you do not need to install all three**.
+This repository includes four integrations documented here. Choose one to get started; **you do not need to install all three**.
 
 | Integration | Catalogue & metadata | Playback |
 |:--|:--|:--|
@@ -187,7 +187,7 @@ TMDB provides search, title details, catalogue metadata, and episode information
 
 ### What it does
 
-AniList supplies anime search, catalogue metadata, title details, and episode numbering. Playback links are generated using Zenkaii's documented player embed:
+AniMap's read-only cross-reference API is used first for title search and cached AniList/MAL metadata. This avoids making a fresh AniList GraphQL request for every title alias. AniList GraphQL remains the fallback for missing mappings and trending catalogue data. Mapped MAL records can fill episode totals that AniList leaves unset for long-running shows.
 
 ```text
 https://zenkaii.pages.dev/embed?id={ANILIST_ID}&ep={EPISODE}&server={SERVER}&audio={AUDIO}
