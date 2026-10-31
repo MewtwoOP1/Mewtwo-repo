@@ -112,9 +112,18 @@ function _markAniListRateLimit(response, error) {
   if (isFinite(resetAt) && resetAt > Date.now() / 1000) {
     waitMs = Math.max(waitMs, resetAt * 1000 - Date.now());
   }
+  // The host may reject a fetch with a generic cancelled DioException while
+  // the actual AniListRateLimited(seconds) value is only written to native
+  // logs. Use the documented 60-second fallback rather than retrying aliases.
   var message = String(error && error.message || error || '');
   var hostWait = message.match(/AniListRateLimited\((\d+)s\)/i);
   if (hostWait) waitMs = Math.max(waitMs, Number(hostWait[1]) * 1000);
+  if (/DioException\s*\[request cancelled\]/i.test(message)) {
+    waitMs = Math.max(waitMs, ANILIST_DEFAULT_COOLDOWN_MS);
+  }
+  if (/HTTP\s*429|too many requests|rate.?limit/i.test(message) && !(waitMs > 0)) {
+    waitMs = ANILIST_DEFAULT_COOLDOWN_MS;
+  }
   if (!(waitMs > 0)) waitMs = ANILIST_DEFAULT_COOLDOWN_MS;
   ANILIST_COOLDOWN_UNTIL = Math.max(ANILIST_COOLDOWN_UNTIL, Date.now() + waitMs);
 }
@@ -135,10 +144,11 @@ function _queuedAniListRequest(query, variables) {
         method: 'POST',
         headers: {
           'Accept': 'application/json',
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Referer': 'https://anilist.co/'
         },
         body: JSON.stringify({ query: query, variables: variables || {} }),
-        timeoutMs: 15000
+        timeoutMs: 30000
       }).then(function (response) {
         var status = Number(response && response.status) || 0;
         if (status === 429) {
@@ -155,20 +165,17 @@ function _queuedAniListRequest(query, variables) {
               /too many requests|rate.?limit/i.test(String(entry && entry.message || ''));
           });
           if (tooMany) {
-            _markAniListRateLimit(response, json.errors[0].message || 'HTTP 429');
+            _markAniListRateLimit(response, 'GraphQL 429');
             throw new Error('AniList GraphQL rate limit: ' + String(json.errors[0].message || 'HTTP 429'));
           }
           throw new Error('AniList GraphQL error: ' + String(json.errors[0].message || 'unknown error'));
         }
         return json.data || {};
       }).catch(function (error) {
-        // Some Zangetsu HTTP adapters throw a host-side rate-limit error instead
-        // of returning a 429 response, so inspect the rejected error too.
-        var message = String(error && error.message || error || '');
-        if (/AniListRateLimited|HTTP\s*429|too many requests|rate.?limit/i.test(message) &&
-            Date.now() >= ANILIST_COOLDOWN_UNTIL) {
-          _markAniListRateLimit(null, error);
-        }
+        // Zangetsu's bridge rejects __fetch for a native cooldown instead of
+        // returning an HTTP response. Detect that path too and stop aliases
+        // from sending one failed request per spelling.
+        _markAniListRateLimit(null, error);
         throw error;
       });
     });
@@ -539,15 +546,17 @@ function popular(opts) {
 
 function search(query, page, opts) {
   var q = _trim(query);
-  if (q.length < 1) return Promise.resolve([]);
+  if (q.length < 2) return Promise.resolve([]);
   var p = Math.max(1, parseInt(page, 10) || 1);
   return _animapSearch(q, p).then(function (items) {
     if (items.length) return items;
+    if (Date.now() < ANILIST_COOLDOWN_UNTIL) return [];
     return _aniListSearch(q, p);
   }).catch(function (error) {
-    console.warn('Zenkai metadata search fallback:', String(error));
+    console.warn('Zenkai metadata search failed:', String(error));
+    if (Date.now() < ANILIST_COOLDOWN_UNTIL) return [];
     return _aniListSearch(q, p).catch(function (fallbackError) {
-      console.warn('Zenkai Player search failed:', String(fallbackError));
+      console.warn('Zenkai AniList fallback unavailable:', String(fallbackError));
       return [];
     });
   });
@@ -709,11 +718,13 @@ function getDetail(url, opts) {
   if (!id) return Promise.resolve(null);
   return _animapDetail(id).then(function (detail) {
     if (detail) return detail;
+    if (Date.now() < ANILIST_COOLDOWN_UNTIL) return null;
     return _aniListDetail(id);
   }).catch(function (error) {
-    console.warn('Zenkai metadata lookup fallback:', String(error));
+    console.warn('Zenkai metadata lookup failed:', String(error));
+    if (Date.now() < ANILIST_COOLDOWN_UNTIL) return null;
     return _aniListDetail(id).catch(function (fallbackError) {
-      console.warn('Zenkai Player detail failed:', String(fallbackError));
+      console.warn('Zenkai AniList detail fallback unavailable:', String(fallbackError));
       return null;
     });
   });
