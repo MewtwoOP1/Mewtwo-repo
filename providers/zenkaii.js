@@ -317,7 +317,7 @@ var MEDIA_FIELDS = [
   'seasonYear',
   'episodes',
   'nextAiringEpisode { episode }',
-  'studios { nodes { name } }'
+  'studios { nodes { name } }',
   'averageScore',
   'description',
   'genres',
