@@ -186,6 +186,24 @@ global.fetch = async (url, options = {}) => {
     return json(200, { id: 777, idMal: 777, averageScore: 81 });
   }
 
+  if (requestUrl.startsWith("https://zenkaii.pages.dev/api/stream?")) {
+    const parsed = new URL(requestUrl);
+    assert.equal(parsed.searchParams.get("server"), "acdn");
+    assert.equal(parsed.searchParams.get("id"), "195604");
+    assert.equal(parsed.searchParams.get("ep"), "1");
+    return json(200, {
+      success: true,
+      server: "ACDN",
+      audio: "multi",
+      multiAudio: true,
+      streamUrl: "/proxy?url=" + encodeURIComponent("https://as-cdn1.top/video/master.m3u8") +
+        "&referer=" + encodeURIComponent("https://animesalt.cx/") + "&seg=1",
+      subtitles: [],
+      intro: null,
+      outro: null
+    });
+  }
+
   if (requestUrl.startsWith("https://zenkaii.pages.dev/api/servers?")) {
     const parsed = new URL(requestUrl);
     assert.equal(parsed.searchParams.get("id"), "195604");
@@ -347,8 +365,8 @@ async function main() {
   assert.equal(source.name, provider.getInfo().name);
   assert.equal(source.logo, provider.getInfo().logo);
   assert.equal(source.type, provider.getInfo().type);
-  assert.equal(source.version, "1.3.0");
-  assert.equal(provider.getInfo().version, "1.3.0");
+  assert.equal(source.version, "1.4.0");
+  assert.equal(provider.getInfo().version, "1.4.0");
 
   const settings = provider.getSettings();
   assert.deepEqual(settings.map((x) => x.key), ["server", "audio"]);
@@ -415,8 +433,9 @@ async function main() {
   const parsedEpisode = JSON.parse(detail.episodes[0].url);
   assert.equal(parsedEpisode.anilistId, 195604);
   assert.equal(parsedEpisode.episode, 1);
-  assert.equal(parsedEpisode.providerVersion, "1.3.0",
-    "Versioned episode URLs must invalidate any stale cached HTML embed source");
+  assert.equal(parsedEpisode.providerVersion, "1.4.0",
+    "Versioned episode URLs must invalidate previous stream cache entries");
+  assert.equal(parsedEpisode.format, "TV", "Store AniList format for ACDN movie/series routing");
 
   const episodeList = await provider.getEpisodes("195604", {});
   assert.equal(episodeList.length, 12);
@@ -461,18 +480,34 @@ async function main() {
   global.__settings.zenkaii = { server: "flixcloud", audio: "sub" };
   assert.deepEqual(await provider.getVideoSources(detail.episodes[3].url, {}), []);
 
-  // FlixCloud/ACDN settings currently fall back to the two public direct
-  // resolver servers; the returned label must expose the actual server used.
+  // FlixCloud still falls back to the working public direct resolvers.
   global.__settings.zenkaii = { server: "flixcloud", audio: "sub" };
   const fallback = await provider.getVideoSources(detail.episodes[0].url, {});
   assert.equal(fallback.length, 1);
   assert.ok(fallback[0].label.includes("fallback from flixcloud"));
 
+  // ACDN is a separate multi-audio route in Zenkai. It must call the official
+  // /api/stream?server=acdn endpoint with the same X-Zenkai-Embed marker used
+  // by the upstream embed client and preserve the returned proxy URL.
+  global.__settings.zenkaii = { server: "acdn", audio: "dub" };
+  const acdnSources = await provider.getVideoSources(detail.episodes[0].url, {});
+  assert.equal(acdnSources.length, 1);
+  assert.equal(acdnSources[0].url.startsWith("https://zenkaii.pages.dev/proxy?url="), true);
+  assert.equal(acdnSources[0].container, "hls");
+  assert.equal(acdnSources[0].kind, "dub");
+  assert.equal(acdnSources[0].audioLang, "multi");
+  assert.ok(acdnSources[0].label.includes("ACDN"));
+  const acdnRequest = requestLog.find((x) => x.url.startsWith("https://zenkaii.pages.dev/api/stream?"));
+  assert.ok(acdnRequest, "ACDN selection must call the ACDN resolver route");
+  assert.equal(acdnRequest.options.headers["X-Zenkai-Embed"], "1");
+  assert.ok(acdnRequest.options.headers.Referer.includes("/embed?id=195604&ep=1&server=acdn"));
+
   // The API's private /api/stream route is not used. HTML player pages are
   // never returned to Zangetsu as native media sources.
   assert.deepEqual(await provider.getStreams("invalid", {}), []);
   assert.deepEqual(await provider.getLinks("invalid", {}), []);
-  assert.equal(requestLog.some((x) => x.url.includes("zenkaii.pages.dev/api/stream")), false);
+  assert.equal(requestLog.some((x) => x.url.includes("zenkaii.pages.dev/api/stream") &&
+    new URL(x.url).searchParams.get("server") !== "acdn"), false);
   assert.equal(requestLog.some((x) => x.url.includes("zenkaii.pages.dev/embed")), false);
   assert.equal(requestLog.some((x) => x.url.includes("megaplay.buzz") && x.url.includes("getSources")), true);
 
