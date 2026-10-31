@@ -27,7 +27,7 @@ function getInfo() {
     baseUrl: 'https://zenkaii.pages.dev',
     logo: 'https://www.google.com/s2/favicons?sz=256&domain=zenkaii.pages.dev',
     type: 'anime',
-    version: '1.1.0'
+    version: '1.2.0'
   };
 }
 
@@ -226,6 +226,17 @@ function _animapJson(path, ttlMs) {
     timeoutMs: 12000
   }).then(function (response) {
     var status = Number(response && response.status) || 0;
+    if (status === 404) {
+      // Negative-cache missing records too. Detail refreshes often revisit the
+      // same AniList ID and should not repeatedly probe an absent snapshot.
+      var missingTtl = ttlMs || 3600000;
+      ANIMAP_CACHE[url] = {
+        value: null,
+        expiresAt: Date.now() + missingTtl,
+        staleUntil: Date.now() + missingTtl
+      };
+      return null;
+    }
     if (status >= 400) throw new Error('AniMap HTTP ' + status);
     var body = response && response.body != null ? response.body : '';
     var json = typeof body === 'string' ? JSON.parse(body || 'null') : body;
@@ -762,7 +773,7 @@ function getLinks(id, opts) { return getVideoSources(id, opts); }
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    version: '1.1.0',
+    version: '1.2.0',
     getInfo: getInfo,
     getSettings: getSettings,
     getHome: getHome,
