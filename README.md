@@ -25,13 +25,14 @@
 
 ## At a glance
 
-This repository includes four integrations documented here. Choose one to get started; **you do not need to install all three**.
+This repository includes four integrations documented here. Choose one to get started; **you do not need to install all four**.
 
 | Integration | Catalogue & metadata | Playback |
 |:--|:--|:--|
 | <img src="assets/icons/pencari.svg" width="24" align="middle" alt="" /> **TMDB + PencariMovie** | TMDB | PencariMovie server |
 | <img src="assets/icons/aiostreams.svg" width="24" align="middle" alt="" /> **AIOStreams** | TMDB | Your AIOStreams instance |
 | <img src="assets/icons/stremio.svg" width="24" align="middle" alt="" /> **TMDB + Stremio** | TMDB | Your configured Stremio-compatible add-ons |
+| **Zenkai Player** | AniList + AniMap metadata | Zenkaii web-player embed |
 
 <p align="center">
   <img src="assets/provider-flow.svg" width="100%" alt="Diagram showing TMDB metadata flowing into Zangetsu separately from playback streams provided by PencariMovie, AIOStreams, or Stremio add-ons." />
@@ -194,6 +195,16 @@ https://zenkaii.pages.dev/embed?id={ANILIST_ID}&ep={EPISODE}&server={SERVER}&aud
 ```
 
 Configure the preferred server (MegaPlay, VidStream, FlixCloud, or ACDN) and audio (SUB or DUB) in **Zenkai Player → Settings**. The player page handles its own source failover.
+
+### Metadata reliability
+
+- Search uses AniMap's read-only title index and AniList/MAL ID mappings first, then uses AniList GraphQL when an AniMap search is unavailable or has no match.
+- AniList calls are cached, deduplicated, serialized, and spaced apart. HTTP 429 responses and Zangetsu's host-side `AniListRateLimited(...)` errors establish a cooldown. Cached metadata is reused during temporary upstream failures.
+- Title search results fall back to mapped MAL metadata if an AniList snapshot is not yet available, preserving the title and poster.
+- When AniList does not report an episode total, the provider uses the mapped MAL episode count or AniList's next-airing episode. It does not invent an episode count.
+- AniMap endpoints used here are documented: [title search](https://animap.id/docs/search), [AniList metadata](https://animap.id/docs/anilist), and [MAL metadata](https://animap.id/docs/mal). AniMap data is cached upstream and may lag changes.
+- See the [AniList rate-limit guide](https://docs.anilist.co/guide/rate-limiting) for upstream request limits.
+
 
 > [!IMPORTANT]
 > Zenkaii documents this as an HTML iframe/player embed, not a direct HLS or MP4 stream. The current Zangetsu provider contract returns native media URLs (HLS, MP4, torrent, or unknown) and does not define an iframe/WebView source type. This repository-only integration exposes the embed URL, but playback inside the app requires the host app to support opening HTML player embeds. This provider does not modify or patch the Zangetsu app and cannot guarantee native in-app playback.
