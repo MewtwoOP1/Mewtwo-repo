@@ -186,37 +186,25 @@ TMDB provides search, title details, catalogue metadata, and episode information
 <details>
 <details>
 <details>
-<summary><strong>Zenkai Player</strong> · AniMap metadata and native MegaPlay/VidStream playback</summary>
+<details>
+<summary><strong>Zenkai Player</strong> · AniMap metadata and native direct playback</summary>
 
-### What it does
+### Metadata
 
-AniMap supplies title search and cross-service mappings. AniList metadata is loaded only when a title is opened. Complete metadata records are returned immediately; MAL and AniList raw snapshots are queried only when a long-running show's episode count is missing.
+AniMap supplies title search and cached AniList/MAL metadata. Search does not issue per-result detail requests. Missing long-running episode totals use MAL and the raw AniList next-airing record where available.
 
-### Native playback
+### Playback
 
-MegaPlay and VidStream now resolve to actual HLS/MP4 files instead of returning the Zenkai HTML embed page:
+- **MegaPlay:** direct AniList-ID player route, player `data-id`, `getSources`, AES-CBC decode, HLS/MP4 result.
+- **VidStream:** same direct-source resolution flow with its VidStream server code.
+- **ACDN:** calls Zenkai's documented `/api/stream?server=acdn` route. The request uses the `X-Zenkai-Embed` marker and embed referer used by Zenkai's own EmbedPage API client. Zenkai performs the AniList-to-AnimeSalt mapping, AnimeDekho/AnimeSalt resolution, player extraction, and segment-aware proxying. The provider preserves the returned proxy URL and marks the source as multi-audio.
+- **FlixCloud:** falls back to the supported direct MegaPlay/VidStream resolvers until a separate public direct FlixCloud resolver is available.
 
-1. Request the public MegaPlay AniList player route for the requested episode and audio.
-2. Read the player page's `data-id`.
-3. Request `stream/getSources` with the same player referer and XHR header used by the MegaPlay integration.
-4. Decode AES-CBC `enc` responses locally, or accept a direct `sources.file`.
-5. Return the media URL with the correct HLS/MP4 container, playback headers, audio language, and subtitle tracks.
+ACDN's route is different from MegaPlay/VidStream: it returns one HLS playlist with multiple audio renditions, not a normal sub/dub file. The provider now has a dedicated ACDN branch instead of routing ACDN through MegaPlay/VidStream fallback.
 
-The direct AniList-ID routes are the same public resolver paths used by the upstream Zenkai server implementation and the repository's [MegaPlay provider](https://github.com/MewtwoOP1/Mewtwo-repo/blob/main/providers/megaplay.js). The provider does **not** call Zenkai's restricted `/api/stream` route or pass its HTML `/embed` page to the native video decoder.
+### API source
 
-### Server settings
-
-- **MegaPlay** resolves using MegaPlay's direct `bcdn` server.
-- **VidStream** resolves using MegaPlay's direct `vidstream` server.
-- **FlixCloud** and **ACDN** currently fall back to MegaPlay, then VidStream, where available. The label identifies the actual server returned.
-
-### Metadata reliability
-
-- Search uses one AniMap title-index request and maps the returned AniList IDs locally. It does not fan out into one metadata request per search result.
-- Complete detail records require one AniMap request. Mapping/MAL lookups happen only for missing metadata or unknown episode totals.
-- AniList GraphQL fallback is cached, deduplicated, serialized, and cooled down after 429 or host-side cancellation errors.
-- Missing episode totals use MAL first and AniList's raw `nextAiringEpisode` as a final known-aired-episode fallback. The provider does not invent counts.
-- AniMap documents [title search](https://animap.id/docs/search), [AniList records](https://animap.id/docs/anilist), and [AniList/MAL mappings](https://animap.id/docs/map).
+See Zenkai's [stream handler](https://github.com/nyyrox2/Zenkai/blob/main/server/handler.js), [ACDN resolver](https://github.com/nyyrox2/Zenkai/blob/main/server/acdn.js), and [EmbedPage API client](https://github.com/nyyrox2/Zenkai/blob/main/src/services/api.ts).
 
 </details>
 
