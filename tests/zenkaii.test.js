@@ -227,6 +227,16 @@ global.fetch = async (url, options = {}) => {
     const encrypted = Buffer.concat([cipher.update(payload, "utf8"), cipher.final()]);
     return json(200, { enc: encrypted.toString("base64url") });
   }
+  if (requestUrl === "https://megaplay.buzz/stream/ani/195604/3/sub?s=vidstream") {
+    return { status: 200, body: '<div data-id="9900"></div>' };
+  }
+  if (requestUrl === "https://megaplay.buzz/stream/getSources?id=9900&s=vidstream") {
+    return json(200, { sources: { file: "https://cdn.example/solo-leveling-episode-3.mp4" } });
+  }
+  if (requestUrl === "https://megaplay.buzz/stream/ani/195604/4/sub?s=bcdn" ||
+      requestUrl === "https://megaplay.buzz/stream/ani/195604/4/sub?s=vidstream") {
+    return { status: 404, body: "not available" };
+  }
   if (requestUrl === "https://megaplay.buzz/stream/ani/195604/3/sub?s=bcdn") {
     return { status: 200, body: "<html>not available</html>" };
   }
@@ -438,6 +448,18 @@ async function main() {
   assert.equal(dubSources[0].audioLang, "en");
   assert.equal(dubSources[0].subtitles.length, 1);
   assert.ok(requestLog.some((x) => x.url === "https://megaplay.buzz/stream/ani/195604/2/dub?s=vidstream"));
+
+  // MP4 sources are classified separately from HLS playlists.
+  global.__settings.zenkaii = { server: "vidstream", audio: "sub" };
+  const mp4Source = await provider.getVideoSources(detail.episodes[2].url, {});
+  assert.equal(mp4Source.length, 1);
+  assert.equal(mp4Source[0].url, "https://cdn.example/solo-leveling-episode-3.mp4");
+  assert.equal(mp4Source[0].container, "mp4");
+
+  // If both direct resolvers have no source for the requested episode, the
+  // provider returns an empty list rather than an HTML player page.
+  global.__settings.zenkaii = { server: "flixcloud", audio: "sub" };
+  assert.deepEqual(await provider.getVideoSources(detail.episodes[3].url, {}), []);
 
   // FlixCloud/ACDN settings currently fall back to the two public direct
   // resolver servers; the returned label must expose the actual server used.
