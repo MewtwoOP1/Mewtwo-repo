@@ -4,6 +4,8 @@ const path = require("node:path");
 
 const requestLog = [];
 let graphQlFallbackCalls = 0;
+let hostRateLimitCalls = 0;
+let throwAniListRateLimit = false;
 
 global.__settings = {
   zenkaii: { server: "megaplay", audio: "sub" },
@@ -41,6 +43,17 @@ global.fetch = async (url, options = {}) => {
         year: 1999
       }]);
     }
+    if (/Fallback Sample/i.test(query)) {
+      return json(200, [{
+        mal_id: 999,
+        anilist_id: [999],
+        titles: ["Fallback Sample"],
+        year: 2022
+      }]);
+    }
+    if (/GraphQL Fallback/i.test(query)) {
+      return { status: 503, body: "AniMap temporarily unavailable" };
+    }
     return json(200, []);
   }
 
@@ -61,6 +74,23 @@ global.fetch = async (url, options = {}) => {
       studios: ["A-1 Pictures"],
       cover_image: "https://img.example/cover.jpg",
       banner_image: "https://img.example/banner.jpg"
+    });
+  }
+
+  if (requestUrl === "https://animap.id/api/anilist/999") {
+    return { status: 404, body: JSON.stringify({ error: "Not fetched" }) };
+  }
+
+  if (requestUrl === "https://animap.id/api/mal/999") {
+    return json(200, {
+      mal_id: 999,
+      title: "Fallback Sample",
+      title_english: "Fallback Sample",
+      episodes: 24,
+      year: 2022,
+      image_url: "https://img.example/fallback-sample.jpg",
+      genres: ["Drama"],
+      studios: ["Sample Studio"]
     });
   }
 
@@ -102,7 +132,8 @@ global.fetch = async (url, options = {}) => {
     return json(200, {
       id: 21,
       idMal: 21,
-      nextAiringEpisode: { episode: 1243 }
+      nextAiringEpisode: { episode: 1243 },
+      averageScore: 83
     });
   }
 
@@ -136,6 +167,34 @@ global.fetch = async (url, options = {}) => {
 
     if (request.query && request.query.includes("media(search: $search")) {
       graphQlFallbackCalls += 1;
+      if (vars.search === "Host Rate Limit" && throwAniListRateLimit) {
+        hostRateLimitCalls += 1;
+        throw new Error("AniListRateLimited(46s)");
+      }
+      if (vars.search === "GraphQL Fallback") {
+        return json(200, {
+          data: {
+            Page: {
+              media: [{
+                id: 333,
+                idMal: 444,
+                title: { english: "GraphQL Fallback", romaji: "GraphQL Fallback" },
+                format: "TV",
+                status: "FINISHED",
+                seasonYear: 2020,
+                episodes: 3,
+                averageScore: 75,
+                description: "GraphQL fallback metadata.",
+                genres: ["Drama"],
+                studios: { nodes: [{ name: "Fallback Studio" }] },
+                coverImage: { extraLarge: "https://img.example/graphql-fallback.jpg" },
+                bannerImage: null,
+                synonyms: []
+              }]
+            }
+          }
+        });
+      }
       return {
         status: 429,
         headers: { "retry-after": "60" },
@@ -147,7 +206,27 @@ global.fetch = async (url, options = {}) => {
     }
 
     if (request.query && request.query.includes("Media(id: $id")) {
-      return json(200, { data: { Media: null } });
+      assert.equal(vars.id, 333);
+      return json(200, {
+        data: {
+          Media: {
+            id: 333,
+            idMal: 444,
+            title: { english: "AniList Detail Fallback", romaji: "AniList Detail Fallback" },
+            format: "TV",
+            status: "FINISHED",
+            seasonYear: 2020,
+            episodes: 3,
+            averageScore: 75,
+            description: "AniList detail fallback metadata.",
+            genres: ["Drama"],
+            studios: { nodes: [{ name: "Fallback Studio" }] },
+            coverImage: { extraLarge: "https://img.example/graphql-fallback.jpg" },
+            bannerImage: null,
+            synonyms: []
+          }
+        }
+      });
     }
   }
 
@@ -164,6 +243,8 @@ async function main() {
   assert.equal(source.name, provider.getInfo().name);
   assert.equal(source.logo, provider.getInfo().logo);
   assert.equal(source.type, provider.getInfo().type);
+  assert.equal(source.version, "1.1.0");
+  assert.equal(provider.getInfo().version, "1.1.0");
   assert.equal(provider.getInfo().version, "1.1.0");
 
   const settings = provider.getSettings();
@@ -216,6 +297,7 @@ async function main() {
   assert.equal(detail.episodes.length, 12);
   assert.equal(detail.episodes[0].number, 1);
   assert.equal(detail.studios[0], "A-1 Pictures");
+  assert.equal(detail.score, 86);
   const parsedEpisode = JSON.parse(detail.episodes[0].url);
   assert.equal(parsedEpisode.anilistId, 195604);
   assert.equal(parsedEpisode.episode, 1);
@@ -246,6 +328,7 @@ async function main() {
   assert.equal(onePiece.anilistId, 21);
   assert.equal(onePiece.malId, 21);
   assert.equal(onePiece.episodes.length, 1242);
+  assert.equal(onePiece.score, 83);
   assert.equal(JSON.parse(onePiece.episodes[1241].url).episode, 1242);
   assert.equal(provider._episodeCount({
     id: 21, format: "TV", episodes: null,
@@ -258,6 +341,29 @@ async function main() {
   assert.deepEqual(await provider.search("Rate Limit Test Alias", 1, {}), []);
   assert.equal(graphQlFallbackCalls, 1);
   assert.ok(provider._debug.cooldownRemaining() > 0);
+
+  // When an AniList snapshot is not in AniMap yet, mapped MAL metadata still
+  // supplies the display title and poster for the search result.
+  const malFallback = await provider.search("Fallback Sample", 1, {});
+  assert.equal(malFallback.length, 1);
+  assert.equal(malFallback[0].cover, "https://img.example/fallback-sample.jpg");
+  assert.equal(malFallback[0].malId, 999);
+
+  // If AniMap is temporarily unavailable, a successful AniList GraphQL search
+  // remains usable as a fallback.
+  const graphQlFallback = await provider.search("GraphQL Fallback", 1, {});
+  assert.equal(graphQlFallback.length, 1);
+  assert.equal(graphQlFallback[0].anilistId, 333);
+
+  // AniList can throw its own adapter exception instead of returning HTTP 429.
+  // That error must establish the same cooldown, not trigger another network hit.
+  provider._debug.reset();
+  throwAniListRateLimit = true;
+  const beforeHostLimit = hostRateLimitCalls;
+  assert.deepEqual(await provider.search("Host Rate Limit", 1, {}), []);
+  assert.ok(provider._debug.cooldownRemaining() >= 45000);
+  assert.deepEqual(await provider.search("Host Rate Limit Alias", 1, {}), []);
+  assert.equal(hostRateLimitCalls, beforeHostLimit + 1);
 
   assert.deepEqual(await provider.getVideoSources("invalid"), []);
   assert.deepEqual(await provider.getVideoSources(JSON.stringify({
