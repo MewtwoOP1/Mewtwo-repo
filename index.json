@@ -789,7 +789,7 @@
     {
       "id": "zenkaii",
       "name": "Zenkai Player",
-      "version": "1.3.0",
+      "version": "1.4.0",
       "type": "anime",
       "lang": "en",
       "file": "providers/zenkaii.js",
@@ -799,7 +799,7 @@
         {
           "key": "server",
           "label": "Zenkai Player server",
-          "description": "Preferred native resolver. MegaPlay and VidStream resolve to direct HLS/MP4 media URLs; FlixCloud/ACDN use these as fallbacks.",
+          "description": "Choose MegaPlay, VidStream, FlixCloud fallback, or native ACDN multi-audio playback.",
           "type": "enum",
           "default": "megaplay",
           "options": [
@@ -817,14 +817,14 @@
             },
             {
               "value": "acdn",
-              "label": "ACDN (fallback)"
+              "label": "ACDN (Multi-audio)"
             }
           ]
         },
         {
           "key": "audio",
           "label": "Preferred audio",
-          "description": "Preferred audio track for direct MegaPlay/VidStream resolution.",
+          "description": "Preferred source category. ACDN returns a multi-audio HLS playlist.",
           "type": "enum",
           "default": "sub",
           "options": [
