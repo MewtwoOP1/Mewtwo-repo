@@ -27,7 +27,7 @@ function getInfo() {
     baseUrl: 'https://zenkaii.pages.dev',
     logo: 'https://www.google.com/s2/favicons?sz=256&domain=zenkaii.pages.dev',
     type: 'anime',
-    version: '1.2.3'
+    version: '1.2.4'
   };
 }
 
@@ -576,6 +576,10 @@ function _parseAniListId(value) {
 function _episodeUrl(anilistId, episode, title) {
   return JSON.stringify({
     provider: 'zenkaii',
+    // Zangetsu caches resolved streams by sourceId|episodeUrl for up to
+    // 20 minutes. A versioned episode URL invalidates old HTML-embed results
+    // after this provider changes away from returning an iframe as video.
+    providerVersion: '1.2.4',
     anilistId: Number(anilistId),
     episode: Number(episode),
     title: String(title || '')
@@ -852,7 +856,7 @@ function getLinks(id, opts) { return getVideoSources(id, opts); }
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    version: '1.2.3',
+    version: '1.2.4',
     getInfo: getInfo,
     getSettings: getSettings,
     getHome: getHome,
