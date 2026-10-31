@@ -789,7 +789,7 @@
     {
       "id": "zenkaii",
       "name": "Zenkai Player",
-      "version": "1.2.2",
+      "version": "1.2.3",
       "type": "anime",
       "lang": "en",
       "file": "providers/zenkaii.js",
