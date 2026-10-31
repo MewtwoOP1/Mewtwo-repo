@@ -36,7 +36,7 @@ function getSettings() {
     {
       key: 'server',
       label: 'Zenkai Player server',
-      description: 'Preferred Zenkai player server. The embed player can fail over when a source is unavailable.',
+      description: 'Server included in the generated external embed URL. Zangetsu cannot play this HTML embed natively.',
       type: 'enum',
       default: 'megaplay',
       options: [
@@ -49,7 +49,7 @@ function getSettings() {
     {
       key: 'audio',
       label: 'Preferred audio',
-      description: 'SUB uses the original audio with subtitles. DUB selects the English dub when the title has one.',
+      description: 'Audio preference included in the generated external embed URL. DUB may be unavailable for some titles.',
       type: 'enum',
       default: 'sub',
       options: [
