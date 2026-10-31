@@ -32,7 +32,7 @@ This repository includes four integrations documented here. Choose one to get st
 | <img src="assets/icons/pencari.svg" width="24" align="middle" alt="" /> **TMDB + PencariMovie** | TMDB | PencariMovie server |
 | <img src="assets/icons/aiostreams.svg" width="24" align="middle" alt="" /> **AIOStreams** | TMDB | Your AIOStreams instance |
 | <img src="assets/icons/stremio.svg" width="24" align="middle" alt="" /> **TMDB + Stremio** | TMDB | Your configured Stremio-compatible add-ons |
-| **Zenkai Player** | AniMap + AniList metadata | External iframe only; no native Zangetsu playback |
+| **Zenkai Player** | AniMap + AniList metadata | Native MegaPlay, VidStream, and ACDN multi-audio playback |
 
 <p align="center">
   <img src="assets/provider-flow.svg" width="100%" alt="Diagram showing TMDB metadata flowing into Zangetsu separately from playback streams provided by PencariMovie, AIOStreams, or Stremio add-ons." />
@@ -197,10 +197,10 @@ AniMap supplies title search and cached AniList/MAL metadata. Search does not is
 
 - **MegaPlay:** direct AniList-ID player route, player `data-id`, `getSources`, AES-CBC decode, HLS/MP4 result.
 - **VidStream:** same direct-source resolution flow with its VidStream server code.
-- **ACDN:** calls Zenkai's documented `/api/stream?server=acdn` route. The request uses the `X-Zenkai-Embed` marker and embed referer used by Zenkai's own EmbedPage API client. Zenkai performs the AniList-to-AnimeSalt mapping, AnimeDekho/AnimeSalt resolution, player extraction, and segment-aware proxying. The provider preserves the returned proxy URL and marks the source as multi-audio.
+- **ACDN:** calls Zenkai's `/api/stream?server=acdn` route using the `X-Zenkai-Embed` marker. Zenkai performs the AniList-to-AnimeSalt mapping and returns a multi-audio HLS playlist. When its segment-proxy URL wraps a signed CDN playlist, the provider now offers that CDN playlist first with the extracted upstream Referer, then keeps Zenkai's proxy as a fallback. This avoids depending exclusively on the proxy layer that timed out during native playback in the supplied log.
 - **FlixCloud:** falls back to the supported direct MegaPlay/VidStream resolvers until a separate public direct FlixCloud resolver is available.
 
-ACDN's route is different from MegaPlay/VidStream: it returns one HLS playlist with multiple audio renditions, not a normal sub/dub file. The provider now has a dedicated ACDN branch instead of routing ACDN through MegaPlay/VidStream fallback.
+ACDN's route is different from MegaPlay/VidStream: it returns one HLS playlist with multiple audio renditions, not a normal sub/dub file. The provider exposes both the signed CDN playlist and the upstream proxy fallback when the response contains a wrapped CDN URL.
 
 ### API source
 
