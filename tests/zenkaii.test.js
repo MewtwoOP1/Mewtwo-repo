@@ -141,6 +141,10 @@ global.fetch = async (url, options = {}) => {
     });
   }
 
+  if (requestUrl === "https://animap.id/api/v1/map/anilist/333") {
+    return { status: 404, body: JSON.stringify({ error: "Not mapped" }) };
+  }
+
   if (requestUrl === "https://animap.id/api/anilist/777") {
     return { status: 404, body: JSON.stringify({ error: "Not fetched" }) };
   }
@@ -177,6 +181,21 @@ global.fetch = async (url, options = {}) => {
 
   if (requestUrl === "https://animap.id/api/anilist/777/raw") {
     return json(200, { id: 777, idMal: 777, averageScore: 81 });
+  }
+
+  if (requestUrl.startsWith("https://zenkaii.pages.dev/api/servers?")) {
+    const parsed = new URL(requestUrl);
+    assert.equal(parsed.searchParams.get("id"), "195604");
+    assert.equal(parsed.searchParams.get("ep"), "1");
+    return json(200, {
+      success: true,
+      servers: {
+        megaplay: { sub: true, dub: true },
+        vidstream: { sub: true, dub: false },
+        flixcloud: { sub: true, dub: true },
+        acdn: { sub: true, dub: true, multi: true }
+      }
+    });
   }
 
   if (requestUrl === "https://graphql.anilist.co") {
@@ -286,8 +305,8 @@ async function main() {
   assert.equal(source.name, provider.getInfo().name);
   assert.equal(source.logo, provider.getInfo().logo);
   assert.equal(source.type, provider.getInfo().type);
-  assert.equal(source.version, "1.2.1");
-  assert.equal(provider.getInfo().version, "1.2.1");
+  assert.equal(source.version, "1.2.2");
+  assert.equal(provider.getInfo().version, "1.2.2");
 
   const settings = provider.getSettings();
   assert.deepEqual(settings.map((x) => x.key), ["server", "audio"]);
@@ -325,7 +344,12 @@ async function main() {
   assert.equal(results[0].title, "Solo Leveling (2024)");
   assert.equal(results[0].anilistId, 195604);
   assert.equal(results[0].malId, 52299);
-  assert.equal(results[0].cover, "https://img.example/cover.jpg");
+  assert.equal(results[0].cover, null, "Search should return mapping cards without per-result metadata fetches");
+  assert.equal(
+    requestLog.filter((x) => /^https:\/\/animap\.id\/api\/anilist\/\d+$/.test(x.url)).length,
+    0,
+    "AniMap search must not fetch each result's metadata record"
+  );
 
   // Repeated searches use AniMap's cache instead of hammering AniList or
   // re-fetching metadata for the same mapping.
@@ -343,7 +367,9 @@ async function main() {
   assert.equal(detail.episodes.length, 12);
   assert.equal(detail.episodes[0].number, 1);
   assert.equal(detail.studios[0], "A-1 Pictures");
-  assert.equal(detail.score, 86);
+  assert.equal(detail.score, undefined, "Fast parsed metadata does not make a second /raw request for score");
+  assert.equal(detail.episodes[0].embedUrl,
+    "https://zenkaii.pages.dev/embed?id=195604&ep=1&server=megaplay&audio=sub");
   const parsedEpisode = JSON.parse(detail.episodes[0].url);
   assert.equal(parsedEpisode.anilistId, 195604);
   assert.equal(parsedEpisode.episode, 1);
@@ -351,20 +377,27 @@ async function main() {
   const episodeList = await provider.getEpisodes("195604", {});
   assert.equal(episodeList.length, 12);
 
-  const subSources = await provider.getVideoSources(detail.episodes[0].url, {});
-  assert.equal(subSources.length, 1);
-  assert.equal(subSources[0].url,
+  // The iframe URL is retained for a browser/WebView-capable host, but it
+  // must never be handed to Zangetsu's native media decoder as a video source.
+  assert.equal(provider.getEmbedUrl(detail.episodes[0].url),
     "https://zenkaii.pages.dev/embed?id=195604&ep=1&server=megaplay&audio=sub");
-  assert.equal(subSources[0].container, "unknown");
-  assert.equal(subSources[0].kind, "sub");
-  assert.equal(subSources[0].audioLang, "ja");
+  assert.deepEqual(await provider.getVideoSources(detail.episodes[0].url, []), []);
+  assert.deepEqual(await provider.getStreams(detail.episodes[0].url, []), []);
+  assert.deepEqual(await provider.getLinks(detail.episodes[0].url, []), []);
+
+  const availability = await provider.getServerAvailability(195604, 1, "Solo Leveling");
+  assert.equal(availability.megaplay.sub, true);
+  assert.equal(availability.acdn.multi, true);
 
   global.__settings.zenkaii = { server: "acdn", audio: "dub" };
-  const dubSources = await provider.getVideoSources(detail.episodes[1].url, {});
-  assert.equal(dubSources[0].url,
+  assert.equal(provider.getEmbedUrl(detail.episodes[1].url),
     "https://zenkaii.pages.dev/embed?id=195604&ep=2&server=acdn&audio=dub");
-  assert.equal(dubSources[0].kind, "dub");
-  assert.equal(dubSources[0].audioLang, "en");
+  assert.deepEqual(await provider.getVideoSources(detail.episodes[1].url, {}), []);
+  assert.equal(
+    requestLog.some((x) => x.url.includes("zenkaii.pages.dev/api/stream")),
+    false,
+    "Never call Zenkai's private same-origin stream endpoint"
+  );
 
   // Long-running anime: AniList can leave its total episodes unset. The
   // provider now fills it from the mapped MAL record and can exceed 500 eps.
@@ -374,7 +407,6 @@ async function main() {
   assert.equal(onePiece.anilistId, 21);
   assert.equal(onePiece.malId, 21);
   assert.equal(onePiece.episodes.length, 1242);
-  assert.equal(onePiece.score, 83);
   assert.equal(JSON.parse(onePiece.episodes[1241].url).episode, 1242);
   assert.equal(provider._episodeCount({
     id: 21, format: "TV", episodes: null,
@@ -395,7 +427,6 @@ async function main() {
   assert.equal(mappedDetail.malId, 777);
   assert.equal(mappedDetail.cover, "https://img.example/mapped-detail.jpg");
   assert.equal(mappedDetail.episodes.length, 24);
-  assert.equal(mappedDetail.score, 81);
   assert.equal(mappedDetail.studios[0], "Mapped Studio");
 
   // When neither AniMap parsed metadata nor a cross-service map is available,
@@ -416,7 +447,7 @@ async function main() {
   // supplies the display title and poster for the search result.
   const malFallback = await provider.search("Fallback Sample", 1, {});
   assert.equal(malFallback.length, 1);
-  assert.equal(malFallback[0].cover, "https://img.example/fallback-sample.jpg");
+  assert.equal(malFallback[0].cover, null, "Search results use the mapping index and defer poster loading to detail");
   assert.equal(malFallback[0].malId, 999);
 
   // Clear the cooldown from the preceding simulated HTTP 429 so this
@@ -440,12 +471,13 @@ async function main() {
   assert.equal(hostRateLimitCalls, beforeHostLimit + 1);
 
   assert.deepEqual(await provider.getVideoSources("invalid"), []);
+  assert.equal(provider.getEmbedUrl("invalid"), null);
   assert.deepEqual(await provider.getVideoSources(JSON.stringify({
     anilistId: 195604, episode: 0
   })), []);
   assert.deepEqual(await provider.getVideoSources(JSON.stringify({
     anilistId: 195604, episode: 1242
-  })).then((rows) => rows.length), 1);
+  })), []);
 
   console.log("Zenkaii AniMap/AniList metadata and playback tests passed.");
 }
