@@ -5,7 +5,7 @@
 <p align="center">
   <a href="https://github.com/Spyou/Zangetsu"><img src="https://img.shields.io/badge/BUILT_FOR-Zangetsu-8B5CF6?style=for-the-badge&logo=github&logoColor=white" alt="Built for Zangetsu" /></a>
   <a href="https://raw.githubusercontent.com/MewtwoOP1/Mewtwo-repo/main/index.json"><img src="https://img.shields.io/badge/SOURCE-Manifest-0F766E?style=for-the-badge" alt="Source manifest" /></a>
-  <img src="https://img.shields.io/badge/INTEGRATIONS-03-4F46E5?style=for-the-badge" alt="Three integrations" />
+  <img src="https://img.shields.io/badge/INTEGRATIONS-04-4F46E5?style=for-the-badge" alt="Three integrations" />
 </p>
 
 <p align="center">
@@ -25,13 +25,14 @@
 
 ## At a glance
 
-This repository includes three integrations documented here. Choose one to get started; **you do not need to install all three**.
+This repository includes four integrations documented here. Choose one to get started; **you do not need to install all four**.
 
 | Integration | Catalogue & metadata | Playback |
 |:--|:--|:--|
 | <img src="assets/icons/pencari.svg" width="24" align="middle" alt="" /> **TMDB + PencariMovie** | TMDB | PencariMovie server |
 | <img src="assets/icons/aiostreams.svg" width="24" align="middle" alt="" /> **AIOStreams** | TMDB | Your AIOStreams instance |
 | <img src="assets/icons/stremio.svg" width="24" align="middle" alt="" /> **TMDB + Stremio** | TMDB | Your configured Stremio-compatible add-ons |
+| **Zenkai Player** | AniMap + AniList metadata | Native MegaPlay, VidStream, and ACDN multi-audio playback |
 
 <p align="center">
   <img src="assets/provider-flow.svg" width="100%" alt="Diagram showing TMDB metadata flowing into Zangetsu separately from playback streams provided by PencariMovie, AIOStreams, or Stremio add-ons." />
@@ -180,6 +181,29 @@ TMDB provides search, title details, catalogue metadata, and episode information
 </details>
 
 ---
+
+
+<details>
+<summary><strong>Zenkai Player</strong> · AniMap metadata and native direct playback</summary>
+
+### Metadata
+
+AniMap supplies title search and cached AniList/MAL metadata. Search does not issue per-result detail requests. Missing long-running episode totals use MAL and the raw AniList next-airing record where available.
+
+### Playback
+
+- **MegaPlay:** direct AniList-ID player route, player `data-id`, `getSources`, AES-CBC decode, HLS/MP4 result.
+- **VidStream:** same direct-source resolution flow with its VidStream server code.
+- **ACDN:** calls Zenkai's `/api/stream?server=acdn` route using the `X-Zenkai-Embed` marker. Zenkai performs the AniList-to-AnimeSalt mapping and returns a multi-audio HLS playlist. When its segment-proxy URL wraps a signed CDN playlist, the provider now offers that CDN playlist first with the extracted upstream Referer, then keeps Zenkai's proxy as a fallback. This avoids depending exclusively on the proxy layer that timed out during native playback in the supplied log.
+- **FlixCloud:** falls back to the supported direct MegaPlay/VidStream resolvers until a separate public direct FlixCloud resolver is available.
+
+ACDN's route is different from MegaPlay/VidStream: it returns one HLS playlist with multiple audio renditions, not a normal sub/dub file. The provider exposes both the signed CDN playlist and the upstream proxy fallback when the response contains a wrapped CDN URL.
+
+### API source
+
+See Zenkai's [stream handler](https://github.com/nyyrox2/Zenkai/blob/main/server/handler.js), [ACDN resolver](https://github.com/nyyrox2/Zenkai/blob/main/server/acdn.js), and [EmbedPage API client](https://github.com/nyyrox2/Zenkai/blob/main/src/services/api.ts).
+
+</details>
 
 ## Troubleshooting
 

@@ -785,6 +785,60 @@
           "default": true
         }
       ]
+    },
+    {
+      "id": "zenkaii",
+      "name": "Zenkai Player",
+      "version": "1.4.1",
+      "type": "anime",
+      "lang": "en",
+      "file": "providers/zenkaii.js",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=zenkaii.pages.dev",
+      "nsfw": false,
+      "settings": [
+        {
+          "key": "server",
+          "label": "Zenkai Player server",
+          "description": "Choose MegaPlay, VidStream, FlixCloud fallback, or native ACDN multi-audio playback (direct CDN with proxy fallback).",
+          "type": "enum",
+          "default": "megaplay",
+          "options": [
+            {
+              "value": "megaplay",
+              "label": "MegaPlay (HD-1)"
+            },
+            {
+              "value": "vidstream",
+              "label": "VidStream (HD-2)"
+            },
+            {
+              "value": "flixcloud",
+              "label": "FlixCloud (fallback)"
+            },
+            {
+              "value": "acdn",
+              "label": "ACDN (Multi-audio)"
+            }
+          ]
+        },
+        {
+          "key": "audio",
+          "label": "Preferred audio",
+          "description": "Preferred source category. ACDN returns a multi-audio HLS playlist.",
+          "type": "enum",
+          "default": "sub",
+          "options": [
+            {
+              "value": "sub",
+              "label": "SUB · Original audio"
+            },
+            {
+              "value": "dub",
+              "label": "DUB · English audio"
+            }
+          ]
+        }
+      ]
     }
   ]
 }
