@@ -597,12 +597,14 @@ function _episodes(media) {
   if (!count) return [];
   var out = [];
   var title = _trim((media.title && (media.title.english || media.title.romaji || media.title.native)) || '');
+  var config = _config();
   for (var ep = 1; ep <= count; ep++) {
     out.push({
       id: String(ep),
       title: title + ' · Episode ' + ep,
       number: ep,
-      url: _episodeUrl(id, ep, title)
+      url: _episodeUrl(id, ep, title),
+      embedUrl: buildEmbedUrl(id, ep, config.server, config.audio)
     });
   }
   return out;
@@ -819,7 +821,7 @@ function getLinks(id, opts) { return getVideoSources(id, opts); }
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    version: '1.2.1',
+    version: '1.2.2',
     getInfo: getInfo,
     getSettings: getSettings,
     getHome: getHome,
