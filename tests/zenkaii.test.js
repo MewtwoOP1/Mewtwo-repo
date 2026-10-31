@@ -212,7 +212,7 @@ global.fetch = async (url, options = {}) => {
       graphQlFallbackCalls += 1;
       if (vars.search === "Host Rate Limit" && throwAniListRateLimit) {
         hostRateLimitCalls += 1;
-        throw new Error("AniListRateLimited(46s)");
+        throw new Error("DioException [request cancelled]: null");
       }
       if (vars.search === "GraphQL Fallback") {
         return json(200, {
@@ -315,6 +315,10 @@ async function main() {
   assert.equal(home.length, 1);
   assert.equal(home[0].items[0].anilistId, 195604);
   assert.equal(home[0].items[0].malId, 52299);
+  const aniListCalls = requestLog.filter((call) => call.url === "https://graphql.anilist.co");
+  assert.ok(aniListCalls.length > 0);
+  assert.ok(aniListCalls.every((call) => call.options.headers.Referer === "https://anilist.co/"),
+    "AniList requests must carry the app-required Referer header");
 
   const results = await provider.search("Solo Leveling", 1, {});
   assert.equal(results.length, 1);
@@ -431,7 +435,7 @@ async function main() {
   throwAniListRateLimit = true;
   const beforeHostLimit = hostRateLimitCalls;
   assert.deepEqual(await provider.search("Host Rate Limit", 1, {}), []);
-  assert.ok(provider._debug.cooldownRemaining() >= 45000);
+  assert.ok(provider._debug.cooldownRemaining() >= 55000);
   assert.deepEqual(await provider.search("Host Rate Limit Alias", 1, {}), []);
   assert.equal(hostRateLimitCalls, beforeHostLimit + 1);
 
