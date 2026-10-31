@@ -141,7 +141,10 @@ function _queuedAniListRequest(query, variables) {
         timeoutMs: 15000
       }).then(function (response) {
         var status = Number(response && response.status) || 0;
-        if (status === 429) throw new Error('AniList HTTP 429');
+        if (status === 429) {
+          _markAniListRateLimit(response, 'HTTP 429');
+          throw new Error('AniList HTTP 429');
+        }
         if (status >= 400) throw new Error('AniList HTTP ' + status);
         var body = response && response.body != null ? response.body : '';
         var json = typeof body === 'string' ? JSON.parse(body || 'null') : body;
@@ -151,7 +154,10 @@ function _queuedAniListRequest(query, variables) {
             return Number(entry && entry.status) === 429 ||
               /too many requests|rate.?limit/i.test(String(entry && entry.message || ''));
           });
-          if (tooMany) throw new Error('AniList GraphQL rate limit: ' + String(json.errors[0].message || 'HTTP 429'));
+          if (tooMany) {
+            _markAniListRateLimit(response, json.errors[0].message || 'HTTP 429');
+            throw new Error('AniList GraphQL rate limit: ' + String(json.errors[0].message || 'HTTP 429'));
+          }
           throw new Error('AniList GraphQL error: ' + String(json.errors[0].message || 'unknown error'));
         }
         return json.data || {};
@@ -159,7 +165,8 @@ function _queuedAniListRequest(query, variables) {
         // Some Zangetsu HTTP adapters throw a host-side rate-limit error instead
         // of returning a 429 response, so inspect the rejected error too.
         var message = String(error && error.message || error || '');
-        if (/AniListRateLimited|HTTP\s*429|too many requests|rate.?limit/i.test(message)) {
+        if (/AniListRateLimited|HTTP\s*429|too many requests|rate.?limit/i.test(message) &&
+            Date.now() >= ANILIST_COOLDOWN_UNTIL) {
           _markAniListRateLimit(null, error);
         }
         throw error;
