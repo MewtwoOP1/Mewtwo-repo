@@ -286,8 +286,8 @@ async function main() {
   assert.equal(source.name, provider.getInfo().name);
   assert.equal(source.logo, provider.getInfo().logo);
   assert.equal(source.type, provider.getInfo().type);
-  assert.equal(source.version, "1.1.0");
-  assert.equal(provider.getInfo().version, "1.1.0");
+  assert.equal(source.version, "1.2.0");
+  assert.equal(provider.getInfo().version, "1.2.0");
 
   const settings = provider.getSettings();
   assert.deepEqual(settings.map((x) => x.key), ["server", "audio"]);
@@ -380,6 +380,13 @@ async function main() {
   // If the parsed AniList snapshot is missing, the v1 map lookup recovers
   // the MAL ID, title, art and season metadata, and MAL supplies episode count.
   const mappedDetail = await provider.getDetail("anilist://777", {});
+  const mapDetailRefresh = await provider.getDetail("anilist://777", {});
+  assert.equal(mapDetailRefresh.title, "Mapped Detail");
+  assert.equal(
+    requestLog.filter((x) => x.url === "https://animap.id/api/anilist/777").length,
+    1,
+    "404 AniMap snapshots should be negative-cached across detail refreshes"
+  );
   assert.equal(mappedDetail.title, "Mapped Detail");
   assert.equal(mappedDetail.malId, 777);
   assert.equal(mappedDetail.cover, "https://img.example/mapped-detail.jpg");
