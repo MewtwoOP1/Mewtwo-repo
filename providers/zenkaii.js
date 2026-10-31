@@ -27,7 +27,7 @@ function getInfo() {
     baseUrl: 'https://zenkaii.pages.dev',
     logo: 'https://www.google.com/s2/favicons?sz=256&domain=zenkaii.pages.dev',
     type: 'anime',
-    version: '1.2.0'
+    version: '1.2.1'
   };
 }
 
@@ -803,7 +803,7 @@ function getLinks(id, opts) { return getVideoSources(id, opts); }
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    version: '1.2.0',
+    version: '1.2.1',
     getInfo: getInfo,
     getSettings: getSettings,
     getHome: getHome,
