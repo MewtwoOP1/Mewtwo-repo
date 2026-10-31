@@ -360,24 +360,28 @@ function _mapMedia(list) {
   return (Array.isArray(list) ? list : []).map(_mediaItem).filter(Boolean);
 }
 
-function _animapFallbackItem(mapping, id) {
+function _animapFallbackItem(mapping, id, mal) {
   var titles = Array.isArray(mapping && mapping.titles) ? mapping.titles : [];
-  var title = _trim(titles[0] || mapping && mapping.title || '');
+  var title = _trim(
+    (mal && (mal.title_english || mal.title)) ||
+    titles[0] || mapping && mapping.title || ''
+  );
   if (!title) return null;
-  var malId = Number(mapping && mapping.mal_id);
-  var year = Number(mapping && mapping.year) || null;
+  var malId = Number(mapping && mapping.mal_id || mal && mal.mal_id);
+  var year = Number(mapping && mapping.year || mal && mal.year) || null;
   var url = 'anilist://' + String(id);
   var item = {
     id: url,
     url: url,
     title: year ? title + ' (' + year + ')' : title,
-    cover: null,
+    cover: mal && mal.image_url || null,
     banner: null,
     type: 'anime',
     sourceId: SOURCE_ID,
     anilistId: Number(id)
   };
   if (isFinite(malId) && malId > 0) item.malId = malId;
+  if (mal && Array.isArray(mal.title_synonyms)) item.synonyms = mal.title_synonyms.slice(0, 20);
   return item;
 }
 
@@ -410,9 +414,15 @@ function _animapSearch(query, page) {
           if (!item.malId && Number(entry.mapping.mal_id) > 0) item.malId = Number(entry.mapping.mal_id);
           return item;
         }
-        return _animapFallbackItem(entry.mapping, entry.id);
+        throw new Error('AniMap has no AniList metadata snapshot');
       }).catch(function () {
-        return _animapFallbackItem(entry.mapping, entry.id);
+        var malId = Number(entry.mapping && entry.mapping.mal_id);
+        if (!(malId > 0)) return _animapFallbackItem(entry.mapping, entry.id, null);
+        return _animapMal(malId).then(function (mal) {
+          return _animapFallbackItem(entry.mapping, entry.id, mal);
+        }).catch(function () {
+          return _animapFallbackItem(entry.mapping, entry.id, null);
+        });
       });
     }).then(function (items) {
       return items.filter(Boolean);
@@ -557,10 +567,11 @@ function _detailFromMedia(media) {
   } else if (media.studios && media.studios.nodes) {
     studios = media.studios.nodes.map(function (studio) { return studio && studio.name; }).filter(Boolean);
   }
-  return {
+  var title = _trim((media.title && (media.title.english || media.title.romaji || media.title.native)) || '');
+  var result = {
     id: 'anilist://' + Number(media.id),
     url: 'anilist://' + Number(media.id),
-    title: item.title.replace(/\s+\(\d{4}\)$/, ''),
+    title: title,
     cover: item.cover,
     banner: item.banner,
     description: media.description || '',
@@ -579,6 +590,10 @@ function _detailFromMedia(media) {
     subCount: episodes.length,
     dubCount: 0
   };
+  if (media.averageScore != null && isFinite(Number(media.averageScore))) {
+    result.score = Number(media.averageScore);
+  }
+  return result;
 }
 
 function _animapDetail(id) {
