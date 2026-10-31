@@ -298,6 +298,65 @@ function _animapRaw(id) {
   return _animapJson('/anilist/' + encodeURIComponent(id) + '/raw', 21600000);
 }
 
+function _animapMap(id) {
+  return _animapJson('/v1/map/anilist/' + encodeURIComponent(id), 21600000);
+}
+
+function _mappedMalId(entry) {
+  if (!entry || typeof entry !== 'object') return null;
+  var direct = Number(entry.mal_id || entry.malId);
+  if (isFinite(direct) && direct > 0) return direct;
+  var sources = Array.isArray(entry.sources) ? entry.sources : [];
+  for (var i = 0; i < sources.length; i++) {
+    var match = String(sources[i] || '').match(/myanimelist\.net\/anime\/(\d+)/i);
+    if (match) return Number(match[1]);
+  }
+  return null;
+}
+
+function _mediaFromMap(entry, id) {
+  if (!entry || typeof entry !== 'object') return null;
+  var malId = _mappedMalId(entry);
+  var season = entry.animeSeason || {};
+  var image = entry.picture || entry.thumbnail || null;
+  var title = _trim(entry.title || '');
+  if (!title) return null;
+  return {
+    id: Number(id),
+    idMal: malId,
+    title: { romaji: title, english: title, native: '' },
+    synonyms: Array.isArray(entry.synonyms) ? entry.synonyms : [],
+    format: entry.type || null,
+    status: entry.status || null,
+    seasonYear: Number(season.year) || null,
+    episodes: Number(entry.episodes) > 0 ? Number(entry.episodes) : null,
+    nextAiringEpisode: null,
+    averageScore: null,
+    description: '',
+    genres: Array.isArray(entry.tags) ? entry.tags : [],
+    studios: Array.isArray(entry.studios) ? entry.studios : [],
+    coverImage: image ? { extraLarge: image, large: image } : null,
+    bannerImage: null
+  };
+}
+
+function _mergeAnimapMap(media, map) {
+  if (!media || !map) return media;
+  var mapped = _mediaFromMap(map, media.id);
+  if (!mapped) return media;
+  if (!media.idMal) media.idMal = mapped.idMal;
+  if (!(Number(media.episodes) > 0) && Number(mapped.episodes) > 0) media.episodes = mapped.episodes;
+  if (!media.title || !(media.title.english || media.title.romaji || media.title.native)) media.title = mapped.title;
+  if ((!media.coverImage || !(media.coverImage.extraLarge || media.coverImage.large)) && mapped.coverImage) media.coverImage = mapped.coverImage;
+  if ((!media.genres || !media.genres.length) && mapped.genres.length) media.genres = mapped.genres;
+  if ((!media.studios || !media.studios.length) && mapped.studios.length) media.studios = mapped.studios;
+  if (!media.status) media.status = mapped.status;
+  if (!media.format) media.format = mapped.format;
+  if (!media.seasonYear) media.seasonYear = mapped.seasonYear;
+  if ((!media.synonyms || !media.synonyms.length) && mapped.synonyms.length) media.synonyms = mapped.synonyms;
+  return media;
+}
+
 function _mapLimit(items, limit, mapper) {
   var results = new Array(items.length);
   var nextIndex = 0;
@@ -604,19 +663,23 @@ function _detailFromMedia(media) {
 }
 
 function _animapDetail(id) {
-  return _animapMedia(id).then(function (media) {
-    if (!media) return null;
-    var needsMal = !(Number(media.episodes) > 0) &&
-      String(media.format || '').toUpperCase() !== 'MOVIE';
-    var malId = Number(media.idMal);
-    var jobs = [
-      needsMal && malId > 0
-        ? _animapMal(malId).catch(function () { return null; })
-        : Promise.resolve(null),
-      _animapRaw(id).catch(function () { return null; })
-    ];
-    return Promise.all(jobs).then(function (results) {
-      return _detailFromMedia(_mergeAnimapFallbacks(media, results[0], results[1]));
+  return _animapMedia(id).catch(function () { return null; }).then(function (media) {
+    return _animapMap(id).catch(function () { return null; }).then(function (map) {
+      if (!media) media = _mediaFromMap(map, id);
+      else media = _mergeAnimapMap(media, map);
+      if (!media) return null;
+      var needsMal = !(Number(media.episodes) > 0) &&
+        String(media.format || '').toUpperCase() !== 'MOVIE';
+      var malId = Number(media.idMal);
+      var jobs = [
+        needsMal && malId > 0
+          ? _animapMal(malId).catch(function () { return null; })
+          : Promise.resolve(null),
+        _animapRaw(id).catch(function () { return null; })
+      ];
+      return Promise.all(jobs).then(function (results) {
+        return _detailFromMedia(_mergeAnimapFallbacks(media, results[0], results[1]));
+      });
     });
   });
 }
