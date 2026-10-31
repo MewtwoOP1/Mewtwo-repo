@@ -105,16 +105,17 @@ function _header(response, name) {
 }
 
 function _markAniListRateLimit(response, error) {
-  var waitMs = ANILIST_DEFAULT_COOLDOWN_MS;
+  var waitMs = 0;
   var retryAfter = parseFloat(_header(response, 'retry-after'));
   if (isFinite(retryAfter) && retryAfter > 0) waitMs = Math.max(waitMs, retryAfter * 1000);
   var resetAt = Number(_header(response, 'x-ratelimit-reset'));
   if (isFinite(resetAt) && resetAt > Date.now() / 1000) {
     waitMs = Math.max(waitMs, resetAt * 1000 - Date.now());
   }
-  var message = String(error || '');
+  var message = String(error && error.message || error || '');
   var hostWait = message.match(/AniListRateLimited\((\d+)s\)/i);
   if (hostWait) waitMs = Math.max(waitMs, Number(hostWait[1]) * 1000);
+  if (!(waitMs > 0)) waitMs = ANILIST_DEFAULT_COOLDOWN_MS;
   ANILIST_COOLDOWN_UNTIL = Math.max(ANILIST_COOLDOWN_UNTIL, Date.now() + waitMs);
 }
 
@@ -140,10 +141,7 @@ function _queuedAniListRequest(query, variables) {
         timeoutMs: 15000
       }).then(function (response) {
         var status = Number(response && response.status) || 0;
-        if (status === 429) {
-          _markAniListRateLimit(response, 'HTTP 429');
-          throw new Error('AniList HTTP 429');
-        }
+        if (status === 429) throw new Error('AniList HTTP 429');
         if (status >= 400) throw new Error('AniList HTTP ' + status);
         var body = response && response.body != null ? response.body : '';
         var json = typeof body === 'string' ? JSON.parse(body || 'null') : body;
@@ -153,10 +151,18 @@ function _queuedAniListRequest(query, variables) {
             return Number(entry && entry.status) === 429 ||
               /too many requests|rate.?limit/i.test(String(entry && entry.message || ''));
           });
-          if (tooMany) _markAniListRateLimit(response, 'GraphQL 429');
+          if (tooMany) throw new Error('AniList GraphQL rate limit: ' + String(json.errors[0].message || 'HTTP 429'));
           throw new Error('AniList GraphQL error: ' + String(json.errors[0].message || 'unknown error'));
         }
         return json.data || {};
+      }).catch(function (error) {
+        // Some Zangetsu HTTP adapters throw a host-side rate-limit error instead
+        // of returning a 429 response, so inspect the rejected error too.
+        var message = String(error && error.message || error || '');
+        if (/AniListRateLimited|HTTP\s*429|too many requests|rate.?limit/i.test(message)) {
+          _markAniListRateLimit(null, error);
+        }
+        throw error;
       });
     });
   });
@@ -512,6 +518,12 @@ function _episodes(media) {
 function _mergeAnimapFallbacks(media, mal, raw) {
   var merged = {};
   Object.keys(media || {}).forEach(function (key) { merged[key] = media[key]; });
+  // The parsed AniMap record has lightweight display metadata; /raw retains
+  // additional AniList fields such as averageScore and richer studio nodes.
+  if (raw && merged.averageScore == null && raw.averageScore != null) {
+    merged.averageScore = raw.averageScore;
+  }
+  if (raw && raw.idMal && !merged.idMal) merged.idMal = raw.idMal;
   if (!(Number(merged.episodes) > 0) && mal && Number(mal.episodes) > 0) {
     merged.episodes = Number(mal.episodes);
   }
@@ -572,12 +584,13 @@ function _detailFromMedia(media) {
 function _animapDetail(id) {
   return _animapMedia(id).then(function (media) {
     if (!media) return null;
-    var needsFallback = !(Number(media.episodes) > 0) &&
+    var needsMal = !(Number(media.episodes) > 0) &&
       String(media.format || '').toUpperCase() !== 'MOVIE';
-    if (!needsFallback) return _detailFromMedia(media);
     var malId = Number(media.idMal);
     var jobs = [
-      malId > 0 ? _animapMal(malId).catch(function () { return null; }) : Promise.resolve(null),
+      needsMal && malId > 0
+        ? _animapMal(malId).catch(function () { return null; })
+        : Promise.resolve(null),
       _animapRaw(id).catch(function () { return null; })
     ];
     return Promise.all(jobs).then(function (results) {
