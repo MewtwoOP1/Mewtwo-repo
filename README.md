@@ -184,9 +184,6 @@ TMDB provides search, title details, catalogue metadata, and episode information
 
 
 <details>
-<details>
-<details>
-<details>
 <summary><strong>Zenkai Player</strong> · AniMap metadata and native direct playback</summary>
 
 ### Metadata
