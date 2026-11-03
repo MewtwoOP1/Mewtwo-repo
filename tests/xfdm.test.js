@@ -103,7 +103,10 @@ async function main() {
 
   const detail = await provider.getDetail('xfdm://anime/9001', {});
   assert.equal(detail.title, 'Mock Anime (2024)');
+  assert.equal(detail.year, '2024', 'MediaDetail.year must be a string');
+  assert.equal(detail.malId, 9002, 'MAL ID is required for AniZip metadata enrichment');
   assert.equal(detail.episodes.length, 2, 'episodes are deduplicated across mirrors/channels');
+  assert.equal(provider._fallbackEpisodes(9001, 12).length, 12, 'AniList episode count remains visible when Bangumi has no exact subject match');
   assert.deepEqual(detail.episodes.map((x) => x.number), [1, 2]);
   assert.equal(detail.subCount, 2);
   assert.equal(detail.dubCount, 0);
