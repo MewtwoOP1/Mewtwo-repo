@@ -1,5 +1,8 @@
 # Changelog
 
+## Unreleased
+
+- Add a native Jellyfin server source for Zangetsu with library browsing, search, show episodes, metadata, image URLs, and playback source resolution.
 ## TMDB + Stremio 3.3.0
 
 - Add a separate Metadata Add-on URLs setting so catalogue/metadata add-ons can be configured independently from streaming add-ons.

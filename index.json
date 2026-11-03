@@ -3,6 +3,67 @@
   "description": "𝑴𝒆𝒘𝒕𝒘𝒐♡ community sources for Zangetsu. Third-party provider integrations; this repository does not host video files.",
   "sources": [
     {
+      "id": "jellyfin",
+      "name": "Jellyfin",
+      "version": "1.0.0",
+      "type": "movie",
+      "lang": "en",
+      "file": "providers/jellyfin.js",
+      "logo": "https://jellyfin.org/favicon.ico",
+      "nsfw": false,
+      "settings": [
+        {
+          "key": "serverUrl",
+          "label": "Jellyfin server URL",
+          "description": "Your Jellyfin server base URL, for example https://jellyfin.example.com. Do not include /web or /api.",
+          "type": "text",
+          "default": ""
+        },
+        {
+          "key": "apiKey",
+          "label": "Jellyfin API key",
+          "description": "Create an API key in Jellyfin Dashboard → API Keys. Keep it private. The key is sent only to your configured server.",
+          "type": "text",
+          "default": ""
+        },
+        {
+          "key": "userId",
+          "label": "User ID (optional)",
+          "description": "Optional Jellyfin user ID. Leave blank to use the first accessible user returned by the server.",
+          "type": "text",
+          "default": ""
+        },
+        {
+          "key": "pageSize",
+          "label": "Items per page",
+          "description": "Maximum media items requested for each library or search result page.",
+          "type": "enum",
+          "default": "50",
+          "options": [
+            {
+              "value": "25",
+              "label": "25 items"
+            },
+            {
+              "value": "50",
+              "label": "50 items"
+            },
+            {
+              "value": "100",
+              "label": "100 items"
+            }
+          ]
+        },
+        {
+          "key": "includeTrailers",
+          "label": "Include trailers",
+          "description": "Include trailer items in library and search results.",
+          "type": "bool",
+          "default": false
+        }
+      ]
+    },
+    {
       "id": "aiostreams",
       "name": "AIOStreams",
       "version": "2.2.0",

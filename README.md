@@ -25,7 +25,7 @@
 
 ## At a glance
 
-This repository includes five integrations documented here. Choose one to get started; **you do not need to install all four**.
+This repository includes six integrations documented here. Choose one to get started; **you do not need to install all four**.
 
 | Integration | Catalogue & metadata | Playback |
 |:--|:--|:--|
@@ -34,6 +34,7 @@ This repository includes five integrations documented here. Choose one to get st
 | <img src="assets/icons/stremio.svg" width="24" align="middle" alt="" /> **TMDB + Stremio** | TMDB | Your configured Stremio-compatible add-ons |
 | **Miruro** | Miruro / AniList metadata | Available Miruro streaming servers |
 | **Zenkai Player** | AniMap + AniList metadata | Native MegaPlay, VidStream, and ACDN multi-audio playback |
+| **Jellyfin** | Your Jellyfin libraries and server metadata | Your own Jellyfin server |
 
 <p align="center">
   <img src="assets/provider-flow.svg" width="100%" alt="Diagram showing TMDB metadata flowing into Zangetsu separately from playback streams provided by PencariMovie, AIOStreams, or Stremio add-ons." />
@@ -241,6 +242,30 @@ ACDN's route is different from MegaPlay/VidStream: it returns one HLS playlist w
 ### API source
 
 See Zenkai's [stream handler](https://github.com/nyyrox2/Zenkai/blob/main/server/handler.js), [ACDN resolver](https://github.com/nyyrox2/Zenkai/blob/main/server/acdn.js), and [EmbedPage API client](https://github.com/nyyrox2/Zenkai/blob/main/src/services/api.ts).
+
+</details>
+
+<details>
+<summary><strong>Jellyfin</strong> · Your personal media server</summary>
+
+### What it does
+
+Connects directly to your Jellyfin server. Browse libraries, search movies and series, view title metadata and episodes, and play media using the server's playback endpoints. This integration does not provide a hosted catalogue or third-party media sources.
+
+### Setup
+
+1. In the Jellyfin Dashboard, open **API Keys** and create an API key.
+2. Install **Jellyfin** from this repository in Zangetsu.
+3. Open **Jellyfin → Settings** and enter your server base URL (for example, `https://jellyfin.example.com`) and API key. Do not add `/web` or `/api` to the URL.
+4. Save the settings. The source discovers your accessible user when User ID is blank; provide a user ID to pin a specific account.
+5. Open a library or search for a title. Open a series to load its episodes, then select an episode to request its playback source from your server.
+
+### Notes
+
+- Keep the API key private. It is sent only to the server URL you configure.
+- Use HTTPS when connecting outside your trusted local network.
+- Playback requires your Jellyfin server to be reachable by the device running Zangetsu. The player must support the format returned by your server; transcoding support depends on the server and client capabilities.
+- This integration uses Jellyfin's authenticated item, library, episode, image, and playback-info APIs.
 
 </details>
 
