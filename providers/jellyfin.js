@@ -542,12 +542,18 @@ function _mapItem(raw, ctx, parentId) {
   var type = String(raw.Type || raw.type || 'Movie');
   if (['Movie', 'Series', 'BoxSet', 'Episode', 'Season'].indexOf(type) < 0) return null;
   if (!ctx.config.showCollections && type === 'BoxSet') return null;
-  var name = _trim(raw.Name || raw.name || raw.OriginalTitle || raw.originalTitle);
+  var rawName = _trim(raw.Name || raw.name || raw.OriginalTitle || raw.originalTitle);
+  var name = type === 'Episode' ? (_trim(raw.SeriesName || raw.seriesName) || rawName) : rawName;
   if (!name) return null;
   var primaryTag = raw.ImageTags && (raw.ImageTags.Primary || raw.ImageTags.primary);
   var backdropTag = raw.BackdropImageTags && raw.BackdropImageTags[0];
   var backdropId = raw.ParentBackdropItemId || raw.parentBackdropItemId;
-  var cover = primaryTag ? _imageUrl(ctx, id, 'Primary', 0, primaryTag, 600) : _imageUrl(ctx, id, 'Primary', 0, null, 600);
+  var seriesPrimaryTag = raw.SeriesPrimaryImageTag || raw.seriesPrimaryImageTag;
+  var cover = primaryTag
+    ? _imageUrl(ctx, id, 'Primary', 0, primaryTag, 600)
+    : (type === 'Episode' && raw.SeriesId && seriesPrimaryTag
+      ? _imageUrl(ctx, raw.SeriesId, 'Primary', 0, seriesPrimaryTag, 600)
+      : _imageUrl(ctx, id, 'Primary', 0, null, 600));
   var banner = backdropTag && (raw.BackdropImageTags && raw.BackdropImageTags.length)
     ? _imageUrl(ctx, id, 'Backdrop', 0, backdropTag, 1000)
     : (backdropId && raw.ParentBackdropImageTags && raw.ParentBackdropImageTags[0]
@@ -571,6 +577,7 @@ function _mapItem(raw, ctx, parentId) {
   if (score !== undefined) item.score = score;
   if (raw.SeriesId) item.jellyfinSeriesId = String(raw.SeriesId);
   if (raw.SeriesName) item.seriesName = raw.SeriesName;
+  if (type === 'Episode') item.episodeTitle = rawName;
   return item;
 }
 
