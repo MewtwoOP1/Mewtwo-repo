@@ -160,17 +160,36 @@ function _catalog(id,force){
  }).catch(function(e){MISS_CACHE[id]=Date.now()+30000;throw e;});
 }
 function _episodeUrl(id,number){return 'xfdm://episode/'+id+'/'+number;}
+function _episodeRowsToItems(id,rows){
+ var seen={};
+ return rows.filter(function(e){if(seen[e.number])return false;seen[e.number]=true;return true;})
+  .map(function(e){return {id:_episodeUrl(id,e.number),url:_episodeUrl(id,e.number),number:e.number,title:e.title||('Episode '+e.number),thumbnail:e.thumbnail||null,date:e.airDate||null,sourceId:SOURCE_ID,type:'anime',category:'sub'};});
+}
+function _fallbackEpisodes(id,count){
+ var total=Math.max(0,Math.min(500,Number(count)||0)),out=[];
+ for(var n=1;n<=total;n++)out.push({id:_episodeUrl(id,n),url:_episodeUrl(id,n),number:n,title:'Episode '+n,sourceId:SOURCE_ID,type:'anime',category:'sub'});
+ return out;
+}
 function getDetail(url,opts){
  var id=_id(url);
  return _media(id).then(function(m){
   var item=_item(m);
   return _catalog(id,opts&&opts.forceRefresh).then(function(cat){
-   item.episodes=[];var numbers={};cat.episodes.forEach(function(ep){if(!numbers[ep.number]){numbers[ep.number]=true;item.episodes.push({id:_episodeUrl(id,ep.number),url:_episodeUrl(id,ep.number),number:ep.number,title:'Episode '+ep.number,sourceId:SOURCE_ID,type:'anime',category:'sub'});}});
-   item.episodes.sort(function(a,b){return a.number-b.number;});item.subCount=item.episodes.length;item.dubCount=0;return item;
-  }).catch(function(e){console.warn('XFDM catalogue unavailable',String(e));item.episodes=[];item.subCount=0;item.dubCount=0;return item;});
+   item.episodes=_episodeRowsToItems(id,cat.episodes);
+   if(!item.episodes.length)item.episodes=_fallbackEpisodes(id,m.episodes);
+   item.subCount=item.episodes.length;item.dubCount=0;return item;
+  }).catch(function(e){
+   console.warn('XFDM catalogue unavailable; showing AniList episode inventory',String(e));
+   item.episodes=_fallbackEpisodes(id,m.episodes);item.subCount=item.episodes.length;item.dubCount=0;return item;
+  });
  });
 }
-function getEpisodes(url,opts){return _catalog(_id(url),opts&&opts.forceRefresh).then(function(c){var seen={};return c.episodes.filter(function(e){if(seen[e.number])return false;seen[e.number]=true;return true;}).map(function(e){return {id:_episodeUrl(_id(url),e.number),url:_episodeUrl(_id(url),e.number),number:e.number,title:'Episode '+e.number,sourceId:SOURCE_ID,type:'anime',category:'sub'};});});}
+function getEpisodes(url,opts){
+ var id=_id(url);
+ return Promise.all([_media(id),_catalog(id,opts&&opts.forceRefresh).catch(function(){return null;})]).then(function(r){
+  return r[1]?(_episodeRowsToItems(id,r[1].episodes).length?_episodeRowsToItems(id,r[1].episodes):_fallbackEpisodes(id,r[0].episodes)):_fallbackEpisodes(id,r[0].episodes);
+ });
+}
 function _resolveChannels(rows){
  var chosen=[],i=0,limit=_config().maxChannels;
  function next(){
@@ -197,4 +216,4 @@ function getVideoSources(url,opts){
 }
 function getStreams(id,opts){return getVideoSources(id,opts);}
 function getLinks(id,opts){return getVideoSources(id,opts);}
-if(typeof module!=='undefined'&&module.exports)module.exports={version:'1.0.0',getInfo:getInfo,getSettings:getSettings,getHome:getHome,popular:popular,search:search,getDetail:getDetail,getEpisodes:getEpisodes,getVideoSources:getVideoSources,getStreams:getStreams,getLinks:getLinks,_config:_config,_normal:_normal,_titleNames:_titleNames,_suggestPath:_suggestPath,_episodeRows:_episodeRows,_playerUrl:_playerUrl,_catalog:_catalog};
+if(typeof module!=='undefined'&&module.exports)module.exports={version:'1.0.0',getInfo:getInfo,getSettings:getSettings,getHome:getHome,popular:popular,search:search,getDetail:getDetail,getEpisodes:getEpisodes,getVideoSources:getVideoSources,getStreams:getStreams,getLinks:getLinks,_config:_config,_normal:_normal,_titleNames:_titleNames,_suggestPath:_suggestPath,_episodeRows:_episodeRows,_playerUrl:_playerUrl,_catalog:_catalog,_fallbackEpisodes:_fallbackEpisodes,_episodeRowsToItems:_episodeRowsToItems};
