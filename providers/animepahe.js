@@ -7,7 +7,7 @@ var DEFAULT_MIRURO_HOSTS = ['https://api.hiyori.tv','https://miruro.zenos.my.id'
 var CACHE = {};
 var SESSIONS = {};
 
-function getInfo(){return {name:'AnimePahe',lang:'en',baseUrl:SITE,logo:'https://www.google.com/s2/favicons?sz=256&domain=animepahe.pw',type:'anime',version:'1.0.2'};}
+function getInfo(){return {name:'AnimePahe',lang:'en',baseUrl:SITE,logo:'https://www.google.com/s2/favicons?sz=256&domain=animepahe.pw',type:'anime',version:'1.0.3'};}
 function getSettings(){
  return [
   {key:'audioMode',label:'Audio tracks',description:'Show both SUB and DUB when available, or filter to one track.',type:'enum',default:'both',options:[{value:'both',label:'Sub and dub'},{value:'sub',label:'Sub only'},{value:'dub',label:'Dub only'}]},
@@ -76,7 +76,7 @@ function _episodesFromMiruro(id,data){
   ['sub','dub'].forEach(function(cat){if(_config().audioMode!=='both'&&_config().audioMode!==cat)return;
    (Array.isArray(eps[cat])?eps[cat]:[]).forEach(function(ep){
     var n=Number(ep.number||ep.episode||ep.ep);if(!(n>0))return;
-    var route=String(ep.id||ep.url||''),slug=route.split('/').pop()||('animepahe-'+n);
+    var route=String(ep.id||ep.url||'').trim(),slug=route?route.split('/').pop():'';
     out.push({id:_episodeUrl(id,n,cat,slug,route),url:_episodeUrl(id,n,cat,slug,route),number:n,title:ep.title||('Episode '+n),thumbnail:ep.image||ep.thumbnail||ep.thumbnail_url||null,date:ep.airDate||ep.aired_on||ep.aired||null,duration:ep.duration||null,filler:!!ep.filler,type:'anime',sourceId:SOURCE_ID,category:cat});
    });
   });
@@ -85,16 +85,15 @@ function _episodesFromMiruro(id,data){
 
  // Some mirror responses expose a shared episode inventory under data[] with
  // episode_number/title/thumbnail_url/aired_on instead of a Kiwi object.
- // These rows are enough to build a real episode catalogue; playback still
- // attempts direct AnimePahe first, then the generated Kiwi route.
+ // These rows are catalogue inventory only. Playback resolves a real provider
+ // episode ID from the Miruro episode endpoint instead of guessing a Kiwi slug.
  var rows=Array.isArray(root.data)?root.data:(Array.isArray(root.episodes)?root.episodes:[]);
  rows.forEach(function(ep){
   if(!ep||ep.kind&&String(ep.kind).toLowerCase()!=='regular')return;
   var n=Number(ep.episode_number||ep.number||ep.episode||ep.ep);if(!(n>0))return;
   if(_config().audioMode==='dub')return;
-  var slug=String(ep.slug||ep.id||('animepahe-'+n));
-  var route='watch/kiwi/'+id+'/sub/'+encodeURIComponent(slug);
-  var encoded=_episodeUrl(id,n,'sub',slug,route);
+  var slug=String(ep.slug||ep.id||'').trim();
+  var encoded=_episodeUrl(id,n,'sub',slug,'');
   out.push({id:encoded,url:encoded,number:n,title:ep.title||('Episode '+n),thumbnail:ep.thumbnail_url||ep.thumbnail||ep.image||null,date:ep.aired_on||ep.airDate||ep.aired||null,duration:ep.duration||null,filler:!!ep.filler,type:'anime',sourceId:SOURCE_ID,category:'sub'});
  });
  return out.sort(function(a,b){return a.number-b.number;});
@@ -111,7 +110,7 @@ function _fallbackEpisodeList(id,media){
 }
 function _mirrorEpisodes(id,force){
  var key='episodes:'+id,c=!force&&_cacheGet(key);if(c)return Promise.resolve(c);
- return _mirrorGet('episodes/'+id).then(function(data){var rows=_episodesFromMiruro(id,data);if(!rows.length)throw new Error('Miruro did not list a Kiwi/AnimePahe catalogue for '+id);return _cachePut(key,rows);});
+ return _mirrorGet('episodes/'+id).then(function(data){var rows=_episodesFromMiruro(id,data);if(!rows.length)throw new Error('Miruro did not return an episode inventory for '+id);return _cachePut(key,rows);});
 }
 function getDetail(url,opts){
  var id=_id(url);
@@ -239,4 +238,4 @@ function getVideoSources(url,opts){
 }
 function getStreams(id,opts){return getVideoSources(id,opts);}
 function getLinks(id,opts){return getVideoSources(id,opts);}
-if(typeof module!=='undefined'&&module.exports)module.exports={version:'1.0.2',getInfo:getInfo,getSettings:getSettings,getHome:getHome,popular:popular,search:search,getDetail:getDetail,getEpisodes:getEpisodes,getVideoSources:getVideoSources,getStreams:getStreams,getLinks:getLinks,_config:_config,_parseIds:_parseIds,_parseRelease:_parseRelease,_variants:_variants,_selectVariant:_selectVariant,_unpack:_unpack,_playlist:_playlist,_episodesFromMiruro:_episodesFromMiruro,_fallbackEpisodeList:_fallbackEpisodeList};
+if(typeof module!=='undefined'&&module.exports)module.exports={version:'1.0.3',getInfo:getInfo,getSettings:getSettings,getHome:getHome,popular:popular,search:search,getDetail:getDetail,getEpisodes:getEpisodes,getVideoSources:getVideoSources,getStreams:getStreams,getLinks:getLinks,_config:_config,_parseIds:_parseIds,_parseRelease:_parseRelease,_variants:_variants,_selectVariant:_selectVariant,_unpack:_unpack,_playlist:_playlist,_episodesFromMiruro:_episodesFromMiruro,_fallbackEpisodeList:_fallbackEpisodeList};
