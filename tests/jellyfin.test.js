@@ -402,6 +402,9 @@ async function main() {
     call.pathname.endsWith('/Users/AuthenticateByName') ||
     call.init.headers.Authorization.includes('Token=')));
 
+  // Force the UserViews request onto the network so the mock can return
+  // an expired-session 401 instead of serving a cached library list.
+  global.__settings.jellyfin.cacheTtl = '0';
   expireNextItemsRequest = true;
   const authBeforeRefresh = authCount;
   await provider.getHome();
