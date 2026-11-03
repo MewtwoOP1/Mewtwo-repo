@@ -16,8 +16,8 @@ var CLIENT_NAME = 'Zangetsu';
 var DEVICE_NAME = 'Zangetsu';
 var DEVICE_ID = 'zangetsu-jellyfin-source-v3';
 var LIST_FIELDS = 'Overview,Genres,ProviderIds,PremiereDate,ProductionYear,CommunityRating,OfficialRating,Status,ImageTags,BackdropImageTags,ParentBackdropItemId,ParentBackdropImageTags,ParentLogoItemId,ParentLogoImageTag,SeriesId,SeriesName,SeriesPrimaryImageTag,ParentIndexNumber,IndexNumber,LocationType,DateCreated,UserData';
-var DETAIL_FIELDS = LIST_FIELDS + ',EndDate,RunTimeTicks,People,Studios,MediaSources,MediaStreams,IndexNumberEnd,ChildCount';
-var EPISODE_FIELDS = 'Overview,Genres,PremiereDate,ProductionYear,ImageTags,ParentIndexNumber,IndexNumber,RunTimeTicks,DateCreated,MediaSources,MediaStreams,SeriesId,SeriesName';
+var DETAIL_FIELDS = LIST_FIELDS + ',EndDate,RunTimeTicks,People,Studios,IndexNumberEnd,ChildCount';
+var EPISODE_FIELDS = 'Overview,Genres,PremiereDate,ProductionYear,ImageTags,ParentIndexNumber,IndexNumber,RunTimeTicks,DateCreated,SeriesId,SeriesName,SeasonId';
 var _sessionCache = Object.create(null);
 var _publicInfoCache = Object.create(null);
 var _responseCache = Object.create(null);
@@ -613,7 +613,8 @@ function _detailObject(raw, ctx, episodes, seasons) {
     subCount: (episodes || []).length,
     dubCount: 0,
     jellyfinItemId: id,
-    jellyfinType: type
+    jellyfinType: type,
+    dateCreated: raw.DateCreated || raw.dateCreated || null
   };
   var score = _score(raw);
   if (score !== undefined) item.score = score;
@@ -1079,7 +1080,7 @@ function _deviceProfile(config) {
 function _playbackInfo(ctx, itemId) {
   var body = {
     UserId: ctx.userId,
-    IsPlayback: true,
+    IsPlayback: false,
     AutoOpenLiveStream: false,
     EnableDirectPlay: true,
     EnableDirectStream: true,
@@ -1110,9 +1111,10 @@ function _subtitleTracks(ctx, itemId, mediaSource) {
   }).map(function (stream) {
     var codec = String(stream.Codec || stream.codec || 'vtt').replace(/[^a-z0-9]/gi, '').toLowerCase() || 'vtt';
     var index = Number(stream.Index != null ? stream.Index : stream.index);
+    var deliveryUrl = stream.DeliveryUrl || stream.deliveryUrl || stream.Path || stream.path || '';
     var path = '/Videos/' + encodeURIComponent(itemId) + '/' + encodeURIComponent(sourceId) +
       '/Subtitles/' + encodeURIComponent(String(index)) + '/0/Stream.' + encodeURIComponent(codec);
-    var url = _joinUrl(ctx.baseUrl, path, {});
+    var url = deliveryUrl ? _absoluteServerUrl(ctx, deliveryUrl) : _joinUrl(ctx.baseUrl, path, {});
     return {
       url: url,
       label: stream.DisplayTitle || stream.displayTitle || stream.Language || stream.language || ('Subtitle ' + (index + 1)),
@@ -1158,11 +1160,11 @@ function _mapMediaSource(ctx, itemId, mediaSource, playSessionId) {
 
   if (ctx.config.preferTranscoding && transcode) {
     sourceUrl = _absoluteServerUrl(ctx, transcode);
-  } else if (ctx.config.useRemoteUrl && isRemote && _isAbsoluteHttp(path)) {
-    sourceUrl = path;
+  } else if (ctx.config.useRemoteUrl && isRemote && path) {
+    sourceUrl = _absoluteServerUrl(ctx, path);
   } else if (direct) {
     sourceUrl = _absoluteServerUrl(ctx, direct);
-  } else if (_isAbsoluteHttp(path)) {
+  } else if (_isAbsoluteHttp(path) && !isRemote) {
     sourceUrl = path;
   } else if (transcode) {
     sourceUrl = _absoluteServerUrl(ctx, transcode);
