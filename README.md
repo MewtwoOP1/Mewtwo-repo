@@ -300,7 +300,7 @@ Connects to your own Jellyfin server using a normal Jellyfin account or an API k
 - **Playback opens but does not start:** check Jellyfin Dashboard activity and logs. Try disabling the transcode preference for direct play, or enable it when the client cannot play the original codec.
 - **Remote images or subtitles fail:** ensure the reverse proxy forwards Jellyfin's API, image, video, and subtitle routes and that the device can reach the same server address.
 
-**Security:** Jellyfin passwords and API keys are private credentials. Use HTTPS outside your trusted LAN, do not share screenshots or exports containing them, and do not embed credentials in the server URL.
+**Security:** Jellyfin passwords and API keys are private credentials. Zangetsu's current generic extension settings render text inputs without password masking, so the password can be visible while editing settings. Prefer a dedicated Jellyfin account with only the library permissions it needs; use HTTPS outside your trusted LAN, do not share screenshots or exports containing credentials, and do not embed credentials in the server URL.
 
 </details>
 
