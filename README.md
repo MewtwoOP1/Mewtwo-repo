@@ -5,7 +5,7 @@
 <p align="center">
   <a href="https://github.com/Spyou/Zangetsu"><img src="https://img.shields.io/badge/BUILT_FOR-Zangetsu-8B5CF6?style=for-the-badge&logo=github&logoColor=white" alt="Built for Zangetsu" /></a>
   <a href="https://raw.githubusercontent.com/MewtwoOP1/Mewtwo-repo/main/index.json"><img src="https://img.shields.io/badge/SOURCE-Manifest-0F766E?style=for-the-badge" alt="Source manifest" /></a>
-  <img src="https://img.shields.io/badge/INTEGRATIONS-05-4F46E5?style=for-the-badge" alt="Three integrations" />
+  <img src="https://img.shields.io/badge/INTEGRATIONS-06-4F46E5?style=for-the-badge" alt="Three integrations" />
 </p>
 
 <p align="center">
@@ -25,7 +25,7 @@
 
 ## At a glance
 
-This repository includes six integrations documented here. Choose one to get started; **you do not need to install all four**.
+This repository includes six integrations documented here. Choose the integrations you need; **you do not need to install all six**.
 
 | Integration | Catalogue & metadata | Playback |
 |:--|:--|:--|
@@ -34,7 +34,7 @@ This repository includes six integrations documented here. Choose one to get sta
 | <img src="assets/icons/stremio.svg" width="24" align="middle" alt="" /> **TMDB + Stremio** | TMDB | Your configured Stremio-compatible add-ons |
 | **Miruro** | Miruro / AniList metadata | Available Miruro streaming servers |
 | **Zenkai Player** | AniMap + AniList metadata | Native MegaPlay, VidStream, and ACDN multi-audio playback |
-| **Jellyfin** | Your Jellyfin libraries and server metadata | Your own Jellyfin server |
+| **Jellyfin** | Jellyfin libraries and server metadata | Jellyfin or AIOStreams media server |
 
 <p align="center">
   <img src="assets/provider-flow.svg" width="100%" alt="Diagram showing TMDB metadata flowing into Zangetsu separately from playback streams provided by PencariMovie, AIOStreams, or Stremio add-ons." />
@@ -246,56 +246,72 @@ See Zenkai's [stream handler](https://github.com/nyyrox2/Zenkai/blob/main/server
 </details>
 
 <details>
-<summary><strong>Jellyfin</strong> · Your personal media server</summary>
+<summary><strong>Jellyfin</strong> · Jellyfin and AIOStreams media servers</summary>
 
 ### What it does
 
-Connects to your own Jellyfin server with a normal Jellyfin account. Browse libraries, search titles, open movie/series details, view complete show episode lists, navigate BoxSet collections, and request playback using Jellyfin's MediaBrowser authentication and playback-negotiation APIs.
+This is a native Jellyfin API source for Zangetsu. It reads the server's own libraries, catalogue entries, title metadata, seasons, episodes, artwork, playback versions, and subtitle tracks. It does not use TMDB or the old Stremio-manifest provider as its catalogue.
+
+It supports normal Jellyfin servers and Jellyfin-compatible servers such as the AIOStreams media server. **AIOStreams catalogues appear as Jellyfin libraries, metadata-addon results become titles and episodes, and stream-addon results are returned as selectable media versions.** You do not need to host Jellyfin separately when using AIOStreams; its configuration already exposes the Jellyfin-compatible server API.
 
 ### Setup
 
-1. Ensure your Jellyfin server is reachable from the device running Zangetsu. Use HTTPS for remote connections and a trusted reverse proxy where applicable.
-2. Install **Jellyfin** from this repository in Zangetsu and open **Jellyfin → Settings**.
-3. Enter the server address. You may enter a hostname and port without a scheme, or a full HTTP/HTTPS URL. Reverse-proxy subpaths are supported. Do not add `/web` or `/web/index.html`.
-4. Enter your Jellyfin **username** and **password**. The provider checks `/System/Info/Public`, then authenticates through `/Users/AuthenticateByName`. The authenticated user ID and access token are discovered automatically.
-5. Save the settings and open Jellyfin. The Home rows can show Continue Watching, Next Up, Recently Added, Favorites, and each supported library.
+1. Make sure the server address is reachable from the device running Zangetsu. Use HTTPS for remote connections.
+2. Install **Jellyfin** from this repository and open **Jellyfin → Settings**.
+3. For a normal Jellyfin server, enter its base address, including any configured base path. For AIOStreams, open **Save & Install → Jellyfin apps → Connect** and copy the plain **Server address** ending in `/jellyfin`. Do not paste the Stremio manifest URL.
+4. For AIOStreams, use the configuration UUID or alias shown on the Connect tab as **Username**, and the configuration password as **Password**. For a household user, append `/UserName` to the username and append `/PIN` to the password when that user has a PIN. For a normal Jellyfin server, use the account's Jellyfin username and password.
+5. Save the settings and open Jellyfin. The source discovers the authenticated user's accessible libraries automatically.
+
+AIOStreams' sign-in picker address contains a secret. Prefer the plain server address plus username and password in the source settings, and do not share the picker address.
 
 ### Settings
 
 | Setting | What it controls |
 |:--|:--|
-| **Server address** | Jellyfin base URL, including an optional reverse-proxy subpath |
-| **Username / Password** | Standard Jellyfin account login |
-| **Catalogue page size** | 25, 50, or 100 items per library/search request |
-| **Home sections** | Continue Watching, Next Up, Recently Added, Favorites, and individual libraries |
-| **Content types** | Movies, TV series, episodes, trailers, and BoxSet collections |
-| **Show collection libraries** | Include BoxSet libraries and collection entries. Opening a collection lists its movies and series |
+| **Jellyfin server address** | Full server URL, including a reverse-proxy or AIOStreams `/jellyfin` base path |
+| **Username / Password** | Standard Jellyfin login. For AIOStreams, use the configuration UUID/alias and configuration password |
+| **API key / access token** | Optional alternative to password login. When set, the API key is used for server requests |
+| **User ID** | Optional user ID for API-key authentication. Leave blank when the server permits automatic discovery |
+| **Library ID** | Optional restriction to one accessible library. Leave blank to browse every supported library |
+| **Catalogue page size** | 25, 50, or 100 items per library row and search request |
+| **Home sections** | Continue Watching, Next Up, Recently Added, Favorites, and each accessible library |
+| **Catalogue content types** | Movies, TV series, and collections / box sets |
+| **Show collection libraries** | Include or hide collection libraries and BoxSet entries |
 | **Library sorting** | Recently added, title, community rating, or release date |
-| **Maximum streaming bitrate** | 16, 25, 40, 80, or 1,000 Mbps advertised to Jellyfin during playback negotiation |
-| **Prefer server transcoding** | Put a server-provided HLS/remux stream before direct play when both are available |
-| **Include external subtitles** | Return external subtitle files. Embedded subtitles remain part of their video stream |
+| **Maximum streaming bitrate** | Bitrate ceiling sent during Jellyfin playback negotiation |
+| **Prefer server transcoding** | Prefer a server-provided transcoding/remux URL when one is available |
+| **Include external subtitles** | Include external subtitle tracks returned by the server |
+| **Use remote media URLs** | Use a remote media URL when a source is marked as remote; otherwise request the server's stream route |
 | **Catalogue cache** | Disable cache or use a 15-second, 30-second, or 1-minute in-memory cache |
-| **Server request timeout** | 5, 10, 15, or 20 seconds per API request |
+| **Server request timeout** | 5, 10, 15, or 25 seconds per request |
 
-### Playback and compatibility
+### Catalogue and metadata
 
-- The provider uses the Jellyfin `Authorization: MediaBrowser ... Token="..."` header for authenticated API and artwork requests.
-- For playback it sends a **POST** request to `/Items/{itemId}/PlaybackInfo` with a Zangetsu device profile, supported codecs/containers, subtitle profiles, and the selected bitrate ceiling.
-- Zangetsu exposes the server's direct-play stream when Jellyfin reports it is supported, and also exposes the server-provided remux/transcoding URL when available. The source preference controls their order.
-- External subtitle tracks are returned as separate subtitle entries. Embedded tracks remain inside the media stream and are not duplicated as soft subtitles.
-- A title in the catalogue does not guarantee the server can play it. Permissions, storage, FFmpeg configuration, client codec support, and network reachability still apply.
+- The source reads libraries from Jellyfin's user views and requests catalogue pages within each library. Search is performed against the available libraries, rather than against an unrelated TMDB catalogue.
+- When an AIOStreams library advertises that a genre must be selected, the source reads that library's genres and automatically chooses its `None` entry when available, or its first offered genre.
+- Opening a series loads its seasons and episode lists. If the server's show-episode route is unavailable or returns no episodes, the source falls back to the season's episode items route.
+- Catalogue and episode-list requests deliberately do not ask for `MediaSources`. AIOStreams resolves stream add-ons when playback versions are requested, not once for every card or episode in a catalogue.
+
+### Playback
+
+- Playback is negotiated through `POST /Items/{itemId}/PlaybackInfo`. When the server advertises AIOStreams' `versions` feature, the source requests a fresh version list and opts in to `RequiredHttpHeaders`.
+- AIOStreams' returned `MediaSources` are mapped into selectable Zangetsu stream results. The source uses the version's `Path`, version metadata, and required request headers. It does not send the Jellyfin account token to an unrelated external stream host.
+- External subtitle tracks use the server-provided `DeliveryUrl` when present. Standard Jellyfin subtitle routes are used as a fallback.
+- Direct links, remote paths, and server-provided transcoding URLs are handled separately. The **Prefer server transcoding** setting controls their order where both a direct and transcoded option are available.
+- A title appearing in a library does not guarantee that a stream add-on can resolve it. Availability depends on the server's catalogue, metadata, configured stream add-ons, and the returned media versions.
 
 ### Troubleshooting
 
-- **401 / invalid login:** verify the username and password in Jellyfin's web client and confirm the configured server address.
-- **Server version warning:** this provider requires Jellyfin 10.9 or later.
-- **Libraries are empty:** confirm that the authenticated account has access to those libraries.
-- **Playback fails:** check Jellyfin Dashboard activity and logs. Try the other returned source, or enable **Prefer server transcoding** when the client cannot play the original file.
-- **Remote artwork or subtitles fail:** ensure your reverse proxy forwards Jellyfin API, image, video, and subtitle routes under the same base path.
+- **401 / invalid login:** for AIOStreams, verify the configuration UUID or alias, configuration password, and any required user PIN. For normal Jellyfin, verify the Jellyfin account credentials.
+- **No libraries:** confirm that the authenticated user can access the libraries and that the server address includes the correct base path.
+- **AIOStreams catalogue is empty:** check that the configuration has catalogues enabled. Libraries that require a genre are handled automatically when their server advertises the genre feature.
+- **A series opens without episodes:** check whether the server exposes seasons and episode items for that series. The provider includes a fallback episode-list route for servers where the show-episode endpoint is unavailable.
+- **No playable versions:** verify that the relevant AIOStreams stream add-ons are enabled and return streams for that title. Metadata appearing in a catalogue does not guarantee a playable result.
+- **A stream starts but fails:** check the stream's required headers and whether its URL is reachable from the device. For a normal Jellyfin server, also check storage permissions, server logs, FFmpeg, and client codec support.
 
-**Security:** Zangetsu's generic extension settings currently display text fields without password masking, so the password can be visible while editing. Prefer a dedicated Jellyfin account with only the library permissions it needs. Use HTTPS outside your trusted LAN, do not share screenshots containing credentials, and do not embed credentials in the server URL.
+**Security:** Zangetsu's generic source settings currently display text fields without password masking. The password and API key can therefore be visible while editing settings. Use a dedicated account with only the required library permissions, prefer HTTPS outside a trusted LAN, and never share screenshots containing credentials. AIOStreams documents its API keys as administrator-level access; use the normal configuration login when you need the configured user's permissions and watch history.
 
-**Zangetsu limitation:** the current JavaScript-provider interface does not expose playback start/progress/stop callbacks. Jellyfin's Continue Watching and Next Up rows are readable, but this extension cannot report playback progress back to Jellyfin.
+**Zangetsu limitation:** the current JavaScript-provider interface does not expose playback start/progress/stop callbacks. Continue Watching and Next Up can be read from the server, but this source cannot report playback progress back to Jellyfin.
 
 </details>
 
