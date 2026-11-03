@@ -7,7 +7,7 @@ var DEFAULT_MIRURO_HOSTS = ['https://api.hiyori.tv','https://miruro.zenos.my.id'
 var CACHE = {};
 var SESSIONS = {};
 
-function getInfo(){return {name:'AnimePahe',lang:'en',baseUrl:SITE,logo:'https://www.google.com/s2/favicons?sz=256&domain=animepahe.pw',type:'anime',version:'1.0.0'};}
+function getInfo(){return {name:'AnimePahe',lang:'en',baseUrl:SITE,logo:'https://www.google.com/s2/favicons?sz=256&domain=animepahe.pw',type:'anime',version:'1.0.1'};}
 function getSettings(){
  return [
   {key:'audioMode',label:'Audio tracks',description:'Show both SUB and DUB when available, or filter to one track.',type:'enum',default:'both',options:[{value:'both',label:'Sub and dub'},{value:'sub',label:'Sub only'},{value:'dub',label:'Dub only'}]},
@@ -241,4 +241,4 @@ function getVideoSources(url,opts){
 }
 function getStreams(id,opts){return getVideoSources(id,opts);}
 function getLinks(id,opts){return getVideoSources(id,opts);}
-if(typeof module!=='undefined'&&module.exports)module.exports={version:'1.0.0',getInfo:getInfo,getSettings:getSettings,getHome:getHome,popular:popular,search:search,getDetail:getDetail,getEpisodes:getEpisodes,getVideoSources:getVideoSources,getStreams:getStreams,getLinks:getLinks,_config:_config,_parseIds:_parseIds,_parseRelease:_parseRelease,_variants:_variants,_selectVariant:_selectVariant,_unpack:_unpack,_playlist:_playlist,_episodesFromMiruro:_episodesFromMiruro,_fallbackEpisodeList:_fallbackEpisodeList};
+if(typeof module!=='undefined'&&module.exports)module.exports={version:'1.0.1',getInfo:getInfo,getSettings:getSettings,getHome:getHome,popular:popular,search:search,getDetail:getDetail,getEpisodes:getEpisodes,getVideoSources:getVideoSources,getStreams:getStreams,getLinks:getLinks,_config:_config,_parseIds:_parseIds,_parseRelease:_parseRelease,_variants:_variants,_selectVariant:_selectVariant,_unpack:_unpack,_playlist:_playlist,_episodesFromMiruro:_episodesFromMiruro,_fallbackEpisodeList:_fallbackEpisodeList};
