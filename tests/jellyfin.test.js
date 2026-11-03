@@ -57,6 +57,10 @@ global.fetch = async (url, init = {}) => {
   assert.equal(init.headers.Authorization, 'MediaBrowser Client="Zangetsu", Device="Zangetsu", DeviceId="zangetsu-jellyfin", Version="1.1.0", Token="' + expectedToken + '"');
   assert.equal(init.headers['X-Emby-Token'], expectedToken);
 
+  if (pathName === '/jellyfin/Users') {
+    return { status: 200, body: JSON.stringify([{ Id: 'user-1', Name: 'Test User' }]) };
+  }
+
   if (pathName === '/jellyfin/UserViews') {
     assert.equal(parsed.searchParams.get('userId'), 'user-1');
     return { status: 200, body: JSON.stringify({ Items: [
