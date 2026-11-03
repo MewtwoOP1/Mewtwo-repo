@@ -135,7 +135,8 @@ function _normalizeServerAddress(input) {
   }
   var scheme = match[1].toLowerCase();
   var host = match[2];
-  var path = String(match[3] || '').replace(/\\/g, '/').replace(/\/web\/index\.html$/i, '').replace(/\/web$/i, '').replace(/\/+$/, '');
+  var path = String(match[3] || '').replace(/\\/g, '/');
+  path = path.replace(/\/+$/, '').replace(/\/web\/index\.html$/i, '').replace(/\/web$/i, '').replace(/\/+$/, '');
   return scheme + '://' + host + path;
 }
 
