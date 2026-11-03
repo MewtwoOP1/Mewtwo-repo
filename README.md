@@ -5,7 +5,7 @@
 <p align="center">
   <a href="https://github.com/Spyou/Zangetsu"><img src="https://img.shields.io/badge/BUILT_FOR-Zangetsu-8B5CF6?style=for-the-badge&logo=github&logoColor=white" alt="Built for Zangetsu" /></a>
   <a href="https://raw.githubusercontent.com/MewtwoOP1/Mewtwo-repo/main/index.json"><img src="https://img.shields.io/badge/SOURCE-Manifest-0F766E?style=for-the-badge" alt="Source manifest" /></a>
-  <img src="https://img.shields.io/badge/INTEGRATIONS-06-4F46E5?style=for-the-badge" alt="Three integrations" />
+  <img src="https://img.shields.io/badge/INTEGRATIONS-06-4F46E5?style=for-the-badge" alt="Six integrations" />
 </p>
 
 <p align="center">
@@ -17,7 +17,7 @@
   <a href="#at-a-glance">Overview</a> &nbsp; · &nbsp;
   <a href="#add-the-repository">Install</a> &nbsp; · &nbsp;
   <a href="#choose-your-setup">Integrations</a> &nbsp; · &nbsp;
-  <a href="#third-party-sources-and-responsibility">Third-party notice</a> &nbsp; · &nbsp;
+  <a href="#credits-and-licensing">Credits &amp; licensing</a> &nbsp; · &nbsp;
   <a href="#troubleshooting">Troubleshooting</a>
 </p>
 
@@ -34,7 +34,7 @@ This repository includes six integrations documented here. Choose the integratio
 | <img src="assets/icons/stremio.svg" width="24" align="middle" alt="" /> **TMDB + Stremio** | TMDB | Your configured Stremio-compatible add-ons |
 | **Miruro** | Miruro / AniList metadata | Available Miruro streaming servers |
 | **Zenkai Player** | AniMap + AniList metadata | Native MegaPlay, VidStream, and ACDN multi-audio playback |
-| **Jellyfin** | Jellyfin libraries and server metadata | Jellyfin or AIOStreams media server |
+| <img src="https://raw.githubusercontent.com/jellyfin/jellyfin-ux/master/logos/SVG/jellyfin-icon--color-on-dark.svg" width="24" align="middle" alt="Jellyfin" /> **Jellyfin** | Jellyfin libraries and server metadata | Jellyfin or AIOStreams media server |
 
 <p align="center">
   <img src="assets/provider-flow.svg" width="100%" alt="Diagram showing TMDB metadata flowing into Zangetsu separately from playback streams provided by PencariMovie, AIOStreams, or Stremio add-ons." />
@@ -246,7 +246,7 @@ See Zenkai's [stream handler](https://github.com/nyyrox2/Zenkai/blob/main/server
 </details>
 
 <details>
-<summary><strong>Jellyfin</strong> · Jellyfin and AIOStreams media servers</summary>
+<summary><img src="https://raw.githubusercontent.com/jellyfin/jellyfin-ux/master/logos/SVG/jellyfin-icon--color-on-dark.svg" width="24" align="middle" alt="" /> &nbsp; <strong>Jellyfin</strong> · Jellyfin and AIOStreams media servers</summary>
 
 ### What it does
 
@@ -320,38 +320,18 @@ The source keeps its settings focused on connection details and the few playback
 | TMDB fails after previously working | Recent API responses can be served from cache during transient network failures; check DNS/network access if all requests still fail |
 | The app says AniList is having an error | AniList is the app's built-in metadata service, not this repository's stream provider. If AniList is unavailable, switch the anime metadata provider to MyAnimeList if available, or retry when the service/network recovers |
 
-## Third-party sources and responsibility
+## Credits and licensing
+
+This repository contains provider integrations for Zangetsu. It does not host media; connected services are independently operated.
+
+- **MIT:** original repository code. See [LICENSE](LICENSE).
+- **Apache-2.0:** the Yuzono-derived serenity-animekai and serenity-aniwave providers. See [LICENSE-APACHE-2.0](LICENSE-APACHE-2.0) and [the upstream notice](NOTICE-YUZONO-ANIME-EXTENSIONS.md).
+- **Jellyfin icon:** official asset from [Jellyfin UX](https://github.com/jellyfin/jellyfin-ux/tree/master/logos/SVG), under [CC BY-SA 4.0](https://github.com/jellyfin/jellyfin-ux/blob/master/LICENSE). It is shown only to identify Jellyfin compatibility. This is an independent, unofficial integration and is not endorsed by Jellyfin.
+
+For the provider interface and manifest format, see [Spyou/Zangetsu](https://github.com/Spyou/Zangetsu) and [Spyou/zangetsu-providers](https://github.com/Spyou/zangetsu-providers).
 
 <p align="center">
-  <img src="assets/third-party-boundaries.svg" width="100%" alt="Diagram explaining that Mewtwo Repo publishes integration code, while independent third-party services control their own sources, content, and availability." />
-</p>
-
-The sources and services referenced by these integrations are third-party projects or endpoints made available by their respective operators. **Mewtwo Repo does not own, operate, maintain, host, or control those third-party sources.** This repository publishes integration code and configuration information only.
-
-| This repository provides | This repository does not provide |
-|:--|:--|
-| Integration code and a source manifest | Hosted, uploaded, stored, or distributed media files |
-| Setup information for supported integrations | Operation or maintenance of third-party source websites and services |
-| References to externally operated services | Guarantees about third-party content, links, stream availability, or uptime |
-
-> [!WARNING]
-> **Third-party services are outside this project's control.** We do not verify, control, or guarantee the content, accuracy, legality, licensing, availability, security, or data-handling practices of external sources. Services, URLs, and returned results may change or stop working without notice. To the extent permitted by applicable law, the maintainers are not responsible for third-party services, their content, outages, or how external services are used.
->
-> You choose whether to access third-party sources and are responsible for complying with applicable laws and each service's terms. A link or integration listed here is not an endorsement or a guarantee of availability.
-
-## Project boundaries & licensing
-
-- This repository and its maintainers do **not** host, upload, store, proxy, or distribute movies, series, anime, subtitles, or video files.
-- Metadata, artwork, and playback links are returned by TMDB or external services. Those services determine their own availability, access rules, terms, and policies.
-- This is an unofficial community project, not affiliated with or endorsed by Zangetsu, TMDB, Stremio, AIOStreams, or PencariMovie.
-- Most code is licensed under MIT. The MovieBox IN port is separately licensed under GPL-3.0-only. See [LICENSE](LICENSE) and [LICENSES/GPL-3.0.txt](LICENSES/GPL-3.0.txt).
-
-## Credits
-
-The provider manifest and JavaScript interface follow the self-contained source model documented by [Spyou/zangetsu-providers](https://github.com/Spyou/zangetsu-providers). This repository is independently maintained and is not the official Zangetsu provider repository.
-
-<p align="center">
-  <sub>Unofficial community integrations · Third-party services are independently operated · Keep personalized manifests private</sub>
+  <sub>Unofficial community integrations · External services are independently operated</sub>
 </p>
 
 <p align="center">
