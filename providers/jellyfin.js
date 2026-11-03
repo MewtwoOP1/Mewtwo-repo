@@ -263,6 +263,20 @@ function _request(ctx, path, params, options) {
   }).then(function (value) {
     if (method === 'GET' && !options.noCache) _cachePut(cacheKey, value, ctx.config.cacheTtl);
     return value;
+  }).catch(function (error) {
+    if (error && error.status === 401 && !options._authRetry && options.auth !== false && ctx.config) {
+      // A server-side token can expire before the local session cache. Re-authenticate
+      // once, replace the context credentials, and retry the exact API operation.
+      return _login(ctx.config, true).then(function (session) {
+        ctx.token = session.token;
+        ctx.userId = session.userId || ctx.userId;
+        return _request(ctx, path, params, Object.assign({}, options, {
+          _authRetry: true,
+          noCache: true
+        }));
+      });
+    }
+    throw error;
   });
 }
 
@@ -613,8 +627,21 @@ function _detailObject(raw, ctx, episodes, seasons) {
     item.imdbId = providers.Imdb || providers.IMDb || null;
     item.tmdbId = providers.Tmdb || providers.TMDB ? Number(providers.Tmdb || providers.TMDB) : undefined;
     item.tvdbId = providers.Tvdb || providers.TVDB || null;
+    item.malId = providers.MyAnimeList || providers.MAL ? Number(providers.MyAnimeList || providers.MAL) : undefined;
+    item.anilistId = providers.AniList || providers.Anilist ? Number(providers.AniList || providers.Anilist) : undefined;
+    item.kitsuId = providers.Kitsu ? Number(providers.Kitsu) : undefined;
+    item.anidbId = providers.AniDB || providers.Anidb ? Number(providers.AniDB || providers.Anidb) : undefined;
   }
+  var people = Array.isArray(raw.People) ? raw.People : [];
+  item.cast = people.filter(function (person) {
+    return person && String(person.Type || person.type || '').toLowerCase() === 'actor';
+  }).map(function (person) { return person.Name || person.name; }).filter(Boolean);
   if (Array.isArray(seasons) && seasons.length) item.seasons = seasons;
+  if (Array.isArray(raw.People) && raw.People.length) {
+    item.cast = raw.People.filter(function (person) {
+      return person && String(person.Type || person.type || '').toLowerCase() === 'actor';
+    }).map(function (person) { return person.Name || person.name; }).filter(Boolean);
+  }
   return item;
 }
 
@@ -888,6 +915,29 @@ function _getSeasons(ctx, seriesId) {
   });
 }
 
+function _collectEpisodePages(ctx, path, baseParams) {
+  var output = [];
+  var total = Infinity;
+  function readPage(startIndex) {
+    var params = Object.assign({}, baseParams, {
+      StartIndex: startIndex,
+      Limit: 500
+    });
+    return _request(ctx, path, params).then(function (payload) {
+      var rows = _itemsFrom(payload);
+      var reportedTotal = Number(payload && (payload.TotalRecordCount != null ? payload.TotalRecordCount : payload.totalRecordCount));
+      if (isFinite(reportedTotal) && reportedTotal >= 0) total = reportedTotal;
+      if (rows.length) output = output.concat(rows);
+      var next = startIndex + rows.length;
+      if (rows.length && next > startIndex && (next < total || (!isFinite(total) && rows.length >= 500))) {
+        return readPage(next);
+      }
+      return output;
+    });
+  }
+  return readPage(0);
+}
+
 function _getSeasonEpisodes(ctx, seriesId, season) {
   var seasonId = String(season && (season.Id || season.id) || '');
   var params = {
@@ -896,32 +946,28 @@ function _getSeasonEpisodes(ctx, seriesId, season) {
     ImageTypeLimit: 1,
     EnableImageTypes: 'Primary,Thumb',
     SortBy: 'ParentIndexNumber,IndexNumber',
-    SortOrder: 'Ascending',
-    Limit: 500
+    SortOrder: 'Ascending'
   };
   if (seasonId) params.SeasonId = seasonId;
-  return _request(ctx, '/Shows/' + encodeURIComponent(seriesId) + '/Episodes', params, { noCache: false }).then(function (payload) {
-    var rows = _itemsFrom(payload);
-    if (rows.length) return rows;
-    return _getItems(ctx, {
+  var primary = _collectEpisodePages(
+    ctx,
+    '/Shows/' + encodeURIComponent(seriesId) + '/Episodes',
+    params
+  );
+  function fallback() {
+    return _collectEpisodePages(ctx, '/Users/' + encodeURIComponent(ctx.userId) + '/Items', {
       ParentId: seasonId || seriesId,
       IncludeItemTypes: 'Episode',
       Recursive: 'true',
       SortBy: 'ParentIndexNumber,IndexNumber',
       SortOrder: 'Ascending',
-      Limit: 500,
       Fields: EPISODE_FIELDS
-    }).then(_itemsFrom);
+    });
+  }
+  return primary.then(function (rows) {
+    return rows.length ? rows : fallback();
   }).catch(function () {
-    return _getItems(ctx, {
-      ParentId: seasonId || seriesId,
-      IncludeItemTypes: 'Episode',
-      Recursive: 'true',
-      SortBy: 'ParentIndexNumber,IndexNumber',
-      SortOrder: 'Ascending',
-      Limit: 500,
-      Fields: EPISODE_FIELDS
-    }).then(_itemsFrom);
+    return fallback();
   });
 }
 
