@@ -300,7 +300,7 @@ function _fields() {
 function _selectedItems() {
   var c = _config();
   var types = c.contentTypes.slice();
-  if (!c.includePlayed) return types;
+  if (c.showCollections && types.indexOf('BoxSet') < 0) types.push('BoxSet');
   return types;
 }
 
@@ -335,15 +335,21 @@ function _imageHeaders(ctx) {
 
 function _pad(value) { return String(value).padStart(2, '0'); }
 
+function _itemUrl(id, type) {
+  var url = 'jellyfin://' + encodeURIComponent(String(id));
+  return String(type || '').toLowerCase() === 'boxset' ? url + '?collection=1' : url;
+}
+
 function _mapItem(raw, ctx) {
   if (!raw || !raw.Id || !raw.Name) return null;
   var type = String(raw.Type || '').toLowerCase();
-  if (!['movie', 'series', 'episode', 'trailer', 'video'].includes(type)) return null;
+  if (!['movie', 'series', 'episode', 'trailer', 'video', 'boxset'].includes(type)) return null;
   var id = String(raw.Id);
+  var itemUrl = _itemUrl(id, type);
   var images = raw.ImageTags || {};
   var item = {
-    id: 'jellyfin://' + encodeURIComponent(id),
-    url: 'jellyfin://' + encodeURIComponent(id),
+    id: itemUrl,
+    url: itemUrl,
     title: String(raw.Name),
     cover: images.Primary ? _imageUrl(id, 'Primary', images.Primary, ctx) : null,
     coverHeaders: _imageHeaders(ctx),
@@ -491,9 +497,41 @@ function popular(opts) {
 
 function _parseItemUrl(value) {
   var text = String(value || '');
-  var match = text.match(/^jellyfin:\/\/([^/?#]+)$/i);
+  var match = text.match(/^jellyfin:\/\/([^/?#]+)(?:\?collection=1)?$/i);
   if (!match) return null;
   try { return decodeURIComponent(match[1]); } catch (e) { return null; }
+}
+
+function _isCollectionUrl(value) {
+  return /^jellyfin:\/\/[^/?#]+\?collection=1$/i.test(String(value || ''));
+}
+
+function _getCollectionItems(ctx, collectionId) {
+  return _itemsFor(ctx, {
+    ParentId: collectionId,
+    Recursive: false,
+    IncludeItemTypes: 'Movie,Series',
+    SortBy: 'SortName',
+    SortOrder: 'Ascending',
+    StartIndex: 0,
+    Limit: ctx.config.pageSize,
+    Fields: _fields(),
+    EnableUserData: true,
+    EnableImages: true
+  });
+}
+
+function _collectionEpisodes(items) {
+  return items.map(function (item, index) {
+    return {
+      id: item.jellyfinId,
+      title: item.title,
+      number: index + 1,
+      url: item.url,
+      thumbnail: item.cover,
+      date: item.year ? String(item.year) + '-01-01' : null
+    };
+  });
 }
 
 function _mapEpisode(raw, ctx) {
@@ -572,7 +610,11 @@ function getEpisodes(url, opts) {
   if (!id) return Promise.reject(new Error('Invalid Jellyfin item URL.'));
   opts = opts || {};
   var page = typeof opts === 'number' ? opts : (opts && opts.page ? opts.page : null);
-  return _withUser().then(function (ctx) { return _getEpisodes(ctx, id, page); });
+  return _withUser().then(function (ctx) {
+    return _isCollectionUrl(url)
+      ? _getCollectionItems(ctx, id).then(_collectionEpisodes)
+      : _getEpisodes(ctx, id, page);
+  });
 }
 
 function getDetail(url, opts) {
@@ -588,7 +630,7 @@ function getDetail(url, opts) {
       var detail = {
         id: id,
         title: String(raw.Name || ''),
-        url: 'jellyfin://' + encodeURIComponent(id),
+        url: mapped.url,
         cover: mapped.cover,
         coverHeaders: mapped.coverHeaders,
         banner: mapped.banner,
@@ -608,6 +650,14 @@ function getDetail(url, opts) {
         return _getEpisodes(ctx, id).then(function (episodes) {
           detail.episodes = episodes;
           detail.subCount = episodes.length;
+          return detail;
+        });
+      }
+      if (String(raw.Type).toLowerCase() === 'boxset') {
+        detail.url = mapped.url;
+        return _getCollectionItems(ctx, id).then(function (items) {
+          detail.episodes = _collectionEpisodes(items);
+          detail.subCount = detail.episodes.length;
           return detail;
         });
       }
@@ -745,6 +795,7 @@ function _exports() {
     getStreams: getStreams,
     _config: _config,
     _parseItemUrl: _parseItemUrl,
+    _isCollectionUrl: _isCollectionUrl,
     _mapItem: _mapItem,
     _imageUrl: _imageUrl
   };
