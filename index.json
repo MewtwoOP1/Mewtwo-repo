@@ -346,7 +346,7 @@
     {
       "id": "miruro",
       "name": "Miruro",
-      "version": "1.0.3",
+      "version": "1.0.4",
       "type": "anime",
       "lang": "en",
       "file": "providers/miruro.js",
