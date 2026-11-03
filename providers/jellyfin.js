@@ -30,6 +30,8 @@ function getSettings() {
     { key: 'catalogSections', label: 'Home catalogue sections', description: 'Choose which Jellyfin catalogue rows appear on Home.', type: 'multiEnum', default: ['resume', 'nextUp', 'latest', 'favorites', 'libraries'], options: [{ value: 'resume', label: 'Continue Watching' }, { value: 'nextUp', label: 'Next Up' }, { value: 'latest', label: 'Recently Added' }, { value: 'favorites', label: 'Favorites' }, { value: 'libraries', label: 'Libraries' }] },
     { key: 'contentTypes', label: 'Catalogue content types', description: 'Choose which media types are shown in search and catalogue rows.', type: 'multiEnum', default: ['Movie', 'Series'], options: [{ value: 'Movie', label: 'Movies' }, { value: 'Series', label: 'TV series' }, { value: 'Episode', label: 'Episodes' }, { value: 'Trailer', label: 'Trailers' }] },
     { key: 'browseSort', label: 'Library sorting', description: 'Sort order for library browsing and popular catalogue rows.', type: 'enum', default: 'DateCreated', options: [{ value: 'DateCreated', label: 'Recently added' }, { value: 'SortName', label: 'Title' }, { value: 'CommunityRating', label: 'Community rating' }, { value: 'PremiereDate', label: 'Release date' }, { value: 'Random', label: 'Random' }] },
+    { key: 'genreFilter', label: 'Genre filter (optional)', description: 'Limit catalogue and search results to one or more Jellyfin genres. Separate multiple genres with commas.', type: 'text', default: '' },
+    { key: 'yearFilter', label: 'Release year filter (optional)', description: 'Limit catalogue and search results to a release year, or comma-separated years.', type: 'text', default: '' },
     { key: 'includePlayed', label: 'Include watched items', description: 'Include items already marked as played in normal library feeds.', type: 'bool', default: true },
     { key: 'showCollections', label: 'Show collection libraries', description: 'Include box sets and collection folders when returned by Jellyfin.', type: 'bool', default: false },
     { key: 'preferTranscoding', label: 'Prefer Jellyfin transcoding', description: 'Put a server-generated HLS transcode first when Jellyfin supplies one. Otherwise direct play remains first.', type: 'bool', default: false },
@@ -99,6 +101,8 @@ function _config() {
     contentTypes: contentTypes,
     catalogSections: catalogSections,
     browseSort: sort,
+    genreFilter: String(_setting('genreFilter') || '').split(',').map(function (x) { return x.trim(); }).filter(Boolean),
+    yearFilter: String(_setting('yearFilter') || '').split(',').map(function (x) { return parseInt(x.trim(), 10); }).filter(function (x) { return isFinite(x) && x >= 1888 && x <= 2200; }),
     includePlayed: _bool('includePlayed', true),
     showCollections: _bool('showCollections', false),
     preferTranscoding: _bool('preferTranscoding', false),
@@ -299,6 +303,15 @@ function _typeFilter() {
   return _selectedItems().join(',');
 }
 
+function _applyCatalogueFilters(params, c) {
+  if (!c.includePlayed) {
+    params.Filters = params.Filters ? String(params.Filters) + ',IsNotPlayed' : 'IsNotPlayed';
+  }
+  if (c.genreFilter.length) params.Genres = c.genreFilter;
+  if (c.yearFilter.length) params.Years = c.yearFilter;
+  return params;
+}
+
 function _imageUrl(itemId, imageType, tag, ctx) {
   ctx = ctx || null;
   var c = ctx ? ctx.config : _config();
@@ -390,29 +403,29 @@ function getHome(opts) {
         }, '/Shows/NextUp')));
       }
       if (sections.includes('latest')) {
-        jobs.push(_section('Recently Added', _itemsFor(ctx, {
+        jobs.push(_section('Recently Added', _itemsFor(ctx, _applyCatalogueFilters({
           Recursive: true, IncludeItemTypes: _typeFilter(), SortBy: 'DateCreated',
           SortOrder: 'Descending', StartIndex: 0, Limit: c.pageSize,
           Fields: _fields(), EnableUserData: true, EnableImages: true
-        })));
+        }, c)));
       }
       if (sections.includes('favorites')) {
-        jobs.push(_section('Favorites', _itemsFor(ctx, {
+        jobs.push(_section('Favorites', _itemsFor(ctx, _applyCatalogueFilters({
           Recursive: true, Filters: 'IsFavorite', IncludeItemTypes: _typeFilter(),
           SortBy: c.browseSort, SortOrder: 'Descending', StartIndex: 0,
           Limit: c.pageSize, Fields: _fields(), EnableUserData: true
-        })));
+        }, c)));
       }
       if (sections.includes('libraries')) {
         views.forEach(function (view) {
           var collectionType = String(view.CollectionType || '').toLowerCase();
           if (!c.showCollections && !['movies', 'tvshows', 'homevideos', 'mixed', ''].includes(collectionType)) return;
-          jobs.push(_section(String(view.Name || 'Library'), _itemsFor(ctx, {
+          jobs.push(_section(String(view.Name || 'Library'), _itemsFor(ctx, _applyCatalogueFilters({
             ParentId: view.Id, Recursive: true, IncludeItemTypes: _typeFilter(),
             SortBy: c.browseSort, SortOrder: 'Descending', StartIndex: 0,
             Limit: c.pageSize, Fields: _fields(), EnableUserData: true,
             EnableImages: true
-          })));
+          }, c)));
         });
       }
       return Promise.all(jobs).then(function (rows) { return rows.filter(Boolean); });
@@ -431,7 +444,7 @@ function search(query, page, opts) {
       StartIndex: (p - 1) * ctx.config.pageSize, Limit: ctx.config.pageSize,
       Fields: _fields(), EnableUserData: true, EnableImages: true
     };
-    if (!ctx.config.includePlayed) params.Filters = 'IsNotPlayed';
+    _applyCatalogueFilters(params, ctx.config);
     return _itemsFor(ctx, params);
   });
 }
@@ -448,12 +461,12 @@ function popular(opts) {
         var t = String(view.CollectionType || '').toLowerCase();
         return ['movies', 'tvshows', 'homevideos', 'mixed', ''].includes(t);
       }).map(function (view) {
-        return _itemsFor(ctx, {
+        return _itemsFor(ctx, _applyCatalogueFilters({
           ParentId: view.Id, Recursive: true, IncludeItemTypes: _typeFilter(),
           SortBy: ctx.config.browseSort, SortOrder: 'Descending',
           StartIndex: start, Limit: ctx.config.pageSize,
           Fields: _fields(), EnableUserData: true, EnableImages: true
-        }).catch(function () { return []; });
+        }, ctx.config)).catch(function () { return []; });
       })).then(function (groups) {
         var merged = [];
         var seen = Object.create(null);
@@ -497,8 +510,8 @@ function _getEpisodes(ctx, seriesId, page) {
   page = Math.max(1, Number(page) || 1);
   return _rawRequest(ctx, '/Shows/' + encodeURIComponent(seriesId) + '/Episodes', {
     userId: ctx.userId, fields: _fields(), isMissing: false,
-    startIndex: (page - 1) * Math.min(500, ctx.config.pageSize),
-    limit: Math.min(500, ctx.config.pageSize),
+    startIndex: (page - 1) * 500,
+    limit: 500,
     enableImages: true, enableUserData: true
   }).then(function (data) {
     return (Array.isArray(data.Items) ? data.Items : []).map(function (raw) { return _mapEpisode(raw, ctx); }).filter(Boolean);
@@ -602,14 +615,13 @@ function _subtitles(mediaSource, itemId, sourceId, ctx) {
 }
 
 function _mediaUrl(mediaSource, itemId, ctx, playSessionId, preferTranscoding) {
-  var params = {
-    MediaSourceId: mediaSource.Id || itemId,
-    PlaySessionId: playSessionId || undefined
-  };
+  var params = { PlaySessionId: playSessionId || undefined };
   var direct = mediaSource.DirectStreamUrl || mediaSource.DirectPlayUrl;
   if (!direct) {
     direct = ctx.config.server + '/Videos/' + encodeURIComponent(itemId) + '/stream';
     params.static = 'true';
+    params.mediaSourceId = mediaSource.Id || itemId;
+  } else if (!/[?&](?:mediaSourceId|MediaSourceId)=/.test(direct)) {
     params.mediaSourceId = mediaSource.Id || itemId;
   }
   var directUrl = _queryUrl(_absoluteUrl(ctx.config.server, direct), params);
@@ -625,7 +637,7 @@ function _mediaUrl(mediaSource, itemId, ctx, playSessionId, preferTranscoding) {
     subtitles: _subtitles(mediaSource, itemId, mediaSource.Id || itemId, ctx)
   };
   var transcodeSource = transcodeUrl ? {
-    url: _queryUrl(transcodeUrl, { PlaySessionId: playSessionId || undefined, api_key: ctx.token }),
+    url: _queryUrl(transcodeUrl, { PlaySessionId: playSessionId || undefined }),
     quality: ctx.config.maxBitrate ? Math.round(ctx.config.maxBitrate / 1000000) + ' Mbps cap' : 'Server transcode',
     label: 'Jellyfin · ' + (transcodeProtocol === 'hls' ? 'HLS transcode' : 'Transcode'),
     container: transcodeProtocol === 'hls' ? 'hls' : 'unknown',
