@@ -126,6 +126,19 @@ global.fetch = async (url, init = {}) => {
     ] }) };
   }
 
+  if (pathName === '/jellyfin/Shows/long-series/Episodes') {
+    const startIndex = Number(parsed.searchParams.get('startIndex') || 0);
+    if (startIndex === 0) {
+      return { status: 200, body: JSON.stringify({ TotalRecordCount: 501, Items: [
+        { Id: 'long-episode-1', Name: 'Episode 1', Type: 'Episode', ParentIndexNumber: 1, IndexNumber: 1 }
+      ] }) };
+    }
+    assert.equal(startIndex, 500);
+    return { status: 200, body: JSON.stringify({ TotalRecordCount: 501, Items: [
+      { Id: 'long-episode-501', Name: 'Episode 501', Type: 'Episode', ParentIndexNumber: 2, IndexNumber: 1 }
+    ] }) };
+  }
+
   if (pathName === '/jellyfin/Users/user-1/Items/movie-1') {
     return { status: 200, body: JSON.stringify({
       Id: 'movie-1', Name: 'Test Movie', Type: 'Movie', Overview: 'A movie synopsis',
@@ -198,6 +211,12 @@ async function main() {
 
   const episodes = await provider.getEpisodes('jellyfin://series-1');
   assert.equal(episodes.length, 2);
+
+  const longEpisodes = await provider.getEpisodes('jellyfin://long-series');
+  assert.equal(longEpisodes.length, 2, 'episode retrieval continues beyond Jellyfin page 1');
+  assert.equal(longEpisodes[1].number, 1);
+  assert.ok(requests.some((r) => new URL(r.url).pathname.endsWith('/Shows/long-series/Episodes') &&
+    new URL(r.url).searchParams.get('startIndex') === '500'));
 
   const streams = await provider.getVideoSources('jellyfin://episode-1');
   assert.equal(streams.length, 2, 'direct play and server transcode are both exposed');
