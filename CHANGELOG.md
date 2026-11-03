@@ -2,11 +2,14 @@
 
 ## Unreleased
 
-- Replace the Jellyfin source implementation with a clean MediaBrowser API integration: public server/version discovery, username/password authentication through `/Users/AuthenticateByName`, token caching, and automatic re-authentication after expired sessions.
-- Use Jellyfin's user-scoped `/UserViews`, `/Items`, `/UserItems/Resume`, and `/Shows/NextUp` routes for Home, library browsing, search, and details.
-- Add BoxSet library and collection navigation, item metadata and artwork mapping, and complete paginated episode retrieval for long-running series.
-- Negotiate playback through `POST /Items/{id}/PlaybackInfo` using a Zangetsu device profile; expose server-approved direct play and server-provided remux/transcoding URLs, authenticated headers, and external subtitle tracks.
-- Replace the previous API-key-first configuration with standard Jellyfin account credentials and settings for catalogue sections, content types, bitrate, playback ordering, subtitles, caching, and request timeout.
+- Rebuild Jellyfin as a standalone catalogue-backed source. Read the authenticated user's Jellyfin libraries and catalogue directly instead of using the old Stremio/TMDB implementation.
+- Add AIOStreams Jellyfin-server support: discover advertised features, handle genre-required catalogues, list configured catalogues as libraries, and read AIOStreams version metadata from Jellyfin media sources.
+- Separate catalogue/detail/episode requests from stream resolution so opening a catalogue or loading episode lists does not invoke stream add-ons.
+- Add complete season episode pagination and a fallback from the show-episodes route to the parent-items route for compatible Jellyfin servers.
+- Negotiate playable versions through `PlaybackInfo`, preserve each remote source's required request headers, and use the server-provided external subtitle delivery URLs without leaking Jellyfin credentials to third-party stream hosts.
+- Add API-key and optional user-ID settings alongside username/password authentication, one-time expired-session reauthentication, library filtering, and updated setup documentation.
+- Replace the old Jellyfin v2 test suite with v3 catalogue, episode pagination, AIOStreams version, header, subtitle, and authentication coverage.
+
 
 ## TMDB + Stremio 3.3.0
 
