@@ -9,7 +9,7 @@ var MEDIA_CACHE = {};
 var CATALOG_CACHE = {};
 var MISS_CACHE = {};
 
-function getInfo(){return {name:'Lili (XFDM)',lang:'zh',baseUrl:SITE,logo:'https://www.google.com/s2/favicons?sz=256&domain=xfdm.pro',type:'anime',version:'1.0.0'};}
+function getInfo(){return {name:'Lili (XFDM)',lang:'zh',baseUrl:SITE,logo:'https://www.google.com/s2/favicons?sz=256&domain=xfdm.pro',type:'anime',version:'1.0.1'};}
 function getSettings(){
  return [
   {key:'requestTimeoutMs',label:'Request timeout',description:'Maximum wait for each Bangumi or XFDM request.',type:'enum',default:'10000',options:[{value:'6000',label:'6 seconds'},{value:'10000',label:'10 seconds'},{value:'15000',label:'15 seconds'}]},
@@ -216,4 +216,4 @@ function getVideoSources(url,opts){
 }
 function getStreams(id,opts){return getVideoSources(id,opts);}
 function getLinks(id,opts){return getVideoSources(id,opts);}
-if(typeof module!=='undefined'&&module.exports)module.exports={version:'1.0.0',getInfo:getInfo,getSettings:getSettings,getHome:getHome,popular:popular,search:search,getDetail:getDetail,getEpisodes:getEpisodes,getVideoSources:getVideoSources,getStreams:getStreams,getLinks:getLinks,_config:_config,_normal:_normal,_titleNames:_titleNames,_suggestPath:_suggestPath,_episodeRows:_episodeRows,_playerUrl:_playerUrl,_catalog:_catalog,_fallbackEpisodes:_fallbackEpisodes,_episodeRowsToItems:_episodeRowsToItems};
+if(typeof module!=='undefined'&&module.exports)module.exports={version:'1.0.1',getInfo:getInfo,getSettings:getSettings,getHome:getHome,popular:popular,search:search,getDetail:getDetail,getEpisodes:getEpisodes,getVideoSources:getVideoSources,getStreams:getStreams,getLinks:getLinks,_config:_config,_normal:_normal,_titleNames:_titleNames,_suggestPath:_suggestPath,_episodeRows:_episodeRows,_playerUrl:_playerUrl,_catalog:_catalog,_fallbackEpisodes:_fallbackEpisodes,_episodeRowsToItems:_episodeRowsToItems};
