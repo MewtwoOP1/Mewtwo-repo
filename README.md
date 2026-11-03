@@ -5,7 +5,7 @@
 <p align="center">
   <a href="https://github.com/Spyou/Zangetsu"><img src="https://img.shields.io/badge/BUILT_FOR-Zangetsu-8B5CF6?style=for-the-badge&logo=github&logoColor=white" alt="Built for Zangetsu" /></a>
   <a href="https://raw.githubusercontent.com/MewtwoOP1/Mewtwo-repo/main/index.json"><img src="https://img.shields.io/badge/SOURCE-Manifest-0F766E?style=for-the-badge" alt="Source manifest" /></a>
-  <img src="https://img.shields.io/badge/INTEGRATIONS-05-4F46E5?style=for-the-badge" alt="Three integrations" />
+  <img src="https://img.shields.io/badge/INTEGRATIONS-08-4F46E5?style=for-the-badge" alt="Three integrations" />
 </p>
 
 <p align="center">
@@ -25,13 +25,16 @@
 
 ## At a glance
 
-This repository includes five integrations documented here. Choose one to get started; **you do not need to install all four**.
+This repository includes eight integrations documented here. Choose one to get started; **you do not need to install all eight**.
 
 | Integration | Catalogue & metadata | Playback |
 |:--|:--|:--|
 | <img src="assets/icons/pencari.svg" width="24" align="middle" alt="" /> **TMDB + PencariMovie** | TMDB | PencariMovie server |
 | <img src="assets/icons/aiostreams.svg" width="24" align="middle" alt="" /> **AIOStreams** | TMDB | Your AIOStreams instance |
 | <img src="assets/icons/stremio.svg" width="24" align="middle" alt="" /> **TMDB + Stremio** | TMDB | Your configured Stremio-compatible add-ons |
+| **AniChan** | AniList | Session-backed multi-server HLS |
+| **AnimePahe** | AniList | Direct Kwik extraction with Kiwi fallback |
+| **Lili (XFDM)** | AniList + Bangumi | Exact-match XFDM MP4 mirrors (Chinese hard subs) |
 | **Miruro** | Miruro / AniList metadata | Available Miruro streaming servers |
 | **Zenkai Player** | AniMap + AniList metadata | Native MegaPlay, VidStream, and ACDN multi-audio playback |
 
@@ -184,6 +187,78 @@ TMDB provides search, title details, catalogue metadata, and episode information
 ---
 
 
+
+
+<details>
+<summary><strong>AniChan</strong> · Session-backed multi-server streaming</summary>
+
+### What it does
+
+AniList provides search and title metadata. AniChan supplies the episode count, sub/dub availability, ordered HLS servers, and optional VTT subtitles.
+
+### Settings
+
+| Setting | What it controls |
+|:--|:--|
+| **Audio tracks** | Show both SUB and DUB, or filter to one. |
+| **Home sections** | Configure AniList trending, popular, seasonal, and top rows. |
+| **Request timeout** | Per-request timeout for AniList and AniChan. |
+| **Refresh session before expiry** | Refresh the two-hour session before it expires. |
+| **Maximum server results** | Limit the number of HLS server choices shown. |
+| **Show adult catalogue entries** | Off by default. |
+
+When the server API returns HTTP 401, AniChan clears the expired session, requests a new session cookie, and retries the server lookup once. Duplicate MegaPlay/VidHawk entries are excluded because those backends are already represented by other sources in this repository.
+
+</details>
+
+<details>
+<summary><strong>AnimePahe</strong> · Direct playback with API fallback</summary>
+
+### What it does
+
+AniList provides search and metadata. The episode catalogue is read from the Miruro/Kiwi backend so episodes remain discoverable even when the AnimePahe website is blocked. When direct AnimePahe access is available, the resolver confirms the series against its AniList or MAL ID, locates the matching release, selects the requested audio/quality variant, and extracts the Kwik HLS playlist.
+
+### Settings
+
+| Setting | What it controls |
+|:--|:--|
+| **Audio tracks** | Show both SUB and DUB, or filter to one. |
+| **Playback fallback API hosts** | Ordered JSON API hosts used for Kiwi fallback. |
+| **Direct AnimePahe request timeout** | Time budget for an individual direct request. |
+| **Try direct AnimePahe first** | Enable or disable direct ID-confirmed resolution. |
+| **Prefer H.264 over AV1** | Prefer the more widely compatible H.264 encode. |
+| **Preferred resolution** | Preferred direct AnimePahe release resolution. |
+| **Title candidates to confirm** | Limit title search candidates before matching AniList/MAL IDs. |
+| **Metadata cache** | Short in-memory cache for metadata and episode lists. |
+
+If direct AnimePahe or Kwik requests are blocked, the source tries Miruro/Kiwi in order: the watch route, the quality-aware stream route, then the detailed sources route. API hosts are rotated on transport failures, blocks, timeouts, and server errors.
+
+> [!NOTE]
+> AnimePahe may require a valid browser-context Cloudflare clearance. The source requests the browser lane when available, but a cold clearance is not guaranteed by the current app runtime. In that case the Kiwi fallback is used.
+
+</details>
+
+<details>
+<summary><strong>Lili (XFDM)</strong> · Bangumi-matched catalogue and MP4 mirrors</summary>
+
+### What it does
+
+AniList powers search and title metadata. The provider resolves a title to a Bangumi anime subject using exact normalized title aliases, then verifies the matching XFDM catalogue through its cover ID. Episodes are deduplicated across available channels and resolved as direct MP4 mirrors.
+
+### Settings
+
+| Setting | What it controls |
+|:--|:--|
+| **Request timeout** | Maximum wait for a Bangumi or XFDM request. |
+| **Bangumi title candidates** | Number of AniList title aliases to search. |
+| **Playback mirror attempts** | Number of XFDM channels resolved for an episode. |
+| **Home sections** | AniList trending, popular, or top rows. |
+| **Catalogue cache** | Short in-memory cache for successful title/episode matches. |
+| **Show adult catalogue entries** | Off by default. |
+
+Matching is intentionally strict. If Bangumi/XFDM cannot be matched safely, the provider does not guess a similar title or another season. XFDM's subtitles are burned into the picture; the source does not invent a separate subtitle file or dub track. Returned streams use the site's available original-audio MP4.
+
+</details>
 
 <details>
 <summary><strong>Miruro</strong> · Multi-server anime catalogue and playback</summary>
