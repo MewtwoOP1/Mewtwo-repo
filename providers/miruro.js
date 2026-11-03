@@ -20,7 +20,7 @@ function getInfo() {
   return {
     name: 'Miruro', lang: 'en', baseUrl: 'https://www.miruro.to',
     logo: 'https://www.google.com/s2/favicons?sz=256&domain=miruro.to',
-    type: 'anime', version: '1.0.3'
+    type: 'anime', version: '1.0.4'
   };
 }
 
@@ -140,18 +140,29 @@ function _apiGet(path, options) {
   if (cached) return Promise.resolve(cached);
   var index = 0;
   var lastError = null;
+  function retryableTransient(error) {
+    var status = Number(error && error.status) || 0;
+    return !status || status === 408 || status === 425 || status === 429 || status >= 500;
+  }
+  function requestHost(host, attempt) {
+    return _requestText(_url(host, path), cfg.timeoutMs).then(function (data) {
+      return _cachePut(key, data, (options && options.cacheMs != null) ? options.cacheMs : cfg.cacheMs);
+    }).catch(function (error) {
+      lastError = error;
+      if (attempt === 0 && retryableTransient(error)) {
+        return new Promise(function (resolve) { setTimeout(resolve, 250); })
+          .then(function () { return requestHost(host, 1); });
+      }
+      if (index < cfg.hosts.length && _retryable(error)) return next();
+      throw error;
+    });
+  }
   function next() {
     if (index >= cfg.hosts.length) {
       return Promise.reject(lastError || new Error('All API mirrors failed for ' + path));
     }
     var host = cfg.hosts[index++];
-    return _requestText(_url(host, path), cfg.timeoutMs).then(function (data) {
-      return _cachePut(key, data, (options && options.cacheMs != null) ? options.cacheMs : cfg.cacheMs);
-    }).catch(function (error) {
-      lastError = error;
-      if (index < cfg.hosts.length && _retryable(error)) return next();
-      throw error;
-    });
+    return requestHost(host, 0);
   }
   return next();
 }
@@ -489,7 +500,7 @@ function _tryProviderPaths(episode, option, paths, index) {
       url: option.route,
       quality: 'Auto',
       label: 'Direct episode URL · ' + option.provider,
-      container: /\\.mpd(?:[?#]|$)/i.test(option.route) ? 'dash' : (/\\.m3u8(?:[?#]|$)/i.test(option.route) ? 'hls' : 'mp4'),
+      container: /\.mpd(?:[?#]|$)/i.test(option.route) ? 'dash' : (/\.m3u8(?:[?#]|$)/i.test(option.route) ? 'hls' : 'mp4'),
       type: 'direct', kind: episode.category,
       audioLang: episode.category === 'dub' ? 'en' : 'ja',
       headers: {}, subtitles: []
@@ -536,7 +547,7 @@ function getLinks(id, opts) { return getVideoSources(id, opts); }
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    version: '1.0.3', getInfo: getInfo, getSettings: getSettings,
+    version: '1.0.4', getInfo: getInfo, getSettings: getSettings,
     getHome: getHome, popular: popular, search: search,
     getDetail: getDetail, getEpisodes: getEpisodes,
     getVideoSources: getVideoSources, getStreams: getStreams, getLinks: getLinks,
