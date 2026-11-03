@@ -5,7 +5,7 @@
 <p align="center">
   <a href="https://github.com/Spyou/Zangetsu"><img src="https://img.shields.io/badge/BUILT_FOR-Zangetsu-8B5CF6?style=for-the-badge&logo=github&logoColor=white" alt="Built for Zangetsu" /></a>
   <a href="https://raw.githubusercontent.com/MewtwoOP1/Mewtwo-repo/main/index.json"><img src="https://img.shields.io/badge/SOURCE-Manifest-0F766E?style=for-the-badge" alt="Source manifest" /></a>
-  <img src="https://img.shields.io/badge/INTEGRATIONS-05-4F46E5?style=for-the-badge" alt="Three integrations" />
+  <img src="https://img.shields.io/badge/INTEGRATIONS-06-4F46E5?style=for-the-badge" alt="Six integrations" />
 </p>
 
 <p align="center">
@@ -17,7 +17,7 @@
   <a href="#at-a-glance">Overview</a> &nbsp; · &nbsp;
   <a href="#add-the-repository">Install</a> &nbsp; · &nbsp;
   <a href="#choose-your-setup">Integrations</a> &nbsp; · &nbsp;
-  <a href="#third-party-sources-and-responsibility">Third-party notice</a> &nbsp; · &nbsp;
+  <a href="#credits-and-licensing">Credits &amp; licensing</a> &nbsp; · &nbsp;
   <a href="#troubleshooting">Troubleshooting</a>
 </p>
 
@@ -25,7 +25,7 @@
 
 ## At a glance
 
-This repository includes five integrations documented here. Choose one to get started; **you do not need to install all four**.
+This repository includes six integrations documented here. Choose the integrations you need; **you do not need to install all six**.
 
 | Integration | Catalogue & metadata | Playback |
 |:--|:--|:--|
@@ -34,6 +34,7 @@ This repository includes five integrations documented here. Choose one to get st
 | <img src="assets/icons/stremio.svg" width="24" align="middle" alt="" /> **TMDB + Stremio** | TMDB | Your configured Stremio-compatible add-ons |
 | **Miruro** | Miruro / AniList metadata | Available Miruro streaming servers |
 | **Zenkai Player** | AniMap + AniList metadata | Native MegaPlay, VidStream, and ACDN multi-audio playback |
+| <img src="https://raw.githubusercontent.com/jellyfin/jellyfin-ux/master/logos/SVG/jellyfin-icon--color-on-dark.svg" width="24" align="middle" alt="Jellyfin" /> **Jellyfin** | Jellyfin libraries and server metadata | Jellyfin or AIOStreams media server |
 
 <p align="center">
   <img src="assets/provider-flow.svg" width="100%" alt="Diagram showing TMDB metadata flowing into Zangetsu separately from playback streams provided by PencariMovie, AIOStreams, or Stremio add-ons." />
@@ -244,6 +245,70 @@ See Zenkai's [stream handler](https://github.com/nyyrox2/Zenkai/blob/main/server
 
 </details>
 
+<details>
+<summary><img src="https://raw.githubusercontent.com/jellyfin/jellyfin-ux/master/logos/SVG/jellyfin-icon--color-on-dark.svg" width="24" align="middle" alt="" /> &nbsp; <strong>Jellyfin</strong> · Jellyfin and AIOStreams media servers</summary>
+
+### What it does
+
+This is a native Jellyfin API source for Zangetsu. It reads the server's own libraries, catalogue entries, title metadata, seasons, episodes, artwork, playback versions, and subtitle tracks. It does not use TMDB or the old Stremio-manifest provider as its catalogue.
+
+It supports normal Jellyfin servers and Jellyfin-compatible servers such as the AIOStreams media server. **AIOStreams catalogues appear as Jellyfin libraries, metadata-addon results become titles and episodes, and stream-addon results are returned as selectable media versions.** You do not need to host Jellyfin separately when using AIOStreams; its configuration already exposes the Jellyfin-compatible server API.
+
+### Setup
+
+1. Make sure the server address is reachable from the device running Zangetsu. Use HTTPS for remote connections.
+2. Install **Jellyfin** from this repository and open **Jellyfin → Settings**.
+3. For a normal Jellyfin server, enter its base address, including any configured base path. For AIOStreams, open **Save & Install → Jellyfin apps → Connect** and copy the plain **Server address** ending in `/jellyfin`. Do not paste the Stremio manifest URL.
+4. For AIOStreams, use the configuration UUID or alias shown on the Connect tab as **Username**, and the configuration password as **Password**. For a household user, append `/UserName` to the username and append `/PIN` to the password when that user has a PIN. For a normal Jellyfin server, use the account's Jellyfin username and password.
+5. Save the settings and open Jellyfin. The source discovers the authenticated user's accessible libraries automatically.
+
+AIOStreams' sign-in picker address contains a secret. Prefer the plain server address plus username and password in the source settings, and do not share the picker address.
+
+### Settings
+
+The source keeps its settings focused on connection details and the few playback controls most users need. Catalogue sections, content types, sorting, caching, and request timeouts use sensible defaults automatically.
+
+| Setting | What it controls |
+|:--|:--|
+| **Jellyfin server address** | Full server URL, including a reverse-proxy or AIOStreams `/jellyfin` base path |
+| **Username / Password** | Standard Jellyfin login. For AIOStreams, use the configuration UUID/alias and configuration password |
+| **API key / access token** | Optional alternative to password login. When set, the API key is used for server requests |
+| **User ID** | Optional user ID for API-key authentication. Leave blank when the server permits automatic discovery |
+| **Library ID** | Optional restriction to one accessible library. Leave blank to browse every supported library |
+| **Catalogue page size** | 25, 50, or 100 items per library row and search request |
+| **Maximum streaming bitrate** | Bitrate ceiling sent during playback negotiation |
+| **Include external subtitles** | Include external subtitle tracks returned by the server |
+
+### Catalogue and metadata
+
+- The source reads libraries from Jellyfin's user views and requests catalogue pages within each library. Search is performed against the available libraries, rather than against an unrelated TMDB catalogue.
+- When an AIOStreams library advertises that a genre must be selected, the source reads that library's genres and automatically chooses its `None` entry when available, or its first offered genre.
+- Opening a series loads its seasons and episode lists. If the server's show-episode route is unavailable or returns no episodes, the source falls back to the season's episode items route.
+- Catalogue and episode-list requests deliberately do not ask for `MediaSources`. AIOStreams resolves stream add-ons when playback versions are requested, not once for every card or episode in a catalogue.
+
+### Playback
+
+- Playback is negotiated through `POST /Items/{itemId}/PlaybackInfo`. When the server advertises AIOStreams' `versions` feature, the source requests a fresh version list and opts in to `RequiredHttpHeaders`.
+- AIOStreams' returned `MediaSources` are mapped into selectable Zangetsu stream results. The source uses the version's `Path`, version metadata, and required request headers. It does not send the Jellyfin account token to an unrelated external stream host.
+- External subtitle tracks use the server-provided `DeliveryUrl` when present. Standard Jellyfin subtitle routes are used as a fallback.
+- Direct links, remote paths, and server-provided transcoding URLs are handled separately using fixed playback selection rules.
+- A title appearing in a library does not guarantee that a stream add-on can resolve it. Availability depends on the server's catalogue, metadata, configured stream add-ons, and the returned media versions.
+
+### Troubleshooting
+
+- **401 / invalid login:** for AIOStreams, verify the configuration UUID or alias, configuration password, and any required user PIN. For normal Jellyfin, verify the Jellyfin account credentials.
+- **No libraries:** confirm that the authenticated user can access the libraries and that the server address includes the correct base path.
+- **AIOStreams catalogue is empty:** check that the configuration has catalogues enabled. Libraries that require a genre are handled automatically when their server advertises the genre feature.
+- **A series opens without episodes:** check whether the server exposes seasons and episode items for that series. The provider includes a fallback episode-list route for servers where the show-episode endpoint is unavailable.
+- **No playable versions:** verify that the relevant AIOStreams stream add-ons are enabled and return streams for that title. Metadata appearing in a catalogue does not guarantee a playable result.
+- **A stream starts but fails:** check the stream's required headers and whether its URL is reachable from the device. For a normal Jellyfin server, also check storage permissions, server logs, FFmpeg, and client codec support.
+
+**Security:** Zangetsu's generic source settings currently display text fields without password masking. The password and API key can therefore be visible while editing settings. Use a dedicated account with only the required library permissions, prefer HTTPS outside a trusted LAN, and never share screenshots containing credentials. AIOStreams documents its API keys as administrator-level access; use the normal configuration login when you need the configured user's permissions and watch history.
+
+**Zangetsu limitation:** the current JavaScript-provider interface does not expose playback start/progress/stop callbacks. Continue Watching and Next Up can be read from the server, but this source cannot report playback progress back to Jellyfin.
+
+</details>
+
 ## Troubleshooting
 
 | Symptom | First thing to check |
@@ -255,38 +320,18 @@ See Zenkai's [stream handler](https://github.com/nyyrox2/Zenkai/blob/main/server
 | TMDB fails after previously working | Recent API responses can be served from cache during transient network failures; check DNS/network access if all requests still fail |
 | The app says AniList is having an error | AniList is the app's built-in metadata service, not this repository's stream provider. If AniList is unavailable, switch the anime metadata provider to MyAnimeList if available, or retry when the service/network recovers |
 
-## Third-party sources and responsibility
+## Credits and licensing
+
+This repository contains provider integrations for Zangetsu. It does not host media; connected services are independently operated.
+
+- **MIT:** original repository code. See [LICENSE](LICENSE).
+- **Apache-2.0:** the Yuzono-derived serenity-animekai and serenity-aniwave providers. See [LICENSE-APACHE-2.0](LICENSE-APACHE-2.0) and [the upstream notice](NOTICE-YUZONO-ANIME-EXTENSIONS.md).
+- **Jellyfin icon:** official asset from [Jellyfin UX](https://github.com/jellyfin/jellyfin-ux/tree/master/logos/SVG), under [CC BY-SA 4.0](https://github.com/jellyfin/jellyfin-ux/blob/master/LICENSE). It is shown only to identify Jellyfin compatibility. This is an independent, unofficial integration and is not endorsed by Jellyfin.
+
+For the provider interface and manifest format, see [Spyou/Zangetsu](https://github.com/Spyou/Zangetsu) and [Spyou/zangetsu-providers](https://github.com/Spyou/zangetsu-providers).
 
 <p align="center">
-  <img src="assets/third-party-boundaries.svg" width="100%" alt="Diagram explaining that Mewtwo Repo publishes integration code, while independent third-party services control their own sources, content, and availability." />
-</p>
-
-The sources and services referenced by these integrations are third-party projects or endpoints made available by their respective operators. **Mewtwo Repo does not own, operate, maintain, host, or control those third-party sources.** This repository publishes integration code and configuration information only.
-
-| This repository provides | This repository does not provide |
-|:--|:--|
-| Integration code and a source manifest | Hosted, uploaded, stored, or distributed media files |
-| Setup information for supported integrations | Operation or maintenance of third-party source websites and services |
-| References to externally operated services | Guarantees about third-party content, links, stream availability, or uptime |
-
-> [!WARNING]
-> **Third-party services are outside this project's control.** We do not verify, control, or guarantee the content, accuracy, legality, licensing, availability, security, or data-handling practices of external sources. Services, URLs, and returned results may change or stop working without notice. To the extent permitted by applicable law, the maintainers are not responsible for third-party services, their content, outages, or how external services are used.
->
-> You choose whether to access third-party sources and are responsible for complying with applicable laws and each service's terms. A link or integration listed here is not an endorsement or a guarantee of availability.
-
-## Project boundaries & licensing
-
-- This repository and its maintainers do **not** host, upload, store, proxy, or distribute movies, series, anime, subtitles, or video files.
-- Metadata, artwork, and playback links are returned by TMDB or external services. Those services determine their own availability, access rules, terms, and policies.
-- This is an unofficial community project, not affiliated with or endorsed by Zangetsu, TMDB, Stremio, AIOStreams, or PencariMovie.
-- Most code is licensed under MIT. The MovieBox IN port is separately licensed under GPL-3.0-only. See [LICENSE](LICENSE) and [LICENSES/GPL-3.0.txt](LICENSES/GPL-3.0.txt).
-
-## Credits
-
-The provider manifest and JavaScript interface follow the self-contained source model documented by [Spyou/zangetsu-providers](https://github.com/Spyou/zangetsu-providers). This repository is independently maintained and is not the official Zangetsu provider repository.
-
-<p align="center">
-  <sub>Unofficial community integrations · Third-party services are independently operated · Keep personalized manifests private</sub>
+  <sub>Unofficial community integrations · External services are independently operated</sub>
 </p>
 
 <p align="center">

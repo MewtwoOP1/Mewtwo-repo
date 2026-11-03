@@ -3,6 +3,117 @@
   "description": "𝑴𝒆𝒘𝒕𝒘𝒐♡ community sources for Zangetsu. Third-party provider integrations; this repository does not host video files.",
   "sources": [
     {
+      "id": "jellyfin",
+      "name": "Jellyfin",
+      "version": "3.0.2",
+      "type": "movie",
+      "lang": "en",
+      "file": "providers/jellyfin.js",
+      "logo": "https://raw.githubusercontent.com/jellyfin/jellyfin-ux/master/logos/SVG/jellyfin-icon--color-on-dark.svg",
+      "nsfw": false,
+      "settings": [
+        {
+          "key": "serverUrl",
+          "label": "Server address",
+          "description": "Jellyfin server URL, including its base path. For AIOStreams, use the address ending in /jellyfin.",
+          "type": "text",
+          "default": ""
+        },
+        {
+          "key": "username",
+          "label": "Username",
+          "description": "Jellyfin username. For AIOStreams, use the configuration UUID or alias.",
+          "type": "text",
+          "default": ""
+        },
+        {
+          "key": "password",
+          "label": "Password",
+          "description": "Jellyfin password. For AIOStreams, use the configuration password (append /PIN only when required).",
+          "type": "text",
+          "default": ""
+        },
+        {
+          "key": "apiKey",
+          "label": "API key (optional)",
+          "description": "Alternative to username and password. Use only if you know the API key and account permissions are correct.",
+          "type": "text",
+          "default": ""
+        },
+        {
+          "key": "userId",
+          "label": "User ID (API key only)",
+          "description": "Only needed when the server cannot automatically identify a user from the API key.",
+          "type": "text",
+          "default": ""
+        },
+        {
+          "key": "libraryId",
+          "label": "Library ID (optional)",
+          "description": "Leave blank to show all accessible libraries. Set this only to restrict the source to one library.",
+          "type": "text",
+          "default": ""
+        },
+        {
+          "key": "pageSize",
+          "label": "Catalogue page size",
+          "description": "Number of titles requested per catalogue page.",
+          "type": "enum",
+          "default": "50",
+          "options": [
+            {
+              "value": "25",
+              "label": "25"
+            },
+            {
+              "value": "50",
+              "label": "50"
+            },
+            {
+              "value": "100",
+              "label": "100"
+            }
+          ]
+        },
+        {
+          "key": "maxStreamingBitrate",
+          "label": "Maximum streaming bitrate",
+          "description": "Maximum bitrate requested during playback negotiation.",
+          "type": "enum",
+          "default": "40000000",
+          "options": [
+            {
+              "value": "16000000",
+              "label": "16 Mbps"
+            },
+            {
+              "value": "25000000",
+              "label": "25 Mbps"
+            },
+            {
+              "value": "40000000",
+              "label": "40 Mbps"
+            },
+            {
+              "value": "80000000",
+              "label": "80 Mbps"
+            },
+            {
+              "value": "1000000000",
+              "label": "Device maximum"
+            }
+          ]
+        },
+        {
+          "key": "includeSubtitles",
+          "label": "Include external subtitles",
+          "description": "Include external subtitle tracks returned by the server.",
+          "type": "bool",
+          "default": true
+        }
+      ]
+    },
+    {
       "id": "aiostreams",
       "name": "AIOStreams",
       "version": "2.2.0",
