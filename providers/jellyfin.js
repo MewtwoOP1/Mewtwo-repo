@@ -11,7 +11,7 @@
  */
 
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID) ? String(__SOURCE_ID) : 'jellyfin';
-var SOURCE_VERSION = '3.0.2';
+var SOURCE_VERSION = '3.0.3';
 var CLIENT_NAME = 'Zangetsu';
 var DEVICE_NAME = 'Zangetsu';
 var DEVICE_ID = 'zangetsu-jellyfin-source-v3';
@@ -29,7 +29,7 @@ function getInfo() {
     name: 'Jellyfin',
     lang: 'en',
     baseUrl: 'https://jellyfin.org',
-    logo: 'https://raw.githubusercontent.com/jellyfin/jellyfin-ux/master/logos/SVG/jellyfin-icon--color-on-dark.svg',
+    logo: 'https://raw.githubusercontent.com/jellyfin/jellyfin-ux/master/logos/PNG-4x/jellyfin-icon--color-on-dark.png',
     type: 'movie',
     version: SOURCE_VERSION
   };
