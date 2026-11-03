@@ -365,8 +365,8 @@ function _listToItems(data, ctx) {
   return rows.map(function (raw) { return _mapItem(raw, ctx); }).filter(Boolean);
 }
 
-function _itemsFor(ctx, params, path) {
-  return _rawRequest(ctx, path || ('/Users/' + encodeURIComponent(ctx.userId) + '/Items'), params)
+function _itemsFor(ctx, params, path, options) {
+  return _rawRequest(ctx, path || ('/Users/' + encodeURIComponent(ctx.userId) + '/Items'), params, options)
     .then(function (data) { return _listToItems(data, ctx); });
 }
 
@@ -391,10 +391,12 @@ function getHome(opts) {
     return _views(ctx).then(function (views) {
       var jobs = [];
       if (sections.includes('resume')) {
+        // Resume can be a slow query on very large playback histories. Keep it
+        // from blocking every other Home row when the server stalls.
         jobs.push(_section('Continue Watching', _itemsFor(ctx, {
           userId: ctx.userId, limit: c.pageSize, fields: _fields(),
           enableUserData: true, enableImages: true
-        }, '/UserItems/Resume')));
+        }, '/UserItems/Resume', { timeoutMs: 2500 })));
       }
       if (sections.includes('nextUp')) {
         jobs.push(_section('Next Up', _itemsFor(ctx, {
