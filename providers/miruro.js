@@ -270,8 +270,15 @@ function _buildEpisodes(animeId, payload) {
         if (!grouped[category][key]) {
           grouped[category][key] = {
             id: null, number: number, title: ep.title || ('Episode ' + number),
-            image: ep.image || ep.thumbnail || null, airDate: ep.airDate || ep.aired || null,
-            duration: ep.duration || null, description: ep.description || '', filler: !!ep.filler,
+            // Zangetsu's Episode JSON contract uses thumbnail/date/description.
+            // Miruro calls the corresponding API fields image/airDate.
+            thumbnail: ep.image || ep.thumbnail || null,
+            date: ep.airDate || ep.aired || ep.date || null,
+            description: ep.description || ep.synopsis || ep.overview || '',
+            // The Miruro episode endpoint reports duration in seconds (e.g. 1420).
+            runtimeMinutes: ep.duration != null && isFinite(Number(ep.duration))
+              ? Math.round(Number(ep.duration) / 60) : null,
+            filler: !!ep.filler,
             sourceId: SOURCE_ID, type: 'anime', category: category, _options: []
           };
         }
@@ -462,7 +469,7 @@ function getLinks(id, opts) { return getVideoSources(id, opts); }
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    version: '1.0.0', getInfo: getInfo, getSettings: getSettings,
+    version: '1.0.1', getInfo: getInfo, getSettings: getSettings,
     getHome: getHome, popular: popular, search: search,
     getDetail: getDetail, getEpisodes: getEpisodes,
     getVideoSources: getVideoSources, getStreams: getStreams, getLinks: getLinks,
