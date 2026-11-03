@@ -186,15 +186,20 @@ function _responseJson(response, url) {
     }
     return value == null ? {} : value;
   }
-  if (status >= 400) {
-    var errorBody = parse(body);
+  function fail(value) {
+    var errorBody = parse(value);
     var message = errorBody && (errorBody.Message || errorBody.message || errorBody.ErrorCode) || ('HTTP ' + status);
     var httpError = new Error('Jellyfin ' + status + ': ' + message);
     httpError.status = status;
     httpError.url = url;
     throw httpError;
   }
-  if (body !== undefined && body !== null) return Promise.resolve(parse(body));
+  var bodyIsStream = body && typeof body.getReader === 'function';
+  if (status >= 400) {
+    if (bodyIsStream && response && typeof response.text === 'function') return Promise.resolve(response.text()).then(fail);
+    return fail(body);
+  }
+  if (body !== undefined && body !== null && !bodyIsStream) return Promise.resolve(parse(body));
   if (response && typeof response.json === 'function') {
     return Promise.resolve(response.json()).catch(function () {
       throw new Error('Jellyfin returned an unreadable JSON response for ' + url);
@@ -253,7 +258,7 @@ function _request(ctx, path, params, options) {
   options = options || {};
   var method = String(options.method || 'GET').toUpperCase();
   var url = _joinUrl(ctx.baseUrl, path, params);
-  var cacheKey = method + ' ' + url + ' ' + (ctx.userId || '');
+  var cacheKey = method + ' ' + url + ' ' + (ctx.userId || '') + ' ' + (ctx.token ? String(ctx.token).slice(-8) : '');
   if (method === 'GET' && !options.noCache) {
     var cached = _cacheGet(cacheKey);
     if (cached !== null) return Promise.resolve(cached);
@@ -501,7 +506,7 @@ function _parseItemUrl(value) {
 function _imageUrl(ctx, itemId, imageType, index, tag, width) {
   if (!itemId) return null;
   var path = '/Items/' + encodeURIComponent(String(itemId)) + '/Images/' + encodeURIComponent(imageType || 'Primary');
-  if (index != null && Number(index) > 0) path += '/' + encodeURIComponent(String(index));
+  if (index != null && Number(index) >= 0 && String(imageType || '').toLowerCase() !== 'primary') path += '/' + encodeURIComponent(String(index));
   var params = { maxWidth: width || 600, quality: 90 };
   if (tag) params.tag = tag;
   if (ctx.token) params.api_key = ctx.token;
@@ -536,8 +541,8 @@ function _mapItem(raw, ctx, parentId) {
   var name = _trim(raw.Name || raw.name || raw.OriginalTitle || raw.originalTitle);
   if (!name) return null;
   var primaryTag = raw.ImageTags && (raw.ImageTags.Primary || raw.ImageTags.primary);
-  var backdropTag = raw.BackdropImageTags && (raw.BackdropImageTags[0] || raw.BackdropImageTags[0]);
-  var backdropId = raw.ParentBackdropItemId || raw.ParentBackdropItemId;
+  var backdropTag = raw.BackdropImageTags && raw.BackdropImageTags[0];
+  var backdropId = raw.ParentBackdropItemId || raw.parentBackdropItemId;
   var cover = primaryTag ? _imageUrl(ctx, id, 'Primary', 0, primaryTag, 600) : _imageUrl(ctx, id, 'Primary', 0, null, 600);
   var banner = backdropTag && (raw.BackdropImageTags && raw.BackdropImageTags.length)
     ? _imageUrl(ctx, id, 'Backdrop', 0, backdropTag, 1000)
@@ -555,7 +560,8 @@ function _mapItem(raw, ctx, parentId) {
     sourceId: SOURCE_ID,
     year: _year(raw),
     jellyfinItemId: id,
-    jellyfinType: type
+    jellyfinType: type,
+    dateCreated: raw.DateCreated || raw.dateCreated || null
   };
   var score = _score(raw);
   if (score !== undefined) item.score = score;
@@ -696,14 +702,12 @@ function _section(title, promise) {
 }
 
 function _resumeItems(ctx) {
-  return _getItems(ctx, {
-    ParentId: undefined,
-    IncludeItemTypes: 'Movie,Episode',
-    Filters: undefined,
-    SortBy: 'DatePlayed',
-    SortOrder: 'Descending',
+  return _request(ctx, '/Users/' + encodeURIComponent(ctx.userId) + '/Items/Resume', {
+    MediaTypes: 'Video',
     Limit: ctx.config.pageSize,
-    Recursive: 'true',
+    Fields: LIST_FIELDS,
+    ImageTypeLimit: 1,
+    EnableImageTypes: 'Primary,Backdrop,Thumb',
     EnableUserData: 'true'
   }, { noCache: true }).then(function (payload) {
     return _itemsFrom(payload).map(function (raw) {
@@ -743,7 +747,7 @@ function _recentItems(ctx, views) {
       return _itemsFrom(payload).map(function (raw) { return _mapItem(raw, ctx, _viewId(view)); }).filter(Boolean);
     }).catch(function () { return []; });
   })).then(_uniqueItems).then(function (items) {
-    items.sort(function (a, b) { return String(b.year || '').localeCompare(String(a.year || '')); });
+    items.sort(function (a, b) { return String(b.dateCreated || '').localeCompare(String(a.dateCreated || '')); });
     return items.slice(0, ctx.config.pageSize);
   });
 }
@@ -1125,8 +1129,8 @@ function _mapMediaSource(ctx, itemId, mediaSource, playSessionId) {
     sourceUrl = _absoluteServerUrl(ctx, transcode);
   } else if (ctx.config.useRemoteUrl && isRemote && _isAbsoluteHttp(path)) {
     sourceUrl = path;
-  } else if (_isAbsoluteHttp(direct)) {
-    sourceUrl = direct;
+  } else if (direct) {
+    sourceUrl = _absoluteServerUrl(ctx, direct);
   } else if (_isAbsoluteHttp(path)) {
     sourceUrl = path;
   } else if (transcode) {
