@@ -148,7 +148,7 @@ global.fetch = async (url, init = {}) => {
     }] });
   }
 
-  if (pathname === '/jellyfin/Items' && parsed.searchParams.has('parentId')) {
+  if (pathname === '/jellyfin/Items' && parsed.searchParams.has('parentId') && !parsed.searchParams.has('searchTerm')) {
     const parentId = parsed.searchParams.get('parentId');
     if (parentId === 'movies-library') {
       assert.equal(parsed.searchParams.get('includeItemTypes'), 'Movie,Episode');
