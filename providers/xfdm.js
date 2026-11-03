@@ -125,7 +125,7 @@ function _episodeRows(html){
 function _playerUrl(html){
  var config=(String(html||'').match(/player_\w+\s*=\s*(\{[\s\S]*?\})\s*[;<]/i)||[])[1];if(!config)return null;
  var raw=(config.match(/["']url["']\s*:\s*"((?:[^"\\]|\\.)*)"/i)||[])[1];if(!raw)return null;
- var url=raw.replace(/\\\//g,'/').replace(/\\\\/g,'\\').replace(/&amp;/g,'&').trim();
+ var url=raw.replace(/\\+\//g,'/').replace(/\\\\/g,'\\').replace(/&amp;/g,'&').trim();
  return /^https?:\/\//i.test(url)?url:null;
 }
 function _catalog(id,force){
