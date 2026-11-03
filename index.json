@@ -426,7 +426,7 @@
     {
       "id": "animepahe",
       "name": "AnimePahe",
-      "version": "1.0.3",
+      "version": "1.0.4",
       "type": "anime",
       "lang": "en",
       "file": "providers/animepahe.js",
