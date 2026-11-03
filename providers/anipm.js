@@ -9,7 +9,7 @@ var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID)
 var SITE = 'https://ani.pm';
 var EMBED = 'https://embed.settlar.io';
 var ANILIST = 'https://graphql.anilist.co';
-var VERSION = '1.0.1';
+var VERSION = '1.0.2';
 var LOGO = 'https://www.google.com/s2/favicons?sz=256&domain=ani.pm';
 
 // Anilili's provider uses this Android Chrome UA on every Ani.pm and Settlar
@@ -106,7 +106,7 @@ function _decodeJson(response, label, allowNotFound) {
   });
 }
 
-function _requestJson(url, label, allowNotFound, nativeHttp) {
+function _requestJson(url, label, allowNotFound) {
   var requestOptions = {
     headers: {
       'User-Agent': UA,
@@ -114,10 +114,11 @@ function _requestJson(url, label, allowNotFound, nativeHttp) {
     },
     timeoutMs: 10000
   };
-  // Settlar's embed-session endpoint rejects the app's Dio TLS fingerprint.
-  // Opt into Zangetsu's native Android OkHttp lane for this request only.
-  // Older app builds ignore this hint and will still receive the upstream 403.
-  if (nativeHttp === true) requestOptions.nativeHttp = true;
+  // Match Anilili's native implementation: every Ani.pm and Settlar API hop
+  // uses Android OkHttp with the browser UA. Dio's TLS fingerprint is rejected
+  // by the provider's Cloudflare gate. The Zangetsu JS bridge must forward this
+  // option to ProviderManager's existing zangetsu/novel_http channel.
+  requestOptions.nativeHttp = true;
   return fetch(url, requestOptions).then(function(response) {
     return _decodeJson(response, label, !!allowNotFound);
   });
@@ -467,7 +468,7 @@ function getVideoSources(episodeUrl, opts) {
       if (!token) throw new Error('Ani.pm returned an embed URL without a token');
 
       var embedSessionUrl = EMBED + '/api/embed/session?t=' + encodeURIComponent(token);
-      return _requestJson(embedSessionUrl, 'Settlar embed session', false, true).then(function(embedSession) {
+      return _requestJson(embedSessionUrl, 'Settlar embed session', false).then(function(embedSession) {
         var source = _trim(embedSession.source);
         if (!/^https:\/\//i.test(source)) {
           throw new Error('Settlar session did not contain an HTTPS stream');
