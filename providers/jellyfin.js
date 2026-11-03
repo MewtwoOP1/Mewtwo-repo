@@ -661,9 +661,23 @@ function _getItems(ctx, params, options) {
   return _request(ctx, '/Users/' + encodeURIComponent(ctx.userId) + '/Items', query, options);
 }
 
+function _genreForView(ctx, view) {
+  var extension = view && (view.aiostreams || view.AIOStreams) || {};
+  var features = ctx.aiostreams && ctx.aiostreams.features || {};
+  if (!features.genreRequired || extension.genreRequired !== true) return Promise.resolve('');
+  var viewId = _viewId(view);
+  if (!viewId) return Promise.resolve('');
+  return _request(ctx, '/Genres', { ParentId: viewId, UserId: ctx.userId }).then(function (payload) {
+    var genres = _itemsFrom(payload);
+    var selected = genres.filter(function (genre) { return String(genre.Name || genre.name || '').toLowerCase() === 'none'; })[0] || genres[0];
+    return selected && (selected.Id || selected.id) ? String(selected.Id || selected.id) : '';
+  }).catch(function () { return ''; });
+}
+
 function _getViewItems(ctx, view, limit, searchTerm) {
   var types = _typesForView(view, ctx.config);
   if (!types.length) return Promise.resolve([]);
+  return _genreForView(ctx, view).then(function (genreId) {
   var params = {
     ParentId: _viewId(view),
     Recursive: 'true',
@@ -676,8 +690,10 @@ function _getViewItems(ctx, view, limit, searchTerm) {
     EnableImageTypes: 'Primary,Backdrop'
   };
   if (searchTerm) params.SearchTerm = searchTerm;
+  if (genreId) params.GenreIds = genreId;
   return _getItems(ctx, params).then(function (payload) {
     return _itemsFrom(payload).map(function (raw) { return _mapItem(raw, ctx, _viewId(view)); }).filter(Boolean);
+  });
   });
 }
 
@@ -734,7 +750,8 @@ function _recentItems(ctx, views) {
   return Promise.all(views.map(function (view) {
     var types = _typesForView(view, ctx.config);
     if (!types.length) return [];
-    return _getItems(ctx, {
+    return _genreForView(ctx, view).then(function (genreId) {
+    var params = {
       ParentId: _viewId(view),
       Recursive: 'true',
       IncludeItemTypes: types.join(','),
@@ -743,9 +760,12 @@ function _recentItems(ctx, views) {
       StartIndex: 0,
       Limit: ctx.config.pageSize,
       Fields: LIST_FIELDS
-    }).then(function (payload) {
+    };
+    if (genreId) params.GenreIds = genreId;
+    return _getItems(ctx, params).then(function (payload) {
       return _itemsFrom(payload).map(function (raw) { return _mapItem(raw, ctx, _viewId(view)); }).filter(Boolean);
     }).catch(function () { return []; });
+    });
   })).then(_uniqueItems).then(function (items) {
     items.sort(function (a, b) { return String(b.dateCreated || '').localeCompare(String(a.dateCreated || '')); });
     return items.slice(0, ctx.config.pageSize);
@@ -756,7 +776,8 @@ function _favoriteItems(ctx, views) {
   return Promise.all(views.map(function (view) {
     var types = _typesForView(view, ctx.config);
     if (!types.length) return [];
-    return _getItems(ctx, {
+    return _genreForView(ctx, view).then(function (genreId) {
+    var params = {
       ParentId: _viewId(view),
       Recursive: 'true',
       IncludeItemTypes: types.join(','),
@@ -767,9 +788,12 @@ function _favoriteItems(ctx, views) {
       Limit: ctx.config.pageSize,
       EnableUserData: 'true',
       Fields: LIST_FIELDS
-    }).then(function (payload) {
+    };
+    if (genreId) params.GenreIds = genreId;
+    return _getItems(ctx, params).then(function (payload) {
       return _itemsFrom(payload).map(function (raw) { return _mapItem(raw, ctx, _viewId(view)); }).filter(Boolean);
     }).catch(function () { return []; });
+    });
   })).then(_uniqueItems).then(function (items) { return items.slice(0, ctx.config.pageSize); });
 }
 
@@ -811,7 +835,8 @@ function search(query, page, opts) {
       return Promise.all(views.map(function (view) {
         var types = _typesForView(view, ctx.config);
         if (!types.length) return [];
-        return _getItems(ctx, {
+        return _genreForView(ctx, view).then(function (genreId) {
+        var params = {
           ParentId: _viewId(view),
           Recursive: 'true',
           IncludeItemTypes: types.join(','),
@@ -821,9 +846,12 @@ function search(query, page, opts) {
           StartIndex: 0,
           Limit: perLibraryLimit,
           Fields: LIST_FIELDS
-        }).then(function (payload) {
+        };
+        if (genreId) params.GenreIds = genreId;
+        return _getItems(ctx, params).then(function (payload) {
           return _itemsFrom(payload).map(function (raw) { return _mapItem(raw, ctx, _viewId(view)); }).filter(Boolean);
         }).catch(function () { return []; });
+        });
       })).then(function (groups) {
         var items = _uniqueItems(groups);
         items.sort(function (a, b) { return String(a.title || '').localeCompare(String(b.title || '')); });
@@ -1057,10 +1085,13 @@ function _playbackInfo(ctx, itemId) {
     EnableDirectStream: true,
     EnableTranscoding: true,
     MaxStreamingBitrate: ctx.config.maxStreamingBitrate,
-    EnableRequiredHttpHeaders: true,
-    Fresh: true,
     DeviceProfile: _deviceProfile(ctx.config)
   };
+  var features = ctx.aiostreams && ctx.aiostreams.features || {};
+  if (features.versions) {
+    body.Fresh = true;
+    body.EnableRequiredHttpHeaders = true;
+  }
   return _request(ctx, '/Items/' + encodeURIComponent(itemId) + '/PlaybackInfo', { UserId: ctx.userId }, {
     method: 'POST',
     body: body,
