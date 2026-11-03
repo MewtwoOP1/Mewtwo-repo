@@ -93,7 +93,7 @@ async function main() {
   assert.equal(results[0].url, 'animepahe://anime/321');
 
   const detail = await provider.getDetail('animepahe://anime/321', {});
-  assert.equal(detail.title, 'Mock Anime');
+  assert.equal(detail.title, 'Mock Anime (2024)');
   assert.equal(detail.status, 'completed');
   assert.equal(detail.episodes.length, 3);
   assert.equal(detail.subCount, 2);
