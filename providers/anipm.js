@@ -19,7 +19,7 @@ var UA = 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 '
 
 var SEARCH_QUERY = [
   'query ($search: String!) {',
-  '  Page(page: 1, perPage: 12) {',
+  '  Page(page: $page, perPage: $perPage) {',
   '    media(search: $search, type: ANIME, sort: SEARCH_MATCH) {',
   '      id idMal',
   '      title { english romaji native }',
@@ -274,7 +274,8 @@ function _mapLimit(items, limit, worker) {
 function search(query, page, opts) {
   var q = _trim(query);
   if (q.length < 2) return Promise.resolve([]);
-  return _anilistRequest(SEARCH_QUERY, { search: q }, 'title search').then(function(data) {
+  var pageNumber = Math.max(1, parseInt(page, 10) || 1);
+  return _anilistRequest(SEARCH_QUERY, { search: q, page: pageNumber, perPage: 12 }, 'title search').then(function(data) {
     var pageData = data.Page || {};
     var media = Array.isArray(pageData.media) ? pageData.media : [];
     var channel = _category(opts);
