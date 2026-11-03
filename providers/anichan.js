@@ -120,7 +120,7 @@ function getDetail(url,opts) {
       if(count>0){for(var n=1;n<=count;n++){episodes.push({id:'anichan://episode/'+id+'/'+n+'/sub',url:'anichan://episode/'+id+'/'+n+'/sub',number:n,title:'Episode '+n,sourceId:SOURCE_ID,type:'anime',category:'sub'});if(dub)episodes.push({id:'anichan://episode/'+id+'/'+n+'/dub',url:'anichan://episode/'+id+'/'+n+'/dub',number:n,title:'Episode '+n,sourceId:SOURCE_ID,type:'anime',category:'dub'});}}
       if(_config().audioMode==='sub')episodes=episodes.filter(function(x){return x.category==='sub';});
       if(_config().audioMode==='dub')episodes=episodes.filter(function(x){return x.category==='dub';});
-      var out=_item(m);out.episodes=episodes;out.subCount=count;out.dubCount:dub?count:0;return out;
+      var out=_item(m);out.episodes=episodes;out.subCount=count;out.dubCount=dub?count:0;return out;
     });
   });
 }
