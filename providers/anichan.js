@@ -8,7 +8,7 @@ var SESSION = null;
 var ANICHAN_ACTIVE_KEYSET = null;
 
 function getInfo() {
-  return { name:'AniChan', lang:'en', baseUrl:SITE, logo:'https://www.google.com/s2/favicons?sz=256&domain=anichan.to', type:'anime', version:'1.0.4' };
+  return { name:'AniChan', lang:'en', baseUrl:SITE, logo:'https://www.google.com/s2/favicons?sz=256&domain=anichan.to', type:'anime', version:'1.0.5' };
 }
 function getSettings() {
   return [
@@ -336,4 +336,4 @@ function getVideoSources(episodeUrl,opts) {
 }
 function getStreams(id,opts){return getVideoSources(id,opts);}
 function getLinks(id,opts){return getVideoSources(id,opts);}
-if(typeof module!=='undefined'&&module.exports)module.exports={version:'1.0.4',getInfo:getInfo,getSettings:getSettings,getHome:getHome,popular:popular,search:search,getDetail:getDetail,getEpisodes:getEpisodes,getVideoSources:getVideoSources,getStreams:getStreams,getLinks:getLinks,_config:_config,_session:_session,_servers:_servers};
+if(typeof module!=='undefined'&&module.exports)module.exports={version:'1.0.5',getInfo:getInfo,getSettings:getSettings,getHome:getHome,popular:popular,search:search,getDetail:getDetail,getEpisodes:getEpisodes,getVideoSources:getVideoSources,getStreams:getStreams,getLinks:getLinks,_config:_config,_session:_session,_servers:_servers,_keysets:ANICHAN_KEYSETS,_b64:_acB64,_utf8Ascii:_acUtf8Ascii,_sha256:_acSha256,_hmac:_acHmac,_decryptEnvelope:_acDecryptEnvelope};
