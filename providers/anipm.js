@@ -9,7 +9,7 @@ var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID)
 var SITE = 'https://ani.pm';
 var EMBED = 'https://embed.settlar.io';
 var ANILIST = 'https://graphql.anilist.co';
-var VERSION = '1.0.0';
+var VERSION = '1.0.1';
 var LOGO = 'https://www.google.com/s2/favicons?sz=256&domain=ani.pm';
 
 // Anilili's provider uses this Android Chrome UA on every Ani.pm and Settlar
