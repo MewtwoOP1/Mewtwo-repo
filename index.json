@@ -344,6 +344,181 @@
       "nsfw": false
     },
     {
+      "id": "miruro",
+      "name": "Miruro",
+      "version": "1.0.0",
+      "type": "anime",
+      "lang": "en",
+      "file": "providers/miruro.js",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=miruro.to",
+      "nsfw": false,
+      "settings": [
+        {
+          "key": "apiHosts",
+          "label": "API mirror URLs (comma or newline separated)",
+          "description": "Ordered JSON API endpoints. The provider automatically switches to the next host when a request is blocked, unavailable, times out, or returns an invalid response. Leave the defaults unless you run your own compatible API.",
+          "type": "text",
+          "default": "https://api.hiyori.tv\nhttps://miruro.zenos.my.id\nhttps://www.neoanime.tv"
+        },
+        {
+          "key": "providerOrder",
+          "label": "Streaming server priority",
+          "description": "Comma-separated server order. Servers missing from this list are still included after the listed servers. The same episode is retried on the next available server when a source fails.",
+          "type": "text",
+          "default": "bee,bonk,hop,kiwi,pewe,ally,nun,bun,twin,cog,moo,sun,knob,telli"
+        },
+        {
+          "key": "disabledProviders",
+          "label": "Disabled streaming servers",
+          "description": "Comma-separated server IDs to hide and skip. Leave blank to enable every server returned by the API.",
+          "type": "text",
+          "default": ""
+        },
+        {
+          "key": "audioMode",
+          "label": "Audio tracks",
+          "description": "Choose which episode tracks to display. Both keeps sub and dub when available.",
+          "type": "enum",
+          "default": "both",
+          "options": [
+            {
+              "value": "both",
+              "label": "Sub and dub"
+            },
+            {
+              "value": "sub",
+              "label": "Sub only"
+            },
+            {
+              "value": "dub",
+              "label": "Dub only"
+            }
+          ]
+        },
+        {
+          "key": "autoFallback",
+          "label": "Automatic server fallback",
+          "description": "Try the next available Miruro server when a selected server has no stream or returns an error.",
+          "type": "bool",
+          "default": true
+        },
+        {
+          "key": "maxProviderAttempts",
+          "label": "Maximum server attempts per episode",
+          "description": "Limits how many different streaming servers are tried for one episode.",
+          "type": "enum",
+          "default": "8",
+          "options": [
+            {
+              "value": "3",
+              "label": "3 servers"
+            },
+            {
+              "value": "5",
+              "label": "5 servers"
+            },
+            {
+              "value": "8",
+              "label": "8 servers"
+            },
+            {
+              "value": "14",
+              "label": "All servers (14 max)"
+            }
+          ]
+        },
+        {
+          "key": "requestTimeoutMs",
+          "label": "API request timeout",
+          "description": "Maximum time for each API request before rotating to the next API host.",
+          "type": "enum",
+          "default": "8000",
+          "options": [
+            {
+              "value": "8000",
+              "label": "8 seconds"
+            },
+            {
+              "value": "15000",
+              "label": "15 seconds"
+            },
+            {
+              "value": "25000",
+              "label": "25 seconds"
+            }
+          ]
+        },
+        {
+          "key": "qualityPreference",
+          "label": "Preferred video quality",
+          "description": "Choose the preferred quality when the API returns multiple stream variants. Other qualities remain available as fallbacks.",
+          "type": "enum",
+          "default": "auto",
+          "options": [
+            {
+              "value": "auto",
+              "label": "Automatic"
+            },
+            {
+              "value": "1080p",
+              "label": "1080p"
+            },
+            {
+              "value": "720p",
+              "label": "720p"
+            },
+            {
+              "value": "480p",
+              "label": "480p"
+            },
+            {
+              "value": "360p",
+              "label": "360p"
+            }
+          ]
+        },
+        {
+          "key": "homeSections",
+          "label": "Home sections (comma separated)",
+          "description": "Available sections: spotlight, trending, recent, popular, upcoming. Invalid or unavailable sections are skipped.",
+          "type": "text",
+          "default": "spotlight,trending,recent,popular"
+        },
+        {
+          "key": "showAdult",
+          "label": "Show adult catalogue entries",
+          "description": "Include results marked as adult by the metadata API.",
+          "type": "bool",
+          "default": false
+        },
+        {
+          "key": "cacheSeconds",
+          "label": "Metadata and episode cache",
+          "description": "Short in-memory cache to avoid repeating identical API requests.",
+          "type": "enum",
+          "default": "120",
+          "options": [
+            {
+              "value": "0",
+              "label": "Disabled"
+            },
+            {
+              "value": "60",
+              "label": "1 minute"
+            },
+            {
+              "value": "120",
+              "label": "2 minutes"
+            },
+            {
+              "value": "300",
+              "label": "5 minutes"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "id": "hdhub4u",
       "name": "HDHub4u",
       "version": "1.2.4",
