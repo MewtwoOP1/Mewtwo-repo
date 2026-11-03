@@ -32,9 +32,9 @@ This repository includes eight integrations documented here. Choose one to get s
 | <img src="assets/icons/pencari.svg" width="24" align="middle" alt="" /> **TMDB + PencariMovie** | TMDB | PencariMovie server |
 | <img src="assets/icons/aiostreams.svg" width="24" align="middle" alt="" /> **AIOStreams** | TMDB | Your AIOStreams instance |
 | <img src="assets/icons/stremio.svg" width="24" align="middle" alt="" /> **TMDB + Stremio** | TMDB | Your configured Stremio-compatible add-ons |
-| **AniChan** | AniList | Session-backed multi-server HLS |
-| **AnimePahe** | AniList | Direct Kwik extraction with Kiwi fallback |
-| **Lili (XFDM)** | AniList + Bangumi | Exact-match XFDM MP4 mirrors (Chinese hard subs) |
+| **AniChan** | AniList | Signed fast/rest server resolution with automatic Miruro fallback |
+| **AnimePahe** | AniList | Direct playback when reachable; real-ID Miruro provider fallback |
+| **Lili (XFDM)** | AniList + Bangumi | Bangumi-matched MP4 mirrors with range validation and Miruro fallback (Chinese hard subs) |
 | **Miruro** | Miruro / AniList metadata | Available Miruro streaming servers |
 | **Zenkai Player** | AniMap + AniList metadata | Native MegaPlay, VidStream, and ACDN multi-audio playback |
 
