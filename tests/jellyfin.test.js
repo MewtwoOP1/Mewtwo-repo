@@ -274,7 +274,7 @@ async function main() {
   assert.ok(streams[1].headers.Authorization.includes('Token='));
 
   assert.ok(authCount >= 2, 'an expired session is authenticated again');
-  assert.equal(calls.filter((c) => c.pathname === '/jellyfin/Users/user-1/Views').length, 2);
+  assert.equal(calls.filter((c) => c.pathname === '/jellyfin/Users/user-1/Views').length, 3, 'Home retry plus search library discovery each request views');
   for (const call of calls) {
     if (/\/Shows\/.*\/Episodes$/.test(call.pathname)) {
       assert.ok(!/MediaSources|MediaStreams/i.test(param(new URL(call.url), 'Fields') || ''));
