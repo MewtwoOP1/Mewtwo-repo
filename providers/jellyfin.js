@@ -190,6 +190,11 @@ function _login(c) {
 function _getAuth() {
   var c = _requireServer();
   var fingerprint = _fingerprint(c);
+  if (JF_AUTH && JF_AUTH.fingerprint !== fingerprint) {
+    JF_AUTH = null;
+    JF_USER_PROMISE = null;
+    Object.keys(JF_CACHE).forEach(function (key) { delete JF_CACHE[key]; });
+  }
   if (JF_AUTH && JF_AUTH.fingerprint === fingerprint && JF_AUTH.expiresAt > Date.now()) {
     return Promise.resolve({ token: JF_AUTH.token, userId: JF_AUTH.userId, config: c });
   }
@@ -304,9 +309,10 @@ function _typeFilter() {
 }
 
 function _applyCatalogueFilters(params, c) {
-  if (!c.includePlayed) {
-    params.Filters = params.Filters ? String(params.Filters) + ',IsNotPlayed' : 'IsNotPlayed';
-  }
+  var filters = Array.isArray(params.Filters) ? params.Filters.slice() :
+    (params.Filters ? String(params.Filters).split(',').filter(Boolean) : []);
+  if (!c.includePlayed && filters.indexOf('IsNotPlayed') < 0) filters.push('IsNotPlayed');
+  if (filters.length) params.Filters = filters;
   if (c.genreFilter.length) params.Genres = c.genreFilter;
   if (c.yearFilter.length) params.Years = c.yearFilter;
   return params;
