@@ -5,7 +5,7 @@
 <p align="center">
   <a href="https://github.com/Spyou/Zangetsu"><img src="https://img.shields.io/badge/BUILT_FOR-Zangetsu-8B5CF6?style=for-the-badge&logo=github&logoColor=white" alt="Built for Zangetsu" /></a>
   <a href="https://raw.githubusercontent.com/MewtwoOP1/Mewtwo-repo/main/index.json"><img src="https://img.shields.io/badge/SOURCE-Manifest-0F766E?style=for-the-badge" alt="Source manifest" /></a>
-  <img src="https://img.shields.io/badge/INTEGRATIONS-04-4F46E5?style=for-the-badge" alt="Three integrations" />
+  <img src="https://img.shields.io/badge/INTEGRATIONS-05-4F46E5?style=for-the-badge" alt="Three integrations" />
 </p>
 
 <p align="center">
@@ -25,13 +25,14 @@
 
 ## At a glance
 
-This repository includes four integrations documented here. Choose one to get started; **you do not need to install all four**.
+This repository includes five integrations documented here. Choose one to get started; **you do not need to install all four**.
 
 | Integration | Catalogue & metadata | Playback |
 |:--|:--|:--|
 | <img src="assets/icons/pencari.svg" width="24" align="middle" alt="" /> **TMDB + PencariMovie** | TMDB | PencariMovie server |
 | <img src="assets/icons/aiostreams.svg" width="24" align="middle" alt="" /> **AIOStreams** | TMDB | Your AIOStreams instance |
 | <img src="assets/icons/stremio.svg" width="24" align="middle" alt="" /> **TMDB + Stremio** | TMDB | Your configured Stremio-compatible add-ons |
+| **Miruro** | Miruro / AniList metadata | Available Miruro streaming servers |
 | **Zenkai Player** | AniMap + AniList metadata | Native MegaPlay, VidStream, and ACDN multi-audio playback |
 
 <p align="center">
@@ -182,6 +183,44 @@ TMDB provides search, title details, catalogue metadata, and episode information
 
 ---
 
+
+
+<details>
+<summary><strong>Miruro</strong> · Multi-server anime catalogue and playback</summary>
+
+### What it does
+
+Miruro provides anime search, metadata, episode lists, sub/dub tracks, and playback sources from the available Miruro server pool. Episodes are grouped by number, so multiple servers can be tried for the same episode without creating duplicate episode rows.
+
+### Settings
+
+Open **Miruro → Settings** after installing it.
+
+| Setting | What it controls |
+|:--|:--|
+| **API mirror URLs** | Ordered, comma- or newline-separated JSON API hosts. The defaults are prefilled. You can replace them with your own compatible API deployment. |
+| **Streaming server priority** | Comma-separated provider IDs. Unlisted servers remain available after the listed servers. |
+| **Disabled streaming servers** | Comma-separated IDs to exclude from the episode list and playback fallback. |
+| **Audio tracks** | Show both SUB and DUB, or filter to one track. |
+| **Automatic server fallback** | Try the next server when a server returns no playable links or fails. |
+| **Maximum server attempts per episode** | Limit fallback to 3, 5, 8, or up to 14 servers. |
+| **API request timeout** | Timeout for each API host request: 8, 15, or 25 seconds. |
+| **Preferred video quality** | Automatic, 1080p, 720p, 480p, or 360p. Other returned qualities remain available. |
+| **Home sections** | Choose spotlight, trending, recent, popular, and upcoming sections. |
+| **Show adult catalogue entries** | Off by default. |
+| **Metadata and episode cache** | Disable caching or use a 1, 2, or 5 minute in-memory cache. |
+
+### Fallback behaviour
+
+For each API request, Miruro rotates through the configured API hosts when a host is blocked, unavailable, rate-limited, times out, returns an API error, or produces invalid JSON. During playback it tries the watch endpoint first, then the quality-aware stream endpoint, then the detailed sources endpoint. When those routes cannot produce a playable source, it moves to the next available Miruro server for the same episode, subject to the configured attempt limit.
+
+### Availability
+
+Miruro and its JSON API hosts are independently operated services. A title can have metadata and episode entries while one or more playback servers are unavailable or have no stream for that episode. API-host rotation and server fallback improve resilience but cannot guarantee a playable link for every title.
+
+</details>
+
+---
 
 <details>
 <summary><strong>Zenkai Player</strong> · AniMap metadata and native direct playback</summary>
