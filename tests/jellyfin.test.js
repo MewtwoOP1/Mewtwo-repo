@@ -151,11 +151,11 @@ global.fetch = async (url, init = {}) => {
   if (pathname === '/jellyfin/Items' && parsed.searchParams.has('parentId')) {
     const parentId = parsed.searchParams.get('parentId');
     if (parentId === 'movies-library') {
-      assert.equal(parsed.searchParams.get('includeItemTypes'), 'Movie,Series,Episode');
+      assert.equal(parsed.searchParams.get('includeItemTypes'), 'Movie,Episode');
       return response(200, { Items: [movie('movie-1', 'Test Movie')], TotalRecordCount: 1 });
     }
     if (parentId === 'shows-library') {
-      assert.equal(parsed.searchParams.get('includeItemTypes'), 'Movie,Series,Episode');
+      assert.equal(parsed.searchParams.get('includeItemTypes'), 'Series,Episode');
       return response(200, { Items: [series('series-1', 'Test Series')], TotalRecordCount: 1 });
     }
     if (parentId === 'boxsets-library') {
