@@ -37,7 +37,7 @@ const episodes = {
   providers: {
     bee: { meta: { id: 'tamon-bside' }, episodes: {
       sub: [
-        { id: 'watch/bee/178005/sub/anikoto-1', number: 1, title: 'Episode One', image: 'https://img.example/ep1.jpg', filler: false },
+        { id: 'watch/bee/178005/sub/anikoto-1', number: 1, title: 'Episode One', image: 'https://img.example/ep1.jpg', airDate: '2026-11-01', filler: false },
         { id: 'watch/bee/178005/sub/anikoto-2', number: 2, title: 'Episode Two' }
       ],
       dub: [{ id: 'watch/bee/178005/dub/anikoto-1', number: 1, title: 'Episode One Dub', audio: 'dub' }]
@@ -109,11 +109,15 @@ async function main() {
   calls.length = 0;
   const detail = await provider.getDetail('miruro://anime/178005', {});
   assert.equal(detail.title, "Tamon's B-Side");
+  assert.equal(detail.year, '2026', 'MediaDetail.year must be serialized as a string');
+  assert.equal(detail.malId, 59047, 'MAL ID enables AniZip episode metadata enrichment');
   assert.equal(detail.status, 'ongoing');
   assert.deepEqual(detail.studios, ['Studio Mock']);
   assert.equal(detail.subCount, 2);
   assert.equal(detail.dubCount, 1);
   assert.equal(detail.episodes.length, 3);
+  assert.equal(detail.episodes[0].thumbnail, 'https://img.example/ep1.jpg');
+  assert.equal(detail.episodes[0].date, '2026-11-01');
   assert.ok(calls.some((x) => x.url.includes('/info/178005')));
   assert.ok(calls.some((x) => x.url.includes('/episodes/178005')));
 
