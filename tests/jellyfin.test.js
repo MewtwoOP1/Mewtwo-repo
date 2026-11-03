@@ -87,6 +87,12 @@ global.fetch = async (url, init = {}) => {
     ], TotalRecordCount: 1 }) };
   }
 
+  if (pathName === '/jellyfin/Users/user-1/Items') {
+    return { status: 200, body: JSON.stringify({ Items: [
+      { Id: 'latest-1', Name: 'Recently Added Movie', Type: 'Movie' }
+    ] }) };
+  }
+
   if (pathName === '/jellyfin/Users/user-1/Items/series-1') {
     return { status: 200, body: JSON.stringify({
       Id: 'series-1', Name: 'Test Series', Type: 'Series',
