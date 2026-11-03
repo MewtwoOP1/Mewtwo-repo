@@ -125,7 +125,7 @@ async function main() {
     'the XFDM suggestion endpoint should be used before HTML search');
   assert.ok(calls.every((x) => !x.url.includes('http://')),
     'all provider requests remain HTTPS');
-  assert.throws(() => provider.getVideoSources('invalid-xfdm-url'), /invalid episode URL/i);
+  await assert.rejects(() => provider.getVideoSources('invalid-xfdm-url'), /invalid episode URL/i);
 
   console.log('XFDM tests passed: manifest, settings, strict season-aware title normalization, Bangumi subject matching, cover-ID verification, episode labels across channels, player JSON extraction, MP4 mirror preference and no false subtitle/dub metadata.');
 }
