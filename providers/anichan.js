@@ -5,9 +5,10 @@ var ANILIST = 'https://graphql.anilist.co';
 var UA = 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36';
 var CACHE = {};
 var SESSION = null;
+var ANICHAN_ACTIVE_KEYSET = null;
 
 function getInfo() {
-  return { name:'AniChan', lang:'en', baseUrl:SITE, logo:'https://www.google.com/s2/favicons?sz=256&domain=anichan.to', type:'anime', version:'1.0.2' };
+  return { name:'AniChan', lang:'en', baseUrl:SITE, logo:'https://www.google.com/s2/favicons?sz=256&domain=anichan.to', type:'anime', version:'1.0.3' };
 }
 function getSettings() {
   return [
@@ -194,19 +195,58 @@ function _collectServerTiers(id,ep,category,session,keyset){
   }
   return next();
 }
+function _refreshKeys(){
+ return _fetch(SITE+'/',{headers:{'Accept':'text/html,application/xhtml+xml','Referer':SITE+'/'},timeoutMs:_config().timeout}).then(function(response){
+  var html=String(response.body||''),urls=[],re=/src=["'](\/_next\/static\/chunks\/[^"']+\.js)["']/gi,m;
+  while((m=re.exec(html))!==null&&urls.length<12){var u=m[1];if(urls.indexOf(u)<0)urls.push(u);}
+  var index=0;
+  function next(){
+   if(index>=urls.length)return null;
+   var url=urls[index++].charAt(0)==='/'?SITE+urls[index-1]:urls[index-1];
+   return _fetch(url,{headers:{'Accept':'*/*','Referer':SITE+'/'},timeoutMs:_config().timeout}).then(function(r){
+    var code=String(r.body||'');
+    var match=code.match(/["']([0-9a-f]{8})["'],[A-Za-z_$][\w$]*=["']([A-Za-z0-9+/=]{44})["'],[A-Za-z_$][\w$]*=["']([A-Za-z0-9+/=]{44})["']/i);
+    if(!match)return next();
+    var key={id:match[1],p:match[2],i:match[3]};
+    if(!ANICHAN_KEYSETS.some(function(x){return x.id===key.id&&x.p===key.p&&x.i===key.i;}))ANICHAN_KEYSETS.unshift(key);
+    ANICHAN_ACTIVE_KEYSET=key;
+    return key;
+   }).catch(function(){return next();});
+  }
+  return next();
+ }).catch(function(error){console.warn('AniChan key refresh failed:',String(error));return null;});
+}
 function _servers(id,ep,category,force){
-  return _session(!!force).then(function(session){
-    return _collectServerTiers(id,ep,category,session,ANICHAN_KEYSETS[0]).catch(function(firstError){
-      if(firstError&&firstError.session&&!force){SESSION=null;return _servers(id,ep,category,true);}
-      return _collectServerTiers(id,ep,category,session,ANICHAN_KEYSETS[1]).catch(function(secondError){
-        if(secondError&&secondError.session&&!force){SESSION=null;return _servers(id,ep,category,true);}
-        throw secondError||firstError;
-      });
-    }).then(function(rows){
-      if(rows.length)return rows;
-      return _collectServerTiers(id,ep,category,session,ANICHAN_KEYSETS[1]);
+ return _session(!!force).then(function(session){
+  var keys=[];
+  if(ANICHAN_ACTIVE_KEYSET)keys.push(ANICHAN_ACTIVE_KEYSET);
+  ANICHAN_KEYSETS.forEach(function(k){if(!keys.some(function(x){return x.id===k.id&&x.p===k.p&&x.i===k.i;}))keys.push(k);});
+  var lastError=null,index=0;
+  function tryKey(){
+   if(index>=keys.length){
+    return _refreshKeys().then(function(refreshed){
+     if(!refreshed||keys.some(function(x){return x.id===refreshed.id&&x.p===refreshed.p&&x.i===refreshed.i;})){
+      if(lastError)throw lastError;
+      return [];
+     }
+     return _collectServerTiers(id,ep,category,session,refreshed).then(function(rows){
+      if(rows.length)ANICHAN_ACTIVE_KEYSET=refreshed;
+      return rows;
+     });
     });
-  });
+   }
+   var keyset=keys[index++];
+   return _collectServerTiers(id,ep,category,session,keyset).then(function(rows){
+    if(rows.length){ANICHAN_ACTIVE_KEYSET=keyset;return rows;}
+    return tryKey();
+   }).catch(function(error){
+    lastError=error;
+    if(error&&error.session&&!force){SESSION=null;return _servers(id,ep,category,true);}
+    return tryKey();
+   });
+  }
+  return tryKey();
+ });
 }
 function _abs(url) { var s=String(url||'');var full=s.charAt(0)==='/'?SITE+s:s;return full.replace(/ /g,'%20'); }
 function _subtitleLanguage(label) {
@@ -277,7 +317,7 @@ function getVideoSources(episodeUrl,opts) {
   if(!m)return Promise.reject(new Error('AniChan: invalid episode URL'));
   var id=Number(m[1]),ep=Number(m[2]),category=m[3].toLowerCase();
   var native=_servers(id,ep,category,false).then(function(rows){
-    var usable=rows.filter(function(x){return x&&String(x.type||'').toLowerCase()!=='embed'&&/^https?:\/\//i.test(String(x.stream||''));})
+    var usable=rows.filter(function(x){var u=String(x&&x.stream||'');return x&&String(x.type||'').toLowerCase()!=='embed'&&(/^https?:\/\//i.test(u)||/^\//.test(u));})
       .sort(function(a,b){return (Number(a.rank)||9999)-(Number(b.rank)||9999);}).slice(0,_config().maxStreams);
     if(!usable.length)throw new Error('AniChan signed server API returned no direct stream for episode '+ep+' ('+category+')');
     var subs=(Array.isArray(usable[0].subtitles)?usable[0].subtitles:[]).map(function(x){
@@ -296,4 +336,4 @@ function getVideoSources(episodeUrl,opts) {
 }
 function getStreams(id,opts){return getVideoSources(id,opts);}
 function getLinks(id,opts){return getVideoSources(id,opts);}
-if(typeof module!=='undefined'&&module.exports)module.exports={version:'1.0.2',getInfo:getInfo,getSettings:getSettings,getHome:getHome,popular:popular,search:search,getDetail:getDetail,getEpisodes:getEpisodes,getVideoSources:getVideoSources,getStreams:getStreams,getLinks:getLinks,_config:_config,_session:_session,_servers:_servers};
+if(typeof module!=='undefined'&&module.exports)module.exports={version:'1.0.3',getInfo:getInfo,getSettings:getSettings,getHome:getHome,popular:popular,search:search,getDetail:getDetail,getEpisodes:getEpisodes,getVideoSources:getVideoSources,getStreams:getStreams,getLinks:getLinks,_config:_config,_session:_session,_servers:_servers};
