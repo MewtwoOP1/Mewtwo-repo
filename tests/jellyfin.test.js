@@ -26,6 +26,8 @@ global.fetch = async (url, init = {}) => {
     body = { Items: [{ Id: 'movie-1', Name: 'Test Movie', Type: 'Movie', ProductionYear: 2024, Overview: 'A test synopsis', ImageTags: { Primary: 'tag1' } }] };
   } else if (parsed.pathname === '/Users/user-1/Items' && parsed.searchParams.has('SearchTerm')) {
     body = { Items: [{ Id: 'series-1', Name: 'Test Series', Type: 'Series', ProductionYear: 2020 }] };
+  } else if (parsed.pathname === '/Users/user-1/Items/episode-1') {
+    body = { Id: 'episode-1', Name: 'Pilot', Type: 'Episode', ParentIndexNumber: 1, IndexNumber: 1, SeriesName: 'Test Series' };
   } else if (parsed.pathname === '/Users/user-1/Items/movie-1') {
     body = { Id: 'movie-1', Name: 'Test Movie', Type: 'Movie', Overview: 'A test synopsis', Genres: ['Drama'], People: [{ Name: 'Actor One', Type: 'Actor' }] };
   } else if (parsed.pathname === '/Shows/series-1/Episodes') {
