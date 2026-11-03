@@ -94,6 +94,8 @@ async function main() {
 
   const detail = await provider.getDetail('animepahe://anime/321', {});
   assert.equal(detail.title, 'Mock Anime (2024)');
+  assert.equal(detail.year, '2024', 'MediaDetail.year must be a string');
+  assert.equal(detail.malId, 654, 'MAL ID is required for AniZip metadata enrichment');
   assert.equal(detail.status, 'completed');
   assert.equal(detail.episodes.length, 3);
   assert.equal(detail.subCount, 2);
@@ -127,6 +129,12 @@ async function main() {
   assert.ok(calls.some((x) => x.url === 'https://animepahe.pw/anime/pahe-session'),
     'candidate must be confirmed by the series AniList/MAL IDs');
   assert.ok(calls.some((x) => x.url === 'https://kwik.cx/e/mock' && x.options.browser === true));
+
+  const shared = provider._episodesFromMiruro(321, { data: [{ episode_number: 3, title: 'Episode Three', thumbnail_url: 'https://img.example/ep3.jpg', aired_on: '2024-02-01' }] });
+  assert.equal(shared.length, 1, 'shared mirror data[] inventories must be accepted');
+  assert.equal(shared[0].thumbnail, 'https://img.example/ep3.jpg');
+  assert.equal(shared[0].date, '2024-02-01');
+  assert.ok(provider._fallbackEpisodeList(321, media).length === 12, 'AniList count is used when the mirror has no Kiwi inventory');
 
   const ids = provider._parseIds('<meta name="anilist" content="321"><meta name="mal" content="654">');
   assert.deepEqual(ids, { anilistId: 321, malId: 654 });
