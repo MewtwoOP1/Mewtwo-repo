@@ -259,11 +259,13 @@ function _parseItemUrl(value) {
 function getDetail(id) {
   var itemId = _parseItemUrl(id);
   if (!itemId) return Promise.reject(new Error('Invalid Jellyfin item URL.'));
-  return _request('/Users/' + encodeURIComponent(_config().userId || 'me') + '/Items/' + encodeURIComponent(itemId), {
-    Fields: 'Overview,Genres,People,Studios,DateCreated,MediaSources,MediaStreams,ProviderIds,ChildCount,RecursiveItemCount'
-  }).catch(function () {
-    return _request('/Items/' + encodeURIComponent(itemId), {
+  return _userId().then(function (userId) {
+    return _request('/Users/' + encodeURIComponent(userId) + '/Items/' + encodeURIComponent(itemId), {
       Fields: 'Overview,Genres,People,Studios,DateCreated,MediaSources,MediaStreams,ProviderIds,ChildCount,RecursiveItemCount'
+    }).catch(function () {
+      return _request('/Items/' + encodeURIComponent(itemId), {
+        Fields: 'Overview,Genres,People,Studios,DateCreated,MediaSources,MediaStreams,ProviderIds,ChildCount,RecursiveItemCount'
+      });
     });
   }).then(function (raw) {
     var mapped = _mapItem(raw);
