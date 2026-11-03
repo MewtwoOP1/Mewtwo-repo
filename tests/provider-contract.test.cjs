@@ -56,6 +56,21 @@ test('AnimePahe fallback inventory does not invent Kiwi episode routes', {
   }
 });
 
+test('AnimePahe shared episode inventory never invents Kiwi server IDs', {
+  skip: !manifest.sources.some((item) => item.id === 'animepahe')
+}, () => {
+  const provider = require(path.join(root, entryFor('animepahe').file));
+  const rows = provider._episodesFromMiruro(154587, {
+    data: [{ episode_number: 1, title: 'Inventory-only episode', slug: 'pahe-ep-1' }]
+  });
+  assert.equal(rows.length, 1);
+  const payload = JSON.parse(decodeURIComponent(
+    rows[0].url.slice('animepahe://episode/'.length)
+  ));
+  assert.equal(payload.route, '');
+  assert.equal(payload.slug, 'pahe-ep-1');
+});
+
 test('Miruro preserves API episode metadata and real provider routes', {
   skip: !manifest.sources.some((item) => item.id === 'miruro')
 }, () => {
