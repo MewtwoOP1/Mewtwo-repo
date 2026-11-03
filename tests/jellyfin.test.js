@@ -1,184 +1,293 @@
 'use strict';
+
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const requests = [];
-const login = { username: 'goutam-test', password: 'correct-horse' };
-let expectedToken = 'session-token-123';
+const calls = [];
+let expectedToken = 'session-token-1';
+let authCount = 0;
+let expireNextItemsRequest = false;
+let activeCredentials = { Username: 'viewer', Pw: 'correct-password' };
+
 global.__settings = {
   jellyfin: {
-    serverUrl: 'https://jf.example.test/jellyfin/',
-    username: login.username,
-    password: login.password,
-    apiKey: '',
-    userId: '',
+    serverUrl: 'https://jf.example.test/jellyfin/web/index.html',
+    username: activeCredentials.Username,
+    password: activeCredentials.Pw,
     pageSize: '25',
-    catalogSections: ['resume', 'nextUp', 'latest', 'favorites', 'libraries'],
+    homeSections: ['resume', 'nextUp', 'recent', 'favorites', 'libraries'],
     contentTypes: ['Movie', 'Series', 'Episode'],
-    browseSort: 'DateCreated',
-    includePlayed: false,
-    genreFilter: 'Drama',
-    yearFilter: '2024',
     showCollections: true,
+    sortBy: 'DateCreated',
+    maxStreamingBitrate: '40000000',
     preferTranscoding: false,
-    maxBitrate: '16000000',
     includeSubtitles: true,
-    imageWidth: '500',
     cacheTtl: '30000',
     requestTimeoutMs: '10000'
   }
 };
 
-const itemsForLibrary = (parentId) => {
-  if (parentId === 'movies-library') return [{ Id: 'movie-1', Name: 'Test Movie', Type: 'Movie', ProductionYear: 2024, Overview: 'A movie synopsis', CommunityRating: 8.2, ImageTags: { Primary: 'poster-tag' }, BackdropImageTags: ['backdrop-tag'] }];
-  if (parentId === 'collection-library') return [{ Id: 'boxset-1', Name: 'Collection', Type: 'BoxSet', Overview: 'A movie collection', ImageTags: { Primary: 'collection-tag' } }];
-  if (parentId === 'boxset-1') return [
-    { Id: 'movie-1', Name: 'Test Movie', Type: 'Movie', ProductionYear: 2024 },
-    { Id: 'series-1', Name: 'Test Series', Type: 'Series', ProductionYear: 2020 }
-  ];
-  return [{ Id: 'series-1', Name: 'Test Series', Type: 'Series', ProductionYear: 2020, Overview: 'A series synopsis', ImageTags: { Primary: 'series-tag' } }];
-};
+function response(status, data) {
+  return { status, body: typeof data === 'string' ? data : JSON.stringify(data) };
+}
+
+function movie(id, name, extra = {}) {
+  return {
+    Id: id, Name: name, Type: 'Movie', ProductionYear: 2024,
+    Overview: name + ' synopsis', CommunityRating: 8.2,
+    Genres: ['Drama'], ImageTags: { Primary: 'poster-' + id },
+    BackdropImageTags: ['backdrop-' + id],
+    ...extra
+  };
+}
+
+function series(id, name, extra = {}) {
+  return {
+    Id: id, Name: name, Type: 'Series', ProductionYear: 2020,
+    Overview: name + ' synopsis', Status: 'Continuing',
+    Genres: ['Mystery', 'Drama'],
+    Studios: [{ Name: 'Example Studio' }],
+    People: [
+      { Name: 'Actor One', Type: 'Actor', Role: 'Lead' },
+      { Name: 'Director One', Type: 'Director' }
+    ],
+    ImageTags: { Primary: 'poster-' + id },
+    BackdropImageTags: ['backdrop-' + id],
+    ProviderIds: { Imdb: 'tt1234567', Tmdb: '456', MyAnimeList: '5114', AniList: '21' },
+    ...extra
+  };
+}
+
+function episode(id, number, extra = {}) {
+  return {
+    Id: id, Name: number === 1 ? 'Pilot' : 'Episode ' + number,
+    Type: 'Episode', SeriesName: 'Test Series', SeriesId: 'series-1',
+    ParentIndexNumber: 1, IndexNumber: number,
+    PremiereDate: '2024-01-' + String(number).padStart(2, '0') + 'T00:00:00Z',
+    Overview: 'Episode ' + number + ' synopsis',
+    ImageTags: { Primary: 'episode-' + id },
+    ...extra
+  };
+}
 
 global.fetch = async (url, init = {}) => {
   const parsed = new URL(String(url));
-  const pathName = parsed.pathname;
-  requests.push({ url: String(url), init });
+  const pathname = parsed.pathname;
+  const method = String(init.method || 'GET').toUpperCase();
+  calls.push({ url: String(url), pathname, method, init });
 
-  assert.equal(parsed.protocol, 'https:');
-  assert.ok(init.timeoutMs === 10000 || (pathName === '/jellyfin/UserItems/Resume' && init.timeoutMs === 2500));
+  assert.ok(parsed.protocol === 'https:' || pathname === '/jf/System/Info/Public',
+    'server calls must use the configured scheme');
+  assert.ok(init.timeoutMs === 10000 || (pathname === '/jellyfin/UserItems/Resume' && init.timeoutMs === 2500));
 
-  if (pathName === '/jellyfin/Users/AuthenticateByName') {
-    assert.equal(init.method, 'POST');
-    assert.match(init.headers.Authorization, /MediaBrowser Client="Zangetsu"/);
-    assert.match(init.headers.Authorization, /Token=""/);
+  if (pathname === '/jellyfin/System/Info/Public') {
+    assert.equal(method, 'GET');
+    assert.match(init.headers.Authorization, /^MediaBrowser Client="Zangetsu"/);
+    assert.doesNotMatch(init.headers.Authorization, /Token=/);
+    return response(200, { ServerName: 'Den', Version: '10.10.7', Id: 'server-1' });
+  }
+
+  if (pathname === '/jellyfin/Users/AuthenticateByName') {
+    assert.equal(method, 'POST');
+    assert.match(init.headers.Authorization, /^MediaBrowser Client="Zangetsu"/);
+    assert.doesNotMatch(init.headers.Authorization, /Token=/);
+    assert.equal(init.headers['Content-Type'], 'application/json');
     const credentials = JSON.parse(init.body);
+    authCount++;
     if (credentials.Username === 'bad-user') {
-      return { status: 401, body: JSON.stringify({ Message: 'Invalid username or password' }) };
+      return response(401, { Message: 'Invalid username or password' });
     }
-    assert.deepEqual(credentials, { Username: login.username, Pw: login.password });
-    return { status: 200, body: JSON.stringify({ AccessToken: 'session-token-123', User: { Id: 'user-1', Name: 'Test User' } }) };
+    assert.deepEqual(credentials, activeCredentials);
+    expectedToken = 'session-token-' + authCount;
+    return response(200, {
+      User: { Id: 'user-1', Name: credentials.Username },
+      AccessToken: expectedToken,
+      ServerId: 'server-1'
+    });
   }
 
-  assert.equal(init.headers.Authorization, 'MediaBrowser Client="Zangetsu", Device="Zangetsu", DeviceId="zangetsu-jellyfin", Version="1.1.0", Token="' + expectedToken + '"');
-  assert.equal(init.headers['X-Emby-Token'], expectedToken);
+  assert.equal(init.headers.Authorization,
+    'MediaBrowser Client="Zangetsu", Device="Zangetsu", DeviceId="zangetsu-jellyfin", Version="2.0.0", Token="' + expectedToken + '"');
+  assert.equal(init.headers['X-Emby-Token'], undefined, 'new implementation must use MediaBrowser Authorization');
 
-  if (pathName === '/jellyfin/Users') {
-    return { status: 200, body: JSON.stringify([{ Id: 'user-1', Name: 'Test User' }]) };
+  if (expireNextItemsRequest && pathname === '/jellyfin/UserViews') {
+    expireNextItemsRequest = false;
+    return response(401, { Message: 'Expired token' });
   }
 
-  if (pathName === '/jellyfin/UserViews') {
+  if (pathname === '/jellyfin/UserViews') {
     assert.equal(parsed.searchParams.get('userId'), 'user-1');
-    return { status: 200, body: JSON.stringify({ Items: [
-      { Id: 'movies-library', Name: 'Movies', CollectionType: 'movies' },
-      { Id: 'shows-library', Name: 'TV Shows', CollectionType: 'tvshows' },
-      { Id: 'collection-library', Name: 'Collections', CollectionType: 'boxsets' }
-    ] }) };
+    return response(200, { Items: [
+      { Id: 'movies-library', Name: 'Movies', Type: 'CollectionFolder', CollectionType: 'movies' },
+      { Id: 'shows-library', Name: 'TV Shows', Type: 'CollectionFolder', CollectionType: 'tvshows' },
+      { Id: 'boxsets-library', Name: 'Collections', Type: 'CollectionFolder', CollectionType: 'boxsets' },
+      { Id: 'mixed-library', Name: 'Everything', Type: 'CollectionFolder' },
+      { Id: 'music-library', Name: 'Music', Type: 'CollectionFolder', CollectionType: 'music' }
+    ] });
   }
 
-  if (pathName === '/jellyfin/UserItems/Resume') {
-    return { status: 200, body: JSON.stringify({ Items: [
-      { Id: 'movie-resume', Name: 'Resume Movie', Type: 'Movie', UserData: { PlaybackPositionTicks: 1000 } }
-    ] }) };
+  if (pathname === '/jellyfin/UserItems/Resume') {
+    assert.equal(parsed.searchParams.get('mediaTypes'), 'Video');
+    assert.equal(parsed.searchParams.get('limit'), '25');
+    return response(200, { Items: [{
+      Id: 'resume-ep', Name: 'Resume Episode', Type: 'Episode',
+      SeriesId: 'series-1', SeriesName: 'Test Series',
+      SeriesPrimaryImageTag: 'series-primary',
+      ParentBackdropItemId: 'series-1',
+      ParentBackdropImageTags: ['series-backdrop'],
+      UserData: { PlaybackPositionTicks: 1000 }
+    }] });
   }
 
-  if (pathName === '/jellyfin/Shows/NextUp') {
-    return { status: 200, body: JSON.stringify({ Items: [
-      { Id: 'episode-next', Name: 'Next Episode', Type: 'Episode', ParentIndexNumber: 2, IndexNumber: 3, SeriesName: 'Next Series' }
-    ] }) };
+  if (pathname === '/jellyfin/Shows/NextUp') {
+    return response(200, { Items: [{
+      Id: 'next-ep', Name: 'Next Episode', Type: 'Episode',
+      SeriesId: 'series-1', SeriesName: 'Test Series',
+      SeriesPrimaryImageTag: 'series-primary', ParentIndexNumber: 2, IndexNumber: 3
+    }] });
   }
 
-  if (pathName === '/jellyfin/Users/user-1/Items' && parsed.searchParams.has('ParentId')) {
-    const parentId = parsed.searchParams.get('ParentId');
-    if (parentId === 'collection-library') assert.match(parsed.searchParams.get('IncludeItemTypes'), /BoxSet/);
-    return { status: 200, body: JSON.stringify({ Items: itemsForLibrary(parentId) }) };
-  }
-
-  if (pathName === '/jellyfin/Users/user-1/Items' && parsed.searchParams.getAll('Filters').includes('IsFavorite')) {
-    return { status: 200, body: JSON.stringify({ Items: [
-      { Id: 'favorite-1', Name: 'Favorite Movie', Type: 'Movie' }
-    ] }) };
-  }
-
-  if (pathName === '/jellyfin/Users/user-1/Items' && parsed.searchParams.has('SearchTerm')) {
-    assert.equal(parsed.searchParams.get('SearchTerm'), 'Test');
-    assert.deepEqual(parsed.searchParams.getAll('Filters'), ['IsNotPlayed']);
-    assert.deepEqual(parsed.searchParams.getAll('Genres'), ['Drama']);
-    assert.deepEqual(parsed.searchParams.getAll('Years'), ['2024']);
-    return { status: 200, body: JSON.stringify({ Items: [
-      { Id: 'series-1', Name: 'Test Series', Type: 'Series' }
-    ], TotalRecordCount: 1 }) };
-  }
-
-  if (pathName === '/jellyfin/Users/user-1/Items') {
-    return { status: 200, body: JSON.stringify({ Items: [
-      { Id: 'latest-1', Name: 'Recently Added Movie', Type: 'Movie' }
-    ] }) };
-  }
-
-  if (pathName === '/jellyfin/Users/user-1/Items/boxset-1') {
-    return { status: 200, body: JSON.stringify({
-      Id: 'boxset-1', Name: 'Collection', Type: 'BoxSet',
-      Overview: 'A movie collection', ImageTags: { Primary: 'collection-tag' }
-    }) };
-  }
-
-  if (pathName === '/jellyfin/Users/user-1/Items/series-1') {
-    return { status: 200, body: JSON.stringify({
-      Id: 'series-1', Name: 'Test Series', Type: 'Series',
-      Overview: 'Series synopsis', ProductionYear: 2020,
-      Status: 'Continuing', Genres: ['Drama', 'Mystery'],
-      Studios: [{ Name: 'Test Studio' }],
-      People: [{ Name: 'Actor One', Type: 'Actor' }, { Name: 'Director One', Type: 'Director' }],
-      ImageTags: { Primary: 'series-tag' }
-    }) };
-  }
-
-  if (pathName === '/jellyfin/Shows/series-1/Episodes') {
-    assert.equal(parsed.searchParams.get('userId'), 'user-1');
-    return { status: 200, body: JSON.stringify({ Items: [
-      { Id: 'episode-1', Name: 'Pilot', Type: 'Episode', ParentIndexNumber: 1, IndexNumber: 1, SeriesName: 'Test Series', PremiereDate: '2024-01-01T00:00:00Z', Overview: 'Episode synopsis', RunTimeTicks: 27000000000, ImageTags: { Primary: 'ep-tag' } },
-      { Id: 'episode-2', Name: 'Second', Type: 'Episode', ParentIndexNumber: 1, IndexNumber: 2, SeriesName: 'Test Series' }
-    ] }) };
-  }
-
-  if (pathName === '/jellyfin/Shows/long-series/Episodes') {
-    const startIndex = Number(parsed.searchParams.get('startIndex') || 0);
-    if (startIndex === 0) {
-      return { status: 200, body: JSON.stringify({ TotalRecordCount: 501, Items: [
-        { Id: 'long-episode-1', Name: 'Episode 1', Type: 'Episode', ParentIndexNumber: 1, IndexNumber: 1 }
-      ] }) };
+  if (pathname === '/jellyfin/Items' && parsed.searchParams.has('parentId')) {
+    const parentId = parsed.searchParams.get('parentId');
+    if (parentId === 'movies-library') {
+      assert.equal(parsed.searchParams.get('includeItemTypes'), 'Movie,Series,Episode');
+      return response(200, { Items: [movie('movie-1', 'Test Movie')], TotalRecordCount: 1 });
     }
-    assert.equal(startIndex, 500);
-    return { status: 200, body: JSON.stringify({ TotalRecordCount: 501, Items: [
-      { Id: 'long-episode-501', Name: 'Episode 501', Type: 'Episode', ParentIndexNumber: 2, IndexNumber: 1 }
-    ] }) };
+    if (parentId === 'shows-library') {
+      assert.equal(parsed.searchParams.get('includeItemTypes'), 'Movie,Series,Episode');
+      return response(200, { Items: [series('series-1', 'Test Series')], TotalRecordCount: 1 });
+    }
+    if (parentId === 'boxsets-library') {
+      assert.equal(parsed.searchParams.get('includeItemTypes'), 'BoxSet');
+      return response(200, { Items: [{
+        Id: 'boxset-1', Name: 'Collection One', Type: 'BoxSet',
+        ImageTags: { Primary: 'collection-poster' }
+      }], TotalRecordCount: 1 });
+    }
+    if (parentId === 'mixed-library') {
+      assert.equal(parsed.searchParams.get('includeItemTypes'), 'Movie,Series,Episode');
+      return response(200, { Items: [movie('mixed-movie', 'Mixed Movie')] });
+    }
+    if (parentId === 'boxset-1') {
+      assert.equal(parsed.searchParams.get('recursive'), 'false');
+      return response(200, { Items: [
+        movie('collection-movie', 'Collection Movie'),
+        series('collection-series', 'Collection Series')
+      ], TotalRecordCount: 2 });
+    }
   }
 
-  if (pathName === '/jellyfin/Users/user-1/Items/movie-1') {
-    return { status: 200, body: JSON.stringify({
-      Id: 'movie-1', Name: 'Test Movie', Type: 'Movie', Overview: 'A movie synopsis',
-      Genres: ['Drama'], People: [{ Name: 'Actor One', Type: 'Actor' }]
-    }) };
+  if (pathname === '/jellyfin/Items' && parsed.searchParams.get('filters') === 'IsFavorite') {
+    return response(200, { Items: [movie('favorite-1', 'Favorite Movie')] });
   }
 
-  if (pathName === '/jellyfin/Items/episode-1/PlaybackInfo') {
-    return { status: 200, body: JSON.stringify({
+  if (pathname === '/jellyfin/Items' && parsed.searchParams.has('searchTerm')) {
+    assert.equal(parsed.searchParams.get('searchTerm'), 'Test');
+    assert.equal(parsed.searchParams.get('startIndex'), '25');
+    return response(200, { Items: [series('search-series', 'Test Series Search')], TotalRecordCount: 1 });
+  }
+
+  if (pathname === '/jellyfin/Items' && parsed.searchParams.has('sortBy')) {
+    assert.ok(parsed.searchParams.has('fields'), 'recently added query must request metadata fields');
+    assert.ok(parsed.searchParams.has('enableImageTypes'), 'recently added query must request poster/backdrop images');
+    return response(200, { Items: [movie('recent-1', 'Recent Movie')] });
+  }
+
+  if (pathname === '/jellyfin/Items/series-1') {
+    assert.equal(parsed.searchParams.get('userId'), 'user-1');
+    return response(200, series('series-1', 'Test Series', {
+      RunTimeTicks: 27000000000,
+      OfficialRating: 'TV-14',
+      EndDate: null,
+      People: [
+        { Name: 'Actor One', Type: 'Actor', Role: 'Lead' },
+        { Name: 'Director One', Type: 'Director' },
+        { Name: 'Actor Two', Type: 'Actor' }
+      ]
+    }));
+  }
+
+  if (pathname === '/jellyfin/Items/movie-1') {
+    return response(200, movie('movie-1', 'Test Movie', {
+      People: [{ Name: 'Movie Actor', Type: 'Actor' }],
+      ProviderIds: { Imdb: 'tt7654321', Tmdb: '123' }
+    }));
+  }
+
+  if (pathname === '/jellyfin/Items/boxset-1') {
+    return response(200, {
+      Id: 'boxset-1', Name: 'Collection One', Type: 'BoxSet',
+      Overview: 'A collection description',
+      ImageTags: { Primary: 'collection-poster' }
+    });
+  }
+
+  if (pathname === '/jellyfin/Shows/series-1/Episodes') {
+    assert.equal(parsed.searchParams.get('userId'), 'user-1');
+    return response(200, {
+      TotalRecordCount: 2,
+      Items: [episode('episode-1', 1), episode('episode-2', 2)]
+    });
+  }
+
+  if (pathname === '/jellyfin/Shows/long-series/Episodes') {
+    const start = Number(parsed.searchParams.get('startIndex') || 0);
+    if (start === 0) {
+      return response(200, {
+        TotalRecordCount: 501,
+        Items: [episode('long-1', 1)]
+      });
+    }
+    assert.equal(start, 500);
+    return response(200, {
+      TotalRecordCount: 501,
+      Items: [episode('long-501', 501, { ParentIndexNumber: 2 })]
+    });
+  }
+
+  if (pathname === '/jellyfin/Items/episode-1/PlaybackInfo') {
+    assert.equal(method, 'POST');
+    assert.equal(parsed.searchParams.get('userId'), 'user-1');
+    assert.equal(parsed.searchParams.get('maxStreamingBitrate'), '40000000');
+    const body = JSON.parse(init.body);
+    assert.equal(body.UserId, 'user-1');
+    assert.equal(body.MaxStreamingBitrate, 40000000);
+    assert.equal(body.DeviceProfile.Name, 'Zangetsu');
+    assert.ok(body.DeviceProfile.DirectPlayProfiles.length > 0);
+    assert.ok(body.DeviceProfile.TranscodingProfiles.some((x) => x.Protocol === 'hls'));
+    assert.ok(body.DeviceProfile.SubtitleProfiles.some((x) => x.Method === 'External'));
+    return response(200, {
       PlaySessionId: 'play-session-1',
-      MediaSources: [{
-        Id: 'media-1', Name: 'Original 1080p', Container: 'mp4', Height: 1080,
-        DirectStreamUrl: '/Videos/episode-1/stream?static=true&mediaSourceId=media-1',
-        TranscodingUrl: '/Videos/episode-1/master.m3u8?VideoCodec=h264',
-        TranscodingSubProtocol: 'hls',
-        MediaStreams: [
-          { Index: 2, Type: 'Subtitle', Language: 'en', DisplayTitle: 'English', Codec: 'srt', IsDefault: true, DeliveryUrl: '/Videos/episode-1/Subtitles/2/Stream.srt' },
-          { Index: 1, Type: 'Audio', Language: 'en', DisplayTitle: 'English' }
-        ]
-      }]
-    }) };
+      MediaSources: [
+        {
+          Id: 'media-direct', Name: 'Original 1080p', Type: 'Default',
+          SupportsDirectPlay: true, SupportsDirectStream: true,
+          Container: 'mkv', ETag: 'etag-1',
+          MediaStreams: [
+            { Type: 'Video', Index: 0, Width: 1920, Height: 1080, Codec: 'h264', DisplayTitle: '1080p H264' },
+            { Type: 'Audio', Index: 1, Language: 'eng', IsDefault: true, DisplayTitle: 'English AC3 5.1' },
+            { Type: 'Subtitle', Index: 2, Language: 'eng', Codec: 'subrip', DeliveryMethod: 'External', DeliveryUrl: '/Videos/episode-1/media-direct/Subtitles/2/0/Stream.srt', IsDefault: true },
+            { Type: 'Subtitle', Index: 3, Language: 'jpn', Codec: 'subrip', DeliveryMethod: 'Embed' }
+          ]
+        },
+        {
+          Id: 'media-transcode', Name: 'HLS transcode', Type: 'Default',
+          SupportsDirectPlay: false, SupportsDirectStream: false,
+          TranscodingUrl: '/videos/episode-1/master.m3u8?MediaSourceId=media-transcode',
+          TranscodingSubProtocol: 'hls',
+          Container: 'ts',
+          MediaStreams: [
+            { Type: 'Video', Index: 0, Width: 1280, Height: 720, Codec: 'h264' },
+            { Type: 'Audio', Index: 1, Language: 'eng', IsDefault: true, DisplayTitle: 'English AAC' },
+            { Type: 'Subtitle', Index: 4, Language: 'eng', Codec: 'srt', DeliveryMethod: 'External', DeliveryUrl: '/Videos/episode-1/media-transcode/Subtitles/4/0/Stream.srt' }
+          ]
+        }
+      ]
+    });
   }
 
-  throw new Error('Unexpected Jellyfin request: ' + pathName + parsed.search);
+  throw new Error('Unexpected Jellyfin request: ' + method + ' ' + parsed.pathname + parsed.search);
 };
 
 const provider = require('../providers/jellyfin.js');
@@ -186,106 +295,124 @@ const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'index.js
 const source = manifest.sources.find((item) => item.id === 'jellyfin');
 
 async function main() {
-  assert.ok(source, 'Jellyfin source is present in index.json');
+  assert.ok(source, 'Jellyfin source is registered in index.json');
   assert.equal(provider.version, source.version);
-  assert.equal(provider.getInfo().version, '1.1.0');
-  assert.deepEqual(provider.getSettings().map((x) => x.key), source.settings.map((x) => x.key));
-  assert.ok(provider.getSettings().some((x) => x.key === 'password'));
-  assert.ok(provider.getSettings().some((x) => x.key === 'catalogSections' && x.type === 'multiEnum'));
-  assert.ok(provider.getSettings().find((x) => x.key === 'contentTypes').options.some((x) => x.value === 'BoxSet'));
-  assert.equal(provider._config().server, 'https://jf.example.test/jellyfin');
+  assert.equal(provider.getInfo().version, '2.0.0');
+  assert.equal(provider.getInfo().name, 'Jellyfin');
+  assert.deepEqual(provider.getSettings().map((item) => item.key), source.settings.map((item) => item.key));
+  assert.ok(provider.getSettings().some((item) => item.key === 'username'));
+  assert.ok(provider.getSettings().some((item) => item.key === 'password'));
+  assert.ok(!provider.getSettings().some((item) => item.key === 'apiKey'));
 
-  const home = await provider.getHome();
-  const titles = home.map((row) => row.title);
-  assert.ok(titles.includes('Continue Watching'));
-  assert.ok(titles.includes('Next Up'));
-  assert.ok(titles.includes('Recently Added'));
-  assert.ok(titles.includes('Favorites'));
-  assert.ok(titles.includes('Movies'));
-  assert.ok(titles.includes('TV Shows'));
-  assert.ok(titles.includes('Collections'));
-  const collectionRow = home.find((row) => row.title === 'Collections');
+  assert.equal(provider._normalizeServerAddress('https://media.example.test/jellyfin/web/index.html/'), 'https://media.example.test/jellyfin');
+  assert.equal(provider._normalizeServerAddress('jf.example.test:8096/web/'), 'http://jf.example.test:8096');
+  assert.throws(() => provider._normalizeServerAddress('https://user:secret@jf.example.test'), /embedded credentials/i);
+  assert.equal(provider._versionAtLeast('10.9.0', '10.9.0'), true);
+  assert.equal(provider._versionAtLeast('10.10.7', '10.9.0'), true);
+  assert.equal(provider._versionAtLeast('10.8.13', '10.9.0'), false);
+  assert.equal(provider._versionAtLeast('4.8.10.0', '10.9.0'), false);
+  assert.deepEqual(provider._parseItemUrl('jellyfin://boxset-1?collection=1'), { id: 'boxset-1', collection: true });
+
+  const initialHome = await provider.getHome();
+  const initialRows = initialHome.map((row) => row.title);
+  assert.ok(initialRows.includes('Continue Watching'));
+  assert.ok(initialRows.includes('Next Up'));
+  assert.ok(initialRows.includes('Recently Added'));
+  assert.ok(initialRows.includes('Favorites'));
+  assert.ok(initialRows.includes('Movies'));
+  assert.ok(initialRows.includes('TV Shows'));
+  assert.ok(initialRows.includes('Collections'));
+  assert.ok(!initialRows.includes('Music'));
+  const resumeRow = initialHome.find((row) => row.title === 'Continue Watching');
+  assert.equal(resumeRow.items[0].jellyfinId, 'series-1', 'episode resume entries map to their parent series');
+  assert.equal(resumeRow.items[0].title, 'Test Series');
+  const collectionRow = initialHome.find((row) => row.title === 'Collections');
   assert.equal(collectionRow.items[0].url, 'jellyfin://boxset-1?collection=1');
-  const movieRow = home.find((row) => row.title === 'Movies');
+  const movieRow = initialHome.find((row) => row.title === 'Movies');
   assert.equal(movieRow.items[0].url, 'jellyfin://movie-1');
   assert.equal(movieRow.items[0].score, 82);
-  assert.equal(movieRow.items[0].cover, 'https://jf.example.test/jellyfin/Items/movie-1/Images/Primary?tag=poster-tag&maxWidth=500');
-  assert.match(movieRow.items[0].coverHeaders.Authorization, /Token="session-token-123"/);
+  assert.equal(movieRow.items[0].cover, 'https://jf.example.test/jellyfin/Items/movie-1/Images/Primary?quality=90&tag=poster-movie-1&maxHeight=600');
+  assert.match(movieRow.items[0].coverHeaders.Authorization, /Token="session-token-/);
 
   const search = await provider.search('Test', 2);
-  assert.equal(search[0].jellyfinType, 'series');
-  const searchRequest = requests.find((r) => new URL(r.url).searchParams.get('SearchTerm') === 'Test');
-  assert.equal(new URL(searchRequest.url).searchParams.get('StartIndex'), '25');
+  assert.ok(search.some((item) => item.title === 'Test Series Search'));
+  const searchRequest = calls.find((call) => call.pathname === '/jellyfin/Items' && new URL(call.url).searchParams.has('searchTerm'));
+  assert.equal(new URL(searchRequest.url).searchParams.get('startIndex'), '25');
+  assert.ok(searchRequest.init.headers.Authorization.includes('Token='));
 
   const collection = await provider.getDetail('jellyfin://boxset-1?collection=1');
-  assert.equal(collection.title, 'Collection');
+  assert.equal(collection.title, 'Collection One');
   assert.equal(collection.episodes.length, 2);
-  assert.equal(collection.episodes[0].url, 'jellyfin://movie-1');
-  assert.equal(collection.episodes[1].url, 'jellyfin://series-1');
+  assert.equal(collection.episodes[0].url, 'jellyfin://collection-movie');
   const collectionEpisodes = await provider.getEpisodes('jellyfin://boxset-1?collection=1');
   assert.equal(collectionEpisodes.length, 2);
 
   const detail = await provider.getDetail('jellyfin://series-1');
-  assert.equal(detail.description, 'Series synopsis');
-  assert.deepEqual(detail.genres, ['Drama', 'Mystery']);
-  assert.deepEqual(detail.studios, ['Test Studio']);
-  assert.deepEqual(detail.cast, ['Actor One']);
+  assert.equal(detail.description, 'Test Series synopsis');
+  assert.deepEqual(detail.genres, ['Mystery', 'Drama']);
+  assert.deepEqual(detail.studios, ['Example Studio']);
+  assert.deepEqual(detail.cast, ['Actor One', 'Actor Two']);
   assert.equal(detail.status, 'ongoing');
   assert.equal(detail.episodes.length, 2);
-  assert.equal(detail.episodes[0].season, 1);
   assert.equal(detail.episodes[0].number, 1);
+  assert.equal(detail.episodes[0].season, 1);
   assert.equal(detail.episodes[0].url, 'jellyfin://episode-1');
-  assert.equal(detail.episodes[0].thumbnail, 'https://jf.example.test/jellyfin/Items/episode-1/Images/Primary?tag=ep-tag&maxWidth=500');
+  assert.equal(detail.malId, 5114);
+  assert.equal(detail.anilistId, 21);
+  assert.equal(detail.tmdbId, 456);
+  assert.equal(detail.imdbId, 'tt1234567');
 
   const episodes = await provider.getEpisodes('jellyfin://series-1');
   assert.equal(episodes.length, 2);
 
   const longEpisodes = await provider.getEpisodes('jellyfin://long-series');
-  assert.equal(longEpisodes.length, 2, 'episode retrieval continues beyond Jellyfin page 1');
-  assert.equal(longEpisodes[1].number, 1);
-  assert.ok(requests.some((r) => new URL(r.url).pathname.endsWith('/Shows/long-series/Episodes') &&
-    new URL(r.url).searchParams.get('startIndex') === '500'));
+  assert.equal(longEpisodes.length, 2, 'episode pagination fetches page 2 past the 500-item boundary');
+  assert.ok(calls.some((call) => call.pathname === '/jellyfin/Shows/long-series/Episodes' &&
+    new URL(call.url).searchParams.get('startIndex') === '500'));
 
   const streams = await provider.getVideoSources('jellyfin://episode-1');
-  assert.equal(streams.length, 2, 'direct play and server transcode are both exposed');
-  assert.match(streams[0].url, /mediaSourceId=media-1/);
-  assert.equal(streams[0].container, 'mp4');
-  assert.equal(streams[0].subtitles[0].url, 'https://jf.example.test/jellyfin/Videos/episode-1/Subtitles/2/Stream.srt');
+  assert.equal(streams.length, 2);
+  assert.ok(streams[0].url.includes('/jellyfin/Videos/episode-1/stream?'));
+  assert.match(streams[0].url, /mediaSourceId=media-direct/);
+  assert.match(streams[0].url, /playSessionId=play-session-1/);
+  assert.equal(streams[0].label.includes('Direct Play'), true);
+  assert.equal(streams[0].headers.Authorization.includes('Token='), true);
+  assert.equal(streams[0].subtitles.length, 1, 'embedded subtitle tracks are not exposed as external soft subtitles');
+  assert.equal(streams[0].subtitles[0].url, 'https://jf.example.test/jellyfin/Videos/episode-1/media-direct/Subtitles/2/0/Stream.srt');
+  assert.equal(streams[0].subtitles[0].format, 'srt');
   assert.equal(streams[0].subtitles[0].default, true);
+  assert.ok(streams[1].url.startsWith('https://jf.example.test/jellyfin/videos/episode-1/master.m3u8'));
   assert.equal(streams[1].container, 'hls');
-  assert.match(streams[1].url, /PlaySessionId=play-session-1/);
-  assert.ok(streams[0].headers.Authorization.includes('session-token-123'));
+  assert.equal(streams[1].subtitles.length, 1);
+  assert.equal(streams[1].headers.Authorization.includes('Token='), true);
+  assert.equal(new URL(streams[0].url).searchParams.has('api_key'), false, 'tokens are not copied into direct stream URLs');
+
+  global.__settings.jellyfin.preferTranscoding = true;
+  const preferredTranscode = await provider.getVideoSources('jellyfin://episode-1');
+  assert.match(preferredTranscode[0].url, /\.m3u8/);
 
   const popular = await provider.popular({ page: 1 });
   assert.ok(Array.isArray(popular));
-  assert.ok(popular.length >= 2);
+  assert.ok(popular.length > 0);
   assert.ok(popular.every((item) => item.url && item.jellyfinId));
 
-  const loginRequests = requests.filter((r) => new URL(r.url).pathname.endsWith('/Users/AuthenticateByName'));
-  assert.equal(loginRequests.length, 1, 'username/password login is cached for subsequent calls');
-  assert.ok(requests.every((r) => new URL(r.url).pathname.endsWith('/Users/AuthenticateByName') ||
-    r.init.headers.Authorization.includes('session-token-123')));
+  const authCalls = calls.filter((call) => call.pathname.endsWith('/Users/AuthenticateByName'));
+  assert.equal(authCalls.length, 1, 'session login is shared across provider requests');
+  assert.ok(calls.every((call) => call.pathname.endsWith('/System/Info/Public') ||
+    call.pathname.endsWith('/Users/AuthenticateByName') ||
+    call.init.headers.Authorization.includes('Token=')));
 
-  // API-key authentication is a supported alternative and skips password login.
-  global.__settings.jellyfin.username = '';
-  global.__settings.jellyfin.password = '';
-  global.__settings.jellyfin.apiKey = 'api-key-token-456';
-  expectedToken = 'api-key-token-456';
-  const apiKeySearch = await provider.search('Test', 1);
-  assert.equal(apiKeySearch[0].jellyfinType, 'series');
-  assert.equal(requests.filter((r) => new URL(r.url).pathname.endsWith('/Users/AuthenticateByName')).length, 1);
+  expireNextItemsRequest = true;
+  const authBeforeRefresh = authCount;
+  await provider.getHome();
+  assert.equal(authCount, authBeforeRefresh + 1, 'expired token is reauthenticated and the failed request is retried');
 
-  // Bad credentials produce a useful authentication error, not a generic HTTP failure.
-  global.__settings.jellyfin.apiKey = '';
-  global.__settings.jellyfin.username = 'bad-user';
-  global.__settings.jellyfin.password = 'wrong-password';
-  await assert.rejects(provider.search('Test', 1), /rejected the username or password/i);
+  activeCredentials = { Username: 'bad-user', Pw: 'wrong-password' };
+  global.__settings.jellyfin.username = activeCredentials.Username;
+  global.__settings.jellyfin.password = activeCredentials.Pw;
+  await assert.rejects(provider.getHome(), /rejected the username or password/i);
 
-  global.__settings.jellyfin.serverUrl = 'file:///etc';
-  assert.throws(() => provider._config(), /Invalid Jellyfin server address/);
-  global.__settings.jellyfin.serverUrl = 'https://jf.example.test/jellyfin';
-
-  console.log('Jellyfin provider tests passed.');
+  console.log('Jellyfin MediaBrowser provider tests passed.');
 }
 
 main().catch((error) => {
