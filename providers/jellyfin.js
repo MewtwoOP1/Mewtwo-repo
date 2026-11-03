@@ -84,7 +84,7 @@ function _config() {
   if (![5000, 10000, 15000, 20000].includes(requestTimeoutMs)) requestTimeoutMs = 10000;
   var contentTypes = _setting('contentTypes');
   if (!Array.isArray(contentTypes) || !contentTypes.length) contentTypes = ['Movie', 'Series'];
-  contentTypes = contentTypes.filter(function (x) { return ['Movie', 'Series', 'Episode', 'Trailer'].includes(String(x)); });
+  contentTypes = contentTypes.filter(function (x) { return ['Movie', 'Series', 'Episode', 'Trailer', 'BoxSet'].includes(String(x)); });
   if (!contentTypes.length) contentTypes = ['Movie', 'Series'];
   var catalogSections = _setting('catalogSections');
   if (!Array.isArray(catalogSections)) catalogSections = ['resume', 'nextUp', 'latest', 'favorites', 'libraries'];
