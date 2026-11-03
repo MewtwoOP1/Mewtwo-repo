@@ -315,6 +315,8 @@ function _getContext(force) {
   if (JF_AUTH && JF_AUTH.fingerprint !== fingerprint) _clearSession();
 
   if (!force && JF_AUTH && JF_AUTH.expiresAt > Date.now()) {
+    // Read current non-credential preferences without forcing a new login.
+    JF_AUTH.config = cfg;
     return Promise.resolve(JF_AUTH);
   }
   if (JF_AUTH_PENDING && JF_AUTH_PENDING.fingerprint === fingerprint) {
