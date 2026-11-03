@@ -11,7 +11,7 @@
  */
 
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID) ? String(__SOURCE_ID) : 'jellyfin';
-var SOURCE_VERSION = '3.0.0';
+var SOURCE_VERSION = '3.0.1';
 var CLIENT_NAME = 'Zangetsu';
 var DEVICE_NAME = 'Zangetsu';
 var DEVICE_ID = 'zangetsu-jellyfin-source-v3';
@@ -29,7 +29,7 @@ function getInfo() {
     name: 'Jellyfin',
     lang: 'en',
     baseUrl: 'https://jellyfin.org',
-    logo: 'https://jellyfin.org/favicon.ico',
+    logo: 'https://raw.githubusercontent.com/MewtwoOP1/Mewtwo-repo/main/assets/icons/jellyfin.svg',
     type: 'movie',
     version: SOURCE_VERSION
   };
@@ -37,23 +37,15 @@ function getInfo() {
 
 function getSettings() {
   return [
-    { key: 'serverUrl', label: 'Jellyfin server address', description: 'Paste the Jellyfin server address, including its base path. For AIOStreams use the address ending in /jellyfin, not the Stremio manifest URL.', type: 'text', default: '' },
-    { key: 'username', label: 'Username', description: 'Jellyfin username. For AIOStreams this is the configuration UUID or alias; add /UserName for a household user when required.', type: 'text', default: '' },
-    { key: 'password', label: 'Password', description: 'Jellyfin password. For AIOStreams use the configuration password, optionally followed by /PIN. Use a dedicated account where possible.', type: 'text', default: '' },
-    { key: 'apiKey', label: 'API key / access token (optional)', description: 'Optional alternative to username and password. When set, password login is skipped. A User ID may be required for servers that do not expose a default user.', type: 'text', default: '' },
-    { key: 'userId', label: 'User ID (optional)', description: 'Optional Jellyfin user ID for API-key authentication. Leave blank to let the provider discover an available user when the server permits it.', type: 'text', default: '' },
-    { key: 'libraryId', label: 'Library ID (optional)', description: 'Leave blank to browse every accessible library. Enter a library ID to restrict Home, search, and catalogue browsing to that library.', type: 'text', default: '' },
-    { key: 'pageSize', label: 'Catalogue page size', description: 'Maximum number of items requested for each library row or search page.', type: 'enum', default: '50', options: [{ value: '25', label: '25 items' }, { value: '50', label: '50 items' }, { value: '100', label: '100 items' }] },
-    { key: 'homeSections', label: 'Home sections', description: 'Choose which Jellyfin rows are shown on the source Home page.', type: 'multiEnum', default: ['resume', 'nextUp', 'recent', 'favorites', 'libraries'], options: [{ value: 'resume', label: 'Continue Watching' }, { value: 'nextUp', label: 'Next Up' }, { value: 'recent', label: 'Recently Added' }, { value: 'favorites', label: 'Favorites' }, { value: 'libraries', label: 'Library catalogues' }] },
-    { key: 'contentTypes', label: 'Catalogue content types', description: 'Choose the movie, series, and collection types returned from libraries. Episodes are loaded when a series is opened.', type: 'multiEnum', default: ['Movie', 'Series', 'BoxSet'], options: [{ value: 'Movie', label: 'Movies' }, { value: 'Series', label: 'TV series' }, { value: 'BoxSet', label: 'Collections / box sets' }] },
-    { key: 'showCollections', label: 'Show collection libraries', description: 'Include BoxSet libraries and collection entries when the server provides them.', type: 'bool', default: true },
-    { key: 'sortBy', label: 'Library sorting', description: 'Sort order used by catalogue and favourite rows.', type: 'enum', default: 'DateCreated', options: [{ value: 'DateCreated', label: 'Recently added' }, { value: 'SortName', label: 'Title' }, { value: 'CommunityRating', label: 'Community rating' }, { value: 'PremiereDate', label: 'Release date' }] },
-    { key: 'maxStreamingBitrate', label: 'Maximum streaming bitrate', description: 'Bitrate ceiling advertised during PlaybackInfo negotiation.', type: 'enum', default: '40000000', options: [{ value: '16000000', label: '16 Mbps' }, { value: '25000000', label: '25 Mbps' }, { value: '40000000', label: '40 Mbps' }, { value: '80000000', label: '80 Mbps' }, { value: '1000000000', label: 'Server / device maximum' }] },
-    { key: 'preferTranscoding', label: 'Prefer server transcoding', description: 'Prefer a server-provided transcoding or remux URL over a direct stream when both are available.', type: 'bool', default: false },
-    { key: 'includeSubtitles', label: 'Include external subtitles', description: 'Return external subtitle tracks exposed by Jellyfin or the Jellyfin-compatible server.', type: 'bool', default: true },
-    { key: 'useRemoteUrl', label: 'Use remote media URLs', description: 'Use an absolute remote media Path when the server marks the media source as remote. Disable to request its Jellyfin stream route instead.', type: 'bool', default: true },
-    { key: 'cacheTtl', label: 'Catalogue cache', description: 'In-memory cache duration for successful catalogue and metadata GET requests. Playback negotiation is never cached.', type: 'enum', default: '30000', options: [{ value: '0', label: 'Disabled' }, { value: '15000', label: '15 seconds' }, { value: '30000', label: '30 seconds' }, { value: '60000', label: '1 minute' }] },
-    { key: 'requestTimeoutMs', label: 'Server request timeout', description: 'Timeout applied to an individual Jellyfin API request.', type: 'enum', default: '15000', options: [{ value: '5000', label: '5 seconds' }, { value: '10000', label: '10 seconds' }, { value: '15000', label: '15 seconds' }, { value: '25000', label: '25 seconds' }] }
+    { key: 'serverUrl', label: 'Server address', description: 'Jellyfin server URL, including its base path. For AIOStreams, use the address ending in /jellyfin.', type: 'text', default: '' },
+    { key: 'username', label: 'Username', description: 'Jellyfin username. For AIOStreams, use the configuration UUID or alias.', type: 'text', default: '' },
+    { key: 'password', label: 'Password', description: 'Jellyfin password. For AIOStreams, use the configuration password (append /PIN only when required).', type: 'text', default: '' },
+    { key: 'apiKey', label: 'API key (optional)', description: 'Alternative to username and password. Use only if you know the API key and account permissions are correct.', type: 'text', default: '' },
+    { key: 'userId', label: 'User ID (API key only)', description: 'Only needed when the server cannot automatically identify a user from the API key.', type: 'text', default: '' },
+    { key: 'libraryId', label: 'Library ID (optional)', description: 'Leave blank to show all accessible libraries. Set this only to restrict the source to one library.', type: 'text', default: '' },
+    { key: 'pageSize', label: 'Catalogue page size', description: 'Number of titles requested per catalogue page.', type: 'enum', default: '50', options: [{ value: '25', label: '25' }, { value: '50', label: '50' }, { value: '100', label: '100' }] },
+    { key: 'maxStreamingBitrate', label: 'Maximum streaming bitrate', description: 'Maximum bitrate requested during playback negotiation.', type: 'enum', default: '40000000', options: [{ value: '16000000', label: '16 Mbps' }, { value: '25000000', label: '25 Mbps' }, { value: '40000000', label: '40 Mbps' }, { value: '80000000', label: '80 Mbps' }, { value: '1000000000', label: 'Device maximum' }] },
+    { key: 'includeSubtitles', label: 'Include external subtitles', description: 'Include external subtitle tracks returned by the server.', type: 'bool', default: true }
   ];
 }
 
@@ -97,12 +89,7 @@ function _config() {
   if ([25, 50, 100].indexOf(pageSize) < 0) pageSize = 50;
 
   var bitrate = _int(_setting('maxStreamingBitrate'), 40000000, 1000000, 1000000000);
-  var cacheTtl = _int(_setting('cacheTtl'), 30000, 0, 60000);
-  var timeout = _int(_setting('requestTimeoutMs'), 15000, 3000, 30000);
-  var types = _list(_setting('contentTypes'), ['Movie', 'Series', 'BoxSet']).filter(function (type) {
-    return ['Movie', 'Series', 'BoxSet'].indexOf(type) >= 0;
-  });
-  if (!types.length) types = ['Movie', 'Series', 'BoxSet'];
+  var types = ['Movie', 'Series', 'BoxSet'];
 
   return {
     serverUrl: _normalizeServerAddress(_setting('serverUrl')),
@@ -112,16 +99,16 @@ function _config() {
     userId: _trim(_setting('userId')),
     libraryId: _trim(_setting('libraryId')),
     pageSize: pageSize,
-    homeSections: _list(_setting('homeSections'), ['resume', 'nextUp', 'recent', 'favorites', 'libraries']),
+    homeSections: ['resume', 'nextUp', 'recent', 'favorites', 'libraries'],
     contentTypes: types,
-    showCollections: _bool(_setting('showCollections'), true),
-    sortBy: _trim(_setting('sortBy')) || 'DateCreated',
+    showCollections: true,
+    sortBy: 'DateCreated',
     maxStreamingBitrate: bitrate,
-    preferTranscoding: _bool(_setting('preferTranscoding'), false),
+    preferTranscoding: false,
     includeSubtitles: _bool(_setting('includeSubtitles'), true),
-    useRemoteUrl: _bool(_setting('useRemoteUrl'), true),
-    cacheTtl: cacheTtl,
-    requestTimeoutMs: timeout
+    useRemoteUrl: true,
+    cacheTtl: 30000,
+    requestTimeoutMs: 15000
   };
 }
 
@@ -361,6 +348,7 @@ function _login(config, force) {
 
 function _context(force) {
   var config = _config();
+  if (!config.serverUrl) return Promise.reject(new Error('Enter the Jellyfin server address in source settings.'));
   return Promise.all([
     _login(config, force),
     _publicInfo(config.serverUrl, force)
