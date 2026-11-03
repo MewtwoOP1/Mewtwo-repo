@@ -74,7 +74,7 @@ async function main() {
   assert.deepEqual(detail.cast, ['Actor One']);
 
   const episodes = await provider.getEpisodes('jellyfin://series-1');
-  assert.equal(episodes.length, 0, 'episode enumeration uses series detail only; series request is mocked next');
+  assert.equal(episodes.length, 1, 'getEpisodes returns the server-provided episode list');
   const series = await provider.getDetail('jellyfin://series-1');
   assert.equal(series.episodes.length, 1);
   assert.equal(series.episodes[0].url, 'jellyfin://episode-1');
