@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- Rebuild Jellyfin as a standalone catalogue-backed source. Read the authenticated user's Jellyfin libraries and catalogue directly instead of using the old Stremio/TMDB implementation.
+- Add AIOStreams Jellyfin-server support: discover advertised features, handle genre-required catalogues, list configured catalogues as libraries, and read AIOStreams version metadata from Jellyfin media sources.
+- Separate catalogue/detail/episode requests from stream resolution so opening a catalogue or loading episode lists does not invoke stream add-ons.
+- Add complete season episode pagination and a fallback from the show-episodes route to the parent-items route for compatible Jellyfin servers.
+- Negotiate playable versions through `PlaybackInfo`, preserve each remote source's required request headers, and use the server-provided external subtitle delivery URLs without leaking Jellyfin credentials to third-party stream hosts.
+- Add API-key and optional user-ID settings alongside username/password authentication, one-time expired-session reauthentication, library filtering, and updated setup documentation.
+- Replace the old Jellyfin v2 test suite with v3 catalogue, episode pagination, AIOStreams version, header, subtitle, and authentication coverage.
+
+
 ## TMDB + Stremio 3.3.0
 
 - Add a separate Metadata Add-on URLs setting so catalogue/metadata add-ons can be configured independently from streaming add-ons.
