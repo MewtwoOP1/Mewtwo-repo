@@ -23,7 +23,7 @@ function getSettings() {
   return [
     { key: 'serverUrl', label: 'Jellyfin server address', description: 'Base address of your Jellyfin server, including an optional reverse-proxy path. Use your local server address and port, or an HTTPS hostname for remote access.', type: 'text', default: '' },
     { key: 'username', label: 'Jellyfin username', description: 'The username of the Jellyfin account you want to use.', type: 'text', default: '' },
-    { key: 'password', label: 'Jellyfin password', description: 'The password for that Jellyfin account. Use an API key instead only when you prefer token authentication.', type: 'text', default: '' },
+    { key: 'password', label: 'Jellyfin password', description: 'The password for that Jellyfin account. Zangetsu currently displays extension text settings without masking; use a dedicated account with only the library permissions you need.', type: 'text', default: '' },
     { key: 'apiKey', label: 'API key (optional alternative)', description: 'Optional server API key. When set, it is used instead of username/password. API-key users may need to enter User ID below.', type: 'text', default: '' },
     { key: 'userId', label: 'User ID (optional)', description: 'Pin a Jellyfin user ID. Username/password login discovers this automatically.', type: 'text', default: '' },
     { key: 'pageSize', label: 'Catalogue page size', description: 'Items requested per catalogue and search page.', type: 'enum', default: '50', options: [{ value: '25', label: '25 items' }, { value: '50', label: '50 items' }, { value: '100', label: '100 items' }] },
