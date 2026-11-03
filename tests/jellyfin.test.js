@@ -134,7 +134,7 @@ global.fetch = async (rawUrl, init = {}) => {
       return reply(200, { Items: [series('series-1', 'Test Series')] });
     }
     if (parent === 'collections-lib') {
-      assert.equal(types, 'BoxSet,Movie,Series');
+      assert.equal(types, 'Movie,Series,BoxSet');
       return reply(200, { Items: [{ Id: 'boxset-1', Name: 'Collection One', Type: 'BoxSet', ImageTags: { Primary: 'collection-poster' } }] });
     }
     if (parent === 'boxset-1') return reply(200, { Items: [movie('collection-movie', 'Collection Movie')] });
