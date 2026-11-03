@@ -605,7 +605,7 @@
           "label": "Bangumi title candidates",
           "description": "Maximum number of AniList title aliases searched against Bangumi. Matching is exact after punctuation/spacing normalization; the provider does not fuzzy-match different seasons.",
           "type": "enum",
-          "default": "5",
+          "default": "8",
           "options": [
             {
               "value": "3",
