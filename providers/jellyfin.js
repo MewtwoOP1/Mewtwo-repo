@@ -578,6 +578,11 @@ function _mapResume(raw, ctx) {
   return _mapItem(series, ctx);
 }
 
+function _pad(value) {
+  if (value == null || !isFinite(Number(value))) return '00';
+  return String(Math.max(0, Math.floor(Number(value)))).padStart(2, '0');
+}
+
 function _mapEpisode(raw, ctx) {
   if (!raw || !raw.Id) return null;
   var season = raw.ParentIndexNumber == null ? null : Number(raw.ParentIndexNumber);
