@@ -87,7 +87,7 @@ test('Miruro preserves API episode metadata and real provider routes', () => {
 
 test('XFDM player URL parser reads JSON-escaped direct media URLs', () => {
   const provider = require(path.join(root, entryFor('xfdm').file));
-  const html = '<script>var player_aaaa={"encrypt":0,"url":"https:\\\\/\\\\/play.xfvod.pro:8088\\\\/temp\\\\/episode.mp4"};</script>';
+  const html = String.raw`<script>var player_aaaa={"encrypt":0,"url":"https:\\/\\/play.xfvod.pro:8088\\/temp\\/episode.mp4"};</script>`;
   assert.equal(
     provider._playerUrl(html),
     'https://play.xfvod.pro:8088/temp/episode.mp4'
