@@ -20,7 +20,7 @@ function getInfo() {
   return {
     name: 'Miruro', lang: 'en', baseUrl: 'https://www.miruro.to',
     logo: 'https://www.google.com/s2/favicons?sz=256&domain=miruro.to',
-    type: 'anime', version: '1.0.0'
+    type: 'anime', version: '1.0.1'
   };
 }
 
