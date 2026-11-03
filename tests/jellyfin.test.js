@@ -5,6 +5,7 @@ const path = require('node:path');
 
 const requests = [];
 const login = { username: 'goutam-test', password: 'correct-horse' };
+let expectedToken = 'session-token-123';
 global.__settings = {
   jellyfin: {
     serverUrl: 'https://jf.example.test/jellyfin/',
@@ -45,12 +46,16 @@ global.fetch = async (url, init = {}) => {
     assert.equal(init.method, 'POST');
     assert.match(init.headers.Authorization, /MediaBrowser Client="Zangetsu"/);
     assert.match(init.headers.Authorization, /Token=""/);
-    assert.deepEqual(JSON.parse(init.body), { Username: login.username, Pw: login.password });
+    const credentials = JSON.parse(init.body);
+    if (credentials.Username === 'bad-user') {
+      return { status: 401, body: JSON.stringify({ Message: 'Invalid username or password' }) };
+    }
+    assert.deepEqual(credentials, { Username: login.username, Pw: login.password });
     return { status: 200, body: JSON.stringify({ AccessToken: 'session-token-123', User: { Id: 'user-1', Name: 'Test User' } }) };
   }
 
-  assert.equal(init.headers.Authorization, 'MediaBrowser Client="Zangetsu", Device="Zangetsu", DeviceId="zangetsu-jellyfin", Version="1.1.0", Token="session-token-123"');
-  assert.equal(init.headers['X-Emby-Token'], 'session-token-123');
+  assert.equal(init.headers.Authorization, 'MediaBrowser Client="Zangetsu", Device="Zangetsu", DeviceId="zangetsu-jellyfin", Version="1.1.0", Token="' + expectedToken + '"');
+  assert.equal(init.headers['X-Emby-Token'], expectedToken);
 
   if (pathName === '/jellyfin/UserViews') {
     assert.equal(parsed.searchParams.get('userId'), 'user-1');
@@ -209,6 +214,21 @@ async function main() {
   assert.equal(loginRequests.length, 1, 'username/password login is cached for subsequent calls');
   assert.ok(requests.every((r) => new URL(r.url).pathname.endsWith('/Users/AuthenticateByName') ||
     r.init.headers.Authorization.includes('session-token-123')));
+
+  // API-key authentication is a supported alternative and skips password login.
+  global.__settings.jellyfin.username = '';
+  global.__settings.jellyfin.password = '';
+  global.__settings.jellyfin.apiKey = 'api-key-token-456';
+  expectedToken = 'api-key-token-456';
+  const apiKeySearch = await provider.search('Test', 1);
+  assert.equal(apiKeySearch[0].jellyfinType, 'series');
+  assert.equal(requests.filter((r) => new URL(r.url).pathname.endsWith('/Users/AuthenticateByName')).length, 1);
+
+  // Bad credentials produce a useful authentication error, not a generic HTTP failure.
+  global.__settings.jellyfin.apiKey = '';
+  global.__settings.jellyfin.username = 'bad-user';
+  global.__settings.jellyfin.password = 'wrong-password';
+  await assert.rejects(provider.search('Test', 1), /rejected the username or password/i);
 
   global.__settings.jellyfin.serverUrl = 'file:///etc';
   assert.throws(() => provider._config(), /Invalid Jellyfin server address/);
