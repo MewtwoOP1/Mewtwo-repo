@@ -106,14 +106,19 @@ function _decodeJson(response, label, allowNotFound) {
   });
 }
 
-function _requestJson(url, label, allowNotFound) {
-  return fetch(url, {
+function _requestJson(url, label, allowNotFound, nativeHttp) {
+  var requestOptions = {
     headers: {
       'User-Agent': UA,
       'Accept': 'application/json'
     },
     timeoutMs: 10000
-  }).then(function(response) {
+  };
+  // Settlar's embed-session endpoint rejects the app's Dio TLS fingerprint.
+  // Opt into Zangetsu's native Android OkHttp lane for this request only.
+  // Older app builds ignore this hint and will still receive the upstream 403.
+  if (nativeHttp === true) requestOptions.nativeHttp = true;
+  return fetch(url, requestOptions).then(function(response) {
     return _decodeJson(response, label, !!allowNotFound);
   });
 }
@@ -462,7 +467,7 @@ function getVideoSources(episodeUrl, opts) {
       if (!token) throw new Error('Ani.pm returned an embed URL without a token');
 
       var embedSessionUrl = EMBED + '/api/embed/session?t=' + encodeURIComponent(token);
-      return _requestJson(embedSessionUrl, 'Settlar embed session', false).then(function(embedSession) {
+      return _requestJson(embedSessionUrl, 'Settlar embed session', false, true).then(function(embedSession) {
         var source = _trim(embedSession.source);
         if (!/^https:\/\//i.test(source)) {
           throw new Error('Settlar session did not contain an HTTPS stream');
