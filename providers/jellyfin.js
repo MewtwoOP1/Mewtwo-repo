@@ -1,9 +1,12 @@
-// Native Jellyfin server integration for Zangetsu.
-// Connects to a user-configured Jellyfin server. No media is hosted by this repository.
+// Jellyfin integration for Zangetsu.
+// Connects to the user's own Jellyfin server. It does not host or proxy media.
 
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID) ? String(__SOURCE_ID) : 'jellyfin';
 var JF_CACHE = Object.create(null);
-var JF_CACHE_TTL = 45000;
+var JF_CACHE_TTL = 30000;
+var JF_AUTH = null;
+var JF_USER_PROMISE = null;
+var JF_MAX_CACHE = 160;
 
 function getInfo() {
   return {
@@ -12,17 +15,29 @@ function getInfo() {
     baseUrl: 'https://jellyfin.org',
     logo: 'https://jellyfin.org/favicon.ico',
     type: 'movie',
-    version: '1.0.0'
+    version: '1.1.0'
   };
 }
 
 function getSettings() {
   return [
-    { key: 'serverUrl', label: 'Jellyfin server URL', description: 'Your Jellyfin server base URL, for example https://jellyfin.example.com. Do not include /web or /api.', type: 'text', default: '' },
-    { key: 'apiKey', label: 'Jellyfin API key', description: 'Create an API key in Jellyfin Dashboard → API Keys. Keep it private. The key is sent only to your configured server.', type: 'text', default: '' },
-    { key: 'userId', label: 'User ID (optional)', description: 'Optional Jellyfin user ID. Leave blank to use the first accessible user returned by the server.', type: 'text', default: '' },
-    { key: 'pageSize', label: 'Items per page', description: 'Maximum media items requested for each library or search result page.', type: 'enum', default: '50', options: [{ value: '25', label: '25 items' }, { value: '50', label: '50 items' }, { value: '100', label: '100 items' }] },
-    { key: 'includeTrailers', label: 'Include trailers', description: 'Include trailer items in library and search results.', type: 'bool', default: false }
+    { key: 'serverUrl', label: 'Jellyfin server address', description: 'Base address of your Jellyfin server, including an optional reverse-proxy path. Example: https://media.example.com or http://192.168.1.10:8096.', type: 'text', default: '' },
+    { key: 'username', label: 'Jellyfin username', description: 'The username of the Jellyfin account you want to use.', type: 'text', default: '' },
+    { key: 'password', label: 'Jellyfin password', description: 'The password for that Jellyfin account. Use an API key instead only when you prefer token authentication.', type: 'text', default: '' },
+    { key: 'apiKey', label: 'API key (optional alternative)', description: 'Optional server API key. When set, it is used instead of username/password. API-key users may need to enter User ID below.', type: 'text', default: '' },
+    { key: 'userId', label: 'User ID (optional)', description: 'Pin a Jellyfin user ID. Username/password login discovers this automatically.', type: 'text', default: '' },
+    { key: 'pageSize', label: 'Catalogue page size', description: 'Items requested per catalogue and search page.', type: 'enum', default: '50', options: [{ value: '25', label: '25 items' }, { value: '50', label: '50 items' }, { value: '100', label: '100 items' }] },
+    { key: 'catalogSections', label: 'Home catalogue sections', description: 'Choose which Jellyfin catalogue rows appear on Home.', type: 'multiEnum', default: ['resume', 'nextUp', 'latest', 'favorites', 'libraries'], options: [{ value: 'resume', label: 'Continue Watching' }, { value: 'nextUp', label: 'Next Up' }, { value: 'latest', label: 'Recently Added' }, { value: 'favorites', label: 'Favorites' }, { value: 'libraries', label: 'Libraries' }] },
+    { key: 'contentTypes', label: 'Catalogue content types', description: 'Choose which media types are shown in search and catalogue rows.', type: 'multiEnum', default: ['Movie', 'Series'], options: [{ value: 'Movie', label: 'Movies' }, { value: 'Series', label: 'TV series' }, { value: 'Episode', label: 'Episodes' }, { value: 'Trailer', label: 'Trailers' }] },
+    { key: 'browseSort', label: 'Library sorting', description: 'Sort order for library browsing and popular catalogue rows.', type: 'enum', default: 'DateCreated', options: [{ value: 'DateCreated', label: 'Recently added' }, { value: 'SortName', label: 'Title' }, { value: 'CommunityRating', label: 'Community rating' }, { value: 'PremiereDate', label: 'Release date' }, { value: 'Random', label: 'Random' }] },
+    { key: 'includePlayed', label: 'Include watched items', description: 'Include items already marked as played in normal library feeds.', type: 'bool', default: true },
+    { key: 'showCollections', label: 'Show collection libraries', description: 'Include box sets and collection folders when returned by Jellyfin.', type: 'bool', default: false },
+    { key: 'preferTranscoding', label: 'Prefer Jellyfin transcoding', description: 'Put a server-generated HLS transcode first when Jellyfin supplies one. Otherwise direct play remains first.', type: 'bool', default: false },
+    { key: 'maxBitrate', label: 'Maximum streaming bitrate', description: 'Maximum bitrate requested for Jellyfin transcoding. Auto lets the server decide.', type: 'enum', default: '0', options: [{ value: '0', label: 'Auto / server default' }, { value: '8000000', label: '8 Mbps' }, { value: '16000000', label: '16 Mbps' }, { value: '25000000', label: '25 Mbps' }, { value: '40000000', label: '40 Mbps' }] },
+    { key: 'includeSubtitles', label: 'Return subtitle tracks', description: 'Expose available embedded and external subtitle tracks to the player.', type: 'bool', default: true },
+    { key: 'imageWidth', label: 'Artwork width', description: 'Maximum requested width for poster and backdrop images.', type: 'enum', default: '500', options: [{ value: '300', label: 'Small · 300 px' }, { value: '500', label: 'Medium · 500 px' }, { value: '800', label: 'Large · 800 px' }] },
+    { key: 'cacheTtl', label: 'Catalogue cache', description: 'In-memory cache duration for library and metadata responses.', type: 'enum', default: '30000', options: [{ value: '0', label: 'Disabled' }, { value: '15000', label: '15 seconds' }, { value: '30000', label: '30 seconds' }, { value: '60000', label: '1 minute' }] },
+    { key: 'requestTimeoutMs', label: 'Server request timeout', description: 'Maximum wait for each Jellyfin API request.', type: 'enum', default: '10000', options: [{ value: '5000', label: '5 seconds' }, { value: '10000', label: '10 seconds' }, { value: '15000', label: '15 seconds' }, { value: '20000', label: '20 seconds' }] }
   ];
 }
 
@@ -33,355 +48,631 @@ function _setting(key) {
   } catch (e) { return null; }
 }
 
+function _bool(key, fallback) {
+  var v = _setting(key);
+  if (v == null) return fallback;
+  return v === true || String(v).toLowerCase() === 'true';
+}
+
 function _config() {
   var raw = String(_setting('serverUrl') || '').trim();
-  var apiKey = String(_setting('apiKey') || '').trim();
-  var userId = String(_setting('userId') || '').trim();
-  var pageSize = parseInt(_setting('pageSize'), 10);
-  if (![25, 50, 100].includes(pageSize)) pageSize = 50;
   var server = '';
   if (raw) {
     try {
       var parsed = new URL(raw);
-      if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') throw new Error('Unsupported protocol');
-      if (parsed.username || parsed.password) throw new Error('Credentials must not be embedded in the server URL');
+      if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') throw new Error('Only HTTP and HTTPS are supported.');
+      if (parsed.username || parsed.password) throw new Error('Do not put credentials in the server address.');
       parsed.search = '';
       parsed.hash = '';
       parsed.pathname = parsed.pathname.replace(/\/+$/, '').replace(/\/(?:web|api)$/i, '');
       server = parsed.toString().replace(/\/$/, '');
-    } catch (e) { throw new Error('Invalid Jellyfin server URL: ' + e.message); }
+    } catch (e) {
+      throw new Error('Invalid Jellyfin server address: ' + e.message);
+    }
   }
+  var pageSize = parseInt(_setting('pageSize'), 10);
+  if (![25, 50, 100].includes(pageSize)) pageSize = 50;
+  var maxBitrate = parseInt(_setting('maxBitrate'), 10);
+  if (![0, 8000000, 16000000, 25000000, 40000000].includes(maxBitrate)) maxBitrate = 0;
+  var imageWidth = parseInt(_setting('imageWidth'), 10);
+  if (![300, 500, 800].includes(imageWidth)) imageWidth = 500;
+  var cacheTtl = parseInt(_setting('cacheTtl'), 10);
+  if (![0, 15000, 30000, 60000].includes(cacheTtl)) cacheTtl = 30000;
+  var requestTimeoutMs = parseInt(_setting('requestTimeoutMs'), 10);
+  if (![5000, 10000, 15000, 20000].includes(requestTimeoutMs)) requestTimeoutMs = 10000;
+  var contentTypes = _setting('contentTypes');
+  if (!Array.isArray(contentTypes) || !contentTypes.length) contentTypes = ['Movie', 'Series'];
+  contentTypes = contentTypes.filter(function (x) { return ['Movie', 'Series', 'Episode', 'Trailer'].includes(String(x)); });
+  if (!contentTypes.length) contentTypes = ['Movie', 'Series'];
+  var catalogSections = _setting('catalogSections');
+  if (!Array.isArray(catalogSections)) catalogSections = ['resume', 'nextUp', 'latest', 'favorites', 'libraries'];
+  catalogSections = catalogSections.filter(function (x) { return ['resume', 'nextUp', 'latest', 'favorites', 'libraries'].includes(String(x)); });
+  var sort = String(_setting('browseSort') || 'DateCreated');
+  if (!['DateCreated', 'SortName', 'CommunityRating', 'PremiereDate', 'Random'].includes(sort)) sort = 'DateCreated';
   return {
     server: server,
-    apiKey: apiKey,
-    userId: userId,
+    username: String(_setting('username') || '').trim(),
+    password: String(_setting('password') || ''),
+    apiKey: String(_setting('apiKey') || '').trim(),
+    userId: String(_setting('userId') || '').trim(),
     pageSize: pageSize,
-    includeTrailers: _setting('includeTrailers') === true || String(_setting('includeTrailers')).toLowerCase() === 'true'
+    contentTypes: contentTypes,
+    catalogSections: catalogSections,
+    browseSort: sort,
+    includePlayed: _bool('includePlayed', true),
+    showCollections: _bool('showCollections', false),
+    preferTranscoding: _bool('preferTranscoding', false),
+    maxBitrate: maxBitrate,
+    includeSubtitles: _bool('includeSubtitles', true),
+    imageWidth: imageWidth,
+    cacheTtl: cacheTtl,
+    requestTimeoutMs: requestTimeoutMs
   };
 }
 
-function _requireConfig() {
+function _fingerprint(c) {
+  return [c.server, c.username, c.password, c.apiKey, c.userId].join('\u001f');
+}
+
+function _requireServer() {
   var c = _config();
-  if (!c.server) throw new Error('Configure your Jellyfin server URL in Jellyfin → Settings.');
-  if (!c.apiKey) throw new Error('Configure a Jellyfin API key in Jellyfin → Settings.');
+  if (!c.server) throw new Error('Enter your Jellyfin server address in Jellyfin → Settings.');
+  if (!c.apiKey && (!c.username || !c.password)) {
+    throw new Error('Enter your Jellyfin username and password, or provide an API key.');
+  }
   return c;
 }
 
-function _headers(c) {
-  return {
-    Accept: 'application/json',
-    'X-Emby-Token': c.apiKey,
-    'X-Emby-Authorization': 'MediaBrowser Client="Zangetsu", Device="Zangetsu", DeviceId="zangetsu-jellyfin", Version="1.0.0", Token="' + c.apiKey + '"'
-  };
+function _authHeader(token) {
+  return 'MediaBrowser Client="Zangetsu", Device="Zangetsu", DeviceId="zangetsu-jellyfin", Version="1.1.0", Token="' +
+    encodeURIComponent(String(token || '')) + '"';
 }
 
-function _request(path, params, options) {
-  var c = _requireConfig();
-  var url = c.server + path;
+function _headers(token, extra) {
+  var h = {
+    Accept: 'application/json',
+    Authorization: _authHeader(token),
+    'X-Emby-Token': String(token || '')
+  };
+  Object.keys(extra || {}).forEach(function (k) { h[k] = extra[k]; });
+  return h;
+}
+
+function _parseBody(response, path) {
+  var status = Number(response && (response.status || response.statusCode)) || 200;
+  var body = response && response.body != null ? response.body : '';
+  var data = body;
+  if (typeof body === 'string') {
+    try { data = JSON.parse(body || '{}'); }
+    catch (e) {
+      if (status >= 200 && status < 300 && body) throw new Error('Jellyfin returned invalid JSON for ' + path + '.');
+      data = {};
+    }
+  }
+  if (status < 200 || status >= 300) {
+    var message = data && (data.Message || data.message || data.error_description || data.Error) || '';
+    var error = new Error('Jellyfin request failed (' + status + ')' + (message ? ': ' + String(message).slice(0, 180) : '') + '.');
+    error.status = status;
+    throw error;
+  }
+  return data || {};
+}
+
+function _login(c) {
+  var authUrl = c.server + '/Users/AuthenticateByName';
+  var anonymousHeader = _authHeader('');
+  return fetch(authUrl, {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      Authorization: anonymousHeader
+    },
+    body: JSON.stringify({ Username: c.username, Pw: c.password }),
+    timeoutMs: c.requestTimeoutMs
+  }).then(function (response) {
+    var data = _parseBody(response, '/Users/AuthenticateByName');
+    var token = String(data.AccessToken || '');
+    var user = data.User || {};
+    if (!token) throw new Error('Jellyfin login succeeded without returning an access token.');
+    if (!user.Id && !c.userId) throw new Error('Jellyfin login did not return a user ID. Enter User ID in source settings.');
+    return { token: token, userId: String(c.userId || user.Id || ''), fingerprint: _fingerprint(c), expiresAt: Date.now() + 30 * 60 * 1000 };
+  }).catch(function (e) {
+    if (e && e.status === 401) throw new Error('Jellyfin rejected the username or password. Check your credentials and server address.');
+    throw e;
+  });
+}
+
+function _getAuth() {
+  var c = _requireServer();
+  var fingerprint = _fingerprint(c);
+  if (JF_AUTH && JF_AUTH.fingerprint === fingerprint && JF_AUTH.expiresAt > Date.now()) {
+    return Promise.resolve({ token: JF_AUTH.token, userId: JF_AUTH.userId, config: c });
+  }
+  if (c.apiKey) {
+    JF_AUTH = { token: c.apiKey, userId: c.userId, fingerprint: fingerprint, expiresAt: Date.now() + 30 * 60 * 1000 };
+    return Promise.resolve({ token: c.apiKey, userId: c.userId, config: c });
+  }
+  return _login(c).then(function (auth) {
+    JF_AUTH = auth;
+    JF_USER_PROMISE = null;
+    Object.keys(JF_CACHE).forEach(function (key) { delete JF_CACHE[key]; });
+    return { token: auth.token, userId: auth.userId, config: c };
+  });
+}
+
+function _clearAuth() {
+  JF_AUTH = null;
+  JF_USER_PROMISE = null;
+  Object.keys(JF_CACHE).forEach(function (key) { delete JF_CACHE[key]; });
+}
+
+function _rawRequest(ctx, path, params, options) {
+  options = options || {};
+  var url = ctx.config.server + path;
   var query = [];
   Object.keys(params || {}).forEach(function (key) {
     var value = params[key];
     if (value === undefined || value === null || value === '') return;
-    query.push(encodeURIComponent(key) + '=' + encodeURIComponent(String(value)));
+    if (Array.isArray(value)) {
+      value.forEach(function (part) { query.push(encodeURIComponent(key) + '=' + encodeURIComponent(String(part))); });
+    } else query.push(encodeURIComponent(key) + '=' + encodeURIComponent(String(value)));
   });
-  if (query.length) url += '?' + query.join('&');
-  var cacheKey = url;
-  var cached = JF_CACHE[cacheKey];
+  if (query.length) url += (url.indexOf('?') >= 0 ? '&' : '?') + query.join('&');
+  var method = String(options.method || 'GET').toUpperCase();
+  var cacheKey = method + ':' + url + ':' + String(ctx.userId || '');
   var now = Date.now();
-  if (!(options && options.noCache) && cached && cached.expiresAt > now) return Promise.resolve(cached.value);
-
-  return fetch(url, {
-    method: 'GET',
-    headers: _headers(c),
-    timeoutMs: 12000
-  }).then(function (response) {
-    var status = Number(response && (response.status || response.statusCode)) || 200;
-    if (status < 200 || status >= 300) {
-      var error = new Error('Jellyfin HTTP ' + status + ' for ' + path);
-      error.status = status;
-      throw error;
-    }
-    var body = response && response.body != null ? response.body : '';
-    var data;
-    if (typeof body === 'string') {
-      try { data = JSON.parse(body || '{}'); }
-      catch (e) { throw new Error('Jellyfin returned invalid JSON for ' + path); }
-    } else data = body || {};
-    if (!(options && options.noCache)) {
-      JF_CACHE[cacheKey] = { value: data, expiresAt: now + JF_CACHE_TTL };
+  var ttl = ctx.config.cacheTtl;
+  if (method === 'GET' && !options.noCache && ttl > 0) {
+    var cached = JF_CACHE[cacheKey];
+    if (cached && cached.expiresAt > now) return Promise.resolve(cached.value);
+  }
+  var requestOptions = {
+    method: method,
+    headers: _headers(ctx.token, options.headers),
+    timeoutMs: options.timeoutMs || ctx.config.requestTimeoutMs
+  };
+  if (options.body != null) requestOptions.body = typeof options.body === 'string' ? options.body : JSON.stringify(options.body);
+  return fetch(url, requestOptions).then(function (response) {
+    return _parseBody(response, path);
+  }).then(function (data) {
+    if (method === 'GET' && !options.noCache && ttl > 0) {
+      JF_CACHE[cacheKey] = { value: data, expiresAt: now + ttl };
       var keys = Object.keys(JF_CACHE);
-      while (keys.length > 120) delete JF_CACHE[keys.shift()];
+      while (keys.length > JF_MAX_CACHE) delete JF_CACHE[keys.shift()];
     }
     return data;
-  });
-}
-
-function _userId() {
-  var c = _requireConfig();
-  if (c.userId) return Promise.resolve(c.userId);
-  return _request('/Users', {}, { noCache: false }).then(function (users) {
-    if (!Array.isArray(users) || !users.length || !users[0].Id) {
-      throw new Error('Jellyfin did not return an accessible user. Set User ID in the source settings.');
+  }).catch(function (error) {
+    if ((error.status === 401 || error.status === 403) && !options.noAuthRetry && !ctx.config.apiKey) {
+      _clearAuth();
+      return _getAuth().then(function (fresh) {
+        return _rawRequest(fresh, path, params, { ...options, noAuthRetry: true, noCache: true });
+      });
     }
-    return String(users[0].Id);
+    throw error;
   });
 }
 
-function _views() {
-  return _userId().then(function (id) {
-    return _request('/Users/' + encodeURIComponent(id) + '/Views', { IncludeExternalContent: false });
-  }).then(function (data) { return Array.isArray(data.Items) ? data.Items : []; });
+function _request(path, params, options) {
+  return _getAuth().then(function (ctx) { return _rawRequest(ctx, path, params, options); });
 }
 
-function _mapItem(raw) {
-  if (!raw || !raw.Id || !raw.Name) return null;
-  var type = String(raw.Type || '').toLowerCase();
-  var isEpisode = type === 'episode';
-  var isMovie = type === 'movie';
-  var isSeries = type === 'series';
-  var isFolder = type === 'folder' || type === 'collectionfolder' || type === 'boxset';
-  if (!(isEpisode || isMovie || isSeries || isFolder)) return null;
-  var id = String(raw.Id);
-  var item = {
-    id: 'jellyfin://' + id,
-    url: 'jellyfin://' + id,
-    title: String(raw.Name),
-    cover: raw.ImageTags && raw.ImageTags.Primary ? _imageUrl(id, 'Primary', raw.ImageTags.Primary) : null,
-    banner: raw.BackdropImageTags && raw.BackdropImageTags.length ? _imageUrl(id, 'Backdrop', raw.BackdropImageTags[0]) : null,
-    type: 'movie',
-    sourceId: SOURCE_ID,
-    jellyfinId: id,
-    jellyfinType: type,
-    overview: raw.Overview || '',
-    year: raw.ProductionYear ? String(raw.ProductionYear) : null
-  };
-  if (raw.CommunityRating != null && isFinite(Number(raw.CommunityRating))) item.score = Math.round(Number(raw.CommunityRating) * 10);
-  if (raw.RunTimeTicks != null) item.duration = Math.round(Number(raw.RunTimeTicks) / 10000);
-  if (isEpisode) {
-    item.seasonNumber = Number(raw.ParentIndexNumber) || 1;
-    item.episodeNumber = Number(raw.IndexNumber) || 1;
-    if (raw.SeriesName) item.title = String(raw.SeriesName) + ' · S' + _pad(item.seasonNumber) + 'E' + _pad(item.episodeNumber) + ' - ' + String(raw.Name);
-  }
-  if (raw.SeriesId) item.seriesId = String(raw.SeriesId);
-  if (raw.ParentId) item.parentId = String(raw.ParentId);
-  return item;
+function _resolveUserId(ctx) {
+  if (ctx.userId) return Promise.resolve(ctx.userId);
+  if (JF_USER_PROMISE) return JF_USER_PROMISE;
+  JF_USER_PROMISE = _rawRequest(ctx, '/Users', {}, { noCache: true }).then(function (users) {
+    var list = Array.isArray(users) ? users : (Array.isArray(users.Users) ? users.Users : []);
+    var first = list.find(function (u) { return u && u.Id; });
+    if (!first) throw new Error('Jellyfin did not expose a user for this API key. Set the User ID setting.');
+    return String(first.Id);
+  }).catch(function (error) {
+    JF_USER_PROMISE = null;
+    if (error.status === 401 || error.status === 403) {
+      throw new Error('This API key cannot list users. Enter the Jellyfin User ID in source settings, or sign in with username and password.');
+    }
+    throw error;
+  });
+  return JF_USER_PROMISE;
+}
+
+function _withUser() {
+  return _getAuth().then(function (ctx) {
+    return _resolveUserId(ctx).then(function (userId) {
+      ctx.userId = userId;
+      return ctx;
+    });
+  });
+}
+
+function _fields() {
+  return 'Overview,Genres,Studios,People,DateCreated,ProductionYear,CommunityRating,MediaSources,MediaStreams,ProviderIds,PremiereDate,ParentIndexNumber,IndexNumber,RunTimeTicks,UserData,ImageTags,BackdropImageTags,ChildCount,RecursiveItemCount';
+}
+
+function _selectedItems() {
+  var c = _config();
+  var types = c.contentTypes.slice();
+  if (!c.includePlayed) return types;
+  return types;
+}
+
+function _typeFilter() {
+  return _selectedItems().join(',');
+}
+
+function _imageUrl(itemId, imageType, tag, ctx) {
+  ctx = ctx || null;
+  var c = ctx ? ctx.config : _config();
+  var url = c.server + '/Items/' + encodeURIComponent(itemId) + '/Images/' + encodeURIComponent(imageType);
+  var params = [];
+  if (tag) params.push('tag=' + encodeURIComponent(tag));
+  if (c.imageWidth) params.push('maxWidth=' + encodeURIComponent(String(c.imageWidth)));
+  if (params.length) url += '?' + params.join('&');
+  return url;
+}
+
+function _imageHeaders(ctx) {
+  return _headers(ctx.token);
 }
 
 function _pad(value) { return String(value).padStart(2, '0'); }
 
-function _imageUrl(itemId, imageType, tag) {
-  var c = _requireConfig();
-  return c.server + '/Items/' + encodeURIComponent(itemId) + '/Images/' + encodeURIComponent(imageType) +
-    (tag ? '?tag=' + encodeURIComponent(tag) : '');
+function _mapItem(raw, ctx) {
+  if (!raw || !raw.Id || !raw.Name) return null;
+  var type = String(raw.Type || '').toLowerCase();
+  if (!['movie', 'series', 'episode', 'trailer', 'video'].includes(type)) return null;
+  var id = String(raw.Id);
+  var images = raw.ImageTags || {};
+  var item = {
+    id: 'jellyfin://' + encodeURIComponent(id),
+    url: 'jellyfin://' + encodeURIComponent(id),
+    title: String(raw.Name),
+    cover: images.Primary ? _imageUrl(id, 'Primary', images.Primary, ctx) : null,
+    coverHeaders: _imageHeaders(ctx),
+    banner: raw.BackdropImageTags && raw.BackdropImageTags.length ? _imageUrl(id, 'Backdrop', raw.BackdropImageTags[0], ctx) : null,
+    type: 'movie',
+    sourceId: SOURCE_ID,
+    score: raw.CommunityRating != null && isFinite(Number(raw.CommunityRating)) ? Math.round(Number(raw.CommunityRating) * 10) : null,
+    genres: Array.isArray(raw.Genres) ? raw.Genres : [],
+    year: raw.ProductionYear ? String(raw.ProductionYear) : null,
+    jellyfinId: id,
+    jellyfinType: type
+  };
+  if (raw.UserData && raw.UserData.Played) item.played = true;
+  if (raw.UserData && raw.UserData.PlayedPercentage != null) item.playedPercentage = Number(raw.UserData.PlayedPercentage);
+  if (raw.Type === 'Episode' || type === 'episode') {
+    item.seasonNumber = Number(raw.ParentIndexNumber) || 1;
+    item.episodeNumber = Number(raw.IndexNumber) || 1;
+    if (raw.SeriesName) item.title = String(raw.SeriesName) + ' · S' + _pad(item.seasonNumber) + 'E' + _pad(item.episodeNumber) + ' · ' + String(raw.Name);
+  }
+  return item;
 }
 
-function _listToItems(data) {
-  var items = data && Array.isArray(data.Items) ? data.Items : [];
-  return items.map(_mapItem).filter(Boolean);
+function _listToItems(data, ctx) {
+  var rows = data && Array.isArray(data.Items) ? data.Items : [];
+  return rows.map(function (raw) { return _mapItem(raw, ctx); }).filter(Boolean);
 }
 
-function getHome() {
-  return _views().then(function (views) {
-    var rows = views.filter(function (view) {
-      var type = String(view.CollectionType || '').toLowerCase();
-      return type === 'movies' || type === 'tvshows' || type === 'homevideos' || !type;
-    }).map(function (view) {
-      return { title: view.Name || 'Jellyfin Library', items: [], _view: view };
-    });
-    return Promise.all(rows.map(function (row) {
-      var view = row._view;
-      return _userId().then(function (userId) {
-        return _request('/Users/' + encodeURIComponent(userId) + '/Items', {
-          ParentId: view.Id,
-          Recursive: true,
-          IncludeItemTypes: 'Movie,Series',
-          SortBy: 'DateCreated',
-          SortOrder: 'Descending',
-          Limit: _config().pageSize,
-          Fields: 'Overview,PrimaryImageAspectRatio,CommunityRating,DateCreated,ProductionYear'
+function _itemsFor(ctx, params, path) {
+  return _rawRequest(ctx, path || ('/Users/' + encodeURIComponent(ctx.userId) + '/Items'), params)
+    .then(function (data) { return _listToItems(data, ctx); });
+}
+
+function _views(ctx) {
+  // Jellyfin's documented user-view route is /UserViews?userId=..., not
+  // /Users/{userId}/Views.
+  return _rawRequest(ctx, '/UserViews', { userId: ctx.userId, includeExternalContent: false })
+    .then(function (data) { return Array.isArray(data.Items) ? data.Items : []; });
+}
+
+function _section(title, promise) {
+  return promise.then(function (items) {
+    return items && items.length ? { title: title, items: items } : null;
+  }).catch(function () { return null; });
+}
+
+function getHome(opts) {
+  opts = opts || {};
+  return _withUser().then(function (ctx) {
+    var c = ctx.config;
+    var sections = c.catalogSections;
+    return _views(ctx).then(function (views) {
+      var jobs = [];
+      if (sections.includes('resume')) {
+        jobs.push(_section('Continue Watching', _itemsFor(ctx, {
+          userId: ctx.userId, limit: c.pageSize, fields: _fields(),
+          enableUserData: true, enableImages: true
+        }, '/UserItems/Resume')));
+      }
+      if (sections.includes('nextUp')) {
+        jobs.push(_section('Next Up', _itemsFor(ctx, {
+          userId: ctx.userId, limit: c.pageSize, fields: _fields(),
+          enableUserData: true, enableImages: true
+        }, '/Shows/NextUp')));
+      }
+      if (sections.includes('latest')) {
+        jobs.push(_section('Recently Added', _itemsFor(ctx, {
+          Recursive: true, IncludeItemTypes: _typeFilter(), SortBy: 'DateCreated',
+          SortOrder: 'Descending', StartIndex: 0, Limit: c.pageSize,
+          Fields: _fields(), EnableUserData: true, EnableImages: true
+        })));
+      }
+      if (sections.includes('favorites')) {
+        jobs.push(_section('Favorites', _itemsFor(ctx, {
+          Recursive: true, Filters: 'IsFavorite', IncludeItemTypes: _typeFilter(),
+          SortBy: c.browseSort, SortOrder: 'Descending', StartIndex: 0,
+          Limit: c.pageSize, Fields: _fields(), EnableUserData: true
+        })));
+      }
+      if (sections.includes('libraries')) {
+        views.forEach(function (view) {
+          var collectionType = String(view.CollectionType || '').toLowerCase();
+          if (!c.showCollections && !['movies', 'tvshows', 'homevideos', 'mixed', ''].includes(collectionType)) return;
+          jobs.push(_section(String(view.Name || 'Library'), _itemsFor(ctx, {
+            ParentId: view.Id, Recursive: true, IncludeItemTypes: _typeFilter(),
+            SortBy: c.browseSort, SortOrder: 'Descending', StartIndex: 0,
+            Limit: c.pageSize, Fields: _fields(), EnableUserData: true,
+            EnableImages: true
+          })));
         });
-      }).then(function (data) {
-        row.items = _listToItems(data);
-        delete row._view;
-        return row;
-      }).catch(function (e) {
-        delete row._view;
-        row.error = String(e.message || e);
-        return row;
-      });
-    }));
+      }
+      return Promise.all(jobs).then(function (rows) { return rows.filter(Boolean); });
+    });
   });
 }
 
-function search(query, page) {
+function search(query, page, opts) {
   var q = String(query || '').trim();
   if (!q) return Promise.resolve([]);
-  return _userId().then(function (userId) {
-    return _request('/Users/' + encodeURIComponent(userId) + '/Items', {
-      SearchTerm: q,
-      Recursive: true,
-      IncludeItemTypes: _config().includeTrailers ? 'Movie,Series,Episode,Trailer' : 'Movie,Series,Episode',
-      SortBy: 'SortName',
-      SortOrder: 'Ascending',
-      StartIndex: Math.max(0, ((Number(page) || 1) - 1) * _config().pageSize),
-      Limit: _config().pageSize,
-      Fields: 'Overview,PrimaryImageAspectRatio,CommunityRating,DateCreated,ProductionYear'
-    }).then(_listToItems);
+  var p = Math.max(1, Number(page) || 1);
+  return _withUser().then(function (ctx) {
+    var params = {
+      SearchTerm: q, Recursive: true, IncludeItemTypes: _typeFilter(),
+      SortBy: 'SortName', SortOrder: 'Ascending',
+      StartIndex: (p - 1) * ctx.config.pageSize, Limit: ctx.config.pageSize,
+      Fields: _fields(), EnableUserData: true, EnableImages: true
+    };
+    if (!ctx.config.includePlayed) params.Filters = 'IsNotPlayed';
+    return _itemsFor(ctx, params);
   });
 }
 
-function popular(page) {
-  return _views().then(function (views) {
-    return Promise.all(views.map(function (view) {
-      return _userId().then(function (userId) {
-        return _request('/Users/' + encodeURIComponent(userId) + '/Items', {
-          ParentId: view.Id,
-          Recursive: true,
-          IncludeItemTypes: 'Movie,Series',
-          SortBy: 'SortName',
-          SortOrder: 'Ascending',
-          StartIndex: Math.max(0, ((Number(page) || 1) - 1) * _config().pageSize),
-          Limit: _config().pageSize,
-          Fields: 'Overview,PrimaryImageAspectRatio,CommunityRating,ProductionYear'
-        }).then(_listToItems).then(function (items) {
-          return items.length ? { title: view.Name || 'Library', items: items } : null;
+function popular(opts) {
+  // Zangetsu's JS provider contract expects MediaItem[], not HomeSection[].
+  // The home rows are supplied separately by getHome().
+  var page = typeof opts === 'number' ? opts : (opts && opts.page) || 1;
+  page = Math.max(1, Number(page) || 1);
+  return _withUser().then(function (ctx) {
+    return _views(ctx).then(function (views) {
+      var start = (page - 1) * ctx.config.pageSize;
+      return Promise.all(views.filter(function (view) {
+        var t = String(view.CollectionType || '').toLowerCase();
+        return ['movies', 'tvshows', 'homevideos', 'mixed', ''].includes(t);
+      }).map(function (view) {
+        return _itemsFor(ctx, {
+          ParentId: view.Id, Recursive: true, IncludeItemTypes: _typeFilter(),
+          SortBy: ctx.config.browseSort, SortOrder: 'Descending',
+          StartIndex: start, Limit: ctx.config.pageSize,
+          Fields: _fields(), EnableUserData: true, EnableImages: true
+        }).catch(function () { return []; });
+      })).then(function (groups) {
+        var merged = [];
+        var seen = Object.create(null);
+        groups.forEach(function (items) {
+          items.forEach(function (item) {
+            if (!seen[item.url]) { seen[item.url] = true; merged.push(item); }
+          });
         });
-      }).catch(function () { return null; });
-    })).then(function (rows) { return rows.filter(Boolean); });
+        return merged;
+      });
+    });
   });
 }
 
 function _parseItemUrl(value) {
-  var match = String(value || '').match(/^jellyfin:\/\/([^/?#]+)$/i);
-  return match ? decodeURIComponent(match[1]) : null;
+  var text = String(value || '');
+  var match = text.match(/^jellyfin:\/\/([^/?#]+)$/i);
+  if (!match) return null;
+  try { return decodeURIComponent(match[1]); } catch (e) { return null; }
 }
 
-function getDetail(id) {
-  var itemId = _parseItemUrl(id);
-  if (!itemId) return Promise.reject(new Error('Invalid Jellyfin item URL.'));
-  return _userId().then(function (userId) {
-    return _request('/Users/' + encodeURIComponent(userId) + '/Items/' + encodeURIComponent(itemId), {
-      Fields: 'Overview,Genres,People,Studios,DateCreated,MediaSources,MediaStreams,ProviderIds,ChildCount,RecursiveItemCount'
-    }).catch(function () {
-      return _request('/Items/' + encodeURIComponent(itemId), {
-        Fields: 'Overview,Genres,People,Studios,DateCreated,MediaSources,MediaStreams,ProviderIds,ChildCount,RecursiveItemCount'
-      });
-    });
-  }).then(function (raw) {
-    var mapped = _mapItem(raw);
-    if (!mapped) throw new Error('Jellyfin item was not found or is not supported.');
-    mapped.description = raw.Overview || '';
-    mapped.genres = Array.isArray(raw.Genres) ? raw.Genres : [];
-    mapped.studios = Array.isArray(raw.Studios) ? raw.Studios.map(function (x) { return x.Name; }).filter(Boolean) : [];
-    mapped.cast = Array.isArray(raw.People) ? raw.People.filter(function (x) { return x.Type === 'Actor'; }).slice(0, 10).map(function (x) { return x.Name; }) : [];
-    mapped.status = raw.Status === 'Continuing' ? 'ongoing' : 'completed';
-    mapped.episodes = [];
-    if (String(raw.Type).toLowerCase() === 'series') {
-      return _userId().then(function (userId) {
-        return _request('/Shows/' + encodeURIComponent(itemId) + '/Episodes', {
-          UserId: userId,
-          Fields: 'Overview,PrimaryImageAspectRatio,CommunityRating,ProductionYear',
-          IsMissing: false
-        });
-      }).then(function (data) {
-        mapped.episodes = (Array.isArray(data.Items) ? data.Items : []).map(function (episode) {
-          var item = _mapItem(episode);
-          if (!item) return null;
-          item.title = 'S' + _pad(item.seasonNumber) + ' E' + _pad(item.episodeNumber) + ' - ' + String(episode.Name || 'Episode');
-          item.url = 'jellyfin://' + String(episode.Id);
-          item.id = item.url;
-          item.date = episode.PremiereDate || null;
-          item.thumbnail = episode.ImageTags && episode.ImageTags.Primary ? _imageUrl(episode.Id, 'Primary', episode.ImageTags.Primary) : null;
-          return item;
-        }).filter(Boolean);
-        mapped.subCount = mapped.episodes.length;
-        mapped.dubCount = 0;
-        return mapped;
-      });
-    }
-    if (String(raw.Type).toLowerCase() === 'movie' || String(raw.Type).toLowerCase() === 'episode') {
-      mapped.episodes = [{
-        id: 'main',
-        title: mapped.title,
-        number: 1,
-        season: 1,
-        url: mapped.url
-      }];
-      mapped.subCount = 1;
-      mapped.dubCount = 0;
-    }
-    return mapped;
+function _mapEpisode(raw, ctx) {
+  if (!raw || !raw.Id) return null;
+  var season = Number(raw.ParentIndexNumber) || 1;
+  var number = Number(raw.IndexNumber) || 1;
+  var image = raw.ImageTags && raw.ImageTags.Primary ? _imageUrl(raw.Id, 'Primary', raw.ImageTags.Primary, ctx) : null;
+  return {
+    id: String(raw.Id),
+    title: 'S' + _pad(season) + ' E' + _pad(number) + ' · ' + String(raw.Name || 'Episode ' + number),
+    number: number,
+    season: season,
+    url: 'jellyfin://' + encodeURIComponent(String(raw.Id)),
+    date: raw.PremiereDate || null,
+    thumbnail: image,
+    description: raw.Overview || null,
+    runtimeMinutes: raw.RunTimeTicks ? Math.round(Number(raw.RunTimeTicks) / 600000000) : null
+  };
+}
+
+function _getEpisodes(ctx, seriesId, page) {
+  page = Math.max(1, Number(page) || 1);
+  return _rawRequest(ctx, '/Shows/' + encodeURIComponent(seriesId) + '/Episodes', {
+    userId: ctx.userId, fields: _fields(), isMissing: false,
+    startIndex: (page - 1) * Math.min(500, ctx.config.pageSize),
+    limit: Math.min(500, ctx.config.pageSize),
+    enableImages: true, enableUserData: true
+  }).then(function (data) {
+    return (Array.isArray(data.Items) ? data.Items : []).map(function (raw) { return _mapEpisode(raw, ctx); }).filter(Boolean);
   });
 }
 
-function getEpisodes(id) {
-  return getDetail(id).then(function (detail) { return detail.episodes || []; });
+function getEpisodes(url, opts) {
+  var id = _parseItemUrl(url);
+  if (!id) return Promise.reject(new Error('Invalid Jellyfin item URL.'));
+  opts = opts || {};
+  var page = typeof opts === 'number' ? opts : opts.page || 1;
+  return _withUser().then(function (ctx) { return _getEpisodes(ctx, id, page); });
 }
 
-function getVideoSources(id) {
-  var itemId = _parseItemUrl(id);
+function getDetail(url, opts) {
+  var id = _parseItemUrl(url);
+  if (!id) return Promise.reject(new Error('Invalid Jellyfin item URL.'));
+  return _withUser().then(function (ctx) {
+    return _rawRequest(ctx, '/Users/' + encodeURIComponent(ctx.userId) + '/Items/' + encodeURIComponent(id), {
+      fields: _fields(), enableUserData: true, enableImages: true
+    }).then(function (raw) {
+      if (!raw || !raw.Id) throw new Error('Jellyfin item was not found.');
+      var mapped = _mapItem(raw, ctx);
+      if (!mapped) throw new Error('This Jellyfin item type is not supported for playback.');
+      var detail = {
+        id: id,
+        title: String(raw.Name || ''),
+        url: 'jellyfin://' + encodeURIComponent(id),
+        cover: mapped.cover,
+        coverHeaders: mapped.coverHeaders,
+        banner: mapped.banner,
+        description: raw.Overview || '',
+        status: raw.Status === 'Continuing' ? 'ongoing' : (raw.Status === 'Ended' ? 'completed' : 'unknown'),
+        genres: Array.isArray(raw.Genres) ? raw.Genres : [],
+        studios: Array.isArray(raw.Studios) ? raw.Studios.map(function (x) { return x && x.Name; }).filter(Boolean) : [],
+        cast: Array.isArray(raw.People) ? raw.People.filter(function (x) { return x && (x.Type === 'Actor' || x.Type === 'GuestStar'); }).slice(0, 20).map(function (x) { return x.Name; }).filter(Boolean) : [],
+        year: raw.ProductionYear ? String(raw.ProductionYear) : null,
+        type: 'movie',
+        sourceId: SOURCE_ID,
+        episodes: [],
+        subCount: 0,
+        dubCount: 0
+      };
+      if (String(raw.Type).toLowerCase() === 'series') {
+        return _getEpisodes(ctx, id, 1).then(function (episodes) {
+          detail.episodes = episodes;
+          detail.subCount = episodes.length;
+          return detail;
+        });
+      }
+      if (['movie', 'episode', 'trailer', 'video'].includes(String(raw.Type).toLowerCase())) {
+        detail.episodes = [{ id: id, title: detail.title, number: 1, season: 1, url: detail.url }];
+        detail.subCount = 1;
+      }
+      return detail;
+    });
+  });
+}
+
+function _absoluteUrl(base, value) {
+  var raw = String(value || '');
+  if (!raw) return '';
+  if (/^https?:\/\//i.test(raw)) return raw;
+  if (raw.charAt(0) === '/') return base.replace(/\/$/, '') + raw;
+  return base.replace(/\/$/, '') + '/' + raw.replace(/^\/+/, '');
+}
+
+function _queryUrl(url, params) {
+  var out = url;
+  var parts = [];
+  Object.keys(params || {}).forEach(function (key) {
+    var value = params[key];
+    if (value === undefined || value === null || value === '') return;
+    parts.push(encodeURIComponent(key) + '=' + encodeURIComponent(String(value)));
+  });
+  if (!parts.length) return out;
+  return out + (out.indexOf('?') >= 0 ? '&' : '?') + parts.join('&');
+}
+
+function _subtitles(mediaSource, itemId, sourceId, ctx) {
+  if (!ctx.config.includeSubtitles) return [];
+  var streams = Array.isArray(mediaSource.MediaStreams) ? mediaSource.MediaStreams : [];
+  return streams.filter(function (stream) {
+    return String(stream.Type || '').toLowerCase() === 'subtitle';
+  }).map(function (stream) {
+    var index = Number(stream.Index);
+    if (!isFinite(index)) return null;
+    var ext = String(stream.Codec || 'vtt').toLowerCase();
+    if (ext === 'subrip') ext = 'srt';
+    if (ext === 'webvtt') ext = 'vtt';
+    var url = stream.DeliveryUrl ? _absoluteUrl(ctx.config.server, stream.DeliveryUrl) :
+      ctx.config.server + '/Videos/' + encodeURIComponent(itemId) + '/' + encodeURIComponent(sourceId) + '/Subtitles/' + index + '/Stream.' + encodeURIComponent(ext);
+    return {
+      url: url,
+      lang: String(stream.Language || 'und'),
+      label: String(stream.DisplayTitle || stream.Language || 'Subtitle'),
+      format: ext,
+      default: !!stream.IsDefault
+    };
+  }).filter(Boolean);
+}
+
+function _mediaUrl(mediaSource, itemId, ctx, playSessionId, preferTranscoding) {
+  var params = {
+    MediaSourceId: mediaSource.Id || itemId,
+    PlaySessionId: playSessionId || undefined
+  };
+  var direct = mediaSource.DirectStreamUrl || mediaSource.DirectPlayUrl;
+  if (!direct) {
+    direct = ctx.config.server + '/Videos/' + encodeURIComponent(itemId) + '/stream';
+    params.static = 'true';
+    params.mediaSourceId = mediaSource.Id || itemId;
+  }
+  var directUrl = _queryUrl(_absoluteUrl(ctx.config.server, direct), params);
+  var transcodeUrl = mediaSource.TranscodingUrl ? _absoluteUrl(ctx.config.server, mediaSource.TranscodingUrl) : '';
+  var transcodeProtocol = String(mediaSource.TranscodingSubProtocol || '').toLowerCase();
+  var directContainer = String(mediaSource.Container || '').toLowerCase();
+  var directSource = {
+    url: directUrl,
+    quality: mediaSource.Height ? String(mediaSource.Height) + 'p' : 'Original',
+    label: 'Jellyfin · ' + String(mediaSource.Name || 'Direct play'),
+    container: directContainer === 'm3u8' ? 'hls' : (directContainer === 'mp4' || directContainer === 'mkv' || directContainer === 'webm' ? 'mp4' : 'unknown'),
+    headers: _headers(ctx.token),
+    subtitles: _subtitles(mediaSource, itemId, mediaSource.Id || itemId, ctx)
+  };
+  var transcodeSource = transcodeUrl ? {
+    url: _queryUrl(transcodeUrl, { PlaySessionId: playSessionId || undefined, api_key: ctx.token }),
+    quality: ctx.config.maxBitrate ? Math.round(ctx.config.maxBitrate / 1000000) + ' Mbps cap' : 'Server transcode',
+    label: 'Jellyfin · ' + (transcodeProtocol === 'hls' ? 'HLS transcode' : 'Transcode'),
+    container: transcodeProtocol === 'hls' ? 'hls' : 'unknown',
+    headers: _headers(ctx.token),
+    subtitles: _subtitles(mediaSource, itemId, mediaSource.Id || itemId, ctx)
+  } : null;
+  return preferTranscoding ? [transcodeSource, directSource].filter(Boolean) : [directSource, transcodeSource].filter(Boolean);
+}
+
+function getVideoSources(episodeUrl, fast) {
+  var itemId = _parseItemUrl(episodeUrl);
   if (!itemId) return Promise.reject(new Error('Invalid Jellyfin episode URL.'));
-  return _userId().then(function (userId) {
-    return _request('/Items/' + encodeURIComponent(itemId) + '/PlaybackInfo', {
-      UserId: userId,
-      AutoOpenLiveStream: false,
-      EnableDirectPlay: true,
-      EnableDirectStream: true,
-      EnableTranscoding: true
-    }, { noCache: true }).then(function (info) {
-      var mediaSources = Array.isArray(info.MediaSources) ? info.MediaSources : [];
-      var sources = [];
-      mediaSources.forEach(function (mediaSource) {
-        var mediaSourceId = String(mediaSource.Id || itemId);
-        var container = String(mediaSource.Container || '').toLowerCase();
-        var directUrl = _config().server + '/Videos/' + encodeURIComponent(itemId) + '/stream' +
-          '?static=true&mediaSourceId=' + encodeURIComponent(mediaSourceId) +
-          '&api_key=' + encodeURIComponent(_config().apiKey);
-        var headers = {};
-        if (mediaSource.RequiredHttpHeaders && typeof mediaSource.RequiredHttpHeaders === 'object') {
-          Object.keys(mediaSource.RequiredHttpHeaders).forEach(function (key) {
-            headers[key] = mediaSource.RequiredHttpHeaders[key];
-          });
-        }
-        sources.push({
-          url: directUrl,
-          title: 'Jellyfin · ' + String(mediaSource.Name || 'Direct Play'),
-          name: 'Jellyfin',
-          quality: mediaSource.Bitrate ? Math.round(Number(mediaSource.Bitrate) / 1000000) + ' Mbps' : 'Original',
-          container: container === 'm3u8' ? 'hls' : (container || 'mp4'),
-          headers: headers,
-          subtitles: (Array.isArray(mediaSource.MediaStreams) ? mediaSource.MediaStreams : [])
-            .filter(function (stream) { return stream.Type === 'Subtitle' && stream.DeliveryUrl; })
-            .map(function (stream) {
-              return {
-                url: stream.DeliveryUrl.charAt(0) === '/' ? _config().server + stream.DeliveryUrl : stream.DeliveryUrl,
-                lang: stream.Language || 'und',
-                label: stream.DisplayTitle || stream.Language || 'Subtitle',
-                format: stream.Codec || 'vtt'
-              };
-            })
+  return _withUser().then(function (ctx) {
+    var params = {
+      userId: ctx.userId,
+      autoOpenLiveStream: false,
+      enableDirectPlay: true,
+      enableDirectStream: true,
+      enableTranscoding: true
+    };
+    if (ctx.config.maxBitrate) params.maxStreamingBitrate = ctx.config.maxBitrate;
+    return _rawRequest(ctx, '/Items/' + encodeURIComponent(itemId) + '/PlaybackInfo', params, { noCache: true }).then(function (info) {
+      var sources = Array.isArray(info.MediaSources) ? info.MediaSources : [];
+      var output = [];
+      sources.forEach(function (mediaSource) {
+        _mediaUrl(mediaSource, itemId, ctx, info.PlaySessionId, ctx.config.preferTranscoding).forEach(function (item) {
+          if (!output.some(function (existing) { return existing.url === item.url; })) output.push(item);
         });
       });
-      if (sources.length) return sources;
-      // Jellyfin may omit MediaSources on some setups; the canonical stream
-      // endpoint remains usable and asks the server to select the source.
+      if (output.length) return output;
       return [{
-        url: _config().server + '/Videos/' + encodeURIComponent(itemId) + '/stream?static=true&api_key=' + encodeURIComponent(_config().apiKey),
-        title: 'Jellyfin · Direct stream',
-        name: 'Jellyfin',
-        container: 'mp4',
-        headers: {},
+        url: ctx.config.server + '/Videos/' + encodeURIComponent(itemId) + '/stream?' + 'static=true',
+        label: 'Jellyfin · Server-selected stream',
+        quality: 'Original',
+        container: 'unknown',
+        headers: _headers(ctx.token),
         subtitles: []
       }];
     });
   });
 }
 
-function getStreams(id) { return getVideoSources(id); }
+function getStreams(id, fast) { return getVideoSources(id, fast); }
 
 function _exports() {
   return {
-    version: '1.0.0',
+    version: '1.1.0',
     getInfo: getInfo,
     getSettings: getSettings,
     getHome: getHome,
@@ -392,8 +683,8 @@ function _exports() {
     getVideoSources: getVideoSources,
     getStreams: getStreams,
     _config: _config,
-    _mapItem: _mapItem,
     _parseItemUrl: _parseItemUrl,
+    _mapItem: _mapItem,
     _imageUrl: _imageUrl
   };
 }
