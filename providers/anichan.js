@@ -85,7 +85,24 @@ function _media(id) {
 function _title(m) { return m && m.title && (m.title.english || m.title.romaji || m.title.native) || 'Anime'; }
 function _item(m) {
   if(!m || !m.id || (m.isAdult && !_config().showAdult)) return null;
-  return {id:'anichan://anime/'+m.id,title:_title(m)+(m.seasonYear?' ('+m.seasonYear+')':''),url:'anichan://anime/'+m.id,cover:m.coverImage&&(m.coverImage.extraLarge||m.coverImage.large)||null,banner:m.bannerImage||null,description:m.description||'',status:_status(m.status),genres:m.genres||[],studios:m.studios&&m.studios.nodes?m.studios.nodes.map(function(x){return x.name;}):[],year:m.seasonYear||null,score:m.averageScore||null,type:'anime',sourceId:SOURCE_ID};
+  return {
+    id:'anichan://anime/'+m.id,
+    title:_title(m)+(m.seasonYear?' ('+m.seasonYear+')':''),
+    englishTitle:m.title&&m.title.english||null,
+    nativeTitle:m.title&&m.title.native||null,
+    synonyms:Array.isArray(m.synonyms)?m.synonyms:[],
+    url:'anichan://anime/'+m.id,
+    cover:m.coverImage&&(m.coverImage.extraLarge||m.coverImage.large)||null,
+    banner:m.bannerImage||null,
+    description:m.description||'',
+    status:_status(m.status),
+    genres:m.genres||[],
+    studios:m.studios&&m.studios.nodes?m.studios.nodes.map(function(x){return x.name;}):[],
+    malId:Number(m.idMal)||null,
+    year:m.seasonYear!=null?String(m.seasonYear):null,
+    score:m.averageScore||null,
+    type:'anime',sourceId:SOURCE_ID
+  };
 }
 function _status(v) { return v==='FINISHED'?'completed':(v==='RELEASING'||v==='NOT_YET_RELEASED'?'ongoing':(v==='CANCELLED'?'cancelled':'unknown')); }
 function _page(path, variables) {
