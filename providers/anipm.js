@@ -18,7 +18,7 @@ var UA = 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 '
   + '(KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36';
 
 var SEARCH_QUERY = [
-  'query ($search: String!) {',
+  'query ($search: String!, $page: Int!, $perPage: Int!) {',
   '  Page(page: $page, perPage: $perPage) {',
   '    media(search: $search, type: ANIME, sort: SEARCH_MATCH) {',
   '      id idMal',
