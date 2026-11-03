@@ -127,13 +127,28 @@ global.fetch = async function(url, options) {
     });
   }
 
+  if (url === "https://ani.pm/api/anime/playback-bootstrap/anilist/154587?ep=3&lang=sub&core=0") {
+    return response(200, {
+      effectiveLanguage: "sub",
+      settlarSelection: "blocked-selection"
+    });
+  }
+  if (url === "https://ani.pm/api/anime/settlar/session?selection=blocked-selection&provider=anipm&ep=3&channel=sub&telemetry=0") {
+    return response(200, {
+      embedUrl: "https://embed.settlar.io/embed/v1?t=blocked-token"
+    });
+  }
+  if (url === "https://embed.settlar.io/api/embed/session?t=blocked-token") {
+    return response(403, "<html>request blocked</html>");
+  }
+
   return response(404, { message: "not found" });
 };
 
 async function main() {
-  assert.equal(provider.version, "1.0.1");
+  assert.equal(provider.version, "1.0.2");
   assert.equal(provider.getInfo().name, "Ani.pm");
-  assert.equal(provider.getInfo().version, "1.0.1");
+  assert.equal(provider.getInfo().version, "1.0.2");
   assert.equal(provider.getInfo().baseUrl, "https://ani.pm");
   assert.deepEqual(provider.getSettings(), []);
   assert.deepEqual(await provider.getHome({}), []);
@@ -187,11 +202,18 @@ async function main() {
     /has no sub for episode 2/
   );
 
+  await assert.rejects(
+    provider.getVideoSources("anipm-episode://154587/3/sub", {}),
+    /Settlar embed session HTTP 403/
+  );
+
   const apiCalls = calls.filter(call => call.url.indexOf("https://ani.pm/") === 0
     || call.url.indexOf("https://embed.settlar.io/") === 0);
   assert.ok(apiCalls.length > 0);
   for (const call of apiCalls) {
     assert.match(call.options.headers["User-Agent"], /Android 14.*Chrome\/137/);
+    assert.equal(call.options.nativeHttp, true,
+      "all Ani.pm and Settlar API calls must use the native Android OkHttp lane");
     assert.equal(call.options.headers.Referer, undefined);
     assert.equal(call.options.headers.Cookie, undefined);
   }
