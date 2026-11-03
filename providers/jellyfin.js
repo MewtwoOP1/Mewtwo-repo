@@ -129,24 +129,14 @@ function _normalizeServerAddress(input) {
   var value = _trim(input);
   if (!value) return '';
   if (!/^https?:\/\//i.test(value)) value = 'https://' + value;
-  var parsed;
-  try {
-    parsed = new URL(value);
-  } catch (e) {
-    throw new Error('Enter a valid Jellyfin server address.');
+  var match = value.match(/^(https?):\/\/([^/?#]+)([^?#]*)/i);
+  if (!match || !match[2] || /[\s@]/.test(match[2])) {
+    throw new Error('Enter a valid Jellyfin server address without embedded credentials.');
   }
-  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-    throw new Error('Jellyfin server addresses must use HTTP or HTTPS.');
-  }
-  if (!parsed.hostname || parsed.username || parsed.password) {
-    throw new Error('The server address must not contain embedded credentials.');
-  }
-  parsed.search = '';
-  parsed.hash = '';
-  var path = String(parsed.pathname || '').replace(/\/+$/, '');
-  path = path.replace(/\/web\/index\.html$/i, '').replace(/\/web$/i, '').replace(/\/+$/, '');
-  parsed.pathname = path || '/';
-  return parsed.toString().replace(/\/+$/, '');
+  var scheme = match[1].toLowerCase();
+  var host = match[2];
+  var path = String(match[3] || '').replace(/\\/g, '/').replace(/\/web\/index\.html$/i, '').replace(/\/web$/i, '').replace(/\/+$/, '');
+  return scheme + '://' + host + path;
 }
 
 function _queryString(params) {
@@ -1032,15 +1022,13 @@ function _absoluteServerUrl(ctx, value) {
 }
 
 function _isInternalUrl(ctx, url) {
-  try {
-    var parsed = new URL(url);
-    var base = new URL(ctx.baseUrl);
-    if (parsed.origin !== base.origin) return false;
-    var basePath = String(base.pathname || '').replace(/\/+$/, '');
-    return !basePath || parsed.pathname === basePath || parsed.pathname.indexOf(basePath + '/') === 0;
-  } catch (e) {
-    return false;
-  }
+  var target = String(url || '').match(/^(https?):\/\/([^/?#]+)([^?#]*)/i);
+  var base = String(ctx.baseUrl || '').match(/^(https?):\/\/([^/?#]+)([^?#]*)/i);
+  if (!target || !base) return false;
+  if ((target[1] + '://' + target[2]).toLowerCase() !== (base[1] + '://' + base[2]).toLowerCase()) return false;
+  var basePath = String(base[3] || '').replace(/\/+$/, '');
+  var targetPath = String(target[3] || '');
+  return !basePath || targetPath === basePath || targetPath.indexOf(basePath + '/') === 0;
 }
 
 function _playerHeaders(ctx, url, requiredHeaders) {
@@ -1265,6 +1253,8 @@ function _exports() {
     _libraryKind: _libraryKind,
     _mapItem: _mapItem,
     _mapEpisode: _mapEpisode,
+    _mapMediaSource: _mapMediaSource,
+    _subtitleTracks: _subtitleTracks,
     _deviceProfile: _deviceProfile,
     _qualityFor: _qualityFor,
     _containerFor: _containerFor
