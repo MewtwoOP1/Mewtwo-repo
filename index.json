@@ -5,11 +5,11 @@
     {
       "id": "jellyfin",
       "name": "Jellyfin",
-      "version": "3.0.2",
+      "version": "3.0.3",
       "type": "movie",
       "lang": "en",
       "file": "providers/jellyfin.js",
-      "logo": "https://raw.githubusercontent.com/jellyfin/jellyfin-ux/master/logos/SVG/jellyfin-icon--color-on-dark.svg",
+      "logo": "https://raw.githubusercontent.com/jellyfin/jellyfin-ux/master/logos/PNG-4x/jellyfin-icon--color-on-dark.png",
       "nsfw": false,
       "settings": [
         {
