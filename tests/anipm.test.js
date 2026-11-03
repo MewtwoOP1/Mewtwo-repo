@@ -199,6 +199,11 @@ async function main() {
   assert.ok(calls.some(call => call.url.indexOf("/api/anime/playback-bootstrap/anilist/154587?ep=1&lang=sub&core=0") >= 0));
   assert.ok(calls.some(call => call.url.indexOf("/api/anime/settlar/session?selection=") >= 0));
   assert.ok(calls.some(call => call.url === "https://embed.settlar.io/api/embed/session?t=token%2Bpart%2Fone"));
+  const settlarEmbedCall = calls.find(call =>
+    call.url === "https://embed.settlar.io/api/embed/session?t=token%2Bpart%2Fone");
+  assert.ok(settlarEmbedCall, "Settlar embed session request should be made");
+  assert.equal(settlarEmbedCall.options.nativeHttp, true,
+    "Settlar embed session must opt into Zangetsu's native OkHttp bridge");
 
   console.log("Ani.pm Anilili-flow tests passed: AniList mapping, package inventory, SUB/DUB, Settlar and subtitles.");
 }
