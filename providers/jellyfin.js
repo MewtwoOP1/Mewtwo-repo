@@ -358,7 +358,24 @@ function _request(path, query, options) {
 }
 
 function _requestWithContext(ctx, path, query, options) {
-  return _rawRequest(ctx.config, ctx.token, path, query, options);
+  options = options || {};
+  return _rawRequest(ctx.config, ctx.token, path, query, options).catch(function (error) {
+    if (!error || error.status !== 401 || options.noAuthRetry) throw error;
+    // A parallel batch of requests can all see the same expired token. Reuse
+    // the in-flight login so the batch performs one refresh, not one per row.
+    if (JF_AUTH && JF_AUTH.token !== ctx.token && JF_AUTH.expiresAt > Date.now()) {
+      return _rawRequest(JF_AUTH.config, JF_AUTH.token, path, query, Object.assign({}, options, {
+        noAuthRetry: true,
+        noCache: true
+      }));
+    }
+    return _getContext(true).then(function (fresh) {
+      return _rawRequest(fresh.config, fresh.token, path, query, Object.assign({}, options, {
+        noAuthRetry: true,
+        noCache: true
+      }));
+    });
+  });
 }
 
 function _fieldsQuery(cfg) {
@@ -1120,7 +1137,7 @@ function getHome(opts) {
       }
 
       if (enabled.indexOf('recent') >= 0) {
-        jobs.push(_section('Recently Added', _requestWithContext(ctx, '/Items', {
+        jobs.push(_section('Recently Added', _requestWithContext(ctx, '/Items', Object.assign({}, _fieldsQuery(ctx.config), {
           userId: ctx.userId,
           recursive: 'true',
           includeItemTypes: types.join(','),
@@ -1129,7 +1146,7 @@ function getHome(opts) {
           startIndex: '0',
           limit: String(limit),
           enableTotalRecordCount: 'true'
-        }, Object.assign({ noCache: false }, _fieldsQuery(ctx.config))).then(function (data) {
+        })).then(function (data) {
           return (Array.isArray(data.Items) ? data.Items : []).map(function (raw) { return _mapItem(raw, ctx); }).filter(Boolean);
         })));
       }
