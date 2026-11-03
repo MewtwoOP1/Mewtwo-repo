@@ -3,6 +3,273 @@
   "description": "𝑴𝒆𝒘𝒕𝒘𝒐♡ community sources for Zangetsu. Third-party provider integrations; this repository does not host video files.",
   "sources": [
     {
+      "id": "jellyfin",
+      "name": "Jellyfin",
+      "version": "3.0.0",
+      "type": "movie",
+      "lang": "en",
+      "file": "providers/jellyfin.js",
+      "logo": "https://jellyfin.org/favicon.ico",
+      "nsfw": false,
+      "settings": [
+        {
+          "key": "serverUrl",
+          "label": "Jellyfin server address",
+          "description": "Paste the Jellyfin server address, including its base path. For AIOStreams use the address ending in /jellyfin, not the Stremio manifest URL.",
+          "type": "text",
+          "default": ""
+        },
+        {
+          "key": "username",
+          "label": "Username",
+          "description": "Jellyfin username. For AIOStreams this is the configuration UUID or alias; add /UserName for a household user when required.",
+          "type": "text",
+          "default": ""
+        },
+        {
+          "key": "password",
+          "label": "Password",
+          "description": "Jellyfin password. For AIOStreams use the configuration password, optionally followed by /PIN. Use a dedicated account where possible.",
+          "type": "text",
+          "default": ""
+        },
+        {
+          "key": "apiKey",
+          "label": "API key / access token (optional)",
+          "description": "Optional alternative to username and password. When set, password login is skipped. A User ID may be required for servers that do not expose a default user.",
+          "type": "text",
+          "default": ""
+        },
+        {
+          "key": "userId",
+          "label": "User ID (optional)",
+          "description": "Optional Jellyfin user ID for API-key authentication. Leave blank to let the provider discover an available user when the server permits it.",
+          "type": "text",
+          "default": ""
+        },
+        {
+          "key": "libraryId",
+          "label": "Library ID (optional)",
+          "description": "Leave blank to browse every accessible library. Enter a library ID to restrict Home, search, and catalogue browsing to that library.",
+          "type": "text",
+          "default": ""
+        },
+        {
+          "key": "pageSize",
+          "label": "Catalogue page size",
+          "description": "Maximum number of items requested for each library row or search page.",
+          "type": "enum",
+          "default": "50",
+          "options": [
+            {
+              "value": "25",
+              "label": "25 items"
+            },
+            {
+              "value": "50",
+              "label": "50 items"
+            },
+            {
+              "value": "100",
+              "label": "100 items"
+            }
+          ]
+        },
+        {
+          "key": "homeSections",
+          "label": "Home sections",
+          "description": "Choose which Jellyfin rows are shown on the source Home page.",
+          "type": "multiEnum",
+          "default": [
+            "resume",
+            "nextUp",
+            "recent",
+            "favorites",
+            "libraries"
+          ],
+          "options": [
+            {
+              "value": "resume",
+              "label": "Continue Watching"
+            },
+            {
+              "value": "nextUp",
+              "label": "Next Up"
+            },
+            {
+              "value": "recent",
+              "label": "Recently Added"
+            },
+            {
+              "value": "favorites",
+              "label": "Favorites"
+            },
+            {
+              "value": "libraries",
+              "label": "Library catalogues"
+            }
+          ]
+        },
+        {
+          "key": "contentTypes",
+          "label": "Catalogue content types",
+          "description": "Choose the movie, series, and collection types returned from libraries. Episodes are loaded when a series is opened.",
+          "type": "multiEnum",
+          "default": [
+            "Movie",
+            "Series",
+            "BoxSet"
+          ],
+          "options": [
+            {
+              "value": "Movie",
+              "label": "Movies"
+            },
+            {
+              "value": "Series",
+              "label": "TV series"
+            },
+            {
+              "value": "BoxSet",
+              "label": "Collections / box sets"
+            }
+          ]
+        },
+        {
+          "key": "showCollections",
+          "label": "Show collection libraries",
+          "description": "Include BoxSet libraries and collection entries when the server provides them.",
+          "type": "bool",
+          "default": true
+        },
+        {
+          "key": "sortBy",
+          "label": "Library sorting",
+          "description": "Sort order used by catalogue and favourite rows.",
+          "type": "enum",
+          "default": "DateCreated",
+          "options": [
+            {
+              "value": "DateCreated",
+              "label": "Recently added"
+            },
+            {
+              "value": "SortName",
+              "label": "Title"
+            },
+            {
+              "value": "CommunityRating",
+              "label": "Community rating"
+            },
+            {
+              "value": "PremiereDate",
+              "label": "Release date"
+            }
+          ]
+        },
+        {
+          "key": "maxStreamingBitrate",
+          "label": "Maximum streaming bitrate",
+          "description": "Bitrate ceiling advertised during PlaybackInfo negotiation.",
+          "type": "enum",
+          "default": "40000000",
+          "options": [
+            {
+              "value": "16000000",
+              "label": "16 Mbps"
+            },
+            {
+              "value": "25000000",
+              "label": "25 Mbps"
+            },
+            {
+              "value": "40000000",
+              "label": "40 Mbps"
+            },
+            {
+              "value": "80000000",
+              "label": "80 Mbps"
+            },
+            {
+              "value": "1000000000",
+              "label": "Server / device maximum"
+            }
+          ]
+        },
+        {
+          "key": "preferTranscoding",
+          "label": "Prefer server transcoding",
+          "description": "Prefer a server-provided transcoding or remux URL over a direct stream when both are available.",
+          "type": "bool",
+          "default": false
+        },
+        {
+          "key": "includeSubtitles",
+          "label": "Include external subtitles",
+          "description": "Return external subtitle tracks exposed by Jellyfin or the Jellyfin-compatible server.",
+          "type": "bool",
+          "default": true
+        },
+        {
+          "key": "useRemoteUrl",
+          "label": "Use remote media URLs",
+          "description": "Use an absolute remote media Path when the server marks the media source as remote. Disable to request its Jellyfin stream route instead.",
+          "type": "bool",
+          "default": true
+        },
+        {
+          "key": "cacheTtl",
+          "label": "Catalogue cache",
+          "description": "In-memory cache duration for successful catalogue and metadata GET requests. Playback negotiation is never cached.",
+          "type": "enum",
+          "default": "30000",
+          "options": [
+            {
+              "value": "0",
+              "label": "Disabled"
+            },
+            {
+              "value": "15000",
+              "label": "15 seconds"
+            },
+            {
+              "value": "30000",
+              "label": "30 seconds"
+            },
+            {
+              "value": "60000",
+              "label": "1 minute"
+            }
+          ]
+        },
+        {
+          "key": "requestTimeoutMs",
+          "label": "Server request timeout",
+          "description": "Timeout applied to an individual Jellyfin API request.",
+          "type": "enum",
+          "default": "15000",
+          "options": [
+            {
+              "value": "5000",
+              "label": "5 seconds"
+            },
+            {
+              "value": "10000",
+              "label": "10 seconds"
+            },
+            {
+              "value": "15000",
+              "label": "15 seconds"
+            },
+            {
+              "value": "25000",
+              "label": "25 seconds"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "id": "aiostreams",
       "name": "AIOStreams",
       "version": "2.2.0",
