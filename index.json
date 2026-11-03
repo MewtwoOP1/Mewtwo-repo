@@ -5,7 +5,7 @@
     {
       "id": "jellyfin",
       "name": "Jellyfin",
-      "version": "2.0.0",
+      "version": "3.0.0",
       "type": "movie",
       "lang": "en",
       "file": "providers/jellyfin.js",
@@ -15,28 +15,49 @@
         {
           "key": "serverUrl",
           "label": "Jellyfin server address",
-          "description": "Server address only. A reverse-proxy subpath is supported. You can enter a hostname and port without a scheme.",
+          "description": "Paste the Jellyfin server address, including its base path. For AIOStreams use the address ending in /jellyfin, not the Stremio manifest URL.",
           "type": "text",
           "default": ""
         },
         {
           "key": "username",
-          "label": "Jellyfin username",
-          "description": "Username for the Jellyfin account that can access your libraries.",
+          "label": "Username",
+          "description": "Jellyfin username. For AIOStreams this is the configuration UUID or alias; add /UserName for a household user when required.",
           "type": "text",
           "default": ""
         },
         {
           "key": "password",
-          "label": "Jellyfin password",
-          "description": "Password for that Jellyfin account. Zangetsu text settings are not password-masked; use a dedicated account with only the library permissions you need.",
+          "label": "Password",
+          "description": "Jellyfin password. For AIOStreams use the configuration password, optionally followed by /PIN. Use a dedicated account where possible.",
+          "type": "text",
+          "default": ""
+        },
+        {
+          "key": "apiKey",
+          "label": "API key / access token (optional)",
+          "description": "Optional alternative to username and password. When set, password login is skipped. A User ID may be required for servers that do not expose a default user.",
+          "type": "text",
+          "default": ""
+        },
+        {
+          "key": "userId",
+          "label": "User ID (optional)",
+          "description": "Optional Jellyfin user ID for API-key authentication. Leave blank to let the provider discover an available user when the server permits it.",
+          "type": "text",
+          "default": ""
+        },
+        {
+          "key": "libraryId",
+          "label": "Library ID (optional)",
+          "description": "Leave blank to browse every accessible library. Enter a library ID to restrict Home, search, and catalogue browsing to that library.",
           "type": "text",
           "default": ""
         },
         {
           "key": "pageSize",
           "label": "Catalogue page size",
-          "description": "Number of items requested per library and search page.",
+          "description": "Maximum number of items requested for each library row or search page.",
           "type": "enum",
           "default": "50",
           "options": [
@@ -57,7 +78,7 @@
         {
           "key": "homeSections",
           "label": "Home sections",
-          "description": "Choose which Jellyfin rows appear on the source Home page.",
+          "description": "Choose which Jellyfin rows are shown on the source Home page.",
           "type": "multiEnum",
           "default": [
             "resume",
@@ -85,18 +106,19 @@
             },
             {
               "value": "libraries",
-              "label": "Libraries"
+              "label": "Library catalogues"
             }
           ]
         },
         {
           "key": "contentTypes",
-          "label": "Search and catalogue content",
-          "description": "Choose the item types shown by search and the general catalogue rows.",
+          "label": "Catalogue content types",
+          "description": "Choose the movie, series, and collection types returned from libraries. Episodes are loaded when a series is opened.",
           "type": "multiEnum",
           "default": [
             "Movie",
-            "Series"
+            "Series",
+            "BoxSet"
           ],
           "options": [
             {
@@ -108,14 +130,6 @@
               "label": "TV series"
             },
             {
-              "value": "Episode",
-              "label": "Episodes"
-            },
-            {
-              "value": "Trailer",
-              "label": "Trailers"
-            },
-            {
               "value": "BoxSet",
               "label": "Collections / box sets"
             }
@@ -124,14 +138,14 @@
         {
           "key": "showCollections",
           "label": "Show collection libraries",
-          "description": "Include BoxSet libraries and collection entries. Opening a collection lists the movies and series inside it.",
+          "description": "Include BoxSet libraries and collection entries when the server provides them.",
           "type": "bool",
           "default": true
         },
         {
           "key": "sortBy",
           "label": "Library sorting",
-          "description": "Sort order for library and popular rows.",
+          "description": "Sort order used by catalogue and favourite rows.",
           "type": "enum",
           "default": "DateCreated",
           "options": [
@@ -156,7 +170,7 @@
         {
           "key": "maxStreamingBitrate",
           "label": "Maximum streaming bitrate",
-          "description": "Upper bitrate advertised to Jellyfin when it chooses a direct stream or transcode.",
+          "description": "Bitrate ceiling advertised during PlaybackInfo negotiation.",
           "type": "enum",
           "default": "40000000",
           "options": [
@@ -185,21 +199,28 @@
         {
           "key": "preferTranscoding",
           "label": "Prefer server transcoding",
-          "description": "Put Jellyfin-provided HLS or remux streams before direct-play links when both are available.",
+          "description": "Prefer a server-provided transcoding or remux URL over a direct stream when both are available.",
           "type": "bool",
           "default": false
         },
         {
           "key": "includeSubtitles",
           "label": "Include external subtitles",
-          "description": "Return external subtitle tracks provided by Jellyfin. Embedded tracks remain part of the video file.",
+          "description": "Return external subtitle tracks exposed by Jellyfin or the Jellyfin-compatible server.",
+          "type": "bool",
+          "default": true
+        },
+        {
+          "key": "useRemoteUrl",
+          "label": "Use remote media URLs",
+          "description": "Use an absolute remote media Path when the server marks the media source as remote. Disable to request its Jellyfin stream route instead.",
           "type": "bool",
           "default": true
         },
         {
           "key": "cacheTtl",
           "label": "Catalogue cache",
-          "description": "In-memory cache duration for successful GET requests.",
+          "description": "In-memory cache duration for successful catalogue and metadata GET requests. Playback negotiation is never cached.",
           "type": "enum",
           "default": "30000",
           "options": [
@@ -224,9 +245,9 @@
         {
           "key": "requestTimeoutMs",
           "label": "Server request timeout",
-          "description": "Timeout for each Jellyfin API request.",
+          "description": "Timeout applied to an individual Jellyfin API request.",
           "type": "enum",
-          "default": "10000",
+          "default": "15000",
           "options": [
             {
               "value": "5000",
@@ -241,8 +262,8 @@
               "label": "15 seconds"
             },
             {
-              "value": "20000",
-              "label": "20 seconds"
+              "value": "25000",
+              "label": "25 seconds"
             }
           ]
         }
