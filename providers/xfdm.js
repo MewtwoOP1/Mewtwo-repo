@@ -59,7 +59,7 @@ function getHome(opts){
 function popular(opts){return _list('POPULARITY_DESC',1).catch(function(){return [];});}
 function _id(url){var m=String(url||'').match(/(?:xfdm:\/\/anime\/|\/)(\d+)(?:[/?#]|$)/)||String(url||'').match(/^(\d+)$/);if(!m)throw new Error('XFDM: invalid AniList ID');return Number(m[1]);}
 function _normal(s){
- return String(s||'').toLowerCase().replace(/&amp;/g,'&').replace(/&quot;/g,'"').replace(/&#39;|&apos;/g,"'").replace(/<[^>]*>/g,'').replace(/[（(]\s*(?:tv|anime|season|part)\s*[\d一二三四五六七八九十]*\s*[）)]/gi,'').replace(/[^\p{L}\p{N}]+/gu,'');
+ return String(s||'').toLowerCase().replace(/&amp;/g,'&').replace(/&quot;/g,'"').replace(/&#39;|&apos;/g,"'").replace(/<[^>]*>/g,'').replace(/[\\s\\-_,.·:;!?，。！？：；、（）()【】\\[\\]{}'"“”‘’]+/g,'');
 }
 function _titleNames(media){
  var raw=[media.title&&media.title.native,media.title&&media.title.romaji,media.title&&media.title.english].concat(media.synonyms||[]);
