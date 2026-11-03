@@ -117,7 +117,7 @@ function getDetail(url,opts) {
   return _media(id).then(function(m){
     return _json(SITE+'/api/watch/episodes?anilistId='+id).then(function(av){
       var count=Number(av&&av.episodes)||0, dub=!!(av&&av.dubAvailable), episodes=[];
-      if(count>0){for(var n=1;n<=count;n++){episodes.push({id:'anichan://episode/'+id+'/'+n+'/sub',url:'anichan://episode/'+id+'/'+n+'/sub',number:n,title:'Episode '+n,sourceId:SOURCE_ID,type:'anime',category:'sub'});if(dub&&_config().audioMode!=='sub')episodes.push({id:'anichan://episode/'+id+'/'+n+'/dub',url:'anichan://episode/'+id+'/'+n+'/dub',number:n,title:'Episode '+n,sourceId:SOURCE_ID,type:'anime',category:'dub'});}}
+      if(count>0){for(var n=1;n<=count;n++){episodes.push({id:'anichan://episode/'+id+'/'+n+'/sub',url:'anichan://episode/'+id+'/'+n+'/sub',number:n,title:'Episode '+n,sourceId:SOURCE_ID,type:'anime',category:'sub'});if(dub)episodes.push({id:'anichan://episode/'+id+'/'+n+'/dub',url:'anichan://episode/'+id+'/'+n+'/dub',number:n,title:'Episode '+n,sourceId:SOURCE_ID,type:'anime',category:'dub'});}}
       if(_config().audioMode==='sub')episodes=episodes.filter(function(x){return x.category==='sub';});
       if(_config().audioMode==='dub')episodes=episodes.filter(function(x){return x.category==='dub';});
       var out=_item(m);out.episodes=episodes;out.subCount=count;out.dubCount:dub?count:0;return out;
