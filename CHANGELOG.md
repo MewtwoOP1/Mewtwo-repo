@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add a dedicated Jellyfin-compatible source icon and simplify its settings to connection, library filter, catalogue page size, bitrate, and subtitles.
+- Avoid malformed relative API requests when the server address has not been configured.
 - Rebuild Jellyfin as a standalone catalogue-backed source. Read the authenticated user's Jellyfin libraries and catalogue directly instead of using the old Stremio/TMDB implementation.
 - Add AIOStreams Jellyfin-server support: discover advertised features, handle genre-required catalogues, list configured catalogues as libraries, and read AIOStreams version metadata from Jellyfin media sources.
 - Separate catalogue/detail/episode requests from stream resolution so opening a catalogue or loading episode lists does not invoke stream add-ons.
