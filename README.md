@@ -266,6 +266,8 @@ AIOStreams' sign-in picker address contains a secret. Prefer the plain server ad
 
 ### Settings
 
+The source keeps its settings focused on connection details and the few playback controls most users need. Catalogue sections, content types, sorting, caching, and request timeouts use sensible defaults automatically.
+
 | Setting | What it controls |
 |:--|:--|
 | **Jellyfin server address** | Full server URL, including a reverse-proxy or AIOStreams `/jellyfin` base path |
@@ -274,16 +276,8 @@ AIOStreams' sign-in picker address contains a secret. Prefer the plain server ad
 | **User ID** | Optional user ID for API-key authentication. Leave blank when the server permits automatic discovery |
 | **Library ID** | Optional restriction to one accessible library. Leave blank to browse every supported library |
 | **Catalogue page size** | 25, 50, or 100 items per library row and search request |
-| **Home sections** | Continue Watching, Next Up, Recently Added, Favorites, and each accessible library |
-| **Catalogue content types** | Movies, TV series, and collections / box sets |
-| **Show collection libraries** | Include or hide collection libraries and BoxSet entries |
-| **Library sorting** | Recently added, title, community rating, or release date |
-| **Maximum streaming bitrate** | Bitrate ceiling sent during Jellyfin playback negotiation |
-| **Prefer server transcoding** | Prefer a server-provided transcoding/remux URL when one is available |
+| **Maximum streaming bitrate** | Bitrate ceiling sent during playback negotiation |
 | **Include external subtitles** | Include external subtitle tracks returned by the server |
-| **Use remote media URLs** | Use a remote media URL when a source is marked as remote; otherwise request the server's stream route |
-| **Catalogue cache** | Disable cache or use a 15-second, 30-second, or 1-minute in-memory cache |
-| **Server request timeout** | 5, 10, 15, or 25 seconds per request |
 
 ### Catalogue and metadata
 
@@ -297,7 +291,7 @@ AIOStreams' sign-in picker address contains a secret. Prefer the plain server ad
 - Playback is negotiated through `POST /Items/{itemId}/PlaybackInfo`. When the server advertises AIOStreams' `versions` feature, the source requests a fresh version list and opts in to `RequiredHttpHeaders`.
 - AIOStreams' returned `MediaSources` are mapped into selectable Zangetsu stream results. The source uses the version's `Path`, version metadata, and required request headers. It does not send the Jellyfin account token to an unrelated external stream host.
 - External subtitle tracks use the server-provided `DeliveryUrl` when present. Standard Jellyfin subtitle routes are used as a fallback.
-- Direct links, remote paths, and server-provided transcoding URLs are handled separately. The **Prefer server transcoding** setting controls their order where both a direct and transcoded option are available.
+- Direct links, remote paths, and server-provided transcoding URLs are handled separately using fixed playback selection rules.
 - A title appearing in a library does not guarantee that a stream add-on can resolve it. Availability depends on the server's catalogue, metadata, configured stream add-ons, and the returned media versions.
 
 ### Troubleshooting
