@@ -70,12 +70,43 @@ function _unwrap(data){if(data&&data.results&&typeof data.results==='object')ret
 function _episodeUrl(id,ep,cat,slug,route){return 'animepahe://episode/'+encodeURIComponent(JSON.stringify({id:id,number:ep,category:cat,slug:slug||'',route:route||''}));}
 function _episodesFromMiruro(id,data){
  var root=_unwrap(data),providers=root.providers||{},kiwi=providers.kiwi||providers.animepahe||null;
- if(!kiwi||!kiwi.episodes)return [];
- var eps=kiwi.episodes, out=[];
- ['sub','dub'].forEach(function(cat){if(_config().audioMode!=='both'&&_config().audioMode!==cat)return;
-  (Array.isArray(eps[cat])?eps[cat]:[]).forEach(function(ep){var n=Number(ep.number||ep.episode);if(!(n>0))return;var route=String(ep.id||ep.url||''),slug=route.split('/').pop()||('animepahe-'+n);out.push({id:_episodeUrl(id,n,cat,slug,route),url:_episodeUrl(id,n,cat,slug,route),number:n,title:ep.title||('Episode '+n),image:ep.image||ep.thumbnail||null,airDate:ep.airDate||null,duration:ep.duration||null,filler:!!ep.filler,type:'anime',sourceId:SOURCE_ID,category:cat});});
+ var out=[];
+ if(kiwi&&kiwi.episodes){
+  var eps=kiwi.episodes;
+  ['sub','dub'].forEach(function(cat){if(_config().audioMode!=='both'&&_config().audioMode!==cat)return;
+   (Array.isArray(eps[cat])?eps[cat]:[]).forEach(function(ep){
+    var n=Number(ep.number||ep.episode||ep.ep);if(!(n>0))return;
+    var route=String(ep.id||ep.url||''),slug=route.split('/').pop()||('animepahe-'+n);
+    out.push({id:_episodeUrl(id,n,cat,slug,route),url:_episodeUrl(id,n,cat,slug,route),number:n,title:ep.title||('Episode '+n),thumbnail:ep.image||ep.thumbnail||ep.thumbnail_url||null,date:ep.airDate||ep.aired_on||ep.aired||null,duration:ep.duration||null,filler:!!ep.filler,type:'anime',sourceId:SOURCE_ID,category:cat});
+   });
+  });
+  return out.sort(function(a,b){return a.number-b.number||(a.category==='sub'?-1:1);});
+ }
+
+ // Some mirror responses expose a shared episode inventory under data[] with
+ // episode_number/title/thumbnail_url/aired_on instead of a Kiwi object.
+ // These rows are enough to build a real episode catalogue; playback still
+ // attempts direct AnimePahe first, then the generated Kiwi route.
+ var rows=Array.isArray(root.data)?root.data:(Array.isArray(root.episodes)?root.episodes:[]);
+ rows.forEach(function(ep){
+  if(!ep||ep.kind&&String(ep.kind).toLowerCase()!=='regular')return;
+  var n=Number(ep.episode_number||ep.number||ep.episode||ep.ep);if(!(n>0))return;
+  if(_config().audioMode==='dub')return;
+  var slug=String(ep.slug||ep.id||('animepahe-'+n));
+  var route='watch/kiwi/'+id+'/sub/'+encodeURIComponent(slug);
+  var encoded=_episodeUrl(id,n,'sub',slug,route);
+  out.push({id:encoded,url:encoded,number:n,title:ep.title||('Episode '+n),thumbnail:ep.thumbnail_url||ep.thumbnail||ep.image||null,date:ep.aired_on||ep.airDate||ep.aired||null,duration:ep.duration||null,filler:!!ep.filler,type:'anime',sourceId:SOURCE_ID,category:'sub'});
  });
- return out.sort(function(a,b){return a.number-b.number||(a.category==='sub'?-1:1);});
+ return out.sort(function(a,b){return a.number-b.number;});
+}
+function _fallbackEpisodeList(id,media){
+ var count=Math.max(0,Math.min(500,Number(media&&media.episodes)||0)),out=[];
+ if(_config().audioMode==='dub')return out;
+ for(var n=1;n<=count;n++){
+  var slug='animepahe-'+n,route='watch/kiwi/'+id+'/sub/'+slug,encoded=_episodeUrl(id,n,'sub',slug,route);
+  out.push({id:encoded,url:encoded,number:n,title:'Episode '+n,thumbnail:null,date:null,type:'anime',sourceId:SOURCE_ID,category:'sub'});
+ }
+ return out;
 }
 function _mirrorEpisodes(id,force){
  var key='episodes:'+id,c=!force&&_cacheGet(key);if(c)return Promise.resolve(c);
@@ -83,9 +114,16 @@ function _mirrorEpisodes(id,force){
 }
 function getDetail(url,opts){
  var id=_id(url);
- return Promise.all([_media(id),_mirrorEpisodes(id,opts&&opts.forceRefresh).catch(function(e){console.warn('AnimePahe episode catalogue unavailable',String(e));return [];})]).then(function(r){var out=_item(r[0]);out.episodes=r[1];out.subCount=out.episodes.filter(function(x){return x.category==='sub';}).length;out.dubCount=out.episodes.filter(function(x){return x.category==='dub';}).length;return out;});
+ return Promise.all([_media(id),_mirrorEpisodes(id,opts&&opts.forceRefresh).catch(function(e){console.warn('AnimePahe episode catalogue unavailable',String(e));return [];})]).then(function(r){
+  var out=_item(r[0]),rows=r[1].length?r[1]:_fallbackEpisodeList(id,r[0]);
+  out.episodes=rows;out.subCount=rows.filter(function(x){return x.category==='sub';}).length;out.dubCount=rows.filter(function(x){return x.category==='dub';}).length;return out;
+ });
 }
-function getEpisodes(url,opts){return _mirrorEpisodes(_id(url),opts&&opts.forceRefresh).catch(function(e){console.warn('AnimePahe episode lookup failed',String(e));return [];});}
+function getEpisodes(url,opts){
+ var id=_id(url);
+ return Promise.all([_media(id),_mirrorEpisodes(id,opts&&opts.forceRefresh).catch(function(e){console.warn('AnimePahe episode lookup failed',String(e));return [];})])
+  .then(function(r){return r[1].length?r[1]:_fallbackEpisodeList(id,r[0]);});
+}
 function _decodeEpisode(url){
  var m=String(url||'').match(/^animepahe:\/\/episode\/(.+)$/i);if(!m)throw new Error('AnimePahe: invalid episode URL');
  var x;try{x=JSON.parse(decodeURIComponent(m[1]));}catch(e){throw new Error('AnimePahe: malformed episode data');}
@@ -203,4 +241,4 @@ function getVideoSources(url,opts){
 }
 function getStreams(id,opts){return getVideoSources(id,opts);}
 function getLinks(id,opts){return getVideoSources(id,opts);}
-if(typeof module!=='undefined'&&module.exports)module.exports={version:'1.0.0',getInfo:getInfo,getSettings:getSettings,getHome:getHome,popular:popular,search:search,getDetail:getDetail,getEpisodes:getEpisodes,getVideoSources:getVideoSources,getStreams:getStreams,getLinks:getLinks,_config:_config,_parseIds:_parseIds,_parseRelease:_parseRelease,_variants:_variants,_selectVariant:_selectVariant,_unpack:_unpack,_playlist:_playlist,_episodesFromMiruro:_episodesFromMiruro};
+if(typeof module!=='undefined'&&module.exports)module.exports={version:'1.0.0',getInfo:getInfo,getSettings:getSettings,getHome:getHome,popular:popular,search:search,getDetail:getDetail,getEpisodes:getEpisodes,getVideoSources:getVideoSources,getStreams:getStreams,getLinks:getLinks,_config:_config,_parseIds:_parseIds,_parseRelease:_parseRelease,_variants:_variants,_selectVariant:_selectVariant,_unpack:_unpack,_playlist:_playlist,_episodesFromMiruro:_episodesFromMiruro,_fallbackEpisodeList:_fallbackEpisodeList};
