@@ -34,7 +34,7 @@ This repository includes six integrations documented here. Choose the integratio
 | <img src="assets/icons/stremio.svg" width="24" align="middle" alt="" /> **TMDB + Stremio** | TMDB | Your configured Stremio-compatible add-ons |
 | **Miruro** | Miruro / AniList metadata | Available Miruro streaming servers |
 | **Zenkai Player** | AniMap + AniList metadata | Native MegaPlay, VidStream, and ACDN multi-audio playback |
-| <img src="https://raw.githubusercontent.com/jellyfin/jellyfin-ux/master/logos/SVG/jellyfin-icon--color-on-dark.svg" width="24" align="middle" alt="Jellyfin" /> **Jellyfin** | Jellyfin libraries and server metadata | Jellyfin or AIOStreams media server |
+| <img src="https://raw.githubusercontent.com/jellyfin/jellyfin-ux/master/logos/PNG-4x/jellyfin-icon--color-on-dark.png" width="24" align="middle" alt="Jellyfin" /> **Jellyfin** | Jellyfin libraries and server metadata | Jellyfin or AIOStreams media server |
 
 <p align="center">
   <img src="assets/provider-flow.svg" width="100%" alt="Diagram showing TMDB metadata flowing into Zangetsu separately from playback streams provided by PencariMovie, AIOStreams, or Stremio add-ons." />
@@ -246,7 +246,7 @@ See Zenkai's [stream handler](https://github.com/nyyrox2/Zenkai/blob/main/server
 </details>
 
 <details>
-<summary><img src="https://raw.githubusercontent.com/jellyfin/jellyfin-ux/master/logos/SVG/jellyfin-icon--color-on-dark.svg" width="24" align="middle" alt="" /> &nbsp; <strong>Jellyfin</strong> · Jellyfin and AIOStreams media servers</summary>
+<summary><img src="https://raw.githubusercontent.com/jellyfin/jellyfin-ux/master/logos/PNG-4x/jellyfin-icon--color-on-dark.png" width="24" align="middle" alt="" /> &nbsp; <strong>Jellyfin</strong> · Jellyfin and AIOStreams media servers</summary>
 
 ### What it does
 
