@@ -20,7 +20,7 @@ function getInfo() {
   return {
     name: 'Miruro', lang: 'en', baseUrl: 'https://www.miruro.to',
     logo: 'https://www.google.com/s2/favicons?sz=256&domain=miruro.to',
-    type: 'anime', version: '1.0.1'
+    type: 'anime', version: '1.0.2'
   };
 }
 
@@ -184,6 +184,7 @@ function _mapItem(item) {
     anilistId: id,
     isAdult: _isAdult(item),
     type: 'anime', sourceId: SOURCE_ID,
+    year: item.seasonYear != null ? String(item.seasonYear) : (item.year != null ? String(item.year) : null),
     score: item.averageScore || item.meanScore || null,
     genres: Array.isArray(item.genres) ? item.genres : []
   };
@@ -532,7 +533,7 @@ function getLinks(id, opts) { return getVideoSources(id, opts); }
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    version: '1.0.1', getInfo: getInfo, getSettings: getSettings,
+    version: '1.0.2', getInfo: getInfo, getSettings: getSettings,
     getHome: getHome, popular: popular, search: search,
     getDetail: getDetail, getEpisodes: getEpisodes,
     getVideoSources: getVideoSources, getStreams: getStreams, getLinks: getLinks,
