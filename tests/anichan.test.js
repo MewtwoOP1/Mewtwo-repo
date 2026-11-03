@@ -89,7 +89,7 @@ async function main() {
   assert.equal(search[0].cover, 'https://img.example/poster.jpg');
 
   const detail = await provider.getDetail('anichan://anime/123', {});
-  assert.equal(detail.title, 'Mock Anime');
+  assert.equal(detail.title, 'Mock Anime (2026)');
   assert.equal(detail.status, 'ongoing');
   assert.equal(detail.episodes.length, 4);
   assert.equal(detail.subCount, 2);
