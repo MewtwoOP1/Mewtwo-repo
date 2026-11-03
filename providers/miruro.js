@@ -20,7 +20,7 @@ function getInfo() {
   return {
     name: 'Miruro', lang: 'en', baseUrl: 'https://www.miruro.to',
     logo: 'https://www.google.com/s2/favicons?sz=256&domain=miruro.to',
-    type: 'anime', version: '1.0.2'
+    type: 'anime', version: '1.0.3'
   };
 }
 
@@ -246,52 +246,43 @@ function _providerNames(providers, order) {
   });
 }
 function _episodeOptions(providerName, episode, category, animeId) {
-  var rawId = String(episode && (episode.id || episode.url) || '');
-  var slug = rawId.split('/').pop();
-  if (!slug) slug = providerName + '-' + String(episode.number || '');
-  return {
-    provider: providerName,
-    slug: slug,
-    route: rawId.indexOf('watch/') === 0 ? rawId : ('watch/' + providerName + '/' + animeId + '/' + category + '/' + slug)
-  };
+  var rawId = String(episode && (episode.id || episode.url) || '').trim();
+  if (!rawId) return null;
+  if (/^https?:\/\//i.test(rawId)) {
+    return { provider: providerName, slug: rawId.split('/').pop() || '', route: rawId, direct: true };
+  }
+  var route = rawId.replace(/^\/+/, '');
+  if (route.indexOf('watch/') !== 0) return null;
+  var parts = route.split('/');
+  if (parts.length < 5 || !parts[1] || !parts[2] || !parts[3] || !parts[4]) return null;
+  return { provider: providerName, slug: parts.slice(4).join('/'), route: route, direct: false };
 }
 function _buildEpisodes(animeId, payload) {
   var cfg = _config();
   var providers = payload && payload.providers || {};
 
-  // Some API mirrors return the shared episode list as data[] rather than
-  // the older per-server providers object. Rebuild provider choices from that
-  // list while preserving the API's episode title, thumbnail and air date.
+  // Some mirrors return a metadata-only data[] inventory instead of
+  // provider-specific watch IDs. Keep those episodes visible, but do not
+  // manufacture provider names or watch URLs that will predictably 404.
   if (!Object.keys(providers).length && payload && Array.isArray(payload.data)) {
-    var sharedRows = payload.data.filter(function (ep) {
-      return ep && (ep.kind == null || String(ep.kind).toLowerCase() === 'regular');
-    }).map(function (ep) {
+    var inventory = { sub: [], dub: [] };
+    payload.data.forEach(function (ep) {
+      if (!ep || (ep.kind != null && String(ep.kind).toLowerCase() !== 'regular')) return;
       var number = Number(ep.episode_number || ep.number || ep.episode || ep.ep);
-      if (!(number > 0) || !isFinite(number)) return null;
-      return {
+      if (!(number > 0) || !isFinite(number)) return;
+      var category = String(ep.category || ep.audio || 'sub').toLowerCase() === 'dub' ? 'dub' : 'sub';
+      inventory[category].push({
         number: number,
         title: ep.title || ('Episode ' + number),
         image: ep.thumbnail_url || ep.thumbnail || ep.image || null,
-        airDate: ep.aired_on || ep.airDate || ep.aired || null,
-        filler: !!ep.filler,
-        slug: ep.slug || ep.id || ('episode-' + number)
-      };
-    }).filter(Boolean);
-
-    if (sharedRows.length) {
-      DEFAULT_PROVIDER_ORDER.forEach(function (provider) {
-        if (cfg.disabledProviders.indexOf(provider) >= 0) return;
-        providers[provider] = { episodes: { sub: sharedRows.map(function (ep) {
-          return {
-            number: ep.number,
-            title: ep.title,
-            image: ep.image,
-            airDate: ep.airDate,
-            filler: ep.filler,
-            id: 'watch/' + provider + '/' + animeId + '/sub/' + encodeURIComponent(String(ep.slug))
-          };
-        }), dub: [] } };
+        airDate: ep.aired_on || ep.airDate || ep.aired || ep.date || null,
+        description: typeof ep.description === 'string' ? ep.description : '',
+        duration: ep.duration || null,
+        filler: !!ep.filler
       });
+    });
+    if (inventory.sub.length || inventory.dub.length) {
+      providers = { __inventory__: { episodes: inventory } };
     }
   }
   var names = _providerNames(providers, cfg.providerOrder);
@@ -320,7 +311,8 @@ function _buildEpisodes(animeId, payload) {
         if (!target.title && ep.title) target.title = ep.title;
         if (!target.thumbnail && (ep.image || ep.thumbnail || ep.thumbnail_url)) target.thumbnail = ep.image || ep.thumbnail || ep.thumbnail_url;
         if (!target.date && (ep.airDate || ep.aired_on || ep.aired)) target.date = ep.airDate || ep.aired_on || ep.aired;
-        target._options.push(_episodeOptions(name, ep, category, animeId));
+        var option = _episodeOptions(name, ep, category, animeId);
+        if (option) target._options.push(option);
       });
     });
   });
@@ -492,6 +484,17 @@ function _watchPaths(episode, option) {
   ];
 }
 function _tryProviderPaths(episode, option, paths, index) {
+  if (option && option.direct) {
+    return Promise.resolve([{
+      url: option.route,
+      quality: 'Auto',
+      label: 'Direct episode URL · ' + option.provider,
+      container: /\\.mpd(?:[?#]|$)/i.test(option.route) ? 'dash' : (/\\.m3u8(?:[?#]|$)/i.test(option.route) ? 'hls' : 'mp4'),
+      type: 'direct', kind: episode.category,
+      audioLang: episode.category === 'dub' ? 'en' : 'ja',
+      headers: {}, subtitles: []
+    }]);
+  }
   if (index >= paths.length) return Promise.reject(new Error('No stream endpoint returned playable sources for ' + option.provider));
   return _apiGet(paths[index], { noCache: true, cacheMs: 0 }).then(function (payload) {
     var streams = _mapStreams(payload, option.provider);
@@ -533,7 +536,7 @@ function getLinks(id, opts) { return getVideoSources(id, opts); }
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    version: '1.0.2', getInfo: getInfo, getSettings: getSettings,
+    version: '1.0.3', getInfo: getInfo, getSettings: getSettings,
     getHome: getHome, popular: popular, search: search,
     getDetail: getDetail, getEpisodes: getEpisodes,
     getVideoSources: getVideoSources, getStreams: getStreams, getLinks: getLinks,
