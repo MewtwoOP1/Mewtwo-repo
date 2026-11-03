@@ -7,7 +7,7 @@ var DEFAULT_MIRURO_HOSTS = ['https://api.hiyori.tv','https://miruro.zenos.my.id'
 var CACHE = {};
 var SESSIONS = {};
 
-function getInfo(){return {name:'AnimePahe',lang:'en',baseUrl:SITE,logo:'https://www.google.com/s2/favicons?sz=256&domain=animepahe.pw',type:'anime',version:'1.0.1'};}
+function getInfo(){return {name:'AnimePahe',lang:'en',baseUrl:SITE,logo:'https://www.google.com/s2/favicons?sz=256&domain=animepahe.pw',type:'anime',version:'1.0.2'};}
 function getSettings(){
  return [
   {key:'audioMode',label:'Audio tracks',description:'Show both SUB and DUB when available, or filter to one track.',type:'enum',default:'both',options:[{value:'both',label:'Sub and dub'},{value:'sub',label:'Sub only'},{value:'dub',label:'Dub only'}]},
@@ -103,7 +103,8 @@ function _fallbackEpisodeList(id,media){
  var count=Math.max(0,Math.min(500,Number(media&&media.episodes)||0)),out=[];
  if(_config().audioMode==='dub')return out;
  for(var n=1;n<=count;n++){
-  var slug='animepahe-'+n,route='watch/kiwi/'+id+'/sub/'+slug,encoded=_episodeUrl(id,n,'sub',slug,route);
+  // Inventory only. Playback must use a real source ID returned by Miruro.
+  var encoded=_episodeUrl(id,n,'sub','','');
   out.push({id:encoded,url:encoded,number:n,title:'Episode '+n,thumbnail:null,date:null,type:'anime',sourceId:SOURCE_ID,category:'sub'});
  }
  return out;
@@ -219,19 +220,16 @@ function _directSources(media,episode){
   });
  });
 }
-function _mirrorStreams(episode){
- var encoded=episode.route||('watch/kiwi/'+episode.id+'/'+episode.category+'/animepahe-'+episode.number);
- var routes=[encoded,'stream?provider=kiwi&anilistId='+episode.id+'&category='+episode.category+'&slug='+encodeURIComponent(episode.slug||('animepahe-'+episode.number))+'&quality='+encodeURIComponent(_config().quality),'sources?episodeId='+encodeURIComponent(encoded)+'&provider=kiwi&anilistId='+episode.id+'&category='+episode.category];
- var i=0,last=null;
- function next(){if(i>=routes.length)return Promise.reject(last||new Error('Miruro/Kiwi fallback has no streams'));var route=routes[i++];
-  return _mirrorGet(route).then(function(payload){var data=_unwrap(payload),rows=Array.isArray(data.streams)?data.streams:(data.bestStream?[data.bestStream]:[]);var streams=rows.filter(function(x){return x&&/^https?:\/\//i.test(String(x.url||''));}).map(function(x){var headers=Object.assign({},x.headers||{});if(x.referer&&!headers.Referer&&!headers.referer)headers.Referer=String(x.referer);return {url:x.url,container:/\.mpd(?:[?#]|$)/i.test(x.url)?'dash':(/\.m3u8(?:[?#]|$)/i.test(x.url)||x.type==='hls'?'hls':undefined),type:x.type||x.format,quality:x.quality||x.label||'Auto',label:(x.quality||x.label||'Auto')+' · Kiwi fallback',kind:episode.category,audioLang:episode.category==='dub'?'en':'ja',headers:headers,referer:x.referer||undefined,subtitles:[]};});
-   if(!streams.length)throw new Error('Kiwi fallback route returned no streams: '+route);
-   if(data.subtitles&&Array.isArray(data.subtitles))streams[0].subtitles=data.subtitles.filter(function(x){return x&&(x.url||x.file);}).map(function(x){return {url:x.url||x.file,label:x.label||x.language||'Subtitle',lang:x.language||x.lang||'',format:x.format||'vtt'};});
-   return streams;
-  }).catch(function(e){last=e;return next();});
- }
- return next();
-}
+
+var MIRURO_FALLBACK_HOSTS=['https://api.hiyori.tv','https://miruro.zenos.my.id','https://www.neoanime.tv'];
+var MIRURO_PROVIDER_ORDER=['kiwi','animepahe','arc','zoro','jet','bee','bonk','hop','pewe','ally','nun','bun','twin','cog','moo','sun','knob','telli'];
+function _mfRoot(v){var r=v||{};for(var i=0;i<3&&r&&typeof r==='object'&&!Array.isArray(r);i++){if(r.results&&typeof r.results==='object'&&!Array.isArray(r.results))r=r.results;else if(r.data&&typeof r.data==='object'&&!Array.isArray(r.data)&&(r.data.providers||r.data.streams))r=r.data;else break;}return r||{};}
+function _mfGet(host,path){var url=String(host).replace(/\/+$/,'')+'/'+String(path).replace(/^\/+/, '');return fetch(url,{headers:{'Accept':'application/json','User-Agent':'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/131.0.0.0 Mobile Safari/537.36'},timeoutMs:10000}).then(function(r){var status=Number(r&&r.status||0),body=r&&r.body!=null?r.body:'';if(status<200||status>=300)throw new Error('HTTP '+status+' from '+url);if(typeof body!=='string')body=String(body||'');if(!body&&r&&typeof r.text==='function')return r.text().then(function(t){try{return JSON.parse(t||'null');}catch(e){throw new Error('Invalid JSON from '+url);}});try{return JSON.parse(body||'null');}catch(e){throw new Error('Invalid JSON from '+url);}});}
+function _mfOptions(payload,num,cat){var root=_mfRoot(payload),providers=root.providers||{},names=Object.keys(providers);names.sort(function(a,b){var ai=MIRURO_PROVIDER_ORDER.indexOf(String(a).toLowerCase()),bi=MIRURO_PROVIDER_ORDER.indexOf(String(b).toLowerCase());if(ai<0)ai=999;if(bi<0)bi=999;return ai===bi?a.localeCompare(b):ai-bi;});var out=[];names.forEach(function(name){var p=providers[name]||{},lists=p.episodes||p,cats=cat==='dub'?['dub']:['sub','hsub'];cats.forEach(function(c){var rows=Array.isArray(lists[c])?lists[c]:[];rows.forEach(function(e){if(!e||Number(e.number||e.episode||e.ep)!==Number(num))return;var id=String(e.id||e.url||'').trim();if(!id)return;if(/^https?:\/\//i.test(id)){out.push({provider:name,route:id,direct:true});return;}id=id.replace(/^\/+/, '');if(id.indexOf('watch/')!==0)return;out.push({provider:name,route:id,direct:false,slug:id.split('/').pop()||''});});});});var seen={};return out.filter(function(o){var k=o.provider+'|'+o.route;if(seen[k])return false;seen[k]=1;return true;});}
+function _mfStreams(payload,provider,cat){var root=_mfRoot(payload),rows=Array.isArray(root)?root:(Array.isArray(root.streams)?root.streams:(root.bestStream&&root.bestStream.url?[root.bestStream].concat(root.streams||[]):(root.stream&&root.stream.url?[root.stream]:[]))),subs=Array.isArray(root.subtitles)?root.subtitles:[],out=rows.map(function(x){if(!x)return null;var u=String(x.url||x.file||'').trim();if(!/^https?:\/\//i.test(u))return null;var h={};if(x.headers&&typeof x.headers==='object')Object.keys(x.headers).forEach(function(k){h[k]=String(x.headers[k]);});var ref=x.referer||x.referrer||null;if(ref&&!h.Referer&&!h.referer)h.Referer=String(ref);var t=String(x.type||x.format||'').toLowerCase(),ct=/\.mpd(?:[?#]|$)/i.test(u)||t==='dash'?'dash':(/\.m3u8(?:[?#]|$)/i.test(u)||t==='hls'?'hls':(/\.mp4(?:[?#]|$)/i.test(u)||t==='mp4'?'mp4':undefined));return {url:u,container:ct,type:x.type||x.format||ct,quality:x.quality||x.label||x.name||'Auto',label:(x.quality||x.label||x.name||'Auto')+' · Miruro ('+provider+')',kind:cat,audioLang:cat==='dub'?'en':'ja',headers:h,referer:ref||undefined,subtitles:[]};}).filter(Boolean);if(out.length&&subs.length)out[0].subtitles=subs.map(function(s){if(!s)return null;var u=String(s.url||s.file||'');if(!/^https?:\/\//i.test(u))return null;return {url:u,label:s.label||s.title||s.language||'Subtitle',lang:s.language||s.lang||'',format:s.format||'vtt'};}).filter(Boolean);return out;}
+function _miruroFallback(id,num,cat,label,hostOverride){var hosts=Array.isArray(hostOverride)&&hostOverride.length?hostOverride.slice():MIRURO_FALLBACK_HOSTS.slice(),last=null;function hostAt(i){if(i>=hosts.length)return Promise.reject(last||new Error(label+': no Miruro host responded'));var host=String(hosts[i]).replace(/\/+$/,'');return _mfGet(host,'episodes/'+encodeURIComponent(String(id))).then(function(payload){var opts=_mfOptions(payload,num,cat);if(!opts.length)throw new Error(label+': Miruro has no real provider episode ID for episode '+num+' ('+cat+')');var optError=null;function optionAt(j){if(j>=opts.length)return Promise.reject(optError||new Error(label+': no playable Miruro provider'));var o=opts[j];if(o.direct)return Promise.resolve([{url:o.route,container:/\.m3u8/i.test(o.route)?'hls':(/\.mpd/i.test(o.route)?'dash':'mp4'),quality:'Auto',label:'Miruro direct ('+o.provider+')',kind:cat,audioLang:cat==='dub'?'en':'ja',headers:{},subtitles:[]}]);var routes=[o.route,'stream?provider='+encodeURIComponent(o.provider)+'&anilistId='+encodeURIComponent(String(id))+'&category='+encodeURIComponent(cat)+'&slug='+encodeURIComponent(o.slug),'sources?episodeId='+encodeURIComponent(o.route)+'&provider='+encodeURIComponent(o.provider)+'&anilistId='+encodeURIComponent(String(id))+'&category='+encodeURIComponent(cat)];function routeAt(k){if(k>=routes.length)return Promise.reject(optError||new Error('Miruro route failed: '+o.provider));return _mfGet(host,routes[k]).then(function(v){var streams=_mfStreams(v,o.provider,cat);if(!streams.length)throw new Error('No streams from '+o.provider);return streams;}).catch(function(e){optError=e;return routeAt(k+1);});}return routeAt(0).catch(function(e){optError=e;return optionAt(j+1);});}return optionAt(0);}).catch(function(e){last=e;return hostAt(i+1);});}return hostAt(0);}
+
+function _mirrorStreams(episode){return _miruroFallback(episode.id,episode.number,episode.category,'AnimePahe',_config().hosts);}
 function getVideoSources(url,opts){
  var episode=_decodeEpisode(url);
  return _media(episode.id).then(function(media){
@@ -241,4 +239,4 @@ function getVideoSources(url,opts){
 }
 function getStreams(id,opts){return getVideoSources(id,opts);}
 function getLinks(id,opts){return getVideoSources(id,opts);}
-if(typeof module!=='undefined'&&module.exports)module.exports={version:'1.0.1',getInfo:getInfo,getSettings:getSettings,getHome:getHome,popular:popular,search:search,getDetail:getDetail,getEpisodes:getEpisodes,getVideoSources:getVideoSources,getStreams:getStreams,getLinks:getLinks,_config:_config,_parseIds:_parseIds,_parseRelease:_parseRelease,_variants:_variants,_selectVariant:_selectVariant,_unpack:_unpack,_playlist:_playlist,_episodesFromMiruro:_episodesFromMiruro,_fallbackEpisodeList:_fallbackEpisodeList};
+if(typeof module!=='undefined'&&module.exports)module.exports={version:'1.0.2',getInfo:getInfo,getSettings:getSettings,getHome:getHome,popular:popular,search:search,getDetail:getDetail,getEpisodes:getEpisodes,getVideoSources:getVideoSources,getStreams:getStreams,getLinks:getLinks,_config:_config,_parseIds:_parseIds,_parseRelease:_parseRelease,_variants:_variants,_selectVariant:_selectVariant,_unpack:_unpack,_playlist:_playlist,_episodesFromMiruro:_episodesFromMiruro,_fallbackEpisodeList:_fallbackEpisodeList};
