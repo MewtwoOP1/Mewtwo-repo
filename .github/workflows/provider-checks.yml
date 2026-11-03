@@ -1,0 +1,33 @@
+name: Provider checks
+
+on:
+  push:
+    branches:
+      - feat/top-anime-providers
+      - feat/miruro-multi-server
+  pull_request:
+    branches:
+      - feat/top-anime-providers
+      - feat/miruro-multi-server
+
+jobs:
+  provider-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Check provider JavaScript syntax
+        run: |
+          node --check providers/anichan.js
+          node --check providers/animepahe.js
+          node --check providers/xfdm.js
+          node --check providers/miruro.js
+
+      - name: Run provider contract regression tests
+        run: node --test tests/provider-contract.test.cjs
