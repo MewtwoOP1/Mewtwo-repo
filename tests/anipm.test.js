@@ -131,9 +131,9 @@ global.fetch = async function(url, options) {
 };
 
 async function main() {
-  assert.equal(provider.version, "1.0.0");
+  assert.equal(provider.version, "1.0.1");
   assert.equal(provider.getInfo().name, "Ani.pm");
-  assert.equal(provider.getInfo().version, "1.0.0");
+  assert.equal(provider.getInfo().version, "1.0.1");
   assert.equal(provider.getInfo().baseUrl, "https://ani.pm");
   assert.deepEqual(provider.getSettings(), []);
   assert.deepEqual(await provider.getHome({}), []);
