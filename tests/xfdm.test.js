@@ -102,7 +102,7 @@ async function main() {
   assert.equal(search[0].url, 'xfdm://anime/9001');
 
   const detail = await provider.getDetail('xfdm://anime/9001', {});
-  assert.equal(detail.title, 'Mock Anime');
+  assert.equal(detail.title, 'Mock Anime (2024)');
   assert.equal(detail.episodes.length, 2, 'episodes are deduplicated across mirrors/channels');
   assert.deepEqual(detail.episodes.map((x) => x.number), [1, 2]);
   assert.equal(detail.subCount, 2);
