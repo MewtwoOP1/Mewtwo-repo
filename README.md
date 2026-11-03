@@ -250,22 +250,57 @@ See Zenkai's [stream handler](https://github.com/nyyrox2/Zenkai/blob/main/server
 
 ### What it does
 
-Connects directly to your Jellyfin server. Browse libraries, search movies and series, view title metadata and episodes, and play media using the server's playback endpoints. This integration does not provide a hosted catalogue or third-party media sources.
+Connects to your own Jellyfin server using a normal Jellyfin account or an API key. Browse each accessible library, search titles, open movie and series details, load a show's episode list, and request direct-play or server-transcoded playback with available subtitles.
 
 ### Setup
 
-1. In the Jellyfin Dashboard, open **API Keys** and create an API key.
-2. Install **Jellyfin** from this repository in Zangetsu.
-3. Open **Jellyfin → Settings** and enter your server base URL (for example, `https://jellyfin.example.com`) and API key. Do not add `/web` or `/api` to the URL.
-4. Save the settings. The source discovers your accessible user when User ID is blank; provide a user ID to pin a specific account.
-5. Open a library or search for a title. Open a series to load its episodes, then select an episode to request its playback source from your server.
+1. Make sure your Jellyfin server is reachable from the device running Zangetsu. For remote access, use HTTPS and a trusted reverse proxy or your own secure remote-access setup.
+2. Install **Jellyfin** from this repository in Zangetsu and open **Jellyfin → Settings**.
+3. Enter your server's base address. Examples: `http://192.168.1.20:8096` on your home network, or `https://media.example.com` behind HTTPS. A reverse-proxy subpath is supported. Do not add `/web` or `/api`.
+4. Enter your Jellyfin **username** and **password**. The provider uses Jellyfin's `/Users/AuthenticateByName` login endpoint and automatically takes the authenticated account's user ID.
+5. Leave **API key** blank when using username/password. Alternatively, provide an API key instead of credentials. With API-key authentication, enter **User ID** if the key cannot list users.
+6. Save the settings and open Jellyfin. The Home catalogue can show Continue Watching, Next Up, Recently Added, Favorites, and each supported library.
 
-### Notes
+### Settings
 
-- Keep the API key private. It is sent only to the server URL you configure.
-- Use HTTPS when connecting outside your trusted local network.
-- Playback requires your Jellyfin server to be reachable by the device running Zangetsu. The player must support the format returned by your server; transcoding support depends on the server and client capabilities.
-- This integration uses Jellyfin's authenticated item, library, episode, image, and playback-info APIs.
+| Setting | What it controls |
+|:--|:--|
+| **Server address** | Jellyfin base URL, including an optional reverse-proxy subpath |
+| **Username / Password** | Standard Jellyfin user login. Credentials are used only for the configured server |
+| **API key** | Optional alternative to username/password |
+| **User ID** | Optional account override; username/password login discovers it automatically |
+| **Catalogue page size** | 25, 50, or 100 results per catalogue/search page |
+| **Home catalogue sections** | Independently enable Continue Watching, Next Up, Recently Added, Favorites, and Libraries |
+| **Catalogue content types** | Movies, series, episodes, and trailers |
+| **Library sorting** | Recently added, title, community rating, release date, or random |
+| **Genre / Release year filters** | Optional comma-separated genre names and/or years, applied to catalogue and search results |
+| **Include watched items** | Include or exclude played items in normal catalogue feeds |
+| **Show collection libraries** | Include additional collection-style library views |
+| **Prefer Jellyfin transcoding** | Put a server-provided HLS transcode before direct play when available |
+| **Maximum streaming bitrate** | Auto, 8, 16, 25, or 40 Mbps for the server playback-info request |
+| **Return subtitle tracks** | Include embedded/external subtitle tracks returned by Jellyfin |
+| **Artwork width** | Request smaller or larger poster/backdrop images |
+| **Catalogue cache** | Disable cache or use a 15-second, 30-second, or 1-minute in-memory cache |
+| **Server request timeout** | 5, 10, 15, or 20 seconds per Jellyfin API request |
+
+### Playback and compatibility
+
+- Zangetsu requests Jellyfin playback information for the selected movie or episode, then exposes the returned direct stream and any server-provided transcoding URL.
+- Authentication headers are attached to artwork, playback, and subtitle requests. The access token is not added to the normal direct-play URL.
+- Jellyfin decides whether a file can be direct-played, remuxed, or transcoded. HLS transcoding requires the Jellyfin server and its FFmpeg setup to be healthy.
+- The Zangetsu player must support the returned container/codec. Direct play does not convert an unsupported codec; use the transcoding preference when the server supplies an HLS transcode.
+- External subtitle paths and embedded subtitle stream metadata are passed through when Jellyfin reports them.
+- A title appearing in the catalogue does not guarantee that the server can currently play it. Server permissions, storage availability, codec support, and network reachability still apply.
+
+### Troubleshooting
+
+- **401 / invalid login:** verify the username and password against the Jellyfin web client and confirm the server address is correct.
+- **API-key login cannot find a user:** enter the Jellyfin User ID explicitly, or use username/password authentication.
+- **Libraries are empty:** confirm that the account can access the libraries, then check that the server URL is reachable from the device.
+- **Playback opens but does not start:** check Jellyfin Dashboard activity and logs. Try disabling the transcode preference for direct play, or enable it when the client cannot play the original codec.
+- **Remote images or subtitles fail:** ensure the reverse proxy forwards Jellyfin's API, image, video, and subtitle routes and that the device can reach the same server address.
+
+**Security:** Jellyfin passwords and API keys are private credentials. Use HTTPS outside your trusted LAN, do not share screenshots or exports containing them, and do not embed credentials in the server URL.
 
 </details>
 
