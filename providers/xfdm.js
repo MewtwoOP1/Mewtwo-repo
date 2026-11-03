@@ -181,7 +181,7 @@ function getVideoSources(url,opts){
   if(!rows.length)throw new Error('XFDM episode '+ep+' is not in the catalogue');
   return _resolveChannels(rows);
  }).then(function(rows){
-  return rows.map(function(x,i){return {url:x.url,container:/\.m3u8(?:[?#]|$)/i.test(x.url)?'hls':'mp4',type:/\.m3u8(?:[?#]|$)/i.test(x.url)?'hls':'mp4',quality:'Mirror '+(i+1)+' ('+String(x.host||'source').split('.')[0]+')',label:'Mirror '+(i+1)+' ('+String(x.host||'source').split('.')[0]+')',headers:{},referer:undefined,kind:'sub',audioLang:'zh',subtitles:[],isActive:i===0};});
+  return rows.map(function(x,i){return {url:x.url,container:/\.m3u8(?:[?#]|$)/i.test(x.url)?'hls':'mp4',type:/\.m3u8(?:[?#]|$)/i.test(x.url)?'hls':'mp4',quality:'Mirror '+(i+1)+' ('+String(x.host||'source').split('.')[0]+')',label:'Mirror '+(i+1)+' ('+String(x.host||'source').split('.')[0]+')',headers:{},referer:undefined,kind:'sub',audioLang:'ja',subtitles:[],isActive:i===0};});
  });
 }
 function getStreams(id,opts){return getVideoSources(id,opts);}
