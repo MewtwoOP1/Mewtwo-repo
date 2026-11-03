@@ -73,9 +73,9 @@ function _mirrorEpisodes(id,force){
 }
 function getDetail(url,opts){
  var id=_id(url);
- return Promise.all([_media(id),_mirrorEpisodes(id,opts&&opts.forceRefresh)]).then(function(r){var out=_item(r[0]);out.episodes=r[1];out.subCount=out.episodes.filter(function(x){return x.category==='sub';}).length;out.dubCount=out.episodes.filter(function(x){return x.category==='dub';}).length;return out;});
+ return Promise.all([_media(id),_mirrorEpisodes(id,opts&&opts.forceRefresh).catch(function(e){console.warn('AnimePahe episode catalogue unavailable',String(e));return [];})]).then(function(r){var out=_item(r[0]);out.episodes=r[1];out.subCount=out.episodes.filter(function(x){return x.category==='sub';}).length;out.dubCount=out.episodes.filter(function(x){return x.category==='dub';}).length;return out;});
 }
-function getEpisodes(url,opts){return _mirrorEpisodes(_id(url),opts&&opts.forceRefresh);}
+function getEpisodes(url,opts){return _mirrorEpisodes(_id(url),opts&&opts.forceRefresh).catch(function(e){console.warn('AnimePahe episode lookup failed',String(e));return [];});}
 function _decodeEpisode(url){
  var m=String(url||'').match(/^animepahe:\/\/episode\/(.+)$/i);if(!m)throw new Error('AnimePahe: invalid episode URL');
  var x;try{x=JSON.parse(decodeURIComponent(m[1]));}catch(e){throw new Error('AnimePahe: malformed episode data');}
@@ -176,7 +176,7 @@ function _mirrorStreams(episode){
  var routes=[encoded,'stream?provider=kiwi&anilistId='+episode.id+'&category='+episode.category+'&slug='+encodeURIComponent(episode.slug||('animepahe-'+episode.number))+'&quality='+encodeURIComponent(_config().quality),'sources?episodeId='+encodeURIComponent(encoded)+'&provider=kiwi&anilistId='+episode.id+'&category='+episode.category];
  var i=0,last=null;
  function next(){if(i>=routes.length)return Promise.reject(last||new Error('Miruro/Kiwi fallback has no streams'));var route=routes[i++];
-  return _mirrorGet(route).then(function(payload){var data=_unwrap(payload),rows=Array.isArray(data.streams)?data.streams:(data.bestStream?[data.bestStream]:[]);var streams=rows.filter(function(x){return x&&/^https?:\/\//i.test(String(x.url||''));}).map(function(x){var h=Number(String(x.quality||x.label||'').match(/(\d{3,4})p/i)?.[1])||0;return {url:x.url,container:/\.mpd(?:[?#]|$)/i.test(x.url)?'dash':(/\.m3u8(?:[?#]|$)/i.test(x.url)||x.type==='hls'?'hls':undefined),type:x.type||x.format,quality:x.quality||x.label||'Auto',label:(x.quality||x.label||'Auto')+' · Kiwi fallback',kind:episode.category,audioLang:episode.category==='dub'?'en':'ja',headers:x.headers||{},referer:x.referer||undefined,subtitles:[]};});
+  return _mirrorGet(route).then(function(payload){var data=_unwrap(payload),rows=Array.isArray(data.streams)?data.streams:(data.bestStream?[data.bestStream]:[]);var streams=rows.filter(function(x){return x&&/^https?:\/\//i.test(String(x.url||''));}).map(function(x){return {url:x.url,container:/\.mpd(?:[?#]|$)/i.test(x.url)?'dash':(/\.m3u8(?:[?#]|$)/i.test(x.url)||x.type==='hls'?'hls':undefined),type:x.type||x.format,quality:x.quality||x.label||'Auto',label:(x.quality||x.label||'Auto')+' · Kiwi fallback',kind:episode.category,audioLang:episode.category==='dub'?'en':'ja',headers:x.headers||{},referer:x.referer||undefined,subtitles:[]};});
    if(!streams.length)throw new Error('Kiwi fallback route returned no streams: '+route);
    if(data.subtitles&&Array.isArray(data.subtitles))streams[0].subtitles=data.subtitles.filter(function(x){return x&&(x.url||x.file);}).map(function(x){return {url:x.url||x.file,label:x.label||x.language||'Subtitle',lang:x.language||x.lang||'',format:x.format||'vtt'};});
    return streams;
