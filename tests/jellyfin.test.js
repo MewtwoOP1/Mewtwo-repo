@@ -20,7 +20,7 @@ global.__settings = {
     includePlayed: false,
     genreFilter: 'Drama',
     yearFilter: '2024',
-    showCollections: false,
+    showCollections: true,
     preferTranscoding: false,
     maxBitrate: '16000000',
     includeSubtitles: true,
@@ -30,9 +30,15 @@ global.__settings = {
   }
 };
 
-const itemsForLibrary = (parentId) => parentId === 'movies-library'
-  ? [{ Id: 'movie-1', Name: 'Test Movie', Type: 'Movie', ProductionYear: 2024, Overview: 'A movie synopsis', CommunityRating: 8.2, ImageTags: { Primary: 'poster-tag' }, BackdropImageTags: ['backdrop-tag'] }]
-  : [{ Id: 'series-1', Name: 'Test Series', Type: 'Series', ProductionYear: 2020, Overview: 'A series synopsis', ImageTags: { Primary: 'series-tag' } }];
+const itemsForLibrary = (parentId) => {
+  if (parentId === 'movies-library') return [{ Id: 'movie-1', Name: 'Test Movie', Type: 'Movie', ProductionYear: 2024, Overview: 'A movie synopsis', CommunityRating: 8.2, ImageTags: { Primary: 'poster-tag' }, BackdropImageTags: ['backdrop-tag'] }];
+  if (parentId === 'collection-library') return [{ Id: 'boxset-1', Name: 'Collection', Type: 'BoxSet', Overview: 'A movie collection', ImageTags: { Primary: 'collection-tag' } }];
+  if (parentId === 'boxset-1') return [
+    { Id: 'movie-1', Name: 'Test Movie', Type: 'Movie', ProductionYear: 2024 },
+    { Id: 'series-1', Name: 'Test Series', Type: 'Series', ProductionYear: 2020 }
+  ];
+  return [{ Id: 'series-1', Name: 'Test Series', Type: 'Series', ProductionYear: 2020, Overview: 'A series synopsis', ImageTags: { Primary: 'series-tag' } }];
+};
 
 global.fetch = async (url, init = {}) => {
   const parsed = new URL(String(url));
@@ -65,7 +71,8 @@ global.fetch = async (url, init = {}) => {
     assert.equal(parsed.searchParams.get('userId'), 'user-1');
     return { status: 200, body: JSON.stringify({ Items: [
       { Id: 'movies-library', Name: 'Movies', CollectionType: 'movies' },
-      { Id: 'shows-library', Name: 'TV Shows', CollectionType: 'tvshows' }
+      { Id: 'shows-library', Name: 'TV Shows', CollectionType: 'tvshows' },
+      { Id: 'collection-library', Name: 'Collections', CollectionType: 'boxsets' }
     ] }) };
   }
 
@@ -82,7 +89,9 @@ global.fetch = async (url, init = {}) => {
   }
 
   if (pathName === '/jellyfin/Users/user-1/Items' && parsed.searchParams.has('ParentId')) {
-    return { status: 200, body: JSON.stringify({ Items: itemsForLibrary(parsed.searchParams.get('ParentId')) }) };
+    const parentId = parsed.searchParams.get('ParentId');
+    if (parentId === 'collection-library') assert.match(parsed.searchParams.get('IncludeItemTypes'), /BoxSet/);
+    return { status: 200, body: JSON.stringify({ Items: itemsForLibrary(parentId) }) };
   }
 
   if (pathName === '/jellyfin/Users/user-1/Items' && parsed.searchParams.getAll('Filters').includes('IsFavorite')) {
@@ -105,6 +114,13 @@ global.fetch = async (url, init = {}) => {
     return { status: 200, body: JSON.stringify({ Items: [
       { Id: 'latest-1', Name: 'Recently Added Movie', Type: 'Movie' }
     ] }) };
+  }
+
+  if (pathName === '/jellyfin/Users/user-1/Items/boxset-1') {
+    return { status: 200, body: JSON.stringify({
+      Id: 'boxset-1', Name: 'Collection', Type: 'BoxSet',
+      Overview: 'A movie collection', ImageTags: { Primary: 'collection-tag' }
+    }) };
   }
 
   if (pathName === '/jellyfin/Users/user-1/Items/series-1') {
@@ -176,6 +192,7 @@ async function main() {
   assert.deepEqual(provider.getSettings().map((x) => x.key), source.settings.map((x) => x.key));
   assert.ok(provider.getSettings().some((x) => x.key === 'password'));
   assert.ok(provider.getSettings().some((x) => x.key === 'catalogSections' && x.type === 'multiEnum'));
+  assert.ok(provider.getSettings().find((x) => x.key === 'contentTypes').options.some((x) => x.value === 'BoxSet'));
   assert.equal(provider._config().server, 'https://jf.example.test/jellyfin');
 
   const home = await provider.getHome();
@@ -186,6 +203,9 @@ async function main() {
   assert.ok(titles.includes('Favorites'));
   assert.ok(titles.includes('Movies'));
   assert.ok(titles.includes('TV Shows'));
+  assert.ok(titles.includes('Collections'));
+  const collectionRow = home.find((row) => row.title === 'Collections');
+  assert.equal(collectionRow.items[0].url, 'jellyfin://boxset-1?collection=1');
   const movieRow = home.find((row) => row.title === 'Movies');
   assert.equal(movieRow.items[0].url, 'jellyfin://movie-1');
   assert.equal(movieRow.items[0].score, 82);
@@ -196,6 +216,14 @@ async function main() {
   assert.equal(search[0].jellyfinType, 'series');
   const searchRequest = requests.find((r) => new URL(r.url).searchParams.get('SearchTerm') === 'Test');
   assert.equal(new URL(searchRequest.url).searchParams.get('StartIndex'), '25');
+
+  const collection = await provider.getDetail('jellyfin://boxset-1?collection=1');
+  assert.equal(collection.title, 'Collection');
+  assert.equal(collection.episodes.length, 2);
+  assert.equal(collection.episodes[0].url, 'jellyfin://movie-1');
+  assert.equal(collection.episodes[1].url, 'jellyfin://series-1');
+  const collectionEpisodes = await provider.getEpisodes('jellyfin://boxset-1?collection=1');
+  assert.equal(collectionEpisodes.length, 2);
 
   const detail = await provider.getDetail('jellyfin://series-1');
   assert.equal(detail.description, 'Series synopsis');
