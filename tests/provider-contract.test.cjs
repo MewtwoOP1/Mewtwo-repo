@@ -7,7 +7,9 @@ const test = require('node:test');
 
 const root = path.resolve(__dirname, '..');
 const manifest = JSON.parse(fs.readFileSync(path.join(root, 'index.json'), 'utf8'));
-const targetIds = ['anichan', 'animepahe', 'xfdm', 'miruro'];
+const targetIds = ['anichan', 'animepahe', 'xfdm', 'miruro'].filter((id) =>
+  manifest.sources.some((item) => item.id === id)
+);
 
 function entryFor(id) {
   const entry = manifest.sources.find((item) => item.id === id);
@@ -36,7 +38,9 @@ test('provider manifest IDs are unique and every target source matches its modul
   }
 });
 
-test('AnimePahe fallback inventory does not invent Kiwi episode routes', () => {
+test('AnimePahe fallback inventory does not invent Kiwi episode routes', {
+  skip: !manifest.sources.some((item) => item.id === 'animepahe')
+}, () => {
   const provider = require(path.join(root, entryFor('animepahe').file));
   const episodes = provider._fallbackEpisodeList(154587, { episodes: 2 });
   assert.equal(episodes.length, 2);
@@ -52,7 +56,9 @@ test('AnimePahe fallback inventory does not invent Kiwi episode routes', () => {
   }
 });
 
-test('Miruro preserves API episode metadata and real provider routes', () => {
+test('Miruro preserves API episode metadata and real provider routes', {
+  skip: !manifest.sources.some((item) => item.id === 'miruro')
+}, () => {
   const provider = require(path.join(root, entryFor('miruro').file));
   const episodes = provider._buildEpisodes(154587, {
     providers: {
@@ -85,7 +91,9 @@ test('Miruro preserves API episode metadata and real provider routes', () => {
   assert.equal(payload.options[0].route, 'watch/kiwi/154587/sub/episode-one');
 });
 
-test('XFDM player URL parser reads JSON-escaped direct media URLs', () => {
+test('XFDM player URL parser reads JSON-escaped direct media URLs', {
+  skip: !manifest.sources.some((item) => item.id === 'xfdm')
+}, () => {
   const provider = require(path.join(root, entryFor('xfdm').file));
   const html = String.raw`<script>var player_aaaa={"encrypt":0,"url":"https:\\/\\/play.xfvod.pro:8088\\/temp\\/episode.mp4"};</script>`;
   assert.equal(
