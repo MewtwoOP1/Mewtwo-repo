@@ -271,11 +271,11 @@ Connects to your own Jellyfin server using a normal Jellyfin account or an API k
 | **User ID** | Optional account override; username/password login discovers it automatically |
 | **Catalogue page size** | 25, 50, or 100 results per catalogue/search page |
 | **Home catalogue sections** | Independently enable Continue Watching, Next Up, Recently Added, Favorites, and Libraries |
-| **Catalogue content types** | Movies, series, episodes, and trailers |
+| **Catalogue content types** | Movies, series, episodes, trailers, and BoxSet collections |
 | **Library sorting** | Recently added, title, community rating, release date, or random |
 | **Genre / Release year filters** | Optional comma-separated genre names and/or years, applied to catalogue and search results |
 | **Include watched items** | Include or exclude played items in normal catalogue feeds |
-| **Show collection libraries** | Include additional collection-style library views |
+| **Show collection libraries** | Include collection-style library views and BoxSet entries. Opening a BoxSet lists its contained movies and series |
 | **Prefer Jellyfin transcoding** | Put a server-provided HLS transcode before direct play when available |
 | **Maximum streaming bitrate** | Auto, 8, 16, 25, or 40 Mbps for the server playback-info request |
 | **Return subtitle tracks** | Include embedded/external subtitle tracks returned by Jellyfin |
