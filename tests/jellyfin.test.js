@@ -37,7 +37,7 @@ global.fetch = async (url, init = {}) => {
   requests.push({ url: String(url), init });
 
   assert.equal(parsed.protocol, 'https:');
-  assert.equal(init.timeoutMs, 10000);
+  assert.ok(init.timeoutMs === 10000 || (pathName === '/jellyfin/UserItems/Resume' && init.timeoutMs === 2500));
 
   if (pathName === '/jellyfin/Users/AuthenticateByName') {
     assert.equal(init.method, 'POST');
@@ -189,7 +189,7 @@ async function main() {
   assert.equal(streams.length, 2, 'direct play and server transcode are both exposed');
   assert.match(streams[0].url, /mediaSourceId=media-1/);
   assert.equal(streams[0].container, 'mp4');
-  assert.equal(streams[0].subtitles[0].url, 'https://jf.example.test/Videos/episode-1/Subtitles/2/Stream.srt');
+  assert.equal(streams[0].subtitles[0].url, 'https://jf.example.test/jellyfin/Videos/episode-1/Subtitles/2/Stream.srt');
   assert.equal(streams[0].subtitles[0].default, true);
   assert.equal(streams[1].container, 'hls');
   assert.match(streams[1].url, /PlaySessionId=play-session-1/);
