@@ -2,9 +2,12 @@
 
 ## Unreleased
 
-- Expand Jellyfin into a full account-authenticated server integration: username/password login, optional API-key mode, automatic user discovery, library and home catalogue sections, search pagination, genre/year filters, movie and series details, up to 500 episodes per series page, authenticated artwork, direct play, HLS transcode fallback, and subtitle tracks.
-- Use Jellyfin's `/UserViews?userId=...` endpoint and return the correct flat media-item list from `popular()`.
-- Add configurable catalogue sections, content types, sorting, watched-item filtering, playback bitrate/transcoding preference, artwork size, cache duration, and request timeout.
+- Replace the Jellyfin source implementation with a clean MediaBrowser API integration: public server/version discovery, username/password authentication through `/Users/AuthenticateByName`, token caching, and automatic re-authentication after expired sessions.
+- Use Jellyfin's user-scoped `/UserViews`, `/Items`, `/UserItems/Resume`, and `/Shows/NextUp` routes for Home, library browsing, search, and details.
+- Add BoxSet library and collection navigation, item metadata and artwork mapping, and complete paginated episode retrieval for long-running series.
+- Negotiate playback through `POST /Items/{id}/PlaybackInfo` using a Zangetsu device profile; expose server-approved direct play and server-provided remux/transcoding URLs, authenticated headers, and external subtitle tracks.
+- Replace the previous API-key-first configuration with standard Jellyfin account credentials and settings for catalogue sections, content types, bitrate, playback ordering, subtitles, caching, and request timeout.
+
 ## TMDB + Stremio 3.3.0
 
 - Add a separate Metadata Add-on URLs setting so catalogue/metadata add-ons can be configured independently from streaming add-ons.
