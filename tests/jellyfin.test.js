@@ -209,7 +209,7 @@ const source = manifest.sources.find((item) => item.id === 'jellyfin');
 
 async function main() {
   assert.ok(source, 'Jellyfin source is registered');
-  assert.equal(provider.version, '3.0.2');
+  assert.equal(provider.version, '3.0.3');
   assert.equal(provider.getInfo().version, source.version);
   assert.deepEqual(provider.getSettings().map((s) => s.key), source.settings.map((s) => s.key));
   assert.ok(provider.getSettings().some((s) => s.key === 'apiKey'));
