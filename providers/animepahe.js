@@ -45,7 +45,17 @@ function _cacheGet(key){var x=CACHE[key];return x&&x.until>Date.now()?x.value:nu
 function _cachePut(key,value){if(_config().cacheMs>0)CACHE[key]={value:value,until:Date.now()+_config().cacheMs};return value;}
 function _media(id){var k='media:'+id,c=_cacheGet(k);if(c)return Promise.resolve(c);return _graph('query($id:Int){Media(id:$id,type:ANIME){'+MEDIA_FIELDS+'}}',{id:Number(id)}).then(function(d){if(!d.Media)throw new Error('AniList title not found: '+id);if(d.Media.isAdult)throw new Error('AnimePahe: adult title hidden');return _cachePut(k,d.Media);});}
 function _title(m){return m&&m.title&&(m.title.english||m.title.romaji||m.title.native)||'Anime';}
-function _item(m){if(!m||!m.id||m.isAdult)return null;return {id:'animepahe://anime/'+m.id,url:'animepahe://anime/'+m.id,title:_title(m)+(m.seasonYear?' ('+m.seasonYear+')':''),cover:m.coverImage&&(m.coverImage.extraLarge||m.coverImage.large)||null,banner:m.bannerImage||null,description:m.description||'',year:m.seasonYear||null,score:m.averageScore||null,genres:m.genres||[],type:'anime',sourceId:SOURCE_ID,status:m.status==='FINISHED'?'completed':m.status==='RELEASING'?'ongoing':'unknown'};}
+function _item(m){if(!m||!m.id||m.isAdult)return null;return {
+ id:'animepahe://anime/'+m.id,url:'animepahe://anime/'+m.id,
+ title:_title(m)+(m.seasonYear?' ('+m.seasonYear+')':''),
+ englishTitle:m.title&&m.title.english||null,nativeTitle:m.title&&m.title.native||null,
+ synonyms:Array.isArray(m.synonyms)?m.synonyms:[],
+ cover:m.coverImage&&(m.coverImage.extraLarge||m.coverImage.large)||null,
+ banner:m.bannerImage||null,description:m.description||'',
+ malId:Number(m.idMal)||null,year:m.seasonYear!=null?String(m.seasonYear):null,
+ score:m.averageScore||null,genres:m.genres||[],type:'anime',sourceId:SOURCE_ID,
+ status:m.status==='FINISHED'?'completed':m.status==='RELEASING'?'ongoing':'unknown'
+};}
 function _anilistPage(sort,page){return _graph('query($page:Int){Page(page:$page,perPage:20){media(type:ANIME,sort:'+sort+',isAdult:false){'+MEDIA_FIELDS+'}}}',{page:page||1}).then(function(d){return (d.Page&&d.Page.media||[]).map(_item).filter(Boolean);});}
 function search(q,page,opts){q=String(q||'').trim();if(!q)return Promise.resolve([]);return _graph('query($search:String,$page:Int){Page(page:$page,perPage:20){media(search:$search,type:ANIME,sort:SEARCH_MATCH,isAdult:false){'+MEDIA_FIELDS+'}}}',{search:q,page:Math.max(1,_int(page,1,1,100))}).then(function(d){return (d.Page&&d.Page.media||[]).map(_item).filter(Boolean);}).catch(function(e){console.warn('AnimePahe search failed',String(e));return [];});}
 function getHome(opts){return Promise.all([_anilistPage('TRENDING_DESC',1),_anilistPage('POPULARITY_DESC',1)]).then(function(rows){return [{title:'Trending Anime',items:rows[0]},{title:'Popular Anime',items:rows[1]}].filter(function(x){return x.items.length;});}).catch(function(){return [];});}
