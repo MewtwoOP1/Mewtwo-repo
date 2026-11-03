@@ -16,7 +16,9 @@ global.__settings = {
     catalogSections: ['resume', 'nextUp', 'latest', 'favorites', 'libraries'],
     contentTypes: ['Movie', 'Series', 'Episode'],
     browseSort: 'DateCreated',
-    includePlayed: true,
+    includePlayed: false,
+    genreFilter: 'Drama',
+    yearFilter: '2024',
     showCollections: false,
     preferTranscoding: false,
     maxBitrate: '16000000',
@@ -74,7 +76,7 @@ global.fetch = async (url, init = {}) => {
     return { status: 200, body: JSON.stringify({ Items: itemsForLibrary(parsed.searchParams.get('ParentId')) }) };
   }
 
-  if (pathName === '/jellyfin/Users/user-1/Items' && parsed.searchParams.get('Filters') === 'IsFavorite') {
+  if (pathName === '/jellyfin/Users/user-1/Items' && parsed.searchParams.getAll('Filters').includes('IsFavorite')) {
     return { status: 200, body: JSON.stringify({ Items: [
       { Id: 'favorite-1', Name: 'Favorite Movie', Type: 'Movie' }
     ] }) };
@@ -82,6 +84,9 @@ global.fetch = async (url, init = {}) => {
 
   if (pathName === '/jellyfin/Users/user-1/Items' && parsed.searchParams.has('SearchTerm')) {
     assert.equal(parsed.searchParams.get('SearchTerm'), 'Test');
+    assert.deepEqual(parsed.searchParams.getAll('Filters'), ['IsNotPlayed']);
+    assert.deepEqual(parsed.searchParams.getAll('Genres'), ['Drama']);
+    assert.deepEqual(parsed.searchParams.getAll('Years'), ['2024']);
     return { status: 200, body: JSON.stringify({ Items: [
       { Id: 'series-1', Name: 'Test Series', Type: 'Series' }
     ], TotalRecordCount: 1 }) };
