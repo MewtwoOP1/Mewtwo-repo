@@ -140,10 +140,10 @@ function _session() {
 }
 function _servers(id,ep,category,force) {
   return _session().then(function(cookie){
-    return _fetch(SITE+'/api/watch/servers?anilistId='+id+'&ep='+ep+'&category='+category,{headers:{'Cookie':cookie,'Referer':SITE+'/'}})
-      .then(function(r){var j;try{j=JSON.parse(r.body||'{}');}catch(e){j={};}return {status:r.status,data:j};});
+    return fetch(SITE+'/api/watch/servers?anilistId='+id+'&ep='+ep+'&category='+category,{headers:{'User-Agent':UA,'Accept':'application/json','Referer':SITE+'/','Cookie':cookie},timeoutMs:_config().timeout})
+      .then(function(r){var body={};try{body=JSON.parse(r.body||'{}');}catch(e){}return {status:Number(r.status)||0,data:body};});
   }).then(function(res){
-    if(res.status===401 && !force){SESSION=null;return _servers(id,ep,category,true);}
+    if(res.status===401&&!force){SESSION=null;return _servers(id,ep,category,true);}
     if(res.status!==200)throw new Error('AniChan servers HTTP '+res.status);
     return Array.isArray(res.data.servers)?res.data.servers:[];
   });
