@@ -839,17 +839,6 @@
           ]
         }
       ]
-    },
-    {
-      "id": "anipm",
-      "name": "Ani.pm",
-      "version": "1.0.2",
-      "type": "anime",
-      "lang": "en",
-      "file": "providers/anipm.js",
-      "logo": "https://www.google.com/s2/favicons?sz=256&domain=ani.pm",
-      "nsfw": false,
-      "settings": []
     }
   ]
 }
