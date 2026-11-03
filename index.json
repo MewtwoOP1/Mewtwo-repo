@@ -324,6 +324,366 @@
       "nsfw": false
     },
     {
+      "id": "anichan",
+      "name": "AniChan",
+      "version": "1.0.0",
+      "type": "anime",
+      "lang": "en",
+      "file": "providers/anichan.js",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=anichan.to",
+      "nsfw": false,
+      "settings": [
+        {
+          "key": "audioMode",
+          "label": "Audio tracks",
+          "description": "Choose whether the source lists both SUB and DUB, or only one track.",
+          "type": "enum",
+          "default": "both",
+          "options": [
+            {
+              "value": "both",
+              "label": "Sub and dub"
+            },
+            {
+              "value": "sub",
+              "label": "Sub only"
+            },
+            {
+              "value": "dub",
+              "label": "Dub only"
+            }
+          ]
+        },
+        {
+          "key": "homeSections",
+          "label": "Home sections",
+          "description": "Comma-separated AniList sections: trending, popular, seasonal, top.",
+          "type": "text",
+          "default": "trending,popular,seasonal"
+        },
+        {
+          "key": "requestTimeoutMs",
+          "label": "Request timeout",
+          "description": "Maximum wait for an individual AniList or AniChan API request.",
+          "type": "enum",
+          "default": "10000",
+          "options": [
+            {
+              "value": "6000",
+              "label": "6 seconds"
+            },
+            {
+              "value": "10000",
+              "label": "10 seconds"
+            },
+            {
+              "value": "15000",
+              "label": "15 seconds"
+            }
+          ]
+        },
+        {
+          "key": "sessionRefresh",
+          "label": "Refresh session before expiry",
+          "description": "Mint a new AniChan session when the cached session is near its two-hour expiry.",
+          "type": "bool",
+          "default": true
+        },
+        {
+          "key": "maxStreams",
+          "label": "Maximum server results",
+          "description": "Limit the number of stream servers returned for an episode.",
+          "type": "enum",
+          "default": "8",
+          "options": [
+            {
+              "value": "3",
+              "label": "3 servers"
+            },
+            {
+              "value": "5",
+              "label": "5 servers"
+            },
+            {
+              "value": "8",
+              "label": "8 servers"
+            },
+            {
+              "value": "12",
+              "label": "12 servers"
+            }
+          ]
+        },
+        {
+          "key": "showAdult",
+          "label": "Show adult catalogue entries",
+          "description": "Include adult entries returned by AniList. Disabled by default.",
+          "type": "bool",
+          "default": false
+        }
+      ]
+    },
+    {
+      "id": "animepahe",
+      "name": "AnimePahe",
+      "version": "1.0.0",
+      "type": "anime",
+      "lang": "en",
+      "file": "providers/animepahe.js",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=animepahe.pw",
+      "nsfw": false,
+      "settings": [
+        {
+          "key": "audioMode",
+          "label": "Audio tracks",
+          "description": "Show both SUB and DUB when available, or filter to one track.",
+          "type": "enum",
+          "default": "both",
+          "options": [
+            {
+              "value": "both",
+              "label": "Sub and dub"
+            },
+            {
+              "value": "sub",
+              "label": "Sub only"
+            },
+            {
+              "value": "dub",
+              "label": "Dub only"
+            }
+          ]
+        },
+        {
+          "key": "miruroApiHosts",
+          "label": "Playback fallback API hosts",
+          "description": "Ordered Miruro JSON API hosts used if direct AnimePahe or Kwik requests are blocked. Comma or newline separated.",
+          "type": "text",
+          "default": "https://api.hiyori.tv\nhttps://miruro.zenos.my.id\nhttps://www.neoanime.tv"
+        },
+        {
+          "key": "directTimeoutMs",
+          "label": "Direct AnimePahe request timeout",
+          "description": "Maximum wait for an individual direct request. The provider falls back to the API route when direct requests fail.",
+          "type": "enum",
+          "default": "5000",
+          "options": [
+            {
+              "value": "3000",
+              "label": "3 seconds"
+            },
+            {
+              "value": "5000",
+              "label": "5 seconds"
+            },
+            {
+              "value": "8000",
+              "label": "8 seconds"
+            }
+          ]
+        },
+        {
+          "key": "directLookup",
+          "label": "Try direct AnimePahe first",
+          "description": "Attempt the direct, ID-confirmed AnimePahe player before using the configured Miruro/Kiwi playback fallback.",
+          "type": "bool",
+          "default": true
+        },
+        {
+          "key": "preferH264",
+          "label": "Prefer H.264 over AV1",
+          "description": "Prefer a compatible H.264 encode over AV1, especially useful on older TV hardware.",
+          "type": "bool",
+          "default": true
+        },
+        {
+          "key": "qualityPreference",
+          "label": "Preferred resolution",
+          "description": "Direct AnimePahe release selection preference.",
+          "type": "enum",
+          "default": "1080p",
+          "options": [
+            {
+              "value": "1080p",
+              "label": "1080p"
+            },
+            {
+              "value": "720p",
+              "label": "720p"
+            },
+            {
+              "value": "480p",
+              "label": "480p"
+            },
+            {
+              "value": "360p",
+              "label": "360p"
+            }
+          ]
+        },
+        {
+          "key": "maxTitleCandidates",
+          "label": "Title candidates to confirm",
+          "description": "Number of AnimePahe search matches checked against AniList or MAL IDs. Lower values are faster and reduce false matches.",
+          "type": "enum",
+          "default": "3",
+          "options": [
+            {
+              "value": "1",
+              "label": "1 candidate"
+            },
+            {
+              "value": "2",
+              "label": "2 candidates"
+            },
+            {
+              "value": "3",
+              "label": "3 candidates"
+            }
+          ]
+        },
+        {
+          "key": "requestCacheSeconds",
+          "label": "Metadata cache",
+          "description": "Short in-memory cache for AniList metadata and episode catalogues.",
+          "type": "enum",
+          "default": "120",
+          "options": [
+            {
+              "value": "0",
+              "label": "Disabled"
+            },
+            {
+              "value": "60",
+              "label": "1 minute"
+            },
+            {
+              "value": "120",
+              "label": "2 minutes"
+            },
+            {
+              "value": "300",
+              "label": "5 minutes"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "xfdm",
+      "name": "Lili (XFDM)",
+      "version": "1.0.0",
+      "type": "anime",
+      "lang": "zh",
+      "file": "providers/xfdm.js",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=xfdm.pro",
+      "nsfw": false,
+      "settings": [
+        {
+          "key": "requestTimeoutMs",
+          "label": "Request timeout",
+          "description": "Maximum wait for each Bangumi or XFDM request.",
+          "type": "enum",
+          "default": "10000",
+          "options": [
+            {
+              "value": "6000",
+              "label": "6 seconds"
+            },
+            {
+              "value": "10000",
+              "label": "10 seconds"
+            },
+            {
+              "value": "15000",
+              "label": "15 seconds"
+            }
+          ]
+        },
+        {
+          "key": "maxTitleCandidates",
+          "label": "Bangumi title candidates",
+          "description": "Maximum number of AniList title aliases searched against Bangumi. Matching is exact after punctuation/spacing normalization; the provider does not fuzzy-match different seasons.",
+          "type": "enum",
+          "default": "5",
+          "options": [
+            {
+              "value": "3",
+              "label": "3 aliases"
+            },
+            {
+              "value": "5",
+              "label": "5 aliases"
+            },
+            {
+              "value": "8",
+              "label": "8 aliases"
+            }
+          ]
+        },
+        {
+          "key": "maxMirrorChannels",
+          "label": "Playback mirror attempts",
+          "description": "Maximum XFDM channels resolved for one episode. Channels are mirrors of the same encode, not different quality levels.",
+          "type": "enum",
+          "default": "2",
+          "options": [
+            {
+              "value": "1",
+              "label": "1 channel"
+            },
+            {
+              "value": "2",
+              "label": "2 channels"
+            },
+            {
+              "value": "3",
+              "label": "3 channels"
+            }
+          ]
+        },
+        {
+          "key": "homeSections",
+          "label": "Home sections",
+          "description": "Comma-separated AniList sections: trending, popular, top.",
+          "type": "text",
+          "default": "trending,popular"
+        },
+        {
+          "key": "cacheSeconds",
+          "label": "Catalogue cache",
+          "description": "Cache successful title and episode lookups briefly. Negative lookups are cached for a shorter period.",
+          "type": "enum",
+          "default": "120",
+          "options": [
+            {
+              "value": "0",
+              "label": "Disabled"
+            },
+            {
+              "value": "60",
+              "label": "1 minute"
+            },
+            {
+              "value": "120",
+              "label": "2 minutes"
+            },
+            {
+              "value": "300",
+              "label": "5 minutes"
+            }
+          ]
+        },
+        {
+          "key": "showAdult",
+          "label": "Show adult catalogue entries",
+          "description": "Include adult entries returned by AniList. Disabled by default.",
+          "type": "bool",
+          "default": false
+        }
+      ]
+    },
+    {
       "id": "anv",
       "name": "AnV",
       "version": "1.0.4",
