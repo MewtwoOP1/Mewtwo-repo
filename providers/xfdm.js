@@ -13,7 +13,7 @@ function getInfo(){return {name:'Lili (XFDM)',lang:'zh',baseUrl:SITE,logo:'https
 function getSettings(){
  return [
   {key:'requestTimeoutMs',label:'Request timeout',description:'Maximum wait for each Bangumi or XFDM request.',type:'enum',default:'10000',options:[{value:'6000',label:'6 seconds'},{value:'10000',label:'10 seconds'},{value:'15000',label:'15 seconds'}]},
-  {key:'maxTitleCandidates',label:'Bangumi title candidates',description:'Maximum number of AniList title aliases searched against Bangumi. Matching is exact after punctuation/spacing normalization; the provider does not fuzzy-match different seasons.',type:'enum',default:'5',options:[{value:'3',label:'3 aliases'},{value:'5',label:'5 aliases'},{value:'8',label:'8 aliases'}]},
+  {key:'maxTitleCandidates',label:'Bangumi title candidates',description:'Maximum number of AniList title aliases searched against Bangumi. Matching is exact after punctuation/spacing normalization; the provider does not fuzzy-match different seasons.',type:'enum',default:'8',options:[{value:'3',label:'3 aliases'},{value:'5',label:'5 aliases'},{value:'8',label:'8 aliases'}]},
   {key:'maxMirrorChannels',label:'Playback mirror attempts',description:'Maximum XFDM channels resolved for one episode. Channels are mirrors of the same encode, not different quality levels.',type:'enum',default:'2',options:[{value:'1',label:'1 channel'},{value:'2',label:'2 channels'},{value:'3',label:'3 channels'}]},
   {key:'homeSections',label:'Home sections',description:'Comma-separated AniList sections: trending, popular, top.',type:'text',default:'trending,popular'},
   {key:'cacheSeconds',label:'Catalogue cache',description:'Cache successful title and episode lookups briefly. Negative lookups are cached for a shorter period.',type:'enum',default:'120',options:[{value:'0',label:'Disabled'},{value:'60',label:'1 minute'},{value:'120',label:'2 minutes'},{value:'300',label:'5 minutes'}]},
@@ -44,7 +44,18 @@ function _media(id){
  return _graph('query($id:Int){Media(id:$id,type:ANIME){'+MEDIA_FIELDS+'}}',{id:Number(id)}).then(function(d){if(!d.Media)throw new Error('AniList title not found: '+id);if(d.Media.isAdult&&!_config().showAdult)throw new Error('XFDM: adult title hidden by settings');MEDIA_CACHE[id]={value:d.Media,until:Date.now()+Math.max(1000,_config().cacheMs)};return d.Media;});
 }
 function _title(m){return m&&m.title&&(m.title.english||m.title.romaji||m.title.native)||'Anime';}
-function _item(m){if(!m||!m.id||m.isAdult)return null;return {id:'xfdm://anime/'+m.id,url:'xfdm://anime/'+m.id,title:_title(m)+(m.seasonYear?' ('+m.seasonYear+')':''),cover:m.coverImage&&(m.coverImage.extraLarge||m.coverImage.large)||null,banner:m.bannerImage||null,description:m.description||'',status:m.status==='FINISHED'?'completed':m.status==='RELEASING'?'ongoing':'unknown',genres:m.genres||[],year:m.seasonYear||null,score:m.averageScore||null,type:'anime',sourceId:SOURCE_ID};}
+function _item(m){if(!m||!m.id||m.isAdult)return null;return {
+ id:'xfdm://anime/'+m.id,url:'xfdm://anime/'+m.id,
+ title:_title(m)+(m.seasonYear?' ('+m.seasonYear+')':''),
+ englishTitle:m.title&&m.title.english||null,nativeTitle:m.title&&m.title.native||null,
+ synonyms:Array.isArray(m.synonyms)?m.synonyms:[],
+ cover:m.coverImage&&(m.coverImage.extraLarge||m.coverImage.large)||null,
+ banner:m.bannerImage||null,description:m.description||'',
+ status:m.status==='FINISHED'?'completed':m.status==='RELEASING'?'ongoing':'unknown',
+ genres:m.genres||[],malId:Number(m.idMal)||null,
+ year:m.seasonYear!=null?String(m.seasonYear):null,
+ score:m.averageScore||null,type:'anime',sourceId:SOURCE_ID
+};}
 function _list(sort,page){
  return _graph('query($page:Int){Page(page:$page,perPage:20){media(type:ANIME,sort:'+sort+',isAdult:false){'+MEDIA_FIELDS+'}}}',{page:page||1}).then(function(d){return (d.Page&&d.Page.media||[]).map(_item).filter(Boolean);});
 }
