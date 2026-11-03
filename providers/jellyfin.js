@@ -514,15 +514,56 @@ function _mapEpisode(raw, ctx) {
   };
 }
 
-function _getEpisodes(ctx, seriesId, page) {
-  page = Math.max(1, Number(page) || 1);
+function _episodePage(ctx, seriesId, startIndex) {
   return _rawRequest(ctx, '/Shows/' + encodeURIComponent(seriesId) + '/Episodes', {
     userId: ctx.userId, fields: _fields(), isMissing: false,
-    startIndex: (page - 1) * 500,
-    limit: 500,
+    startIndex: startIndex, limit: 500,
     enableImages: true, enableUserData: true
-  }).then(function (data) {
-    return (Array.isArray(data.Items) ? data.Items : []).map(function (raw) { return _mapEpisode(raw, ctx); }).filter(Boolean);
+  });
+}
+
+function _mapEpisodesPage(data, ctx) {
+  return (Array.isArray(data.Items) ? data.Items : [])
+    .map(function (raw) { return _mapEpisode(raw, ctx); })
+    .filter(Boolean);
+}
+
+function _getEpisodes(ctx, seriesId, page) {
+  var explicitPage = Number(page);
+  if (isFinite(explicitPage) && explicitPage >= 1) {
+    return _episodePage(ctx, seriesId, (Math.floor(explicitPage) - 1) * 500)
+      .then(function (data) { return _mapEpisodesPage(data, ctx); });
+  }
+
+  // Zangetsu's provider contract consumes one complete episode array. Jellyfin
+  // paginates long-running series, so collect the remaining pages in small
+  // parallel batches rather than silently cutting shows off at episode 500.
+  return _episodePage(ctx, seriesId, 0).then(function (first) {
+    var merged = _mapEpisodesPage(first, ctx);
+    var total = Number(first && first.TotalRecordCount) || merged.length;
+    var pages = Math.min(20, Math.ceil(total / 500));
+    var offsets = [];
+    for (var start = 500; start < pages * 500; start += 500) offsets.push(start);
+    function loadBatch(index) {
+      if (index >= offsets.length) return Promise.resolve(merged);
+      var batch = offsets.slice(index, index + 4);
+      return Promise.all(batch.map(function (offset) {
+        return _episodePage(ctx, seriesId, offset);
+      })).then(function (results) {
+        results.forEach(function (data) {
+          merged = merged.concat(_mapEpisodesPage(data, ctx));
+        });
+        return loadBatch(index + batch.length);
+      });
+    }
+    return loadBatch(0).then(function (all) {
+      var seen = Object.create(null);
+      return all.filter(function (episode) {
+        if (seen[episode.id]) return false;
+        seen[episode.id] = true;
+        return true;
+      });
+    });
   });
 }
 
@@ -530,7 +571,7 @@ function getEpisodes(url, opts) {
   var id = _parseItemUrl(url);
   if (!id) return Promise.reject(new Error('Invalid Jellyfin item URL.'));
   opts = opts || {};
-  var page = typeof opts === 'number' ? opts : opts.page || 1;
+  var page = typeof opts === 'number' ? opts : (opts && opts.page ? opts.page : null);
   return _withUser().then(function (ctx) { return _getEpisodes(ctx, id, page); });
 }
 
@@ -564,7 +605,7 @@ function getDetail(url, opts) {
         dubCount: 0
       };
       if (String(raw.Type).toLowerCase() === 'series') {
-        return _getEpisodes(ctx, id, 1).then(function (episodes) {
+        return _getEpisodes(ctx, id).then(function (episodes) {
           detail.episodes = episodes;
           detail.subCount = episodes.length;
           return detail;
