@@ -986,20 +986,22 @@ function getVideoSources(episodeUrl, fast) {
       var mediaSources = Array.isArray(info.MediaSources) ? info.MediaSources.filter(function (source) {
         return source && source.Id && String(source.Type || '').toLowerCase() !== 'placeholder';
       }) : [];
-      var output = [];
+      var directEntries = [];
+      var transcodeEntries = [];
       mediaSources.forEach(function (source) {
         var canDirect = source.SupportsDirectPlay === true;
         var canTranscode = !!source.TranscodingUrl;
         var direct = canDirect ? _streamEntry(ctx, parsed.id, source, info, 'direct') : null;
         var transcode = canTranscode ? _streamEntry(ctx, parsed.id, source, info, 'transcode') : null;
-        if (ctx.config.preferTranscoding) {
-          if (transcode) output.push(transcode);
-          if (direct) output.push(direct);
-        } else {
-          if (direct) output.push(direct);
-          if (transcode) output.push(transcode);
-        }
+        if (direct) directEntries.push(direct);
+        if (transcode) transcodeEntries.push(transcode);
       });
+      // Apply the preference to the complete media-source list, not just
+      // within each source. Jellyfin may return a direct-play source first
+      // and a separate transcoding source second.
+      var output = ctx.config.preferTranscoding
+        ? transcodeEntries.concat(directEntries)
+        : directEntries.concat(transcodeEntries);
       var seen = Object.create(null);
       output = output.filter(function (source) {
         if (!source.url || seen[source.url]) return false;
