@@ -29,7 +29,7 @@
         {
           "key": "password",
           "label": "Jellyfin password",
-          "description": "The password for that Jellyfin account. Use an API key instead only when you prefer token authentication.",
+          "description": "The password for that Jellyfin account. Zangetsu currently displays extension text settings without masking; use a dedicated account with only the library permissions you need.",
           "type": "text",
           "default": ""
         },
