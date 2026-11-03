@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Add a dedicated Jellyfin-compatible source icon and simplify its settings to connection, library filter, catalogue page size, bitrate, and subtitles.
+- Use the official Jellyfin icon for the Jellyfin source, fix its direct asset URL, and bump the provider to 3.0.2.
 - Avoid malformed relative API requests when the server address has not been configured.
 - Rebuild Jellyfin as a standalone catalogue-backed source. Read the authenticated user's Jellyfin libraries and catalogue directly instead of using the old Stremio/TMDB implementation.
 - Add AIOStreams Jellyfin-server support: discover advertised features, handle genre-required catalogues, list configured catalogues as libraries, and read AIOStreams version metadata from Jellyfin media sources.
@@ -12,6 +12,9 @@
 - Add API-key and optional user-ID settings alongside username/password authentication, one-time expired-session reauthentication, library filtering, and updated setup documentation.
 - Replace the old Jellyfin v2 test suite with v3 catalogue, episode pagination, AIOStreams version, header, subtitle, and authentication coverage.
 
+
+- Remove the obsolete duplicate GPL-3.0 licence files left over from the former MovieBox IN source; no GPL provider remains in this repository branch.
+- Correct the Apache-2.0 notice to identify the two remaining Yuzono-derived Serenity providers.
 
 ## TMDB + Stremio 3.3.0
 
