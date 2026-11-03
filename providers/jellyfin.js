@@ -407,14 +407,14 @@ function getHome(opts) {
           Recursive: true, IncludeItemTypes: _typeFilter(), SortBy: 'DateCreated',
           SortOrder: 'Descending', StartIndex: 0, Limit: c.pageSize,
           Fields: _fields(), EnableUserData: true, EnableImages: true
-        }, c)));
+        }, c))));
       }
       if (sections.includes('favorites')) {
         jobs.push(_section('Favorites', _itemsFor(ctx, _applyCatalogueFilters({
           Recursive: true, Filters: 'IsFavorite', IncludeItemTypes: _typeFilter(),
           SortBy: c.browseSort, SortOrder: 'Descending', StartIndex: 0,
           Limit: c.pageSize, Fields: _fields(), EnableUserData: true
-        }, c)));
+        }, c))));
       }
       if (sections.includes('libraries')) {
         views.forEach(function (view) {
@@ -425,7 +425,7 @@ function getHome(opts) {
             SortBy: c.browseSort, SortOrder: 'Descending', StartIndex: 0,
             Limit: c.pageSize, Fields: _fields(), EnableUserData: true,
             EnableImages: true
-          }, c)));
+          }, c))));
         });
       }
       return Promise.all(jobs).then(function (rows) { return rows.filter(Boolean); });
