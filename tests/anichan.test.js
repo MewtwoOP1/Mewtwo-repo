@@ -118,7 +118,7 @@ async function main() {
 
   assert.ok(requests.some((x) => x.url === 'https://anichan.to/api/watch/session' && x.options.method === 'POST'));
   assert.ok(requests.some((x) => x.url.includes('/api/watch/servers?anilistId=123&ep=1&category=sub')));
-  assert.throws(() => provider.getVideoSources('not-anichan://episode/1'), /invalid episode URL/i);
+  await assert.rejects(() => provider.getVideoSources('not-anichan://episode/1'), /invalid episode URL/i);
 
   console.log('AniChan tests passed: AniList metadata, episode catalogue, sub/dub settings, session cookie creation, 401 refresh, duplicate backend filtering, HLS and VTT mapping.');
 }
