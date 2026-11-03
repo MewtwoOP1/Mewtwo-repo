@@ -69,34 +69,43 @@ function _mirrorGet(path,index){
 function _unwrap(data){if(data&&data.results&&typeof data.results==='object')return data.results;return data||{};}
 function _episodeUrl(id,ep,cat,slug,route){return 'animepahe://episode/'+encodeURIComponent(JSON.stringify({id:id,number:ep,category:cat,slug:slug||'',route:route||''}));}
 function _episodesFromMiruro(id,data){
- var root=_unwrap(data),providers=root.providers||{},kiwi=providers.kiwi||providers.animepahe||null;
- var out=[];
- if(kiwi&&kiwi.episodes){
-  var eps=kiwi.episodes;
-  ['sub','dub'].forEach(function(cat){if(_config().audioMode!=='both'&&_config().audioMode!==cat)return;
-   (Array.isArray(eps[cat])?eps[cat]:[]).forEach(function(ep){
-    var n=Number(ep.number||ep.episode||ep.ep);if(!(n>0))return;
-    var route=String(ep.id||ep.url||'').trim(),slug=route?route.split('/').pop():'';
-    out.push({id:_episodeUrl(id,n,cat,slug,route),url:_episodeUrl(id,n,cat,slug,route),number:n,title:ep.title||('Episode '+n),thumbnail:ep.image||ep.thumbnail||ep.thumbnail_url||null,date:ep.airDate||ep.aired_on||ep.aired||null,duration:ep.duration||null,filler:!!ep.filler,type:'anime',sourceId:SOURCE_ID,category:cat});
-   });
-  });
-  return out.sort(function(a,b){return a.number-b.number||(a.category==='sub'?-1:1);});
+ var root=_unwrap(data),providers=root.providers||{},groups={},out=[];
+ function addEpisode(category,ep){
+  var n=Number(ep&&(ep.number||ep.episode||ep.episode_number||ep.ep));
+  if(!(n>0)||!isFinite(n))return;
+  if(_config().audioMode!=='both'&&_config().audioMode!==category)return;
+  var key=category+'|'+n,existing=groups[key];
+  if(!existing){
+   var encoded=_episodeUrl(id,n,category,'','');
+   existing=groups[key]={id:encoded,url:encoded,number:n,title:ep.title||('Episode '+n),
+    thumbnail:ep.image||ep.thumbnail||ep.thumbnail_url||null,
+    date:(ep.airDate||ep.aired_on||ep.aired||ep.date)!=null?String(ep.airDate||ep.aired_on||ep.aired||ep.date):null,
+    description:typeof ep.description==='string'?ep.description:'',
+    duration:ep.duration||null,filler:!!ep.filler,type:'anime',sourceId:SOURCE_ID,category:category};
+  }else{
+   if((!existing.title||/^Episode \d+$/i.test(existing.title))&&ep.title)existing.title=ep.title;
+   if(!existing.thumbnail)existing.thumbnail=ep.image||ep.thumbnail||ep.thumbnail_url||null;
+   if(!existing.date&&(ep.airDate||ep.aired_on||ep.aired||ep.date)!=null)existing.date=String(ep.airDate||ep.aired_on||ep.aired||ep.date);
+   if(!existing.description&&typeof ep.description==='string')existing.description=ep.description;
+  }
  }
-
- // Some mirror responses expose a shared episode inventory under data[] with
- // episode_number/title/thumbnail_url/aired_on instead of a Kiwi object.
- // These rows are catalogue inventory only. Playback resolves a real provider
- // episode ID from the Miruro episode endpoint instead of guessing a Kiwi slug.
- var rows=Array.isArray(root.data)?root.data:(Array.isArray(root.episodes)?root.episodes:[]);
- rows.forEach(function(ep){
-  if(!ep||ep.kind&&String(ep.kind).toLowerCase()!=='regular')return;
-  var n=Number(ep.episode_number||ep.number||ep.episode||ep.ep);if(!(n>0))return;
-  if(_config().audioMode==='dub')return;
-  var slug=String(ep.slug||ep.id||'').trim();
-  var encoded=_episodeUrl(id,n,'sub',slug,'');
-  out.push({id:encoded,url:encoded,number:n,title:ep.title||('Episode '+n),thumbnail:ep.thumbnail_url||ep.thumbnail||ep.image||null,date:ep.aired_on||ep.airDate||ep.aired||null,duration:ep.duration||null,filler:!!ep.filler,type:'anime',sourceId:SOURCE_ID,category:'sub'});
+ Object.keys(providers).forEach(function(providerName){
+  var provider=providers[providerName]||{},lists=provider.episodes||provider;
+  ['sub','dub'].forEach(function(category){
+   var rows=Array.isArray(lists[category])?lists[category]:[];
+   rows.forEach(function(ep){addEpisode(category,ep);});
+  });
  });
- return out.sort(function(a,b){return a.number-b.number;});
+ if(!Object.keys(groups).length){
+  var rows=Array.isArray(root.data)?root.data:(Array.isArray(root.episodes)?root.episodes:[]);
+  rows.forEach(function(ep){
+   if(!ep||ep.kind&&String(ep.kind).toLowerCase()!=='regular')return;
+   var category=String(ep.category||ep.audio||'sub').toLowerCase()==='dub'?'dub':'sub';
+   addEpisode(category,ep);
+  });
+ }
+ out=Object.keys(groups).map(function(key){return groups[key];});
+ return out.sort(function(a,b){return a.number-b.number||(a.category==='sub'?-1:1);});
 }
 function _fallbackEpisodeList(id,media){
  var count=Math.max(0,Math.min(500,Number(media&&media.episodes)||0)),out=[];
