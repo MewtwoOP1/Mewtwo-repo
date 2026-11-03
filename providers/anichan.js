@@ -148,7 +148,7 @@ function _servers(id,ep,category,force) {
     return Array.isArray(res.data.servers)?res.data.servers:[];
   });
 }
-function _abs(url) { var s=String(url||'');return s.charAt(0)==='/'?SITE+s:s.replace(/ /g,'%20');}
+function _abs(url) { var s=String(url||'');var full=s.charAt(0)==='/'?SITE+s:s;return full.replace(/ /g,'%20'); }
 function _subtitleLanguage(label) {
   var s=String(label||'').toLowerCase();
   return s.indexOf('eng')===0?'en':s.indexOf('spa')===0?'es':s.indexOf('por')===0?'pt':s.indexOf('fre')===0||s.indexOf('fra')===0?'fr':s.indexOf('ger')===0?'de':s.indexOf('ita')===0?'it':s.indexOf('ara')===0?'ar':s.indexOf('rus')===0?'ru':s.indexOf('kor')===0?'ko':s.indexOf('jap')===0?'ja':s.indexOf('chi')===0?'zh':'und';
