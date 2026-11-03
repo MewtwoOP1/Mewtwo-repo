@@ -161,6 +161,20 @@
           ]
         },
         {
+          "key": "genreFilter",
+          "label": "Genre filter (optional)",
+          "description": "Limit catalogue and search results to one or more Jellyfin genres. Separate multiple genres with commas.",
+          "type": "text",
+          "default": ""
+        },
+        {
+          "key": "yearFilter",
+          "label": "Release year filter (optional)",
+          "description": "Limit catalogue and search results to a release year, or comma-separated years.",
+          "type": "text",
+          "default": ""
+        },
+        {
           "key": "includePlayed",
           "label": "Include watched items",
           "description": "Include items already marked as played in normal library feeds.",
