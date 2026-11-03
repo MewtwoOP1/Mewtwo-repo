@@ -21,7 +21,7 @@ function getInfo() {
 
 function getSettings() {
   return [
-    { key: 'serverUrl', label: 'Jellyfin server address', description: 'Base address of your Jellyfin server, including an optional reverse-proxy path. Example: https://media.example.com or http://192.168.1.10:8096.', type: 'text', default: '' },
+    { key: 'serverUrl', label: 'Jellyfin server address', description: 'Base address of your Jellyfin server, including an optional reverse-proxy path. Use your local server address and port, or an HTTPS hostname for remote access.', type: 'text', default: '' },
     { key: 'username', label: 'Jellyfin username', description: 'The username of the Jellyfin account you want to use.', type: 'text', default: '' },
     { key: 'password', label: 'Jellyfin password', description: 'The password for that Jellyfin account. Use an API key instead only when you prefer token authentication.', type: 'text', default: '' },
     { key: 'apiKey', label: 'API key (optional alternative)', description: 'Optional server API key. When set, it is used instead of username/password. API-key users may need to enter User ID below.', type: 'text', default: '' },
