@@ -6,9 +6,9 @@
 //   GET /api/v1/season/{id}/episodes?limit=&page= -> [ {content_id, episode_number, audio_locales, is_clip} ]
 //   GET /api/v1/episode/{id}/media/hls/{locale}   -> { media_id, hls: {playlist, hard_subs, subtitles} }
 //
-// Sub: ja-JP locale, Dub: en-US locale. HLS uses AES-128; the plaintext key is the media_id as hex
-// bytes (the site serves key.bin base64-wrapped). The provider exposes the media id through the
-// stream's `playlistKey` marker so the existing runtime can synthesize the key.
+// Sub: ja-JP locale, Dub: en-US locale. HLS is AES-128 encrypted and the key endpoint is not a
+// raw 16-byte HLS key. Zangetsu's VideoSource contract has no key-injection field, so playback is
+// rejected explicitly rather than returning a stream the host cannot decrypt.
 
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID)
   ? String(__SOURCE_ID) : 'uniquestream';
@@ -25,7 +25,7 @@ var _seriesCache = {};
 
 function getInfo() {
   return { name: 'UniqueStream', lang: 'en', baseUrl: 'https://anime.uniquestream.net',
-    logo: 'https://www.google.com/s2/favicons?sz=256&domain=uniquestream.net', type: 'anime', version: '1.0.1' };
+    logo: 'https://www.google.com/s2/favicons?sz=256&domain=uniquestream.net', type: 'anime', version: '1.0.2' };
 }
 function getSettings() { return []; }
 
@@ -360,10 +360,11 @@ function getVideoSources(episodeUrl, opts) {
       var playback = _choosePlayback(media, parsed.category);
       if (!playback) throw new Error('UniqueStream episode ' + parsed.number + ' has no playable HLS stream');
 
-      // The AES-128 key is the media id as hex bytes; expose it through the marker the runtime reads.
-      var playlistKey = media.mediaId ? 'uniquestream:' + media.mediaId : null;
+      // The current Zangetsu host ignores unknown VideoSource fields and cannot inject/decode this
+      // provider's non-standard key response. Do not claim that this HLS is playable.
+      throw new Error('UniqueStream HLS requires AES-128 key handling unavailable in Zangetsu');
 
-      return [{
+      /* return [{
         url: playback.url,
         quality: 'Auto',
         label: 'UniqueStream · ' + (parsed.category === 'dub' ? 'Dub' : 'Sub') +
@@ -374,7 +375,7 @@ function getVideoSources(episodeUrl, opts) {
         audioLang: parsed.category === 'dub' ? 'en' : 'ja',
         subtitles: playback.subtitles,
         playlistKey: playlistKey
-      }];
+      }]; */
     });
 }
 
@@ -389,7 +390,7 @@ function popular(opts) {
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    version: '1.0.1',
+    version: '1.0.2',
     getInfo: getInfo,
     getSettings: getSettings,
     getHome: getHome,

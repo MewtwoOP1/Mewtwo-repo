@@ -134,35 +134,29 @@ async function main() {
   const episodes = await provider.getEpisodes("uniquestream://I35iIyC2?t=Solo%20Leveling", {});
   assert.equal(episodes.length, 2);
 
-  // ── sub stream prefers the clean playlist when soft subs exist ────────────
-  const sub = await provider.getVideoSources("uniquestream://e1/1/sub", {});
-  assert.equal(sub.length, 1);
-  assert.equal(sub[0].url, "https://cdn/x/master.m3u8");
-  assert.equal(sub[0].container, "hls");
-  assert.equal(sub[0].kind, "sub");
-  assert.equal(sub[0].audioLang, "ja");
-  assert.equal(sub[0].playlistKey, "uniquestream:m1");
-  assert.deepEqual(sub[0].subtitles, [
-    { url: "https://cdn/x/subs/en-US.vtt", label: "en-US", lang: "en", format: "vtt", mimeType: "text/vtt" },
-  ]);
+  // ── encrypted HLS is rejected honestly because Zangetsu cannot inject its key ─
+  await assert.rejects(
+    () => provider.getVideoSources("uniquestream://e1/1/sub", {}),
+    /AES-128 key handling unavailable/,
+  );
 
   // ── dub uses the en-US encode ─────────────────────────────────────────────
-  const dub = await provider.getVideoSources("uniquestream://e1/1/dub", {});
-  assert.equal(dub[0].url, "https://cdn/x/master.m3u8");
-  assert.equal(dub[0].kind, "dub");
-  assert.equal(dub[0].audioLang, "en");
-  // The endpoint shipped a soft-subtitle track alongside the dub, so it is kept rather than hidden.
-  assert.deepEqual(dub[0].subtitles.map((t) => t.lang), ["en"]);
+  await assert.rejects(
+    () => provider.getVideoSources("uniquestream://e1/1/dub", {}),
+    /AES-128 key handling unavailable/,
+  );
 
   // ── with no soft subs, sub uses the burned-in English encode ──────────────
-  const hard = await provider.getVideoSources("uniquestream://e3/1/sub", {});
-  assert.equal(hard[0].url, "https://cdn/x/hard/en-US/master.m3u8");
-  assert.match(hard[0].label, /Hard-subbed/);
-  assert.deepEqual(hard[0].subtitles, []);
+  await assert.rejects(
+    () => provider.getVideoSources("uniquestream://e3/1/sub", {}),
+    /AES-128 key handling unavailable/,
+  );
 
   // ── a missing locale falls back to the other one ──────────────────────────
-  const fallback = await provider.getVideoSources("uniquestream://e5/1/sub", {});
-  assert.equal(fallback[0].url, "https://cdn/x/master.m3u8");
+  await assert.rejects(
+    () => provider.getVideoSources("uniquestream://e5/1/sub", {}),
+    /AES-128 key handling unavailable/,
+  );
 
   // ── no playlist at all fails instead of inventing a URL ───────────────────
   await assert.rejects(() => provider.getVideoSources("uniquestream://e4/1/sub", {}), /no playable HLS stream/);
@@ -177,7 +171,7 @@ async function main() {
   assert.ok(calls.some((u) => u.includes("/season/S2/episodes?limit=20&page=1")));
   assert.ok(calls.some((u) => u.includes("/season/S2/episodes?limit=20&page=2")));
 
-  console.log("UniqueStream search, season selection, pagination, HLS variants, and key marker passed.");
+  console.log("UniqueStream metadata, season selection, pagination, and explicit encrypted-HLS limitation passed.");
 }
 
 main().catch((error) => {
