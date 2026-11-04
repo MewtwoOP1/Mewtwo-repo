@@ -28,7 +28,7 @@ var _detailCache = {};
 
 function getInfo() {
   return { name: 'AnimeAV1', lang: 'es', baseUrl: BASE,
-    logo: 'https://www.google.com/s2/favicons?sz=256&domain=animeav1.com', type: 'anime', version: '1.0.1' };
+    logo: 'https://www.google.com/s2/favicons?sz=256&domain=animeav1.com', type: 'anime', version: '1.0.2' };
 }
 function getSettings() { return []; }
 
@@ -218,7 +218,9 @@ function _b64Decode(s) {
 }
 
 function _voeConfig(html) {
-  var tag = '<script type="application/json">';
+  var tagMatch = String(html || '').match(/<script\b[^>]*type\s*=\s*["']application\/json["'][^>]*>/i);
+  if (!tagMatch) return null;
+  var tag = tagMatch[0];
   var open = html.indexOf(tag);
   if (open < 0) return null;
   var start = open + tag.length;
@@ -403,29 +405,36 @@ function _resolveEmbed(embed, dub) {
 }
 
 function _resolveVoe(url, dub, audio) {
-  return _fetchText(url, BASE + '/').then(function (html) {
-    var config = _voeConfig(html);
-    if (!config) {
-      var redirect = _voeRedirect(html);
-      if (!redirect) return null;
-      return _fetchText(redirect, BASE + '/').then(_voeConfig);
-    }
-    return config;
-  }).then(function (config) {
-    var source = config && config.source;
-    if (!source || String(source).indexOf('http') !== 0) return [];
-    return [{
-      url: source,
-      quality: 'VOE',
-      label: 'VOE' + (audio ? ' · ' + audio : ''),
-      container: 'hls',
-      headers: { 'User-Agent': UA },
-      kind: dub ? 'dub' : 'sub',
-      audioLang: dub ? 'es' : 'ja',
-      audio: audio,
-      subtitles: []
-    }];
-  }).catch(function () { return []; });
+  function resolve(attempt) {
+    return _fetchText(url, BASE + '/').then(function (html) {
+      var config = _voeConfig(html);
+      if (!config) {
+        var redirect = _voeRedirect(html);
+        if (!redirect) return null;
+        return _fetchText(redirect, BASE + '/').then(_voeConfig);
+      }
+      return config;
+    }).then(function (config) {
+      var source = config && (config.source || config.file || config.url);
+      if ((!source || String(source).indexOf('http') !== 0) && attempt < 1) return resolve(attempt + 1);
+      if (!source || String(source).indexOf('http') !== 0) return [];
+      return [{
+        url: source,
+        quality: 'VOE',
+        label: 'VOE' + (audio ? ' · ' + audio : ''),
+        container: 'hls',
+        headers: { 'User-Agent': UA },
+        kind: dub ? 'dub' : 'sub',
+        audioLang: dub ? 'es' : 'ja',
+        audio: audio,
+        subtitles: []
+      }];
+    }).catch(function () {
+      if (attempt < 1) return resolve(attempt + 1);
+      return [];
+    });
+  }
+  return resolve(0);
 }
 
 function _resolveYourUpload(url, dub, audio) {
@@ -484,7 +493,7 @@ function popular(opts) {
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    version: '1.0.1',
+    version: '1.0.2',
     getInfo: getInfo,
     getSettings: getSettings,
     getHome: getHome,

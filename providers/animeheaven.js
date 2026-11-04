@@ -26,7 +26,7 @@ var _detailCache = {};
 
 function getInfo() {
   return { name: 'AnimeHeaven', lang: 'en', baseUrl: BASE,
-    logo: 'https://www.google.com/s2/favicons?sz=256&domain=animeheaven.me', type: 'anime', version: '1.0.1' };
+    logo: 'https://www.google.com/s2/favicons?sz=256&domain=animeheaven.me', type: 'anime', version: '1.0.2' };
 }
 function getSettings() { return []; }
 
@@ -51,7 +51,8 @@ function _raceTimeout(promise, ms, fallback) {
   });
 }
 
-function _get(url, ref, cookie) {
+function _get(url, ref, cookie, attempt) {
+  attempt = attempt || 0;
   var h = { 'User-Agent': UA, 'Accept': 'text/html,application/xhtml+xml,*/*', 'Referer': ref || BASE + '/' };
   if (cookie) h['Cookie'] = cookie;
   return _raceTimeout(fetch(url, { headers: h }).then(function (r) {
@@ -61,6 +62,13 @@ function _get(url, ref, cookie) {
   }), 15000, null).then(function (v) {
     if (v == null) throw new Error('AnimeHeaven: timeout for ' + url);
     return v;
+  }).catch(function (error) {
+    var message = String(error && error.message || error || '').toLowerCase();
+    var transient = /reset|connection|socket|network|fetch failed|timeout/.test(message);
+    if (!transient || attempt >= 2) throw error;
+    return new Promise(function (resolve) {
+      setTimeout(resolve, 250 * (attempt + 1));
+    }).then(function () { return _get(url, ref, cookie, attempt + 1); });
   });
 }
 
@@ -390,7 +398,7 @@ function popular(opts) {
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    version: '1.0.1',
+    version: '1.0.2',
     getInfo: getInfo,
     getSettings: getSettings,
     getHome: getHome,

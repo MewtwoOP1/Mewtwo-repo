@@ -64,7 +64,7 @@ global.fetch = async (url, init) => {
 };
 
 async function main() {
-  assert.equal(provider.version, "1.0.1");
+  assert.equal(provider.version, "1.0.2");
   assert.equal(provider.getInfo().name, "AnimeHeaven");
   assert.equal(provider.getInfo().type, "anime");
   assert.equal(provider.getInfo().lang, "en");
@@ -128,6 +128,21 @@ async function main() {
     return response("", 404);
   };
   await assert.rejects(() => provider.getVideoSources("animeheaven://47edc338ae59c34cc3ea427c7f6871df/2", {}), /no video source/);
+  global.fetch = oldFetch;
+
+  // Transport resets are retried, while HTTP errors remain explicit.
+  let retryCalls = 0;
+  global.fetch = async (url) => {
+    if (String(url).endsWith("/anime.php?retry")) {
+      retryCalls++;
+      if (retryCalls === 1) throw new Error("Connection reset by peer");
+      return response(DETAIL_HTML);
+    }
+    return response("", 404);
+  };
+  const retried = await provider.getDetail("anime.php?retry", {});
+  assert.equal(retried.episodes.length, 2);
+  assert.equal(retryCalls, 2);
   global.fetch = oldFetch;
 
   console.log("AnimeHeaven search, detail, episodes, gate mirrors, and decoy filtering passed.");
