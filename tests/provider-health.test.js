@@ -145,11 +145,23 @@ async function readSample(response, maxBytes) {
   if (typeof body === 'string') return Buffer.from(body).subarray(0, maxBytes);
   if (body && typeof body.getReader === 'function') {
     const reader = body.getReader();
+    const chunks = [];
+    let total = 0;
     try {
-      const result = await reader.read();
-      if (!result || result.done || !result.value) return Buffer.alloc(0);
-      const view = Buffer.from(result.value);
-      return view.subarray(0, maxBytes);
+      // A bounded Range GET can arrive in several small network chunks. Read
+      // until the requested bound (or end of body) so manifest signatures that
+      // straddle a chunk boundary are still recognized.
+      while (total < maxBytes) {
+        const result = await reader.read();
+        if (!result || result.done || !result.value) break;
+        const view = Buffer.from(result.value);
+        const remaining = maxBytes - total;
+        const slice = view.subarray(0, remaining);
+        chunks.push(slice);
+        total += slice.length;
+        if (view.length > remaining) break;
+      }
+      return Buffer.concat(chunks, total);
     } finally {
       try { await reader.cancel(); } catch (_) {}
     }

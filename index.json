@@ -681,19 +681,47 @@
       ]
     },
     {
-      "id": "xfdm",
-      "name": "Lili (XFDM)",
-      "version": "1.0.2",
+      "id": "zoko",
+      "name": "Zoko",
+      "version": "1.0.0",
       "type": "anime",
-      "lang": "zh",
-      "file": "providers/xfdm.js",
-      "logo": "https://www.google.com/s2/favicons?sz=256&domain=xfdm.pro",
+      "lang": "en",
+      "file": "providers/zoko.js",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=zokoanime.video",
       "nsfw": false,
       "settings": [
         {
+          "key": "audioMode",
+          "label": "Audio tracks",
+          "description": "Show both SUB and DUB when available, or filter to one track.",
+          "type": "enum",
+          "default": "both",
+          "options": [
+            {
+              "value": "both",
+              "label": "Sub and dub"
+            },
+            {
+              "value": "sub",
+              "label": "Sub only"
+            },
+            {
+              "value": "dub",
+              "label": "Dub only"
+            }
+          ]
+        },
+        {
+          "key": "homeSections",
+          "label": "Home sections",
+          "description": "Comma-separated AniList sections: trending, popular, top.",
+          "type": "text",
+          "default": "trending,popular"
+        },
+        {
           "key": "requestTimeoutMs",
           "label": "Request timeout",
-          "description": "Maximum wait for each Bangumi or XFDM request.",
+          "description": "Maximum wait for an individual AniList or Zoko request.",
           "type": "enum",
           "default": "10000",
           "options": [
@@ -712,44 +740,157 @@
           ]
         },
         {
-          "key": "maxTitleCandidates",
-          "label": "Bangumi title candidates",
-          "description": "Maximum number of AniList title aliases searched against Bangumi. Matching is exact after punctuation/spacing normalization; the provider does not fuzzy-match different seasons.",
+          "key": "showAdult",
+          "label": "Show adult catalogue entries",
+          "description": "Include adult entries returned by AniList. Disabled by default.",
+          "type": "bool",
+          "default": false
+        }
+      ]
+    },
+    {
+      "id": "animeheaven",
+      "name": "AnimeHeaven",
+      "version": "1.0.0",
+      "type": "anime",
+      "lang": "en",
+      "file": "providers/animeheaven.js",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=animeheaven.me",
+      "nsfw": false,
+      "settings": [
+        {
+          "key": "requestTimeoutMs",
+          "label": "Request timeout",
+          "description": "Maximum wait for each catalogue, detail, or gate request.",
           "type": "enum",
-          "default": "8",
+          "default": "12000",
           "options": [
             {
-              "value": "3",
-              "label": "3 aliases"
+              "value": "6000",
+              "label": "6 seconds"
             },
             {
-              "value": "5",
-              "label": "5 aliases"
+              "value": "12000",
+              "label": "12 seconds"
             },
             {
-              "value": "8",
-              "label": "8 aliases"
+              "value": "18000",
+              "label": "18 seconds"
             }
           ]
         },
         {
-          "key": "maxMirrorChannels",
-          "label": "Playback mirror attempts",
-          "description": "Maximum XFDM channels resolved for one episode. Channels are mirrors of the same encode, not different quality levels.",
+          "key": "maxStreams",
+          "label": "Maximum mirrors",
+          "description": "Limit the number of working AnimeHeaven mirrors returned for an episode.",
           "type": "enum",
-          "default": "2",
+          "default": "4",
           "options": [
             {
-              "value": "1",
-              "label": "1 channel"
-            },
-            {
               "value": "2",
-              "label": "2 channels"
+              "label": "2 mirrors"
             },
             {
-              "value": "3",
-              "label": "3 channels"
+              "value": "4",
+              "label": "4 mirrors"
+            },
+            {
+              "value": "6",
+              "label": "6 mirrors"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "animeonsen",
+      "name": "AnimeOnsen",
+      "version": "1.0.0",
+      "type": "anime",
+      "lang": "all",
+      "file": "providers/animeonsen.js",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=animeonsen.xyz",
+      "nsfw": false,
+      "settings": [
+        {
+          "key": "requestTimeoutMs",
+          "label": "Request timeout",
+          "description": "Maximum wait for an individual AnimeOnsen API request.",
+          "type": "enum",
+          "default": "12000",
+          "options": [
+            {
+              "value": "6000",
+              "label": "6 seconds"
+            },
+            {
+              "value": "12000",
+              "label": "12 seconds"
+            },
+            {
+              "value": "18000",
+              "label": "18 seconds"
+            }
+          ]
+        },
+        {
+          "key": "homeLimit",
+          "label": "Home catalogue size",
+          "description": "Number of titles requested for the AnimeOnsen home row.",
+          "type": "enum",
+          "default": "30",
+          "options": [
+            {
+              "value": "15",
+              "label": "15 titles"
+            },
+            {
+              "value": "30",
+              "label": "30 titles"
+            },
+            {
+              "value": "50",
+              "label": "50 titles"
+            }
+          ]
+        },
+        {
+          "key": "includeSubtitles",
+          "label": "Include external subtitles",
+          "description": "Add AnimeOnsen ASS subtitle tracks to each episode when available.",
+          "type": "bool",
+          "default": true
+        }
+      ]
+    },
+    {
+      "id": "kickassanime",
+      "name": "KickAssAnime",
+      "version": "1.0.0",
+      "type": "anime",
+      "lang": "en",
+      "file": "providers/kickassanime.js",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=kaa.lt",
+      "nsfw": false,
+      "settings": [
+        {
+          "key": "audioMode",
+          "label": "Audio tracks",
+          "description": "Show both Japanese and English audio tracks when available, or filter to one.",
+          "type": "enum",
+          "default": "both",
+          "options": [
+            {
+              "value": "both",
+              "label": "Sub and dub"
+            },
+            {
+              "value": "sub",
+              "label": "Sub only"
+            },
+            {
+              "value": "dub",
+              "label": "Dub only"
             }
           ]
         },
@@ -761,27 +902,23 @@
           "default": "trending,popular"
         },
         {
-          "key": "cacheSeconds",
-          "label": "Catalogue cache",
-          "description": "Cache successful title and episode lookups briefly. Negative lookups are cached for a shorter period.",
+          "key": "requestTimeoutMs",
+          "label": "Request timeout",
+          "description": "Maximum wait for an individual AniList or KAA request.",
           "type": "enum",
-          "default": "120",
+          "default": "10000",
           "options": [
             {
-              "value": "0",
-              "label": "Disabled"
+              "value": "6000",
+              "label": "6 seconds"
             },
             {
-              "value": "60",
-              "label": "1 minute"
+              "value": "10000",
+              "label": "10 seconds"
             },
             {
-              "value": "120",
-              "label": "2 minutes"
-            },
-            {
-              "value": "300",
-              "label": "5 minutes"
+              "value": "15000",
+              "label": "15 seconds"
             }
           ]
         },
@@ -791,6 +928,81 @@
           "description": "Include adult entries returned by AniList. Disabled by default.",
           "type": "bool",
           "default": false
+        }
+      ]
+    },
+    {
+      "id": "reanime",
+      "name": "Re:Anime",
+      "version": "1.0.0",
+      "type": "anime",
+      "lang": "en",
+      "file": "providers/reanime.js",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=reanime.to",
+      "nsfw": false,
+      "settings": [
+        {
+          "key": "audioMode",
+          "label": "Audio tracks",
+          "description": "Show both SUB and DUB when Re:Anime reports both, or filter to one track.",
+          "type": "enum",
+          "default": "both",
+          "options": [
+            {
+              "value": "both",
+              "label": "Sub and dub"
+            },
+            {
+              "value": "sub",
+              "label": "Sub only"
+            },
+            {
+              "value": "dub",
+              "label": "Dub only"
+            }
+          ]
+        },
+        {
+          "key": "requestTimeoutMs",
+          "label": "Request timeout",
+          "description": "Maximum wait for an individual Re:Anime or FlixCloud request.",
+          "type": "enum",
+          "default": "12000",
+          "options": [
+            {
+              "value": "6000",
+              "label": "6 seconds"
+            },
+            {
+              "value": "12000",
+              "label": "12 seconds"
+            },
+            {
+              "value": "18000",
+              "label": "18 seconds"
+            }
+          ]
+        },
+        {
+          "key": "maxStreams",
+          "label": "Maximum downloads",
+          "description": "Limit the number of direct downloads returned for an episode.",
+          "type": "enum",
+          "default": "4",
+          "options": [
+            {
+              "value": "2",
+              "label": "2 files"
+            },
+            {
+              "value": "4",
+              "label": "4 files"
+            },
+            {
+              "value": "6",
+              "label": "6 files"
+            }
+          ]
         }
       ]
     },
