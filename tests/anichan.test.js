@@ -134,7 +134,8 @@ async function main() {
     assert.equal(results[0].url, "anichan://154587");
     assert.equal(results[0].title, "Frieren: Beyond Journey's End");
     assert.equal(results[0].cover, "https://img.example/frieren-xl.jpg");
-    assert.equal(results[0].year, 2023);
+    assert.equal(results[0].year, "2023");
+    assert.equal(typeof results[0].year, "string");
   }
 
   // ── detail: AniChan's episode count + dub flag, enriched by AniList ────────
@@ -157,7 +158,10 @@ async function main() {
     assert.equal(detail.cover, "https://img.example/frieren-xl.jpg");
     assert.equal(detail.banner, "https://img.example/frieren-banner.jpg");
     assert.equal(detail.malId, 52991);
-    assert.equal(detail.year, 2023);
+    assert.equal(detail.year, "2023");
+    assert.equal(typeof detail.year, "string");
+    assert.ok(detail.episodes.every((ep) => typeof ep.id === "string" && typeof ep.title === "string" &&
+      typeof ep.url === "string" && typeof ep.number === "number"));
     assert.equal(detail.status, "finished");
     assert.deepEqual(detail.genres, ["Adventure", "Drama", "Fantasy"]);
     assert.equal(detail.subCount, 2);

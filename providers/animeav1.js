@@ -148,12 +148,24 @@ function _parseMedia(page) {
     else title = media.title.romaji || media.title.english || media.title.userPreferred || '';
   }
   var cover = '';
-  if (media.poster) cover = media.poster;
-  else if (media.cover) cover = media.cover;
-  else if (media.coverImage) cover = media.coverImage.extraLarge || media.coverImage.large || media.coverImage;
+  if (typeof media.poster === 'string') cover = media.poster;
+  else if (typeof media.cover === 'string') cover = media.cover;
+  else if (media.coverImage && typeof media.coverImage === 'object') {
+    cover = media.coverImage.extraLarge || media.coverImage.large || media.coverImage.url || '';
+  } else if (typeof media.coverImage === 'string') cover = media.coverImage;
+  cover = typeof cover === 'string' ? cover : '';
   var description = media.description || media.synopsis || '';
-  var genres = Array.isArray(media.genres) ? media.genres.slice() : [];
-  var year = media.year || null;
+  // The site has returned both strings and objects here. MediaDetail expects
+  // List<String>, so never leak the devalue object shape to the host.
+  var genres = Array.isArray(media.genres) ? media.genres.map(function (genre) {
+    if (typeof genre === 'string') return genre.trim();
+    if (genre && typeof genre === 'object') {
+      return String(genre.name || genre.title || genre.label || '').trim();
+    }
+    return '';
+  }).filter(function (genre) { return !!genre; }) : [];
+  // MediaDetail.year is String?, while the site commonly sends an integer.
+  var year = media.year != null ? String(media.year) : null;
   return {
     malId: media.malId != null ? parseInt(media.malId, 10) : null,
     episodes: unique,

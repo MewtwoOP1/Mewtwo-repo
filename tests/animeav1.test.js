@@ -31,6 +31,17 @@ function page(root) {
   return JSON.stringify({ nodes: [{ type: "data", data: flat }] });
 }
 
+const MEDIA_TYPED = page({
+  media: {
+    id: 159,
+    title: "Sousou no Frieren",
+    malId: 52991,
+    episodes: [{ number: 1 }, { number: 2 }, { number: 3 }],
+    genres: [{ name: "Adventure" }, { title: "Drama" }, "Fantasy"],
+    year: 2023,
+  },
+});
+
 function rot13(text) {
   return String(text).replace(/[A-Za-z]/g, (c) => {
     const o = c.charCodeAt(0);
@@ -96,7 +107,7 @@ async function main() {
 
     if (requestUrl.includes("/catalogo/__data.json?search=Sousou%20no%20Frieren")) return response(SEARCH);
     if (requestUrl.endsWith("/catalogo/__data.json")) return response(SEARCH);
-    if (requestUrl.endsWith("/media/sousou-no-frieren/__data.json")) return response(MEDIA);
+    if (requestUrl.endsWith("/media/sousou-no-frieren/__data.json")) return response(MEDIA_TYPED);
     if (requestUrl.endsWith("/media/sousou-no-frieren/1/__data.json")) return response(SUB_PAGE);
     if (requestUrl.endsWith("/media/sousou-no-frieren/2/__data.json")) return response(UNSUPPORTED_PAGE);
     if (requestUrl.endsWith("/media/sousou-no-frieren/3/__data.json")) return response(EMPTY_PAGE);
@@ -127,6 +138,12 @@ async function main() {
   const detail = await provider.getDetail("sousou-no-frieren", {});
   assert.equal(detail.title, "Sousou no Frieren");
   assert.equal(detail.malId, 52991);
+  assert.equal(typeof detail.year, "string");
+  assert.equal(detail.year, "2023");
+  assert.deepEqual(detail.genres, ["Adventure", "Drama", "Fantasy"]);
+  assert.ok(detail.genres.every((genre) => typeof genre === "string"));
+  assert.ok(detail.episodes.every((ep) => typeof ep.id === "string" && typeof ep.title === "string" &&
+    typeof ep.url === "string" && typeof ep.number === "number"));
   assert.deepEqual(detail.episodes.map((ep) => ep.number), [1, 2, 3]);
   assert.equal(detail.episodes[0].url, "animeav1://sousou-no-frieren/1");
 

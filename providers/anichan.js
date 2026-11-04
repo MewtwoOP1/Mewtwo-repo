@@ -200,8 +200,11 @@ function _mediaFromAniList(m) {
     cover: cover.extraLarge || cover.large || null,
     banner: m.bannerImage || null,
     description: m.description || '',
-    genres: Array.isArray(m.genres) ? m.genres : [],
-    year: m.seasonYear || null,
+    genres: Array.isArray(m.genres) ? m.genres.map(function (genre) {
+      return typeof genre === 'string' ? genre.trim() : '';
+    }).filter(function (genre) { return !!genre; }) : [],
+    // Zangetsu's MediaDetail year field is String?, although AniList sends a number.
+    year: m.seasonYear != null ? String(m.seasonYear) : null,
     status: String(m.status || '').toLowerCase() || 'unknown',
     format: m.format || null,
     episodes: typeof m.episodes === 'number' ? m.episodes : null,
