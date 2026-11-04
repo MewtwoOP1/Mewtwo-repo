@@ -103,6 +103,10 @@ global.fetch = async (url, init) => {
   if (target === 'https://reanime.to/api/watch/mock-anime/1') {
     return json(watch);
   }
+  if (target === 'https://reanime.to/api/watch/missing-anime/1') {
+    // Next.js 404 shells contain the same boot text as a Cloudflare challenge.
+    return html('<html><body>Please enable JavaScript and cookies to continue.</body></html>', 404);
+  }
   if (target === 'https://reanime.to/api/flix/123/1') {
     return json({ servers: [{ dataType: 'sub', dataLink: 'https://flixcloud.cc/e/abc123' }] });
   }
@@ -176,6 +180,8 @@ async function main() {
   assert.equal(subStreams[1].quality, '1080p');
   assert.equal(subStreams[1].container, 'mkv');
   assert.equal(subStreams[1].headers.Referer, 'https://flixcloud.cc/');
+  const cachedSubStreams = await provider.getVideoSources(subOne.url, {});
+  assert.equal(cachedSubStreams, subStreams, 'resolved streams are cached for repeated source sweeps');
 
   const dubStreams = await provider.getVideoSources(dubOne.url, {});
   assert.equal(dubStreams.length, 1);
@@ -195,12 +201,25 @@ async function main() {
   global.__settings.reanime.audioMode = 'both';
 
   assert.equal(provider._mergeServers({ episode_links: watch.episode_links }, { servers: watch.episode_links }).length, 3);
+  assert.equal(provider._mergeServers(null, { servers: [
+    { serverName: 'HD-1', dataLink: 'https://flixcloud.cc/e/abc123?v=1', dataType: 'sub' },
+    { serverName: 'HD-2', dataLink: 'https://flixcloud.cc/e/abc123?v=2', dataType: 'sub' },
+    { serverName: 'HD-1', dataLink: 'https://flixcloud.cc/e/abc123?v=1', dataType: 'dub' }
+  ] }).length, 2, 'HD-1/HD-2 mirrors collapse per audio track but keep sub and dub separate');
+
+  const watchBefore = requests.filter((entry) => entry.url === 'https://reanime.to/api/watch/missing-anime/1').length;
+  const missingStreams = await provider.getVideoSources('missing-anime|1|ep-1|123|sub', {});
+  const watchAfter = requests.filter((entry) => entry.url === 'https://reanime.to/api/watch/missing-anime/1').length;
+  assert.equal(watchAfter - watchBefore, 1,
+    'a 404 HTML shell is not mistaken for a Cloudflare challenge and retried across mirrors');
+  assert.equal(missingStreams.length, 1, 'the FlixCloud lookup still works when the watch endpoint is missing');
+
   await assert.rejects(() => provider.getDetail(''), /missing anime slug/i);
   assert.deepEqual(await provider.getVideoSources('', {}), []);
   assert.ok(requests.some((entry) => entry.url === 'https://flixcloud.cc/d/abc123/__data.json'));
   assert.ok(requests.some((entry) => entry.url.indexOf('https://fetch8.flixcloud.cc/download/11111111-1111-1111-1111-111111111111/progress') === 0));
 
-  console.log('Re:Anime tests passed: manifest parity, real Response handling, Cloudflare browser retry, search/home/detail, SUB/DUB episodes, direct MKV and FlixCloud downloads, deduplication, settings, and invalid input.');
+  console.log('Re:Anime tests passed: manifest parity, real Response handling, Cloudflare browser retry, search/home/detail, SUB/DUB episodes, direct MKV and FlixCloud downloads, deduplication, cached streams, 404 handling, settings, and invalid input.');
 }
 
 main().catch((error) => { console.error(error && error.stack || error); process.exitCode = 1; });

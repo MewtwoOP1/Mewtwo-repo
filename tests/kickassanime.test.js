@@ -75,6 +75,25 @@ const playerHtml = [
   '</script></html>'
 ].join('\n');
 
+function astroPlayer(props) {
+  const encoded = JSON.stringify(props).replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+  return '<html><body><astro-island props="' + encoded + '"></astro-island></body></html>';
+}
+const catPlayerHtml = astroPlayer({
+  manifest: [0, '//bl.krussdomi.com/playlist/cat123/master.m3u8'],
+  subtitles: [1, [
+    [0, { format: [0, 'srt'], language: [0, 'en'], name: [0, 'English'], src: [0, 'https:///subbl.krussdomi.com/cat123/en.srt'] }]
+  ]],
+  type: [0, 'hls'],
+  source: [0, 'catstream']
+});
+const dashPlayerHtml = astroPlayer({
+  manifest: [0, 'https:////bl.krussdomi.com/mpd/bird123/master.mpd'],
+  subtitles: [1, []],
+  type: [0, 'dash'],
+  source: [0, 'catstream']
+});
+
 const requests = [];
 global.fetch = async (url, init) => {
   const target = String(url);
@@ -95,6 +114,12 @@ global.fetch = async (url, init) => {
   if (target === 'https://kaa.lt/api/show/mock-anime-da47/episodes?ep=1&lang=en-US') {
     return json(dubPage);
   }
+  if (target === 'https://kaa.lt/api/show/mock-anime-da47/episodes?ep=2&lang=ja-JP') {
+    return json(subPage);
+  }
+  if (target === 'https://kaa.lt/api/show/mock-anime-da47/episodes?ep=2&lang=en-US') {
+    return json(dubPage);
+  }
   if (target === 'https://kaa.lt/api/show/mock-anime-da47/episode/ep-1-ep-1-sub') {
     return json({ servers: [
       { name: 'MegaPlay', src: 'https://megaplay.example/embed/1' },
@@ -106,8 +131,18 @@ global.fetch = async (url, init) => {
       { name: 'VidStreaming', src: 'https://krussdomi.com/player?id=dub123&source=vidstream' }
     ] });
   }
+  if (target === 'https://kaa.lt/api/show/mock-anime-da47/episode/ep-2-ep-2-sub') {
+    return json({ servers: [
+      { name: 'CatStream', src: 'https://krussdomi.com/cat-player/player?id=cat123&type=hls&source=catstream' }
+    ] });
+  }
+  if (target === 'https://kaa.lt/api/show/mock-anime-da47/episode/ep-2-ep-2-dub') {
+    return json({ servers: [] });
+  }
   if (target === 'https://krussdomi.com/player?id=abc123&source=vidstream') return html(playerHtml);
   if (target === 'https://krussdomi.com/player?id=dub123&source=vidstream') return html(playerHtml);
+  if (target === 'https://krussdomi.com/cat-player/player?id=cat123&type=hls&source=catstream') return html(catPlayerHtml);
+  if (target === 'https://krussdomi.com/cat-player/player?id=bird123&type=dash') return html(dashPlayerHtml);
   return json({ error: 'not found' }, 404);
 };
 
@@ -141,7 +176,16 @@ async function main() {
   assert.equal(search[0].url, 'kaa://anime/151807');
   assert.equal(search[0].sourceId, 'kickassanime');
 
+  const anilistMediaCalls = () => requests.filter((entry) => {
+    if (entry.url !== 'https://graphql.anilist.co') return false;
+    try { return JSON.parse(entry.options.body).query.includes('Media(id:$id'); } catch (_) { return false; }
+  }).length;
+  const mediaCallsBeforeDetail = anilistMediaCalls();
   const detail = await provider.getDetail('kaa://anime/151807', {});
+  assert.equal(anilistMediaCalls(), mediaCallsBeforeDetail,
+    'detail reuses the AniList row already returned by search/home');
+  assert.equal(requests.filter((entry) => entry.url === 'https://kaa.lt/api/fsearch').length, 1,
+    'duplicate English/romaji titles are searched once and a confident match stops alias probing');
   assert.equal(detail.title, 'Mock Anime (2024)');
   assert.equal(detail.status, 'ongoing');
   assert.equal(detail.episodes.length, 5, 'three sub and two dub rows');
@@ -171,6 +215,35 @@ async function main() {
   assert.equal(dubStreams[0].kind, 'dub');
   assert.equal(dubStreams[0].audioLang, 'en-US');
 
+  const catManifest = provider._playerManifest(catPlayerHtml);
+  assert.deepEqual(catManifest, { url: 'https://bl.krussdomi.com/playlist/cat123/master.m3u8', type: 'hls' });
+  const catSubtitles = provider._subtitles(catPlayerHtml);
+  assert.equal(catSubtitles.length, 1, 'CatStream Astro props expose one subtitle');
+  assert.equal(catSubtitles[0].url, 'https://subbl.krussdomi.com/cat123/en.srt');
+  assert.equal(catSubtitles[0].format, 'srt');
+  assert.deepEqual(provider._playerManifest(dashPlayerHtml), {
+    url: 'https://bl.krussdomi.com/mpd/bird123/master.mpd', type: 'dash'
+  });
+  assert.equal(provider._serverUrl({ servers: [
+    { name: 'BirdStream', src: 'https://krussdomi.com/cat-player/player?id=bird123&type=dash' },
+    { name: 'CatStream', src: 'https://krussdomi.com/cat-player/player?id=cat123&type=hls&source=catstream' }
+  ] }), 'https://krussdomi.com/cat-player/player?id=cat123&type=hls&source=catstream',
+    'the native priority prefers VidStreaming, then CatStream, then BirdStream');
+
+  const subTwo = detail.episodes.find((entry) => entry.number === 2 && entry.category === 'sub');
+  const catStreams = await provider.getVideoSources(subTwo.url, {});
+  assert.equal(catStreams.length, 1);
+  assert.equal(catStreams[0].url, 'https://bl.krussdomi.com/playlist/cat123/master.m3u8');
+  assert.equal(catStreams[0].type, 'hls');
+  assert.equal(catStreams[0].subtitles[0].format, 'srt');
+
+  const dubTwo = detail.episodes.find((entry) => entry.number === 2 && entry.category === 'dub');
+  const dubFallback = await provider.getVideoSources(dubTwo.url, {});
+  assert.equal(dubFallback.length, 1, 'a dub row with no servers falls back to the Japanese stream');
+  assert.equal(dubFallback[0].kind, 'sub');
+  assert.match(dubFallback[0].label, /dub unavailable/i);
+  assert.equal(dubFallback[0].url, 'https://bl.krussdomi.com/playlist/cat123/master.m3u8');
+
   global.__settings.kickassanime.audioMode = 'sub';
   const subOnly = await provider.getDetail('kaa://anime/151807', {});
   assert.equal(subOnly.episodes.length, 3);
@@ -195,7 +268,7 @@ async function main() {
   assert.ok(requests.some((entry) => entry.url === 'https://kaa.lt/api/fsearch'));
   assert.ok(requests.some((entry) => entry.url === 'https://krussdomi.com/player?id=abc123&source=vidstream'));
 
-  console.log('KickAssAnime tests passed: manifest parity, real Response handling, AniList home/search/detail, title resolution, SUB/DUB episodes, VidStreaming HLS, subtitles, settings, and invalid input.');
+  console.log('KickAssAnime tests passed: manifest parity, real Response handling, AniList home/search/detail, title resolution, SUB/DUB episodes, VidStreaming HLS, CatStream/DASH manifests, subtitles, dub fallback, settings, and invalid input.');
 }
 
 main().catch((error) => { console.error(error && error.stack || error); process.exitCode = 1; });

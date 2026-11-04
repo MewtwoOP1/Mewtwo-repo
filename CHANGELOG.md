@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Remove the AnimePahe source from the manifest and provider/test suites.
+- Zoko: reuse AniList search rows during detail, cache player pages between availability checks and playback, and derive ongoing episode totals from `nextAiringEpisode`.
+- KickAssAnime: stop querying AniList twice during detail, skip duplicate alias searches after a confident match, cache episode pages, support CatStream and BirdStream player manifests, normalize Astro subtitle tracks, and fall back to the Japanese stream when a dub row has no servers.
+- Re:Anime: treat 401/404/410 pages as normal API responses instead of Cloudflare challenges, start the watch and FlixCloud lookups together, deduplicate HD mirrors per audio track, cache FlixCloud metadata and resolved streams, and remove the 7-second request cap.
+- Bump Zoko, KickAssAnime, and Re:Anime to 1.0.1.
+
 - Fix the Jellyfin source icon by switching from SVG to the official square PNG asset, which is compatible with Zangetsu's cached network-image renderer; bump provider version to 3.0.3.
 
 - Use the official Jellyfin icon for the Jellyfin source, fix its direct asset URL, and bump the provider to 3.0.2.

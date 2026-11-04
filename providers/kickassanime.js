@@ -13,7 +13,7 @@ var UA = 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko)
 var CACHE = {};
 
 function getInfo() {
-  return { name: 'KickAssAnime', lang: 'en', baseUrl: SITE, logo: 'https://www.google.com/s2/favicons?sz=256&domain=kaa.lt', type: 'anime', version: '1.0.0' };
+  return { name: 'KickAssAnime', lang: 'en', baseUrl: SITE, logo: 'https://www.google.com/s2/favicons?sz=256&domain=kaa.lt', type: 'anime', version: '1.0.1' };
 }
 function getSettings() {
   return [
@@ -130,6 +130,8 @@ function _status(value) {
 function _item(media) {
   var cfg = _config();
   if (!media || !media.id || media.isAdult && !cfg.showAdult) return null;
+  // Reuse the AniList row returned by search/home in the following detail call.
+  _cachePut('media:' + media.id, media, 120000);
   return {
     id: 'kaa://anime/' + media.id,
     url: 'kaa://anime/' + media.id,
@@ -305,29 +307,53 @@ function _resolveShow(media) {
   var key = 'show:' + media.id;
   var cached = _cacheGet(key);
   if (cached) return Promise.resolve(cached);
-  var titles = _mediaTitles(media).slice(0, 3);
-  return Promise.all(titles.map(function (title) { return _searchKaa(title); })).then(function (groups) {
-    var rows = [], seen = {};
-    groups.forEach(function (group) {
-      (group || []).forEach(function (row) {
-        if (!seen[row.slug]) { seen[row.slug] = true; rows.push(row); }
-      });
-    });
+  var titles = [], seenTitles = {};
+  _mediaTitles(media).forEach(function (title) {
+    var normalized = _normalize(title);
+    if (!normalized || seenTitles[normalized] || titles.length >= 3) return;
+    seenTitles[normalized] = true;
+    titles.push(title);
+  });
+  if (!titles.length) throw new Error('KickAssAnime title match was too weak');
+  var rows = [], seenRows = {};
+  function choose() {
     var chosen = null;
     var best = -1;
     rows.forEach(function (row) {
       var score = _candidateScore(media, row);
       if (score > best) { best = score; chosen = row; }
     });
-    if (!chosen || best < 0.28) throw new Error('KickAssAnime title match was too weak');
-    return _cachePut(key, chosen, 300000);
+    return { chosen: chosen, best: best };
+  }
+  function collect(group) {
+    (group || []).forEach(function (row) {
+      if (!seenRows[row.slug]) { seenRows[row.slug] = true; rows.push(row); }
+    });
+  }
+  function attempt(index) {
+    return _searchKaa(titles[index]).then(function (group) {
+      collect(group);
+      var match = choose();
+      // A confident first-title match does not need the remaining aliases.
+      if (match.chosen && match.best >= 0.72) return match;
+      if (index + 1 >= titles.length) return match;
+      return attempt(index + 1);
+    });
+  }
+  return attempt(0).then(function (match) {
+    if (!match.chosen || match.best < 0.28) throw new Error('KickAssAnime title match was too weak');
+    return _cachePut(key, match.chosen, 300000);
   });
 }
 function _episodesUrl(slug, episode, locale) {
   return API + '/show/' + encodeURIComponent(slug) + '/episodes?ep=' + encodeURIComponent(String(episode)) + '&lang=' + encodeURIComponent(locale);
 }
 function _episodePage(slug, episode, locale) {
-  return _json(_episodesUrl(slug, episode, locale), { headers: { Referer: SITE + '/' } });
+  var key = 'page:' + slug + ':' + episode + ':' + locale;
+  var cached = _cacheGet(key);
+  if (cached) return Promise.resolve(cached);
+  return _json(_episodesUrl(slug, episode, locale), { headers: { Referer: SITE + '/' } })
+    .then(function (root) { return _cachePut(key, root, 60000); });
 }
 function _episodeNumbers(root) {
   var out = {}, has = false;
@@ -417,22 +443,19 @@ function _episodeItems(anilistId, show, availability) {
 }
 function getDetail(url, opts) {
   var id = _id(url);
-  return Promise.all([_media(id), _resolveShowByAnilist(id)]).then(function (results) {
-    var media = results[0];
-    var show = results[1];
-    return _availability(show).then(function (availability) {
-      var item = _item(media);
-      if (!item) throw new Error('KickAssAnime: title is hidden by settings');
-      item.episodes = _episodeItems(id, show, availability);
-      item.subCount = item.episodes.filter(function (x) { return x.category === 'sub'; }).length;
-      item.dubCount = item.episodes.filter(function (x) { return x.category === 'dub'; }).length;
-      item.episodeCount = item.episodes.length;
-      return item;
+  return _media(id).then(function (media) {
+    return _resolveShow(media).then(function (show) {
+      return _availability(show).then(function (availability) {
+        var item = _item(media);
+        if (!item) throw new Error('KickAssAnime: title is hidden by settings');
+        item.episodes = _episodeItems(id, show, availability);
+        item.subCount = item.episodes.filter(function (x) { return x.category === 'sub'; }).length;
+        item.dubCount = item.episodes.filter(function (x) { return x.category === 'dub'; }).length;
+        item.episodeCount = item.episodes.length;
+        return item;
+      });
     });
   });
-}
-function _resolveShowByAnilist(id) {
-  return _media(id).then(_resolveShow);
 }
 function getEpisodes(url, opts) {
   return getDetail(url, opts).then(function (detail) { return detail.episodes || []; });
@@ -456,9 +479,58 @@ function _vidStreamingUrl(root) {
   }
   return '';
 }
+function _serverUrl(root) {
+  var servers = root && Array.isArray(root.servers) ? root.servers : [];
+  var preferred = ['vidstreaming', 'catstream', 'birdstream'];
+  for (var p = 0; p < preferred.length; p++) {
+    for (var i = 0; i < servers.length; i++) {
+      var server = servers[i] || {};
+      var name = String(server.name || '').toLowerCase();
+      var src = String(server.src || server.url || '');
+      if (name === preferred[p] || src.toLowerCase().indexOf('source=' + preferred[p]) >= 0) {
+        var url = _absolute(src);
+        if (url) return url;
+      }
+    }
+  }
+  return '';
+}
 function _playerId(playerUrl) {
   try { return new URL(playerUrl).searchParams.get('id') || ''; }
   catch (e) { return ''; }
+}
+function _astroProps(html) {
+  var match = String(html || '').match(/\bprops="([^"]+)"/);
+  if (!match) return null;
+  try {
+    var parsed = JSON.parse(_decodeEntities(match[1]));
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch (e) { return null; }
+}
+function _unwrap(value) {
+  return Array.isArray(value) && value.length === 2 ? value[1] : value;
+}
+function _mediaUrl(value) {
+  var text = _decodeEntities(value).trim();
+  if (!text) return '';
+  text = text.replace(/^https?:\/{2,}/i, 'https://').replace(/^\/\//, 'https://');
+  return _absolute(text);
+}
+function _playerManifest(html) {
+  var props = _astroProps(html);
+  if (props) {
+    var manifest = _mediaUrl(_unwrap(props.manifest));
+    var kind = String(_unwrap(props.type) || '').toLowerCase();
+    if (manifest) {
+      var dash = /\.mpd(?:[?#]|$)/i.test(manifest) || kind === 'dash';
+      return { url: manifest, type: dash ? 'dash' : 'hls' };
+    }
+  }
+  var fallback = String(html || '').match(/(?:https?:)?\/\/[^"'\s\\]+\.(?:m3u8|mpd)(?:[?#][^"'\s\\]*)?/i);
+  if (!fallback) return null;
+  var url = _mediaUrl(fallback[0]);
+  if (!url) return null;
+  return { url: url, type: /\.mpd(?:[?#]|$)/i.test(url) ? 'dash' : 'hls' };
 }
 function _decodeEntities(value) {
   return String(value || '')
@@ -474,52 +546,100 @@ function _absolute(value) {
     return parsed.protocol === 'https:' ? parsed.href : '';
   } catch (e) { return ''; }
 }
+function _subtitleFormat(row, url) {
+  var format = String(_unwrap(row && row.format) || '').toLowerCase();
+  if (format === 'vtt' || format === 'srt') return format;
+  if (/\.srt(?:[?#]|$)/i.test(url)) return 'srt';
+  if (/\.vtt(?:[?#]|$)/i.test(url)) return 'vtt';
+  return 'vtt';
+}
 function _subtitles(html) {
+  var out = [], seen = {};
+  function add(url, lang, label, format) {
+    var absolute = _mediaUrl(url);
+    if (!absolute || seen[absolute]) return;
+    seen[absolute] = true;
+    out.push({ url: absolute, lang: lang || 'und', label: label || lang || 'Subtitles', format: format || 'vtt' });
+  }
+  var props = _astroProps(html);
+  var rows = props && props.subtitles;
+  var list = Array.isArray(rows) && rows.length === 2 ? rows[1] : rows;
+  if (Array.isArray(list)) {
+    list.forEach(function (item) {
+      var row = Array.isArray(item) && item.length === 2 ? item[1] : item;
+      if (!row || typeof row !== 'object') return;
+      var src = _unwrap(row.src || row.url || row.file);
+      if (!src) return;
+      add(src, _unwrap(row.language), _unwrap(row.name), _subtitleFormat(row, String(src)));
+    });
+  }
   var text = _decodeEntities(html);
   var re = /"language":\[0,"([^"]*)"\],"name":\[0,"([^"]*)"\],"src":\[0,"([^"]+\.vtt)"\]/gi;
-  var out = [], seen = {}, match;
-  while ((match = re.exec(text)) !== null) {
-    var url = _absolute(match[3]);
-    if (!url || seen[url]) continue;
-    seen[url] = true;
-    var lang = match[1] || 'und';
-    out.push({ url: url, lang: lang, label: match[2] || lang, format: 'vtt' });
-  }
+  var match;
+  while ((match = re.exec(text)) !== null) add(match[3], match[1], match[2], 'vtt');
   return out;
+}
+function _playbackStream(playerUrl, body, category, locale) {
+  var manifest = _playerManifest(body);
+  var subtitles = _subtitles(body);
+  if (!manifest) {
+    var playerId = _playerId(playerUrl);
+    if (!playerId || !/source=vidstream/i.test(playerUrl)) return null;
+    manifest = { url: HLS_BASE + '/' + encodeURIComponent(playerId) + '/master.m3u8', type: 'hls' };
+  }
+  var dash = manifest.type === 'dash';
+  return {
+    url: manifest.url,
+    type: manifest.type,
+    container: manifest.type,
+    hls: !dash,
+    dash: dash,
+    quality: 'Auto',
+    label: category === 'dub' ? 'KickAssAnime English' : 'KickAssAnime Japanese',
+    kind: category,
+    audio: category,
+    audioLang: locale,
+    headers: { 'User-Agent': UA, Referer: PLAYER_ORIGIN + '/', Origin: PLAYER_ORIGIN },
+    subtitles: subtitles,
+    isActive: true
+  };
+}
+function _resolveEpisodeStream(episode, locale, category) {
+  return _episodePage(episode.slug, episode.number, locale).then(function (page) {
+    var row = _episodeRow(page, episode.number);
+    if (!row || !row.slug) throw new Error('KickAssAnime episode was not found');
+    return _json(API + '/show/' + encodeURIComponent(episode.slug) + '/episode/ep-' + encodeURIComponent(String(episode.number)) + '-' + encodeURIComponent(row.slug), { headers: { Referer: SITE + '/' } });
+  }).then(function (detail) {
+    var playerUrl = _serverUrl(detail);
+    if (!playerUrl) throw new Error('KickAssAnime episode has no native player server');
+    return _fetch(playerUrl, { headers: { Accept: 'text/html,application/xhtml+xml,*/*;q=0.8', Referer: SITE + '/' } })
+      .then(function (player) {
+        var stream = _playbackStream(playerUrl, player.body, category, locale);
+        if (!stream) throw new Error('KickAssAnime player did not expose a playable manifest');
+        return [stream];
+      });
+  });
 }
 function getVideoSources(episodeUrl, opts) {
   var episode;
   try { episode = _parseEpisode(episodeUrl); }
   catch (e) { return Promise.resolve([]); }
   var locale = episode.category === 'dub' ? DUB_LOCALE : ORIGINAL_LOCALE;
-  return _episodePage(episode.slug, episode.number, locale).then(function (page) {
-    var row = _episodeRow(page, episode.number);
-    if (!row || !row.slug) throw new Error('KickAssAnime episode was not found');
-    return _json(API + '/show/' + encodeURIComponent(episode.slug) + '/episode/ep-' + encodeURIComponent(String(episode.number)) + '-' + encodeURIComponent(row.slug), { headers: { Referer: SITE + '/' } });
-  }).then(function (detail) {
-    var playerUrl = _vidStreamingUrl(detail);
-    if (!playerUrl) throw new Error('KickAssAnime episode has no native HLS server');
-    var playerId = _playerId(playerUrl);
-    if (!playerId) throw new Error('KickAssAnime player did not expose a media id');
-    return _fetch(playerUrl, { headers: { Accept: 'text/html,application/xhtml+xml,*/*;q=0.8', Referer: SITE + '/' } })
-      .then(function (player) { return _subtitles(player.body); })
-      .catch(function () { return []; })
-      .then(function (subtitles) {
-        return [{
-          url: HLS_BASE + '/' + encodeURIComponent(playerId) + '/master.m3u8',
-          type: 'hls',
-          container: 'hls',
-          hls: true,
-          quality: 'Auto',
-          label: episode.category === 'dub' ? 'KickAssAnime English' : 'KickAssAnime Japanese',
-          kind: episode.category,
-          audio: episode.category,
-          audioLang: locale,
-          headers: { 'User-Agent': UA, Referer: PLAYER_ORIGIN + '/', Origin: PLAYER_ORIGIN },
-          subtitles: subtitles,
-          isActive: true
-        }];
+  return _resolveEpisodeStream(episode, locale, episode.category).catch(function (error) {
+    // Some KAA titles list dub episode rows but leave the dub server list
+    // empty. Fall back to the Japanese stream for that episode instead of
+    // returning a dead-end with zero streams.
+    if (episode.category !== 'dub') throw error;
+    return _resolveEpisodeStream(episode, ORIGINAL_LOCALE, 'sub').then(function (streams) {
+      return streams.map(function (stream) {
+        return Object.assign({}, stream, {
+          kind: 'sub',
+          audio: 'sub',
+          audioLang: ORIGINAL_LOCALE,
+          label: 'KickAssAnime Japanese (dub unavailable)'
+        });
       });
+    }).catch(function () { return []; });
   });
 }
 function getStreams(url, opts) { return getVideoSources(url, opts); }
@@ -527,7 +647,7 @@ function getLinks(url, opts) { return getVideoSources(url, opts); }
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    version: '1.0.0', getInfo: getInfo, getSettings: getSettings,
+    version: '1.0.1', getInfo: getInfo, getSettings: getSettings,
     getHome: getHome, popular: popular, search: search,
     getDetail: getDetail, getEpisodes: getEpisodes,
     getVideoSources: getVideoSources, getStreams: getStreams, getLinks: getLinks,
@@ -535,6 +655,7 @@ if (typeof module !== 'undefined' && module.exports) {
     _seasonNumber: _seasonNumber, _candidate: _candidate, _candidateScore: _candidateScore,
     _episodeNumbers: _episodeNumbers, _episodeTitles: _episodeTitles, _episodeRow: _episodeRow,
     _parseEpisode: _parseEpisode, _vidStreamingUrl: _vidStreamingUrl, _playerId: _playerId,
+    _serverUrl: _serverUrl, _playerManifest: _playerManifest, _astroProps: _astroProps,
     _subtitles: _subtitles
   };
 }

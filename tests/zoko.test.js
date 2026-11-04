@@ -106,7 +106,22 @@ async function main() {
   assert.equal(search[0].cover, 'https://img.example/poster.jpg');
   assert.equal(search[0].sourceId, 'zoko');
 
+  assert.equal(provider._episodeCount({ episodes: 0, nextAiringEpisode: { episode: 13 } }), 12,
+    'ongoing titles without an episode total fall back to the next airing number');
+  assert.equal(provider._episodeCount({ episodes: 26, nextAiringEpisode: { episode: 27 } }), 26,
+    'the published episode total wins when it is already known');
+
+  const mediaQueriesBefore = requests.filter((entry) => {
+    if (entry.url !== 'https://graphql.anilist.co') return false;
+    try { return JSON.parse(entry.options.body).query.includes('Media(id:$id'); } catch (_) { return false; }
+  }).length;
   const detail = await provider.getDetail('zoko://anime/151807', {});
+  const mediaQueriesAfter = requests.filter((entry) => {
+    if (entry.url !== 'https://graphql.anilist.co') return false;
+    try { return JSON.parse(entry.options.body).query.includes('Media(id:$id'); } catch (_) { return false; }
+  }).length;
+  assert.equal(mediaQueriesAfter, mediaQueriesBefore,
+    'detail reuses the AniList row already returned by search/home');
   assert.equal(detail.title, 'Mock Anime (2026)');
   assert.equal(detail.year, '2026');
   assert.equal(detail.malId, 52299);
@@ -132,6 +147,8 @@ async function main() {
   assert.equal(subStreams[0].subtitles.length, 1, 'duplicate subtitle URLs are deduplicated');
   assert.equal(subStreams[0].subtitles[0].format, 'vtt');
   assert.equal(subStreams[0].subtitles[0].url, 'https://cdn.example/sub/en.vtt');
+  assert.equal(requests.filter((entry) => entry.url === 'https://zokoanime.video/stream/mal/52299/1/sub').length, 1,
+    'the availability probe and playback share one cached player page');
 
   const dubStreams = await provider.getVideoSources('zoko://episode/151807/52299/1/dub', {});
   assert.equal(dubStreams.length, 1);
@@ -163,7 +180,7 @@ async function main() {
   assert.ok(requests.some((entry) => entry.url === 'https://graphql.anilist.co'));
   assert.ok(requests.some((entry) => entry.url === 'https://zokoanime.video/stream/mal/52299/1/sub'));
 
-  console.log('Zoko tests passed: manifest parity, real Response handling, AniList home/search/detail, SUB/DUB availability, XOR payload decoding, HLS headers/subtitles, settings, and invalid input.');
+  console.log('Zoko tests passed: manifest parity, real Response handling, AniList home/search/detail, cached media/player pages, next-airing episode counts, SUB/DUB availability, XOR payload decoding, HLS headers/subtitles, settings, and invalid input.');
 }
 
 main().catch((error) => { console.error(error && error.stack || error); process.exitCode = 1; });

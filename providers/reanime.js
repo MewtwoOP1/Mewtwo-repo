@@ -3,13 +3,15 @@
 // the original MKV download to be ready and returns that direct file. It never
 // returns an iframe or a not-yet-generated download.
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID) ? String(__SOURCE_ID) : 'reanime';
-var VERSION = '1.0.0';
+var VERSION = '1.0.1';
 var SITE = 'https://reanime.to';
 var API = SITE + '/api/v1';
 var FLIX_API = SITE + '/api/flix';
 var FLIX = 'https://flixcloud.cc';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36';
 var SITE_DOMAINS = ['https://reanime.to', 'https://reanime.cz', 'https://reanime.wtf'];
+var FLIX_META_CACHE = {};
+var STREAM_CACHE = {};
 
 function getInfo() {
   return { name: 'Re:Anime', lang: 'en', baseUrl: SITE,
@@ -77,6 +79,11 @@ function _headers(referer, accept) {
   };
 }
 function _isMomentPage(response) {
+  var status = Number(response && response.status || 0);
+  // A normal 401/404/410 page can contain the same Next.js boot text as a
+  // Cloudflare challenge. Do not mistake it for one, otherwise every missing
+  // endpoint is fetched twice on all three mirrors.
+  if (status === 401 || status === 404 || status === 410) return false;
   var body = String(response && response.body || '').toLowerCase();
   var headers = response && response.headers || {};
   var cfMitigated = String(headers['cf-mitigated'] || headers['CF-Mitigated'] || '').toLowerCase();
@@ -127,10 +134,11 @@ function _fetch(url, referer, timeoutMs, accept) {
     var targetReferer = sourceDomain && referer && String(referer).indexOf(sourceDomain) === 0
       ? domain + String(referer).slice(sourceDomain.length)
       : (referer || (domain || SITE) + '/home');
-    return _fetchOnce(targetUrl, targetReferer, Math.min(timeoutMs || _config().timeoutMs, 7000), accept, false)
+    var effectiveTimeout = timeoutMs || _config().timeoutMs;
+    return _fetchOnce(targetUrl, targetReferer, effectiveTimeout, accept, false)
       .then(function (response) {
         if (!_isMomentPage(response)) return response;
-        return _fetchOnce(targetUrl, targetReferer, Math.min(timeoutMs || _config().timeoutMs, 7000), accept, true)
+        return _fetchOnce(targetUrl, targetReferer, effectiveTimeout, accept, true)
           .then(function (cleared) {
             if (_isMomentPage(cleared)) {
               var err = new Error('Re:Anime Cloudflare challenge remained after browser retry');
@@ -394,25 +402,34 @@ function _resolveFlixDownload(dataLink, label, kind) {
   if (!match) return Promise.resolve([]);
   var embedId = match[1];
   var metadataUrl = FLIX + '/d/' + encodeURIComponent(embedId) + '/__data.json';
-  return fetch(metadataUrl, {
-    headers: _flixDownloadHeaders(),
-    timeoutMs: _config().timeoutMs
-  }).then(function (r) {
-    return _readResponse(r).then(function (body) {
-      var status = Number(r && (r.status || r.statusCode) || 0);
-      if (status >= 400) throw new Error('FlixCloud download metadata HTTP ' + status);
-      var fileId = (body.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i) || [])[0];
-      var token = (body.match(/eyJ[\w-]+\.[\w-]+\.[\w-]+/) || [])[0];
-      var base = (body.match(/https:\/\/fetch\d*\.flixcloud\.cc/i) || [])[0] || FLIX;
-      var resolution = (body.match(/(\d{3,4}p)/i) || [])[1] || 'Auto';
-      if (!fileId || !token) throw new Error('FlixCloud download metadata missing file ID/token');
-      return {
-        fileId: fileId, token: token, base: base,
-        url: base + '/download/' + fileId + '?token=' + encodeURIComponent(token),
-        resolution: resolution
-      };
+  var cachedMeta = FLIX_META_CACHE[embedId];
+  var metadataPromise;
+  if (cachedMeta && cachedMeta.expiresAt > Date.now()) {
+    metadataPromise = Promise.resolve(cachedMeta.value);
+  } else {
+    metadataPromise = fetch(metadataUrl, {
+      headers: _flixDownloadHeaders(),
+      timeoutMs: _config().timeoutMs
+    }).then(function (r) {
+      return _readResponse(r).then(function (body) {
+        var status = Number(r && (r.status || r.statusCode) || 0);
+        if (status >= 400) throw new Error('FlixCloud download metadata HTTP ' + status);
+        var fileId = (body.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i) || [])[0];
+        var token = (body.match(/eyJ[\w-]+\.[\w-]+\.[\w-]+/) || [])[0];
+        var base = (body.match(/https:\/\/fetch\d*\.flixcloud\.cc/i) || [])[0] || FLIX;
+        var resolution = (body.match(/(\d{3,4}p)/i) || [])[1] || 'Auto';
+        if (!fileId || !token) throw new Error('FlixCloud download metadata missing file ID/token');
+        var value = {
+          fileId: fileId, token: token, base: base,
+          url: base + '/download/' + fileId + '?token=' + encodeURIComponent(token),
+          resolution: resolution
+        };
+        FLIX_META_CACHE[embedId] = { value: value, expiresAt: Date.now() + 60000 };
+        return value;
+      });
     });
-  }).then(function (meta) {
+  }
+  return metadataPromise.then(function (meta) {
     return _pollFlixDownload(meta, 0).then(function () {
       return [{
         url: meta.url, quality: meta.resolution, label: (label || 'Re:Anime') + ' Download',
@@ -434,8 +451,15 @@ function _mergeServers(watch, flix) {
     (Array.isArray(list) ? list : []).forEach(function (server) {
       if (!server || typeof server !== 'object') return;
       var link = String(_first(server, ['dataLink', 'url', 'link', 'src']) || '').trim();
-      var key = link || String(_first(server, ['$id', 'id']) || '');
-      if (!key || seen[key]) return;
+      var audio = _serverAudio(server);
+      // HD-1 and HD-2 point at the same FlixCloud file with different query
+      // flags. Collapse them per audio track so one episode does not fetch and
+      // poll the same download twice.
+      var embed = link.match(/\/e\/([a-z0-9]+)/i);
+      var key = (embed ? 'embed:' + embed[1] : link || String(_first(server, ['$id', 'id']) || ''));
+      if (!key) return;
+      key = audio + ':' + key;
+      if (seen[key]) return;
       seen[key] = 1;
       out.push(server);
     });
@@ -457,47 +481,64 @@ function getVideoSources(episodeUrl, opts) {
   if (!p.slug || !(p.epNum > 0)) return Promise.resolve([]);
   var audio = p.category || (opts && String(opts.category || '').toLowerCase() === 'dub' ? 'dub' : 'sub');
   if (audio !== 'dub') audio = 'sub';
+  var cacheKey = p.slug + '|' + p.epNum + '|' + p.suppliedAid + '|' + audio;
+  var cachedStreams = STREAM_CACHE[cacheKey];
+  if (cachedStreams && cachedStreams.expiresAt > Date.now()) return Promise.resolve(cachedStreams.value);
   var referer = SITE + '/watch/' + p.slug + '?ep=' + p.epNum;
-  return _json(SITE + '/api/watch/' + encodeURIComponent(p.slug) + '/' + p.epNum, referer)
-    .catch(function () { return null; })
-    .then(function (watch) {
-      var watchAnime = watch && watch.anime || {};
-      var aid = /^\d+$/.test(p.suppliedAid) && p.suppliedAid !== '0' ? p.suppliedAid : _anilistId(watchAnime);
-      var aidPromise = aid ? Promise.resolve(aid) :
-        _detailData(p.slug).then(function (d) {
-          var data = d && (d.data || d.anime || d);
-          return _anilistId(data);
-        }).catch(function () { return ''; });
-      return aidPromise.then(function (anilistId) {
-        var flixPromise = anilistId
-          ? _json(FLIX_API + '/' + anilistId + '/' + p.epNum, referer).catch(function () { return null; })
-          : Promise.resolve(null);
-        return flixPromise.then(function (flix) {
-          var servers = _mergeServers(watch, flix);
-          var tasks = [];
-          servers.forEach(function (server) {
-            var serverType = _serverAudio(server);
-            if (serverType && serverType !== audio) return;
-            var label = '[' + (serverType || audio).toUpperCase() + '] ' + String(server.serverName || server.name || 'Re:Anime');
-            var link = String(_first(server, ['dataLink', 'url', 'link', 'src']) || '');
-            var direct = _directMedia(link, label, audio);
-            if (direct) tasks.push(Promise.resolve([direct]));
-            else if (/flixcloud/i.test(link) && /\/e\//i.test(link)) tasks.push(_resolveFlixDownload(link, label, audio));
-          });
-          return Promise.all(tasks).then(function (groups) {
-            var out = [], seen = {};
-            groups.forEach(function (group) {
-              (group || []).forEach(function (stream) {
-                if (!stream || !stream.url || seen[stream.url]) return;
-                seen[stream.url] = 1;
-                out.push(stream);
-              });
-            });
-            return out.slice(0, _config().maxStreams);
-          });
+  var suppliedAid = /^\d+$/.test(p.suppliedAid) && p.suppliedAid !== '0' ? p.suppliedAid : '';
+  // The watch endpoint is optional (and on current Re:Anime builds it returns
+  // the site shell). Start it in parallel with the FlixCloud lookup so a slow
+  // or missing watch response does not delay playback.
+  var watchPromise = _json(SITE + '/api/watch/' + encodeURIComponent(p.slug) + '/' + p.epNum, referer)
+    .catch(function () { return null; });
+  var aidPromise = suppliedAid ? Promise.resolve(suppliedAid) :
+    watchPromise.then(function (watch) {
+      return _anilistId(watch && watch.anime);
+    }).then(function (aid) {
+      if (aid) return aid;
+      return _detailData(p.slug).then(function (d) {
+        var data = d && (d.data || d.anime || d);
+        return _anilistId(data);
+      }).catch(function () { return ''; });
+    });
+  var flixPromise = aidPromise.then(function (anilistId) {
+    return anilistId
+      ? _json(FLIX_API + '/' + anilistId + '/' + p.epNum, referer).catch(function () { return null; })
+      : null;
+  });
+  return Promise.all([watchPromise, flixPromise]).then(function (results) {
+    var watch = results[0];
+    var flix = results[1];
+    var servers = _mergeServers(watch, flix);
+    var tasks = [];
+    servers.forEach(function (server) {
+      var serverType = _serverAudio(server);
+      if (serverType && serverType !== audio) return;
+      var label = '[' + (serverType || audio).toUpperCase() + '] ' + String(server.serverName || server.name || 'Re:Anime');
+      var link = String(_first(server, ['dataLink', 'url', 'link', 'src']) || '');
+      var direct = _directMedia(link, label, audio);
+      if (direct) tasks.push(Promise.resolve([direct]));
+      else if (/flixcloud/i.test(link) && /\/e\//i.test(link)) tasks.push(_resolveFlixDownload(link, label, audio));
+    });
+    return Promise.all(tasks).then(function (groups) {
+      var out = [], seen = {}, seenFiles = {};
+      groups.forEach(function (group) {
+        (group || []).forEach(function (stream) {
+          if (!stream || !stream.url) return;
+          var file = stream.url.match(/\/download\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);
+          var key = file ? 'file:' + file[1].toLowerCase() : stream.url;
+          if (seen[key] || seenFiles[stream.url]) return;
+          seen[key] = 1;
+          seenFiles[stream.url] = 1;
+          out.push(stream);
         });
       });
-    }).catch(function () { return []; });
+      return out.slice(0, _config().maxStreams);
+    });
+  }).then(function (streams) {
+    if (streams.length) STREAM_CACHE[cacheKey] = { value: streams, expiresAt: Date.now() + 30000 };
+    return streams;
+  }).catch(function () { return []; });
 }
 function getStreams(id, opts) { return getVideoSources(id, opts); }
 function getLinks(id, opts) { return getVideoSources(id, opts); }

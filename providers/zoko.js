@@ -10,7 +10,7 @@ var PAYLOAD_KEY = 'otaku-embed-v1';
 var CACHE = {};
 
 function getInfo() {
-  return { name: 'Zoko', lang: 'en', baseUrl: SITE, logo: 'https://www.google.com/s2/favicons?sz=256&domain=zokoanime.video', type: 'anime', version: '1.0.0' };
+  return { name: 'Zoko', lang: 'en', baseUrl: SITE, logo: 'https://www.google.com/s2/favicons?sz=256&domain=zokoanime.video', type: 'anime', version: '1.0.1' };
 }
 function getSettings() {
   return [
@@ -113,7 +113,7 @@ function _graph(query, variables) {
   });
 }
 
-var MEDIA_FIELDS = 'id idMal title { english romaji native userPreferred } description(asHtml:false) coverImage { extraLarge large } bannerImage episodes status genres seasonYear averageScore isAdult synonyms';
+var MEDIA_FIELDS = 'id idMal title { english romaji native userPreferred } description(asHtml:false) coverImage { extraLarge large } bannerImage episodes nextAiringEpisode { episode } status genres seasonYear averageScore isAdult synonyms';
 function _title(media) {
   return media && media.title && (media.title.english || media.title.romaji || media.title.native || media.title.userPreferred) || 'Anime';
 }
@@ -128,6 +128,9 @@ function _item(media) {
   var cfg = _config();
   if (!media || !media.id || media.isAdult && !cfg.showAdult) return null;
   if (!Number(media.idMal)) return null;
+  // Keep the full AniList row so a following getDetail() can reuse the search
+  // response instead of spending a second AniList round-trip on the same title.
+  _cachePut('media:' + media.id, media, 120000);
   return {
     id: 'zoko://anime/' + media.id,
     url: 'zoko://anime/' + media.id,
@@ -226,13 +229,16 @@ function _decodePayload(html) {
   } catch (e) { return null; }
 }
 function _episodePage(malId, number, category) {
+  var key = 'page:' + malId + ':' + number + ':' + category;
+  var cached = _cacheGet(key);
+  if (cached) return Promise.resolve(cached);
   var url = SITE + '/stream/mal/' + encodeURIComponent(String(malId)) + '/' + encodeURIComponent(String(number)) + '/' + encodeURIComponent(category);
   return _fetch(url, {
     headers: { Accept: 'text/html,application/xhtml+xml,*/*;q=0.8', Referer: SITE + '/' }
   }).then(function (response) {
     var payload = _decodePayload(response.body);
     if (!payload) throw new Error('Zoko player payload was missing or could not be decoded');
-    return payload;
+    return _cachePut(key, payload, 60000);
   });
 }
 function _availability(malId) {
@@ -262,9 +268,18 @@ function _episode(anilistId, malId, number, category) {
   var url = _episodeUrl(anilistId, malId, number, category);
   return { id: url, url: url, number: number, title: 'Episode ' + number, category: category, sourceId: SOURCE_ID, type: 'anime' };
 }
+function _episodeCount(media) {
+  var count = Number(media && media.episodes) || 0;
+  // Ongoing shows can have a null/zero episode total while AniList already
+  // knows the next episode number. That is the only reliable upper bound we
+  // have for Zoko, so use it instead of returning an empty episode list.
+  var next = media && media.nextAiringEpisode && Number(media.nextAiringEpisode.episode);
+  if (next > 0) count = Math.max(count, next - 1);
+  return Math.max(0, Math.min(500, count));
+}
 function _episodeItems(anilistId, malId, media, availability) {
   var cfg = _config();
-  var count = Math.max(0, Math.min(500, Number(media && media.episodes) || 0));
+  var count = _episodeCount(media);
   var sub = !!availability.sub;
   var dub = !!availability.dub;
   var wantSub = cfg.audioMode !== 'dub' && sub;
@@ -355,11 +370,12 @@ function getLinks(url, opts) { return getVideoSources(url, opts); }
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    version: '1.0.0', getInfo: getInfo, getSettings: getSettings,
+    version: '1.0.1', getInfo: getInfo, getSettings: getSettings,
     getHome: getHome, popular: popular, search: search,
     getDetail: getDetail, getEpisodes: getEpisodes,
     getVideoSources: getVideoSources, getStreams: getStreams, getLinks: getLinks,
     _config: _config, _decodePayload: _decodePayload, _availability: _availability,
-    _parseEpisode: _parseEpisode, _subtitles: _subtitles, _item: _item
+    _parseEpisode: _parseEpisode, _subtitles: _subtitles, _item: _item,
+    _episodeCount: _episodeCount
   };
 }
