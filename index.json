@@ -630,6 +630,16 @@
       ]
     },
     {
+      "id": "anichan",
+      "name": "AniChan",
+      "version": "1.0.1",
+      "type": "anime",
+      "lang": "en",
+      "file": "providers/anichan.js",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=anichan.to",
+      "nsfw": false
+    },
+    {
       "id": "hdhub4u",
       "name": "HDHub4u",
       "version": "1.2.4",

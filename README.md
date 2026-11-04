@@ -5,7 +5,7 @@
 <p align="center">
   <a href="https://github.com/Spyou/Zangetsu"><img src="https://img.shields.io/badge/BUILT_FOR-Zangetsu-8B5CF6?style=for-the-badge&logo=github&logoColor=white" alt="Built for Zangetsu" /></a>
   <a href="https://raw.githubusercontent.com/MewtwoOP1/Mewtwo-repo/main/index.json"><img src="https://img.shields.io/badge/SOURCE-Manifest-0F766E?style=for-the-badge" alt="Source manifest" /></a>
-  <img src="https://img.shields.io/badge/INTEGRATIONS-06-4F46E5?style=for-the-badge" alt="Six integrations" />
+  <img src="https://img.shields.io/badge/INTEGRATIONS-07-4F46E5?style=for-the-badge" alt="Seven integrations" />
 </p>
 
 <p align="center">
@@ -25,7 +25,7 @@
 
 ## At a glance
 
-This repository includes six integrations documented here. Choose the integrations you need; **you do not need to install all six**.
+This repository documents six main integrations and one additional anime source, AniChan. Choose the sources you need; **you do not need to install all of them**.
 
 | Integration | Catalogue & metadata | Playback |
 |:--|:--|:--|
@@ -34,6 +34,7 @@ This repository includes six integrations documented here. Choose the integratio
 | <img src="assets/icons/stremio.svg" width="24" align="middle" alt="" /> **TMDB + Stremio** | TMDB | Your configured Stremio-compatible add-ons |
 | **Miruro** | Miruro / AniList metadata | Available Miruro streaming servers |
 | **Zenkai Player** | AniMap + AniList metadata | Native MegaPlay, VidStream, and ACDN multi-audio playback |
+| **AniChan** | AniList metadata | AniChan HLS servers |
 | <img src="https://raw.githubusercontent.com/jellyfin/jellyfin-ux/master/logos/PNG-4x/jellyfin-icon--color-on-dark.png" width="24" align="middle" alt="Jellyfin" /> **Jellyfin** | Jellyfin libraries and server metadata | Jellyfin or AIOStreams media server |
 
 <p align="center">
@@ -242,6 +243,23 @@ ACDN's route is different from MegaPlay/VidStream: it returns one HLS playlist w
 ### API source
 
 See Zenkai's [stream handler](https://github.com/nyyrox2/Zenkai/blob/main/server/handler.js), [ACDN resolver](https://github.com/nyyrox2/Zenkai/blob/main/server/acdn.js), and [EmbedPage API client](https://github.com/nyyrox2/Zenkai/blob/main/src/services/api.ts).
+
+</details>
+
+---
+
+<details>
+<summary><strong>AniChan</strong> · AniList anime catalogue and HLS playback</summary>
+
+AniChan uses AniList for title discovery and its own watch API for episode metadata, servers, and HLS playback. It is installed individually from the manifest and has no additional settings.
+
+### Source notes
+
+- **AniChan** resolves titles through AniList's public GraphQL API, then asks AniChan for its episode count, dub flag, and servers. Playback uses a short-lived `anichan_ws` cookie minted by `POST /api/watch/session`. Server requests are tiered (`fast`, then `rest`) and signed with an `X-Wk` keyset read from the site's JavaScript chunks. Encrypted replies are decrypted locally, and keysets are refreshed when they rotate. AniList search can return titles AniChan does not carry; those fail at detail time so the picker can move on. MegaPlay and VidHawk duplicates are filtered out because they are reached through other sources in this repository.
+
+### Limitations
+
+AniChan currently publishes a null Cloudflare Turnstile site key. The provider sends an empty token and **never** solves or bypasses CAPTCHA. If the site enables Turnstile, session creation fails with an explicit error. Its watch session is short-lived and may need refreshing between requests. As a third-party source, AniChan can change markup, rotate hosts, block requests, or become unavailable without notice.
 
 </details>
 
