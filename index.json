@@ -630,6 +630,56 @@
       ]
     },
     {
+      "id": "animeheaven",
+      "name": "AnimeHeaven",
+      "version": "1.0.0",
+      "type": "anime",
+      "lang": "en",
+      "file": "providers/animeheaven.js",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=animeheaven.me",
+      "nsfw": false
+    },
+    {
+      "id": "anichan",
+      "name": "AniChan",
+      "version": "1.0.0",
+      "type": "anime",
+      "lang": "en",
+      "file": "providers/anichan.js",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=anichan.to",
+      "nsfw": false
+    },
+    {
+      "id": "uniquestream",
+      "name": "UniqueStream",
+      "version": "1.0.0",
+      "type": "anime",
+      "lang": "en",
+      "file": "providers/uniquestream.js",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=uniquestream.net",
+      "nsfw": false
+    },
+    {
+      "id": "animeav1",
+      "name": "AnimeAV1",
+      "version": "1.0.0",
+      "type": "anime",
+      "lang": "es",
+      "file": "providers/animeav1.js",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=animeav1.com",
+      "nsfw": false
+    },
+    {
+      "id": "animekhor",
+      "name": "AnimeKhor",
+      "version": "1.0.0",
+      "type": "anime",
+      "lang": "en",
+      "file": "providers/animekhor.js",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=animekhor.org",
+      "nsfw": false
+    },
+    {
       "id": "hdhub4u",
       "name": "HDHub4u",
       "version": "1.2.4",

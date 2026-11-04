@@ -5,7 +5,7 @@
 <p align="center">
   <a href="https://github.com/Spyou/Zangetsu"><img src="https://img.shields.io/badge/BUILT_FOR-Zangetsu-8B5CF6?style=for-the-badge&logo=github&logoColor=white" alt="Built for Zangetsu" /></a>
   <a href="https://raw.githubusercontent.com/MewtwoOP1/Mewtwo-repo/main/index.json"><img src="https://img.shields.io/badge/SOURCE-Manifest-0F766E?style=for-the-badge" alt="Source manifest" /></a>
-  <img src="https://img.shields.io/badge/INTEGRATIONS-06-4F46E5?style=for-the-badge" alt="Six integrations" />
+  <img src="https://img.shields.io/badge/INTEGRATIONS-11-4F46E5?style=for-the-badge" alt="Eleven integrations" />
 </p>
 
 <p align="center">
@@ -25,7 +25,7 @@
 
 ## At a glance
 
-This repository includes six integrations documented here. Choose the integrations you need; **you do not need to install all six**.
+This repository documents six main integrations and five anime/donghua providers here. Choose the sources you need; **you do not need to install all of them**.
 
 | Integration | Catalogue & metadata | Playback |
 |:--|:--|:--|
@@ -34,6 +34,11 @@ This repository includes six integrations documented here. Choose the integratio
 | <img src="assets/icons/stremio.svg" width="24" align="middle" alt="" /> **TMDB + Stremio** | TMDB | Your configured Stremio-compatible add-ons |
 | **Miruro** | Miruro / AniList metadata | Available Miruro streaming servers |
 | **Zenkai Player** | AniMap + AniList metadata | Native MegaPlay, VidStream, and ACDN multi-audio playback |
+| **AnimeHeaven** | AnimeHeaven catalogue | AnimeHeaven CDN MP4 mirrors |
+| **AniChan** | AniList metadata | AniChan HLS servers |
+| **UniqueStream** | UniqueStream JSON catalogue | UniqueStream HLS (sub/dub) |
+| **AnimeAV1** | AnimeAV1 catalogue (Spanish) | VOE / YourUpload |
+| **AnimeKhor** | AnimeKhor donghua catalogue | Dailymotion / OK.ru / Rumble |
 | <img src="https://raw.githubusercontent.com/jellyfin/jellyfin-ux/master/logos/PNG-4x/jellyfin-icon--color-on-dark.png" width="24" align="middle" alt="Jellyfin" /> **Jellyfin** | Jellyfin libraries and server metadata | Jellyfin or AIOStreams media server |
 
 <p align="center">
@@ -242,6 +247,35 @@ ACDN's route is different from MegaPlay/VidStream: it returns one HLS playlist w
 ### API source
 
 See Zenkai's [stream handler](https://github.com/nyyrox2/Zenkai/blob/main/server/handler.js), [ACDN resolver](https://github.com/nyyrox2/Zenkai/blob/main/server/acdn.js), and [EmbedPage API client](https://github.com/nyyrox2/Zenkai/blob/main/src/services/api.ts).
+
+</details>
+
+---
+
+<details>
+<summary><strong>AnimeHeaven · AniChan · UniqueStream · AnimeAV1 · AnimeKhor</strong> · Additional anime and donghua sources</summary>
+
+These five sources use each site's own catalogue and streams. They have no settings and are installed individually from the manifest.
+
+| Source | Content | Languages | Playback |
+|:--|:--|:--|:--|
+| **AnimeHeaven** | Anime catalogue and search | English subtitles, burned in | Direct MP4 from AnimeHeaven's CDN, several mirrors |
+| **AniChan** | AniList search and metadata | Japanese audio; English and other soft subtitles; English dub where present | HLS through AniChan's `/api/watch` servers |
+| **UniqueStream** | UniqueStream series, seasons, and episodes | `ja-JP` sub, `en-US` dub | HLS (AES-128); soft subtitles or the English burned-in encode |
+| **AnimeAV1** | Spanish anime catalogue | Japanese audio with Spanish subtitles; Latino Spanish dub where present | HLS/MP4 from VOE and YourUpload |
+| **AnimeKhor** | **Donghua only** (Chinese-origin animation) | Chinese audio with the mirror's own subtitles | Dailymotion, OK.ru, and Rumble direct files |
+
+### Source notes
+
+- **AnimeHeaven** reads `search.php`, the `gatea()` rows on `anime.php`, and `gate.php` with the episode's `key` cookie. The gate page plants a decoy clip for scrapers; the provider strips HTML comments and keeps only files whose query begins with the episode's own gate key. Subtitles are burned in, so no separate tracks are advertised. One MP4 quality is normal; the mirrors are offered as manual failover.
+- **AniChan** resolves titles through AniList's public GraphQL API, then asks AniChan for its episode count, dub flag, and servers. The playback API needs a short-lived `anichan_ws` cookie minted by `POST /api/watch/session`. Server requests are tiered (`fast`, then `rest`) and signed with an `X-Wk` keyset id taken from the site's own JavaScript chunks; encrypted replies (`{v:1,i,d}`) are decrypted with the host's AES-CTR bridge. When the keyset rotates, the provider re-reads the chunks. The site currently publishes a null Cloudflare Turnstile site key, so an empty token is accepted; the provider never solves or bypasses a CAPTCHA. If the site enables Turnstile, session creation fails and the provider reports the error. AniList search can return titles AniChan does not carry; those fail at detail time so the picker can move on. MegaPlay and VidHawk duplicates are filtered out because they are reached through other sources in this repository.
+- **UniqueStream** uses the site's FastAPI JSON routes (`/search`, `/series/{id}`, `/season/{id}/episodes`, `/episode/{id}/media/hls/{locale}`). Episodes with soft subtitles use the clean `ja-JP` playlist; when only burned-in encodes exist, the `en-US` hard-sub playlist is used and labelled as such. There is no public home/catalogue route, so the source exposes search rather than a home row. The HLS AES-128 key is the episode's `media_id`; the provider marks it with `playlistKey: "uniquestream:<media_id>"` for the runtime.
+- **AnimeAV1** reads SvelteKit's devalue-flattened `__data.json` pages for search, media, and episode embeds. VOE configs are decoded locally and YourUpload files come from `og:video`; MP4Upload and UPNShare need per-host extractors this repository does not carry and are skipped rather than returned as fake streams. The catalogue is Spanish-focused: Japanese audio with Spanish subtitles, plus a Latino Spanish dub where the episode lists one.
+- **AnimeKhor** is a dedicated **donghua** catalogue, not a general anime source; a Japanese title will not match. It parses the WordPress search, the `.eplister` episode list (including ranges such as `637 to 638`), and the base64-encoded mirror `<select>`. Dailymotion and OK.ru are resolved to direct HLS/MP4 files (OK.ru's entity-escaped `hlsManifestUrl` is used first); Rumble is attempted from the embed's media URLs. Other hosts (YouTube, emturbovid, abyssplayer, streamtape, and similar) require player extraction the repository does not implement, so the provider names them in an error instead of fabricating a stream. Some titles currently expose only a YouTube mirror and therefore fail with that message.
+
+### Limitations
+
+These are third-party sites. They can change markup, rotate hosts, block requests, rate-limit, or remove a title without notice. None of these providers bypasses CAPTCHA, Turnstile, DRM, or paywalls. When a source cannot be resolved, the provider fails with a specific error or returns no streams; it never returns a page URL or placeholder as if it were media.
 
 </details>
 
