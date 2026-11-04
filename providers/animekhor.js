@@ -30,7 +30,7 @@ var _detailCache = {};
 
 function getInfo() {
   return { name: 'AnimeKhor', lang: 'en', baseUrl: BASE,
-    logo: 'https://www.google.com/s2/favicons?sz=256&domain=animekhor.org', type: 'anime', version: '1.0.0' };
+    logo: 'https://www.google.com/s2/favicons?sz=256&domain=animekhor.org', type: 'anime', version: '1.0.1' };
 }
 function getSettings() { return []; }
 
@@ -537,7 +537,7 @@ function popular(opts) {
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    version: '1.0.0',
+    version: '1.0.1',
     getInfo: getInfo,
     getSettings: getSettings,
     getHome: getHome,

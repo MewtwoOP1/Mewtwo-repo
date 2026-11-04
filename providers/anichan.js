@@ -44,7 +44,7 @@ var KEYSET_TTL_MS = 30 * 60 * 1000;
 
 function getInfo() {
   return { name: 'AniChan', lang: 'en', baseUrl: BASE,
-    logo: 'https://www.google.com/s2/favicons?sz=256&domain=anichan.to', type: 'anime', version: '1.0.0' };
+    logo: 'https://www.google.com/s2/favicons?sz=256&domain=anichan.to', type: 'anime', version: '1.0.1' };
 }
 function getSettings() { return []; }
 
@@ -809,7 +809,7 @@ function popular(opts) {
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    version: '1.0.0',
+    version: '1.0.1',
     getInfo: getInfo,
     getSettings: getSettings,
     getHome: getHome,
