@@ -26,7 +26,7 @@ var _detailCache = {};
 
 function getInfo() {
   return { name: 'AnimeHeaven', lang: 'en', baseUrl: BASE,
-    logo: 'https://www.google.com/s2/favicons?sz=256&domain=animeheaven.me', type: 'anime', version: '1.0.2' };
+    logo: 'https://www.google.com/s2/favicons?sz=256&domain=animeheaven.me', type: 'anime', version: '1.0.3' };
 }
 function getSettings() { return []; }
 
@@ -398,7 +398,7 @@ function popular(opts) {
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    version: '1.0.2',
+    version: '1.0.3',
     getInfo: getInfo,
     getSettings: getSettings,
     getHome: getHome,

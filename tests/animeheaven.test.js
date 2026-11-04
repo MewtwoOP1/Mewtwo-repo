@@ -64,7 +64,7 @@ global.fetch = async (url, init) => {
 };
 
 async function main() {
-  assert.equal(provider.version, "1.0.2");
+  assert.equal(provider.version, "1.0.3");
   assert.equal(provider.getInfo().name, "AnimeHeaven");
   assert.equal(provider.getInfo().type, "anime");
   assert.equal(provider.getInfo().lang, "en");

@@ -632,7 +632,7 @@
     {
       "id": "animeheaven",
       "name": "AnimeHeaven",
-      "version": "1.0.2",
+      "version": "1.0.3",
       "type": "anime",
       "lang": "en",
       "file": "providers/animeheaven.js",
@@ -652,7 +652,7 @@
     {
       "id": "uniquestream",
       "name": "UniqueStream",
-      "version": "1.0.2",
+      "version": "1.0.3",
       "type": "anime",
       "lang": "en",
       "file": "providers/uniquestream.js",
@@ -662,7 +662,7 @@
     {
       "id": "animeav1",
       "name": "AnimeAV1",
-      "version": "1.0.2",
+      "version": "1.0.3",
       "type": "anime",
       "lang": "es",
       "file": "providers/animeav1.js",
@@ -672,7 +672,7 @@
     {
       "id": "animekhor",
       "name": "AnimeKhor",
-      "version": "1.0.1",
+      "version": "1.0.3",
       "type": "anime",
       "lang": "en",
       "file": "providers/animekhor.js",
