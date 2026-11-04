@@ -10,7 +10,7 @@ var PAYLOAD_KEY = 'otaku-embed-v1';
 var CACHE = {};
 
 function getInfo() {
-  return { name: 'Zoko', lang: 'en', baseUrl: SITE, logo: 'https://www.google.com/s2/favicons?sz=256&domain=zokoanime.video', type: 'anime', version: '1.0.1' };
+  return { name: 'Zoko', lang: 'en', baseUrl: SITE, logo: 'https://www.google.com/s2/favicons?sz=256&domain=zokoanime.video', type: 'anime', version: '1.0.2' };
 }
 function getSettings() {
   return [
@@ -228,6 +228,24 @@ function _decodePayload(html) {
     return parsed && typeof parsed === 'object' ? parsed : null;
   } catch (e) { return null; }
 }
+function _payloadSource(payload) {
+  if (!payload || typeof payload !== 'object') return '';
+  var candidates = [payload.src, payload.url, payload.stream, payload.hls, payload.m3u8,
+    payload.source, payload.video && payload.video.src, payload.video && payload.video.url];
+  if (Array.isArray(payload.sources)) candidates = candidates.concat(payload.sources);
+  for (var i = 0; i < candidates.length; i++) {
+    var value = candidates[i];
+    if (value && typeof value === 'object') value = value.url || value.src || value.file;
+    if (/^https:\/\/.*\.m3u8(?:[?#]|$)/i.test(String(value || '').trim())) return String(value).trim();
+  }
+  return '';
+}
+function _extractHls(html, payload) {
+  var source = _payloadSource(payload);
+  if (source) return source;
+  var match = String(html || '').match(/https:\/\/[^"'\s<>]+\.m3u8(?:[?#][^"'\s<>]*)?/i);
+  return match ? match[0] : '';
+}
 function _episodePage(malId, number, category) {
   var key = 'page:' + malId + ':' + number + ':' + category;
   var cached = _cacheGet(key);
@@ -237,7 +255,9 @@ function _episodePage(malId, number, category) {
     headers: { Accept: 'text/html,application/xhtml+xml,*/*;q=0.8', Referer: SITE + '/' }
   }).then(function (response) {
     var payload = _decodePayload(response.body);
-    if (!payload) throw new Error('Zoko player payload was missing or could not be decoded');
+    var source = _extractHls(response.body, payload);
+    if (!payload && !source) throw new Error('Zoko player payload was missing or could not be decoded');
+    if (source && (!payload || !payload.src)) payload = Object.assign({}, payload || {}, { src: source });
     return _cachePut(key, payload, 60000);
   });
 }
@@ -347,7 +367,7 @@ function getVideoSources(episodeUrl, opts) {
   try { episode = _parseEpisode(episodeUrl); }
   catch (e) { return Promise.resolve([]); }
   return _episodePage(episode.malId, episode.number, episode.category).then(function (payload) {
-    var stream = _absolute(payload.src);
+    var stream = _absolute(_extractHls('', payload));
     if (!stream) throw new Error('Zoko returned no playable HLS source');
     return [{
       url: stream,
@@ -370,11 +390,12 @@ function getLinks(url, opts) { return getVideoSources(url, opts); }
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    version: '1.0.1', getInfo: getInfo, getSettings: getSettings,
+    version: '1.0.2', getInfo: getInfo, getSettings: getSettings,
     getHome: getHome, popular: popular, search: search,
     getDetail: getDetail, getEpisodes: getEpisodes,
     getVideoSources: getVideoSources, getStreams: getStreams, getLinks: getLinks,
-    _config: _config, _decodePayload: _decodePayload, _availability: _availability,
+    _config: _config, _decodePayload: _decodePayload, _payloadSource: _payloadSource,
+    _availability: _availability,
     _parseEpisode: _parseEpisode, _subtitles: _subtitles, _item: _item,
     _episodeCount: _episodeCount
   };

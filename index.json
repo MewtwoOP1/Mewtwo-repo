@@ -537,7 +537,7 @@
     {
       "id": "zoko",
       "name": "Zoko",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "type": "anime",
       "lang": "en",
       "file": "providers/zoko.js",
@@ -720,7 +720,7 @@
     {
       "id": "kickassanime",
       "name": "KickAssAnime",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "type": "anime",
       "lang": "en",
       "file": "providers/kickassanime.js",
@@ -788,7 +788,7 @@
     {
       "id": "reanime",
       "name": "Re:Anime",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "type": "anime",
       "lang": "en",
       "file": "providers/reanime.js",

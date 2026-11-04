@@ -7,6 +7,7 @@
 - KickAssAnime: stop querying AniList twice during detail, skip duplicate alias searches after a confident match, cache episode pages, support CatStream and BirdStream player manifests, normalize Astro subtitle tracks, and fall back to the Japanese stream when a dub row has no servers.
 - Re:Anime: treat 401/404/410 pages as normal API responses instead of Cloudflare challenges, start the watch and FlixCloud lookups together, deduplicate HD mirrors per audio track, cache FlixCloud metadata and resolved streams, and remove the 7-second request cap.
 - Bump Zoko, KickAssAnime, and Re:Anime to 1.0.1.
+- Zoko 1.0.2 accepts all current player payload source shapes, KickAssAnime 1.0.2 forces refreshed player-manifest code, and Re:Anime 1.0.2 follows FlixCloud download redirects to return the playable CDN URL instead of the non-playable download endpoint.
 
 - Fix the Jellyfin source icon by switching from SVG to the official square PNG asset, which is compatible with Zangetsu's cached network-image renderer; bump provider version to 3.0.3.
 

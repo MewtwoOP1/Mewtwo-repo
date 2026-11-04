@@ -3,7 +3,7 @@
 // the original MKV download to be ready and returns that direct file. It never
 // returns an iframe or a not-yet-generated download.
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID) ? String(__SOURCE_ID) : 'reanime';
-var VERSION = '1.0.1';
+var VERSION = '1.0.2';
 var SITE = 'https://reanime.to';
 var API = SITE + '/api/v1';
 var FLIX_API = SITE + '/api/flix';
@@ -397,6 +397,22 @@ function _pollFlixDownload(meta, attempt) {
     throw new Error(result.message || 'FlixCloud download is not ready');
   });
 }
+function _resolveDownloadRedirect(meta) {
+  return fetch(meta.url, {
+    method: 'GET',
+    redirect: 'manual',
+    headers: _flixDownloadHeaders(),
+    timeoutMs: _config().timeoutMs
+  }).then(function (response) {
+    var location = '';
+    try {
+      location = response.headers && typeof response.headers.get === 'function'
+        ? response.headers.get('location') || '' : '';
+    } catch (_) {}
+    if (/^https:\/\//i.test(location)) return location;
+    return meta.url;
+  }).catch(function () { return meta.url; });
+}
 function _resolveFlixDownload(dataLink, label, kind) {
   var match = String(dataLink || '').match(/\/e\/([a-z0-9]+)/i);
   if (!match) return Promise.resolve([]);
@@ -431,11 +447,11 @@ function _resolveFlixDownload(dataLink, label, kind) {
   }
   return metadataPromise.then(function (meta) {
     return _pollFlixDownload(meta, 0).then(function () {
-      return [{
-        url: meta.url, quality: meta.resolution, label: (label || 'Re:Anime') + ' Download',
+      return _resolveDownloadRedirect(meta).then(function (playableUrl) { return [{
+        url: playableUrl, quality: meta.resolution, label: (label || 'Re:Anime') + ' Stream',
         container: 'mkv', type: 'mkv', headers: _flixDownloadHeaders(),
         kind: kind || 'sub', audioLang: kind === 'dub' ? 'en' : 'ja', subtitles: [], isActive: true
-      }];
+      }]; });
     });
   }).catch(function () { return []; });
 }
@@ -550,6 +566,7 @@ if (typeof module !== 'undefined' && module.exports) {
     getDetail: getDetail, getEpisodes: getEpisodes,
     getVideoSources: getVideoSources, getStreams: getStreams, getLinks: getLinks,
     _config: _config, _episodeParts: _episodeParts, _directMedia: _directMedia,
+    _resolveDownloadRedirect: _resolveDownloadRedirect,
     _serverAudio: _serverAudio, _mergeServers: _mergeServers, _anilistId: _anilistId
   };
 }
