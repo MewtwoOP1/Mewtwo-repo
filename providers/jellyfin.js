@@ -11,7 +11,7 @@
  */
 
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID) ? String(__SOURCE_ID) : 'jellyfin';
-var SOURCE_VERSION = '3.0.3';
+var SOURCE_VERSION = '3.1.0';
 var CLIENT_NAME = 'Zangetsu';
 var DEVICE_NAME = 'Zangetsu';
 var DEVICE_ID = 'zangetsu-jellyfin-source-v3';
@@ -521,8 +521,71 @@ function _status(value) {
   var status = _trim(value).toLowerCase();
   if (status === 'ended' || status === 'released') return 'completed';
   if (status === 'continuing' || status === 'returning series' || status === 'in production') return 'ongoing';
+  if (status === 'hiatus') return 'hiatus';
   if (status === 'cancelled' || status === 'canceled') return 'cancelled';
   return 'unknown';
+}
+
+function _numberOrNull(value) {
+  if (value === undefined || value === null || value === '') return null;
+  var number = Number(value);
+  return isFinite(number) ? number : null;
+}
+
+function _padNumber(value) {
+  var number = Math.max(0, Math.floor(_numberOrNull(value) || 0));
+  return number < 10 ? '0' + number : String(number);
+}
+
+// Jellyfin returns image tags for the item itself and for its parents. An
+// episode often has no Primary image of its own, in which case Jellyfin exposes
+// the series/season thumb instead of an episode screenshot.
+function _primaryImageUrl(ctx, itemId, raw, width) {
+  raw = raw || {};
+  var primaryTag = raw.ImageTags && (raw.ImageTags.Primary || raw.ImageTags.primary);
+  if (primaryTag) return _imageUrl(ctx, itemId, 'Primary', 0, primaryTag, width);
+  var parentPrimaryId = raw.ParentPrimaryImageItemId || raw.parentPrimaryImageItemId;
+  var parentPrimaryTag = raw.ParentPrimaryImageTag || raw.parentPrimaryImageTag;
+  if (parentPrimaryId && parentPrimaryTag) return _imageUrl(ctx, parentPrimaryId, 'Primary', 0, parentPrimaryTag, width);
+  var thumbId = raw.ParentThumbItemId || raw.parentThumbItemId;
+  var thumbTag = raw.ParentThumbImageTag || raw.parentThumbImageTag;
+  if (thumbId && thumbTag) return _imageUrl(ctx, thumbId, 'Thumb', 0, thumbTag, width);
+  var seriesId = raw.SeriesId || raw.seriesId;
+  var seriesTag = raw.SeriesPrimaryImageTag || raw.seriesPrimaryImageTag;
+  if (seriesId && seriesTag) return _imageUrl(ctx, seriesId, 'Primary', 0, seriesTag, width);
+  if (itemId) return _imageUrl(ctx, itemId, 'Primary', 0, null, width);
+  return null;
+}
+
+function _backdropImageUrl(ctx, itemId, raw, width) {
+  raw = raw || {};
+  var ownTags = raw.BackdropImageTags || raw.backdropImageTags;
+  if (itemId && Array.isArray(ownTags) && ownTags[0]) {
+    return _imageUrl(ctx, itemId, 'Backdrop', 0, ownTags[0], width);
+  }
+  var parentId = raw.ParentBackdropItemId || raw.parentBackdropItemId;
+  var parentTags = raw.ParentBackdropImageTags || raw.parentBackdropImageTags;
+  if (parentId && Array.isArray(parentTags) && parentTags[0]) {
+    return _imageUrl(ctx, parentId, 'Backdrop', 0, parentTags[0], width);
+  }
+  return null;
+}
+
+function _applyProviderIds(item, raw) {
+  var providers = raw && (raw.ProviderIds || raw.providerIds);
+  if (!providers) return item;
+  item.imdbId = providers.Imdb || providers.IMDb || providers.imdb || null;
+  var tmdb = providers.Tmdb != null ? providers.Tmdb : providers.TMDB;
+  if (tmdb != null && isFinite(Number(tmdb))) item.tmdbId = Number(tmdb);
+  item.tvdbId = providers.Tvdb || providers.TVDB || providers.tvdb || null;
+  var mal = providers.MyAnimeList != null ? providers.MyAnimeList : providers.MAL;
+  if (mal != null && isFinite(Number(mal))) item.malId = Number(mal);
+  var anilist = providers.AniList != null ? providers.AniList : providers.Anilist;
+  if (anilist != null && isFinite(Number(anilist))) item.anilistId = Number(anilist);
+  if (providers.Kitsu != null && isFinite(Number(providers.Kitsu))) item.kitsuId = Number(providers.Kitsu);
+  var anidb = providers.AniDB != null ? providers.AniDB : providers.Anidb;
+  if (anidb != null && isFinite(Number(anidb))) item.anidbId = Number(anidb);
+  return item;
 }
 
 function _mapItem(raw, ctx, parentId) {
@@ -534,29 +597,19 @@ function _mapItem(raw, ctx, parentId) {
   var rawName = _trim(raw.Name || raw.name || raw.OriginalTitle || raw.originalTitle);
   var name = type === 'Episode' ? (_trim(raw.SeriesName || raw.seriesName) || rawName) : rawName;
   if (!name) return null;
-  var primaryTag = raw.ImageTags && (raw.ImageTags.Primary || raw.ImageTags.primary);
-  var backdropTag = raw.BackdropImageTags && raw.BackdropImageTags[0];
-  var backdropId = raw.ParentBackdropItemId || raw.parentBackdropItemId;
-  var seriesPrimaryTag = raw.SeriesPrimaryImageTag || raw.seriesPrimaryImageTag;
-  var cover = primaryTag
-    ? _imageUrl(ctx, id, 'Primary', 0, primaryTag, 600)
-    : (type === 'Episode' && raw.SeriesId && seriesPrimaryTag
-      ? _imageUrl(ctx, raw.SeriesId, 'Primary', 0, seriesPrimaryTag, 600)
-      : _imageUrl(ctx, id, 'Primary', 0, null, 600));
-  var banner = backdropTag && (raw.BackdropImageTags && raw.BackdropImageTags.length)
-    ? _imageUrl(ctx, id, 'Backdrop', 0, backdropTag, 1000)
-    : (backdropId && raw.ParentBackdropImageTags && raw.ParentBackdropImageTags[0]
-      ? _imageUrl(ctx, backdropId, 'Backdrop', 0, raw.ParentBackdropImageTags[0], 1000)
-      : null);
-  var itemUrl = _itemUri(id, type, parentId || raw.ParentId, raw.SeriesId, type === 'Season' ? id : raw.SeasonId);
+  var isTv = type === 'Series' || type === 'Season' || type === 'Episode';
+  var itemUrl = type === 'Episode'
+    ? _episodeUri(id, raw.SeriesId, raw.SeasonId, raw.ParentIndexNumber, raw.IndexNumber)
+    : _itemUri(id, type, parentId || raw.ParentId, raw.SeriesId, type === 'Season' ? id : raw.SeasonId);
   var item = {
     id: itemUrl,
     url: itemUrl,
     title: name,
-    cover: cover,
-    banner: banner,
+    cover: _primaryImageUrl(ctx, id, raw, 600),
+    banner: _backdropImageUrl(ctx, id, raw, 1000),
     type: 'movie',
     sourceId: SOURCE_ID,
+    tmdbIsTv: isTv,
     year: _year(raw),
     jellyfinItemId: id,
     jellyfinType: type,
@@ -567,24 +620,32 @@ function _mapItem(raw, ctx, parentId) {
   if (raw.SeriesId) item.jellyfinSeriesId = String(raw.SeriesId);
   if (raw.SeriesName) item.seriesName = raw.SeriesName;
   if (type === 'Episode') item.episodeTitle = rawName;
-  return item;
+  return _applyProviderIds(item, raw);
 }
 
-function _mapEpisode(raw, ctx, seriesId, seasonId) {
+function _mapEpisode(raw, ctx, seriesId, seasonId, fallbackSeason, fallbackEpisode) {
   if (!raw || !(raw.Id || raw.id)) return null;
   var id = String(raw.Id || raw.id);
-  var season = Number(raw.ParentIndexNumber || raw.parentIndexNumber || 0);
-  var episode = Number(raw.IndexNumber || raw.indexNumber || 0);
-  var title = _trim(raw.Name || raw.name || ('Episode ' + (episode || '')));
+  var season = _numberOrNull(raw.ParentIndexNumber != null ? raw.ParentIndexNumber : raw.parentIndexNumber);
+  if (season === null) season = _numberOrNull(raw.SeasonNumber != null ? raw.SeasonNumber : raw.seasonNumber);
+  if (season === null) season = _numberOrNull(fallbackSeason);
+  if (season === null) season = 0;
+  var episode = _numberOrNull(raw.IndexNumber != null ? raw.IndexNumber : raw.indexNumber);
+  if (episode === null) episode = _numberOrNull(fallbackEpisode);
+  if (episode === null) episode = 1;
+  var rawTitle = _trim(raw.Name || raw.name || '');
+  var label = 'S' + _padNumber(season) + ' E' + _padNumber(episode);
+  var title = rawTitle || ('Episode ' + episode);
+  if (!/^S\d+\s*E\d+/i.test(title)) title = label + ' - ' + title;
   var uri = _episodeUri(id, seriesId || raw.SeriesId, seasonId || raw.SeasonId, season, episode);
   var entry = {
-    id: 'S' + String(season).padStart(2, '0') + 'E' + String(episode).padStart(2, '0'),
-    title: (season > 0 ? 'S' + String(season).padStart(2, '0') + ' E' + String(episode).padStart(2, '0') + ' - ' : '') + title,
-    number: episode || 1,
+    id: 'S' + _padNumber(season) + 'E' + _padNumber(episode),
+    title: title,
+    number: episode,
     season: season,
     url: uri,
     date: raw.PremiereDate || raw.DateCreated || null,
-    thumbnail: raw.ImageTags && raw.ImageTags.Primary ? _imageUrl(ctx, id, 'Primary', 0, raw.ImageTags.Primary, 420) : null,
+    thumbnail: _primaryImageUrl(ctx, id, raw, 420),
     summary: raw.Overview || ''
   };
   return entry;
@@ -594,13 +655,14 @@ function _detailObject(raw, ctx, episodes, seasons) {
   if (!raw) return null;
   var type = String(raw.Type || raw.type || 'Movie');
   var id = String(raw.Id || raw.id || '');
+  var isTv = type === 'Series' || type === 'Season' || type === 'Episode';
   var title = _trim(raw.Name || raw.name || 'Untitled');
   var genres = Array.isArray(raw.Genres) ? raw.Genres : (Array.isArray(raw.genres) ? raw.genres : []);
   var item = {
     id: _itemUri(id, type, raw.ParentId, raw.SeriesId, type === 'Season' ? id : raw.SeasonId),
     title: title,
-    cover: raw.ImageTags && raw.ImageTags.Primary ? _imageUrl(ctx, id, 'Primary', 0, raw.ImageTags.Primary, 600) : _imageUrl(ctx, id, 'Primary', 0, null, 600),
-    banner: raw.BackdropImageTags && raw.BackdropImageTags[0] ? _imageUrl(ctx, id, 'Backdrop', 0, raw.BackdropImageTags[0], 1000) : null,
+    cover: _primaryImageUrl(ctx, id, raw, 600),
+    banner: _backdropImageUrl(ctx, id, raw, 1000),
     url: _itemUri(id, type, raw.ParentId, raw.SeriesId, type === 'Season' ? id : raw.SeasonId),
     description: raw.Overview || '',
     status: _status(raw.Status),
@@ -608,6 +670,7 @@ function _detailObject(raw, ctx, episodes, seasons) {
     studios: (raw.Studios || []).map(function (studio) { return studio && (studio.Name || studio.name); }).filter(Boolean),
     type: 'movie',
     sourceId: SOURCE_ID,
+    tmdbIsTv: isTv,
     year: _year(raw),
     episodes: episodes || [],
     subCount: (episodes || []).length,
@@ -618,26 +681,12 @@ function _detailObject(raw, ctx, episodes, seasons) {
   };
   var score = _score(raw);
   if (score !== undefined) item.score = score;
-  if (raw.ProviderIds) {
-    var providers = raw.ProviderIds;
-    item.imdbId = providers.Imdb || providers.IMDb || null;
-    item.tmdbId = providers.Tmdb || providers.TMDB ? Number(providers.Tmdb || providers.TMDB) : undefined;
-    item.tvdbId = providers.Tvdb || providers.TVDB || null;
-    item.malId = providers.MyAnimeList || providers.MAL ? Number(providers.MyAnimeList || providers.MAL) : undefined;
-    item.anilistId = providers.AniList || providers.Anilist ? Number(providers.AniList || providers.Anilist) : undefined;
-    item.kitsuId = providers.Kitsu ? Number(providers.Kitsu) : undefined;
-    item.anidbId = providers.AniDB || providers.Anidb ? Number(providers.AniDB || providers.Anidb) : undefined;
-  }
+  _applyProviderIds(item, raw);
   var people = Array.isArray(raw.People) ? raw.People : [];
   item.cast = people.filter(function (person) {
     return person && String(person.Type || person.type || '').toLowerCase() === 'actor';
   }).map(function (person) { return person.Name || person.name; }).filter(Boolean);
   if (Array.isArray(seasons) && seasons.length) item.seasons = seasons;
-  if (Array.isArray(raw.People) && raw.People.length) {
-    item.cast = raw.People.filter(function (person) {
-      return person && String(person.Type || person.type || '').toLowerCase() === 'actor';
-    }).map(function (person) { return person.Name || person.name; }).filter(Boolean);
-  }
   return item;
 }
 
@@ -752,7 +801,7 @@ function _nextUpItems(ctx) {
     Limit: ctx.config.pageSize,
     Fields: LIST_FIELDS,
     EnableUserData: 'true',
-    EnableImageTypes: 'Primary,Backdrop'
+    EnableImageTypes: 'Primary,Backdrop,Thumb'
   }, { noCache: true }).then(function (payload) {
     return _itemsFrom(payload).map(function (raw) {
       return _mapItem(raw, ctx, raw.ParentId);
@@ -883,6 +932,16 @@ function _getItem(ctx, itemId, fields, options) {
 }
 
 function _getSeasons(ctx, seriesId) {
+  function fallback() {
+    return _getItems(ctx, {
+      ParentId: seriesId,
+      IncludeItemTypes: 'Season',
+      Recursive: 'false',
+      SortBy: 'IndexNumber',
+      SortOrder: 'Ascending',
+      Fields: LIST_FIELDS
+    }).then(_itemsFrom);
+  }
   return _request(ctx, '/Shows/' + encodeURIComponent(seriesId) + '/Seasons', {
     UserId: ctx.userId,
     Fields: LIST_FIELDS,
@@ -890,24 +949,19 @@ function _getSeasons(ctx, seriesId) {
     EnableImageTypes: 'Primary,Backdrop'
   }).then(function (payload) {
     var rows = _itemsFrom(payload);
-    if (rows.length) return rows;
-    return _getItems(ctx, {
-      ParentId: seriesId,
-      IncludeItemTypes: 'Season',
-      Recursive: 'false',
-      SortBy: 'IndexNumber',
-      SortOrder: 'Ascending',
-      Fields: LIST_FIELDS
-    }).then(_itemsFrom);
+    return rows.length ? rows : fallback();
+  }, function () {
+    return fallback();
   }).catch(function () {
-    return _getItems(ctx, {
-      ParentId: seriesId,
-      IncludeItemTypes: 'Season',
-      Recursive: 'false',
-      SortBy: 'IndexNumber',
-      SortOrder: 'Ascending',
-      Fields: LIST_FIELDS
-    }).then(_itemsFrom);
+    // A series can still be opened with its episodes read from the
+    // all-episodes endpoint when the season list is unavailable.
+    return [];
+  }).then(function (rows) {
+    return (rows || []).slice().sort(function (a, b) {
+      var left = _numberOrNull(a && (a.IndexNumber != null ? a.IndexNumber : a.indexNumber));
+      var right = _numberOrNull(b && (b.IndexNumber != null ? b.IndexNumber : b.indexNumber));
+      return (left === null ? Number.MAX_SAFE_INTEGER : left) - (right === null ? Number.MAX_SAFE_INTEGER : right);
+    });
   });
 }
 
@@ -936,13 +990,12 @@ function _collectEpisodePages(ctx, path, baseParams) {
 
 function _getSeasonEpisodes(ctx, seriesId, season) {
   var seasonId = String(season && (season.Id || season.id) || '');
+  var seq = 'ParentIndexNumber,IndexNumber';
   var params = {
     UserId: ctx.userId,
     Fields: EPISODE_FIELDS,
     ImageTypeLimit: 1,
-    EnableImageTypes: 'Primary,Thumb',
-    SortBy: 'ParentIndexNumber,IndexNumber',
-    SortOrder: 'Ascending'
+    EnableImageTypes: 'Primary,Thumb'
   };
   if (seasonId) params.SeasonId = seasonId;
   var primary = _collectEpisodePages(
@@ -955,7 +1008,7 @@ function _getSeasonEpisodes(ctx, seriesId, season) {
       ParentId: seasonId || seriesId,
       IncludeItemTypes: 'Episode',
       Recursive: 'true',
-      SortBy: 'ParentIndexNumber,IndexNumber',
+      SortBy: seq,
       SortOrder: 'Ascending',
       Fields: EPISODE_FIELDS
     });
@@ -976,37 +1029,66 @@ function getDetail(url, opts) {
       var type = String(raw.Type || parsed.type || 'Movie');
       if (type === 'Series') {
         return _getSeasons(ctx, parsed.id).then(function (seasons) {
-          return _mapLimit(seasons, 3, function (season) {
-            return _getSeasonEpisodes(ctx, parsed.id, season);
-          }).then(function (groups) {
+          var mappedSeasons = seasons.map(function (season) { return _mapItem(season, ctx, parsed.id); }).filter(Boolean);
+          var seasonNumbers = Object.create(null);
+          seasons.forEach(function (season) {
+            var seasonId = season.Id || season.id;
+            var seasonNumber = season.IndexNumber != null ? season.IndexNumber : season.indexNumber;
+            if (seasonId && seasonNumber != null) seasonNumbers[seasonId] = seasonNumber;
+          });
+          function finish(all) {
+            all.sort(function (a, b) {
+              return (Number(a.season) - Number(b.season)) || (Number(a.number) - Number(b.number));
+            });
+            return _detailObject(raw, ctx, all, mappedSeasons);
+          }
+          function fromGroups(groups) {
             var all = [];
             groups.forEach(function (episodes, index) {
               var season = seasons[index] || {};
               var seasonId = season.Id || season.id;
-              (episodes || []).forEach(function (episode) {
-                var mapped = _mapEpisode(episode, ctx, parsed.id, seasonId);
+              var seasonNumber = season.IndexNumber != null ? season.IndexNumber : season.indexNumber;
+              (episodes || []).forEach(function (episode, episodeIndex) {
+                var mapped = _mapEpisode(episode, ctx, parsed.id, seasonId, seasonNumber, episodeIndex + 1);
                 if (mapped) all.push(mapped);
               });
             });
-            if (!all.length) {
+            return all;
+          }
+          return _mapLimit(seasons, 3, function (season) {
+            return _getSeasonEpisodes(ctx, parsed.id, season);
+          }).then(function (groups) {
+            var all = fromGroups(groups);
+            var partial = groups.some(function (episodes) { return episodes === null; });
+            if (!seasons.length || partial || !all.length) {
+              // If one season failed there is no way to tell which episodes
+              // are missing. The all-episodes route is authoritative and also
+              // covers servers that do not implement the seasons endpoint.
               return _getSeasonEpisodes(ctx, parsed.id, null).then(function (episodes) {
-                all = episodes.map(function (episode) { return _mapEpisode(episode, ctx, parsed.id, episode.SeasonId); }).filter(Boolean);
-                return _detailObject(raw, ctx, all, seasons.map(function (season) { return _mapItem(season, ctx, parsed.id); }).filter(Boolean));
-              }).catch(function () {
-                return _detailObject(raw, ctx, all, []);
+                var recovered = (episodes || []).map(function (episode, index) {
+                  var seasonId = episode.SeasonId;
+                  var fallbackSeason = seasonId && seasonNumbers[seasonId] != null ? seasonNumbers[seasonId] : episode.ParentIndexNumber;
+                  return _mapEpisode(episode, ctx, parsed.id, seasonId, fallbackSeason, index + 1);
+                }).filter(Boolean);
+                return finish(recovered.length ? recovered : all);
+              }, function () {
+                return finish(all);
               });
             }
-            all.sort(function (a, b) {
-              return (Number(a.season) - Number(b.season)) || (Number(a.number) - Number(b.number));
-            });
-            return _detailObject(raw, ctx, all, seasons.map(function (season) { return _mapItem(season, ctx, parsed.id); }).filter(Boolean));
+            return finish(all);
           });
         });
       }
       if (type === 'Season') {
-        return _getSeasonEpisodes(ctx, raw.SeriesId || parsed.seriesId || parsed.id, raw).then(function (episodes) {
-          var mapped = episodes.map(function (episode) { return _mapEpisode(episode, ctx, raw.SeriesId || parsed.seriesId, parsed.id); }).filter(Boolean);
+        var seasonSeriesId = raw.SeriesId || parsed.seriesId || parsed.id;
+        var seasonItemId = raw.Id || parsed.id;
+        return _getSeasonEpisodes(ctx, seasonSeriesId, raw).then(function (episodes) {
+          var mapped = (episodes || []).map(function (episode, index) {
+            return _mapEpisode(episode, ctx, seasonSeriesId, raw.SeasonId || seasonItemId, raw.IndexNumber, index + 1);
+          }).filter(Boolean);
           return _detailObject(raw, ctx, mapped, []);
+        }, function () {
+          return _detailObject(raw, ctx, [], []);
         });
       }
       if (type === 'Movie') {
@@ -1020,7 +1102,15 @@ function getDetail(url, opts) {
         return _detailObject(raw, ctx, [movieEpisode], []);
       }
       if (type === 'Episode') {
-        return _detailObject(raw, ctx, [_mapEpisode(raw, ctx, raw.SeriesId || parsed.seriesId, raw.SeasonId || parsed.seasonId)].filter(Boolean), []);
+        var episodeEntry = _mapEpisode(
+          raw,
+          ctx,
+          raw.SeriesId || parsed.seriesId,
+          raw.SeasonId || parsed.seasonId,
+          raw.ParentIndexNumber,
+          raw.IndexNumber
+        );
+        return _detailObject(raw, ctx, [episodeEntry].filter(Boolean), []);
       }
       if (type === 'BoxSet') {
         return _getItems(ctx, {
@@ -1095,7 +1185,7 @@ function _deviceProfile(config) {
       { Type: 'Audio', Container: 'mp3,aac,m4a,flac,ogg,opus,wav', AudioCodec: 'aac,mp3,opus,flac,vorbis' }
     ],
     TranscodingProfiles: [
-      { Type: 'Video', Container: 'ts', Protocol: 'hls', VideoCodec: 'h264', AudioCodec: 'aac,mp3', Context: 'Streaming', MaxAudioChannels: '8', EnableSubtitlesInManifest: 'true' },
+      { Type: 'Video', Container: 'ts', Protocol: 'hls', VideoCodec: 'h264', AudioCodec: 'aac,mp3', Context: 'Streaming', MaxAudioChannels: '8', EnableSubtitlesInManifest: true },
       { Type: 'Video', Container: 'mp4', Protocol: 'http', VideoCodec: 'h264', AudioCodec: 'aac,mp3', Context: 'Streaming', MaxAudioChannels: '8' }
     ],
     SubtitleProfiles: [
