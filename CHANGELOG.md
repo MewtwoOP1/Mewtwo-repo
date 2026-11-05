@@ -4,6 +4,8 @@
 
 - Fix the Jellyfin source icon by switching from SVG to the official square PNG asset, which is compatible with Zangetsu's cached network-image renderer; bump provider version to 3.0.3.
 
+- Jellyfin 3.1.0 fixes TV handling: mark series, seasons, and episodes as TV for TMDB metadata, keep specials in `S00`, infer missing season/episode numbers, use parent/series artwork when an episode has no image, link episode cards through episode URLs, send a valid single-value sort to the standard Jellyfin episodes endpoint, recover episodes when one season request fails, and pass a boolean `EnableSubtitlesInManifest` flag.
+
 - Use the official Jellyfin icon for the Jellyfin source, fix its direct asset URL, and bump the provider to 3.0.2.
 - Avoid malformed relative API requests when the server address has not been configured.
 - Rebuild Jellyfin as a standalone catalogue-backed source. Read the authenticated user's Jellyfin libraries and catalogue directly instead of using the old Stremio/TMDB implementation.

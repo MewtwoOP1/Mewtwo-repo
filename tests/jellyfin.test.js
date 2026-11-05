@@ -140,18 +140,43 @@ global.fetch = async (rawUrl, init = {}) => {
     if (parent === 'boxset-1') return reply(200, { Items: [movie('collection-movie', 'Collection Movie')] });
     if (parent === 'long-series') return reply(200, { Items: [] });
     if (parent === 'season-fallback') return reply(200, { TotalRecordCount: 1, Items: [episode('fallback-episode', 1)] });
+    if (parent === 'season-p2') return reply(500, { Message: 'Season request failed' });
+    if (parent === 'partial-series') return reply(200, { Items: [] });
   }
   if (pathname === '/jellyfin/Users/user-1/Items/series-1') {
     assert.ok(!/MediaSources|MediaStreams/i.test(param(url, 'Fields') || ''));
     return reply(200, series('series-1', 'Test Series'));
+  }
+  if (pathname === '/jellyfin/Users/user-1/Items/movie-1') {
+    return reply(200, movie('movie-1', 'Test Movie'));
   }
   if (pathname === '/jellyfin/Shows/series-1/Seasons') {
     return reply(200, { Items: [{ Id: 'season-1', Name: 'Season 1', Type: 'Season', IndexNumber: 1, SeriesId: 'series-1' }] });
   }
   if (pathname === '/jellyfin/Shows/series-1/Episodes') {
     assert.equal(param(url, 'SeasonId'), 'season-1');
+    assert.equal(param(url, 'SortBy'), null, 'the standard Jellyfin episodes route takes one sort value, not a list');
     assert.ok(!/MediaSources|MediaStreams/i.test(param(url, 'Fields') || ''));
     return reply(200, { TotalRecordCount: 2, Items: [episode('episode-1', 1), episode('episode-2', 2)] });
+  }
+  if (pathname === '/jellyfin/Users/user-1/Items/partial-series') return reply(200, series('partial-series', 'Partial Series'));
+  if (pathname === '/jellyfin/Shows/partial-series/Seasons') {
+    return reply(200, { Items: [
+      { Id: 'season-p1', Name: 'Season 1', Type: 'Season', IndexNumber: 1, SeriesId: 'partial-series' },
+      { Id: 'season-p2', Name: 'Season 2', Type: 'Season', IndexNumber: 2, SeriesId: 'partial-series' }
+    ] });
+  }
+  if (pathname === '/jellyfin/Shows/partial-series/Episodes') {
+    const seasonId = param(url, 'SeasonId');
+    if (seasonId === 'season-p1') {
+      return reply(200, { TotalRecordCount: 1, Items: [episode('partial-1', 1, { SeriesId: 'partial-series', SeriesName: 'Partial Series', SeasonId: 'season-p1' })] });
+    }
+    if (seasonId === 'season-p2') return reply(500, { Message: 'Season request failed' });
+    assert.equal(seasonId, null);
+    return reply(200, { TotalRecordCount: 2, Items: [
+      episode('partial-1', 1, { SeriesId: 'partial-series', SeriesName: 'Partial Series', SeasonId: 'season-p1' }),
+      episode('partial-2', 1, { SeriesId: 'partial-series', SeriesName: 'Partial Series', SeasonId: 'season-p2', ParentIndexNumber: 2 })
+    ] });
   }
   if (pathname === '/jellyfin/Users/user-1/Items/long-series') return reply(200, series('long-series', 'Long Series'));
   if (pathname === '/jellyfin/Shows/long-series/Seasons') return reply(200, { Items: [] });
@@ -176,6 +201,7 @@ global.fetch = async (rawUrl, init = {}) => {
     assert.equal(body.Fresh, true);
     assert.equal(body.EnableRequiredHttpHeaders, true);
     assert.equal(body.DeviceProfile.Name, 'Zangetsu');
+    assert.equal(body.DeviceProfile.TranscodingProfiles[0].EnableSubtitlesInManifest, true);
     return reply(200, {
       PlaySessionId: 'play-session-1',
       MediaSources: [
@@ -209,7 +235,7 @@ const source = manifest.sources.find((item) => item.id === 'jellyfin');
 
 async function main() {
   assert.ok(source, 'Jellyfin source is registered');
-  assert.equal(provider.version, '3.0.3');
+  assert.equal(provider.version, '3.1.0');
   assert.equal(provider.getInfo().version, source.version);
   assert.deepEqual(provider.getSettings().map((s) => s.key), source.settings.map((s) => s.key));
   assert.ok(provider.getSettings().some((s) => s.key === 'apiKey'));
@@ -229,8 +255,14 @@ async function main() {
   const resume = home.find((row) => row.title === 'Continue Watching');
   assert.equal(resume.items[0].title, 'Test Series');
   assert.equal(resume.items[0].jellyfinItemId, 'resume-episode');
+  assert.ok(resume.items[0].url.startsWith('jellyfin://episode/'), 'episode cards link to an episode, not a bare item');
+  assert.equal(resume.items[0].tmdbIsTv, true);
+  const showsRow = home.find((row) => row.title === 'TV Shows');
+  assert.equal(showsRow.items[0].tmdbIsTv, true);
+  assert.equal(showsRow.items[0].tmdbId, 456);
   assert.equal(home.find((row) => row.title === 'Movies').items[0].score, 82);
   assert.equal(home.find((row) => row.title === 'Movies').items[0].dateCreated, '2026-11-02T10:00:00Z');
+  assert.equal(home.find((row) => row.title === 'Movies').items[0].tmdbIsTv, false);
 
   const search = await provider.search('Test', 1);
   assert.ok(search.some((item) => item.title === 'Test Movie Search'));
@@ -242,8 +274,17 @@ async function main() {
   assert.deepEqual(detail.studios, ['Example Studio']);
   assert.deepEqual(detail.cast, ['Actor One', 'Actor Two']);
   assert.equal(detail.status, 'ongoing');
+  assert.equal(detail.tmdbIsTv, true);
+  assert.match(detail.cover, /\/Items\/series-1\/Images\/Primary/);
+  assert.match(detail.banner, /\/Items\/series-1\/Images\/Backdrop\/0/);
   assert.equal(detail.episodes.length, 2);
   assert.equal(detail.episodes[0].number, 1);
+  assert.equal(detail.episodes[0].season, 1);
+  assert.equal(detail.episodes[0].title, 'S01 E01 - Pilot');
+  assert.equal(detail.episodes[1].title, 'S01 E02 - Episode 2');
+  assert.ok(detail.episodes[0].url.startsWith('jellyfin://episode/episode-1'));
+  assert.match(detail.episodes[0].thumbnail, /\/Items\/series-1\/Images\/Primary/);
+  assert.match(detail.episodes[0].thumbnail, /tag=series-poster/);
   assert.equal(detail.malId, 5114);
   assert.equal(detail.anilistId, 21);
   assert.equal(detail.kitsuId, 22);
@@ -251,7 +292,34 @@ async function main() {
   assert.equal(detail.tmdbId, 456);
   assert.equal(detail.imdbId, 'tt1234567');
 
+  const movieDetail = await provider.getDetail(provider._itemUri('movie-1', 'Movie'));
+  assert.equal(movieDetail.tmdbIsTv, false);
+  assert.equal(movieDetail.episodes.length, 1);
+  assert.ok(movieDetail.episodes[0].url.startsWith('jellyfin://episode/movie-1'));
+
+  const special = provider._mapEpisode(
+    { Id: 'special-1', Name: 'Beach Special', ParentIndexNumber: 0, IndexNumber: 1, SeriesId: 'series-1', SeasonId: 'season-0', SeriesPrimaryImageTag: 'series-poster', ImageTags: {} },
+    { baseUrl: 'https://aio.example.test/jellyfin', token: 'test-token' },
+    'series-1', 'season-0', 0, 1
+  );
+  assert.equal(special.season, 0);
+  assert.equal(special.id, 'S00E01');
+  assert.equal(special.title, 'S00 E01 - Beach Special');
+  assert.match(special.thumbnail, /\/Items\/series-1\/Images\/Primary/);
+
+  const inferred = provider._mapEpisode(
+    { Id: 'inferred-1', Name: 'Inferred Numbers', ImageTags: {} },
+    { baseUrl: 'https://aio.example.test/jellyfin', token: 'test-token' },
+    'series-1', 'season-3', 3, 7
+  );
+  assert.equal(inferred.season, 3);
+  assert.equal(inferred.number, 7);
+  assert.equal(inferred.title, 'S03 E07 - Inferred Numbers');
+
   assert.equal((await provider.getEpisodes(provider._itemUri('series-1', 'Series'))).length, 2);
+  const partial = await provider.getEpisodes(provider._itemUri('partial-series', 'Series'));
+  assert.equal(partial.length, 2, 'a failed season recovers episodes from the all-episodes route');
+  assert.deepEqual(partial.map((episode) => episode.title), ['S01 E01 - Pilot', 'S02 E01 - Pilot']);
   assert.equal((await provider.getEpisodes(provider._itemUri('long-series', 'Series'))).length, 501);
   assert.equal(longEpisodeRequests, 2, 'episode pagination reads the page beyond 500 results');
   assert.equal((await provider.getEpisodes(provider._itemUri('fallback-series', 'Series'))).length, 1,
@@ -277,7 +345,10 @@ async function main() {
   assert.equal(calls.filter((c) => c.pathname === '/jellyfin/Users/user-1/Views').length, 3, 'Home retry plus search library discovery each request views');
   for (const call of calls) {
     if (/\/Shows\/.*\/Episodes$/.test(call.pathname)) {
-      assert.ok(!/MediaSources|MediaStreams/i.test(param(new URL(call.url), 'Fields') || ''));
+      const callUrl = new URL(call.url);
+      assert.ok(!/MediaSources|MediaStreams/i.test(param(callUrl, 'Fields') || ''));
+      assert.ok(!String(param(callUrl, 'SortBy') || '').includes(','),
+        'the standard Jellyfin episodes route rejects a comma-separated sort list');
     }
   }
   console.log('Jellyfin v3 catalogue and playback tests passed.');
