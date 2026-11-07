@@ -9,6 +9,7 @@
   - **Re:Anime 1.0.2** — FlixCloud resolution with direct MKV downloads.
   - **AnimeGG 1.0.0** — series/episode scraping and progressive MP4 playback.
   - **AnimeAV1 1.0.0** — Spanish catalogue with VOE HLS and YourUpload MP4 fallback.
+  - **AnimeGG 1.0.1** — series/episode scraping and progressive MP4 playback; retry on timeout/connection-reset errors.
 - Add `PROVIDER_AUDIT.md` with the complete Anilili provider comparison, live playback evidence, and
   the rejection reason for every provider that was not added.
 - Fix the three sources flagged in the Zangetsu playback log:

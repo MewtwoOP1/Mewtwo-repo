@@ -3,9 +3,10 @@
 // embed id whose page carries the final /play/.../video.mp4 URL; the provider
 // returns that URL directly, never an iframe.
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID) ? String(__SOURCE_ID) : 'animegg';
-var VERSION = '1.0.0';
+var VERSION = '1.0.1';
 var SITE = 'https://www.animegg.org';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36';
+var RETRIES = 2;
 var CACHE = {};
 
 function getInfo() {
@@ -62,25 +63,39 @@ function _get(url, referer) {
   var key = 'page:' + url;
   var cached = _cacheGet(key);
   if (cached) return Promise.resolve(cached);
-  return fetch(url, {
-    headers: {
-      'User-Agent': UA,
-      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-      'Accept-Language': 'en-US,en;q=0.9',
-      'Referer': referer || SITE + '/'
-    },
-    timeoutMs: _config().timeoutMs
-  }).then(function (response) {
-    return _readResponse(response).then(function (body) {
-      var status = Number(response && response.status || 0);
-      if (status < 200 || status >= 300) {
-        var error = new Error('AnimeGG HTTP ' + status + ' for ' + url);
-        error.status = status;
-        throw error;
+  function attempt(n) {
+    return fetch(url, {
+      headers: {
+        'User-Agent': UA,
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Referer': referer || SITE + '/'
+      },
+      timeoutMs: _config().timeoutMs
+    }).then(function (response) {
+      return _readResponse(response).then(function (body) {
+        var status = Number(response && response.status || 0);
+        if (status < 200 || status >= 300) {
+          var error = new Error('AnimeGG HTTP ' + status + ' for ' + url);
+          error.status = status;
+          throw error;
+        }
+        return _cachePut(key, String(body || ''), 120000);
+      });
+    }).catch(function (err) {
+      var msg = String(err && err.message || err);
+      var transient = msg.indexOf('timeout') >= 0 ||
+        msg.indexOf('reset') >= 0 ||
+        msg.indexOf('abort') >= 0 ||
+        msg.indexOf('closed') >= 0;
+      if (transient && n < RETRIES) {
+        return new Promise(function (resolve) { setTimeout(resolve, 300 * (n + 1)); })
+          .then(function () { return attempt(n + 1); });
       }
-      return _cachePut(key, String(body || ''), 120000);
+      throw err;
     });
-  });
+  }
+  return attempt(0);
 }
 function _decode(value) {
   return String(value == null ? '' : value)
