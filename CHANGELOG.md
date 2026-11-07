@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Add seven live-verified anime sources from the Anilili provider audit:
+  - **Zoko 1.0.2** — AniList-backed search, SUB/DUB episode tracks, and HLS playback.
+  - **AnimeOnsen 1.0.0** — multi-audio DASH playback with subtitle tracks.
+  - **KickAssAnime 1.0.2** — catalogue and HLS playback with the required upstream headers.
+  - **Re:Anime 1.0.2** — FlixCloud resolution with direct MKV downloads.
+  - **AnimeGG 1.0.0** — series/episode scraping and progressive MP4 playback.
+  - **AnimeAV1 1.0.0** — Spanish catalogue with VOE HLS and YourUpload MP4 fallback.
+  - **AnimeHeaven 1.0.0** — mirror-based progressive MP4 playback.
+- Add `PROVIDER_AUDIT.md` with the complete Anilili provider comparison, live playback evidence, and
+  the rejection reason for every provider that was not added.
 - Fix the Jellyfin source icon by switching from SVG to the official square PNG asset, which is compatible with Zangetsu's cached network-image renderer; bump provider version to 3.0.3.
 
 - Jellyfin 3.1.0 fixes TV handling: mark series, seasons, and episodes as TV for TMDB metadata, keep specials in `S00`, infer missing season/episode numbers, use parent/series artwork when an episode has no image, link episode cards through episode URLs, send a valid single-value sort to the standard Jellyfin episodes endpoint, recover episodes when one season request fails, and pass a boolean `EnableSubtitlesInManifest` flag.
