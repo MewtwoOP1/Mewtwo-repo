@@ -126,47 +126,53 @@ async function main() {
   assert.equal(detail.year, '2026');
   assert.equal(detail.malId, 52299);
   assert.equal(detail.status, 'ongoing');
-  assert.equal(detail.episodes.length, 6, 'three sub and three dub rows');
+  assert.equal(detail.episodes.length, 3, 'one row per episode number, both audio tracks');
   assert.equal(detail.subCount, 3);
   assert.equal(detail.dubCount, 3);
-  assert.equal(detail.episodes[0].url, 'zoko://episode/151807/52299/1/sub');
-  assert.ok(detail.episodes.every((entry) => entry.category === 'sub' || entry.category === 'dub'));
+  assert.equal(detail.episodes[0].url, 'zoko://episode/151807/52299/1/both');
+  assert.ok(detail.episodes.every((entry) => entry.category === 'both'));
 
   const availability = await provider._availability(52299);
   assert.deepEqual(availability, { sub: true, dub: true });
 
-  const subEpisode = detail.episodes.find((entry) => entry.number === 1 && entry.category === 'sub');
-  const subStreams = await provider.getVideoSources(subEpisode.url, {});
-  assert.equal(subStreams.length, 1);
-  assert.equal(subStreams[0].url, 'https://cdn.example/sub/master.m3u8');
-  assert.equal(subStreams[0].type, 'hls');
-  assert.equal(subStreams[0].container, 'hls');
-  assert.equal(subStreams[0].kind, 'sub');
-  assert.equal(subStreams[0].headers.Referer, 'https://zokoanime.video/');
-  assert.equal(subStreams[0].headers.Origin, 'https://zokoanime.video');
-  assert.equal(subStreams[0].subtitles.length, 1, 'duplicate subtitle URLs are deduplicated');
-  assert.equal(subStreams[0].subtitles[0].format, 'vtt');
-  assert.equal(subStreams[0].subtitles[0].url, 'https://cdn.example/sub/en.vtt');
+  const bothEpisode = detail.episodes[0];
+  const bothStreams = await provider.getVideoSources(bothEpisode.url, {});
+  assert.equal(bothStreams.length, 2, 'a both episode exposes sub and dub HLS streams');
+  assert.ok(bothStreams.some((entry) => entry.url === 'https://cdn.example/sub/master.m3u8' && entry.kind === 'sub'),
+    'sub HLS stream');
+  assert.ok(bothStreams.some((entry) => entry.url === 'https://cdn.example/dub/master.m3u8' && entry.kind === 'dub'),
+    'dub HLS stream');
+  assert.equal(bothStreams[0].subtitles.length, 1, 'duplicate subtitle URLs are deduplicated');
+  assert.equal(bothStreams[0].subtitles[0].format, 'vtt');
+  assert.equal(bothStreams[0].subtitles[0].url, 'https://cdn.example/sub/en.vtt');
   assert.equal(requests.filter((entry) => entry.url === 'https://zokoanime.video/stream/mal/52299/1/sub').length, 1,
     'the availability probe and playback share one cached player page');
 
-  const dubStreams = await provider.getVideoSources('zoko://episode/151807/52299/1/dub', {});
-  assert.equal(dubStreams.length, 1);
-  assert.equal(dubStreams[0].url, 'https://cdn.example/dub/master.m3u8');
-  assert.equal(dubStreams[0].kind, 'dub');
-  assert.equal(dubStreams[0].audioLang, 'en');
-
+  // A sub-only sweep collapses the both row to sub streams only.
   global.__settings.zoko.audioMode = 'sub';
   const subOnly = await provider.getDetail('zoko://anime/151807', {});
   assert.equal(subOnly.episodes.length, 3);
   assert.ok(subOnly.episodes.every((entry) => entry.category === 'sub'));
+  const subStreams = await provider.getVideoSources(subOnly.episodes[0].url, {});
+  assert.equal(subStreams.length, 1);
+  assert.equal(subStreams[0].url, 'https://cdn.example/sub/master.m3u8');
+  assert.equal(subStreams[0].kind, 'sub');
+  assert.equal(subStreams[0].audioLang, 'ja');
 
   global.__settings.zoko.audioMode = 'dub';
   const dubOnly = await provider.getDetail('zoko://anime/151807', {});
   assert.equal(dubOnly.episodes.length, 3);
   assert.ok(dubOnly.episodes.every((entry) => entry.category === 'dub'));
+  const dubStreams = await provider.getVideoSources(dubOnly.episodes[0].url, {});
+  assert.equal(dubStreams.length, 1);
+  assert.equal(dubStreams[0].url, 'https://cdn.example/dub/master.m3u8');
+  assert.equal(dubStreams[0].kind, 'dub');
+  assert.equal(dubStreams[0].audioLang, 'en');
   global.__settings.zoko.audioMode = 'both';
 
+  assert.deepEqual(provider._parseEpisode('zoko://episode/151807/52299/1/both'), {
+    anilistId: 151807, malId: 52299, number: 1, category: 'both'
+  });
   assert.deepEqual(provider._parseEpisode('zoko://episode/151807/52299/1/sub'), {
     anilistId: 151807, malId: 52299, number: 1, category: 'sub'
   });

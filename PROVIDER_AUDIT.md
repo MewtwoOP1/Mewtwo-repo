@@ -48,7 +48,6 @@ that cannot be mapped from Zangetsu's normal search input.
 | animepahe | No | No | No — playback requires the Android `PaheBridge` WebView | Rejected — WebView-only |
 | rareanimes | Yes (`rareanimes.js`) | Yes | Yes — existing RareAnimes source | Rejected — duplicate |
 | anidbapp | No | No | No — `play.anidb.app` DNS/connection failure | Rejected — endpoint unreachable |
-| animeheaven | No | Yes | Yes — MP4 206, `video/mp4` | **Added** (1.0.0) |
 | xfdm | No | No | No — search needs Chinese/Bangumi subject names; romaji search returns `total: 0` | Rejected — cannot map Zangetsu search |
 | animeonsen | No | Yes | Yes — DASH 206, `application/dash+xml` | **Added** (1.0.0) |
 | anikoto | Yes (`anikoto.js`) | Yes | Yes — existing AniKoto source | Rejected — duplicate |
@@ -76,22 +75,21 @@ that cannot be mapped from Zangetsu's normal search input.
 
 | Provider | Source ID | Version | Language | Live playback evidence |
 |:--|:--|:--|:--|:--|
-| Zoko | `zoko` | 1.0.2 | English | HLS master fetched with 200 and `#EXTM3U` |
+| Zoko | `zoko` | 1.0.3 | English | HLS master fetched with 200 and `#EXTM3U` |
 | AnimeOnsen | `animeonsen` | 1.0.0 | Multi-audio | DASH manifest fetched with 206 and `<MPD>` |
 | KickAssAnime | `kickassanime` | 1.0.3 | English | HLS master fetched with 200 and `#EXTM3U` |
 | Re:Anime | `reanime` | 1.0.3 | English | Direct MKV fetched with 206 and `video/x-matroska` |
 | AnimeGG | `animegg` | 1.0.0 | English | Progressive MP4 fetched with 206 and `video/mp4` |
 | AnimeAV1 | `animeav1` | 1.0.0 | Spanish | VOE HLS fetched with 200 and `#EXTM3U`; YourUpload MP4 fallback |
-| AnimeHeaven | `animeheaven` | 1.0.1 | English | Mirror MP4 fetched with 206 and `video/mp4` |
 
 AnimeAV1 is not a duplicate of the existing `anv.js` source: its streams are Spanish, with burned-in
 Spanish subtitles and a Latino dub on some titles. It is therefore declared as Spanish rather than
 presented as another English catalogue.
 
 ### Post-audit fixes (after the Zangetsu playback log review)
-- **AnimeHeaven:** search now retries the fast-search endpoint on connection resets, falls back to the full search page, then to the new/popular catalogue index filtered by query, instead of returning zero results.
 - **Re:Anime:** one episode row per number (SUB/DUB are exposed as stream variants on the same row) and the FlixCloud progress endpoint is polled until the download is ready before returning the download URL, avoiding 404s.
 - **KickAssAnime:** one episode row per number (SUB/DUB are stream variants on the same row), both audio tracks are resolved for a combined episode row, and playback falls back to any listed server when no preferred native player server is available.
+- **Zoko:** HLS payload extraction now handles truncated `__P` payloads by extracting the `src` field directly when full JSON parse fails; one episode row per number (SUB/DUB are stream variants on the same row).
 
 ## Notes on the rejected providers
 

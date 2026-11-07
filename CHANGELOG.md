@@ -9,13 +9,13 @@
   - **Re:Anime 1.0.2** — FlixCloud resolution with direct MKV downloads.
   - **AnimeGG 1.0.0** — series/episode scraping and progressive MP4 playback.
   - **AnimeAV1 1.0.0** — Spanish catalogue with VOE HLS and YourUpload MP4 fallback.
-  - **AnimeHeaven 1.0.0** — mirror-based progressive MP4 playback.
 - Add `PROVIDER_AUDIT.md` with the complete Anilili provider comparison, live playback evidence, and
   the rejection reason for every provider that was not added.
-- Fix the four sources flagged in the Zangetsu playback log:
-  - **AnimeHeaven 1.0.1** — make search resilient to connection resets by retrying the fast-search endpoint, falling back to the full search page, then to the new/popular catalogue index filtered by query.
+- Fix the three sources flagged in the Zangetsu playback log:
   - **Re:Anime 1.0.3** — emit one episode row per number (SUB/DUB are stream variants, not duplicate rows) and poll the FlixCloud progress endpoint until the download is ready before returning the download URL, avoiding 404s.
   - **KickAssAnime 1.0.3** — emit one episode row per number (SUB/DUB are stream variants, not duplicate rows), resolve both audio tracks for a combined episode row, and fall back to any listed server when no preferred native player server is available.
+  - **Zoko 1.0.3** — fix HLS payload extraction from truncated `__P` payloads; emit one episode row per number (SUB/DUB are stream variants).
+- Remove **AnimeHeaven** (v1.0.1): the animeheaven.me domain persistently resets connections and returns zero search results for all titles; the source is unavailable and has been removed from the repository.
 - Fix the Jellyfin source icon by switching from SVG to the official square PNG asset, which is compatible with Zangetsu's cached network-image renderer; bump provider version to 3.0.3.
 
 - Jellyfin 3.1.0 fixes TV handling: mark series, seasons, and episodes as TV for TMDB metadata, keep specials in `S00`, infer missing season/episode numbers, use parent/series artwork when an episode has no image, link episode cards through episode URLs, send a valid single-value sort to the standard Jellyfin episodes endpoint, recover episodes when one season request fails, and pass a boolean `EnableSubtitlesInManifest` flag.

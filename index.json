@@ -1139,7 +1139,7 @@
     {
       "id": "zoko",
       "name": "Zoko",
-      "version": "1.0.2",
+      "version": "1.0.3",
       "type": "anime",
       "lang": "en",
       "file": "providers/zoko.js",
@@ -1511,60 +1511,6 @@
             {
               "value": "18000",
               "label": "18 seconds"
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "id": "animeheaven",
-      "name": "AnimeHeaven",
-      "version": "1.0.1",
-      "type": "anime",
-      "lang": "en",
-      "file": "providers/animeheaven.js",
-      "logo": "https://www.google.com/s2/favicons?sz=256&domain=animeheaven.me",
-      "nsfw": false,
-      "settings": [
-        {
-          "key": "requestTimeoutMs",
-          "label": "Request timeout",
-          "description": "Maximum wait for each catalogue, detail, or gate request.",
-          "type": "enum",
-          "default": "12000",
-          "options": [
-            {
-              "value": "6000",
-              "label": "6 seconds"
-            },
-            {
-              "value": "12000",
-              "label": "12 seconds"
-            },
-            {
-              "value": "18000",
-              "label": "18 seconds"
-            }
-          ]
-        },
-        {
-          "key": "maxStreams",
-          "label": "Maximum mirrors",
-          "description": "Limit the number of working AnimeHeaven mirrors returned for an episode.",
-          "type": "enum",
-          "default": "4",
-          "options": [
-            {
-              "value": "2",
-              "label": "2 mirrors"
-            },
-            {
-              "value": "4",
-              "label": "4 mirrors"
-            },
-            {
-              "value": "6",
-              "label": "6 mirrors"
             }
           ]
         }

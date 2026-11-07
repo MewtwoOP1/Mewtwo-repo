@@ -10,7 +10,7 @@ var PAYLOAD_KEY = 'otaku-embed-v1';
 var CACHE = {};
 
 function getInfo() {
-  return { name: 'Zoko', lang: 'en', baseUrl: SITE, logo: 'https://www.google.com/s2/favicons?sz=256&domain=zokoanime.video', type: 'anime', version: '1.0.2' };
+  return { name: 'Zoko', lang: 'en', baseUrl: SITE, logo: 'https://www.google.com/s2/favicons?sz=256&domain=zokoanime.video', type: 'anime', version: '1.0.3' };
 }
 function getSettings() {
   return [
@@ -224,8 +224,18 @@ function _decodePayload(html) {
   var bytes = [];
   for (var i = 0; i < binary.length; i++) bytes.push(binary.charCodeAt(i) ^ key.charCodeAt(i % key.length));
   try {
-    var parsed = JSON.parse(_utf8(bytes));
-    return parsed && typeof parsed === 'object' ? parsed : null;
+    var text = _utf8(bytes);
+    // Try full JSON parse first
+    try {
+      var parsed = JSON.parse(text);
+      return parsed && typeof parsed === 'object' ? parsed : null;
+    } catch (_) {}
+    // Zoko's player page sometimes serves a truncated __P payload. The src
+    // field appears early in the JSON and is complete even when the tail is
+    // cut off, so extract it directly rather than failing the whole payload.
+    var srcMatch = String(text).match(/"src"\s*:\s*"([^"]+)"/);
+    if (srcMatch) return { src: srcMatch[1] };
+    return null;
   } catch (e) { return null; }
 }
 function _payloadSource(payload) {
@@ -302,16 +312,22 @@ function _episodeItems(anilistId, malId, media, availability) {
   var count = _episodeCount(media);
   var sub = !!availability.sub;
   var dub = !!availability.dub;
-  var wantSub = cfg.audioMode !== 'dub' && sub;
-  var wantDub = cfg.audioMode !== 'sub' && dub;
-  if (!wantSub && !wantDub) {
-    if (sub) wantSub = true;
-    else if (dub) wantDub = true;
-  }
+  var audio = cfg.audioMode;
+  if (audio === 'sub' && !sub) audio = 'dub';
+  if (audio === 'dub' && !dub) audio = 'sub';
+  // One row per episode number. When both audio tracks exist the row covers
+  // both and playback exposes each as its own stream; this keeps the episode
+  // list from doubling every episode into a SUB row and a DUB row.
   var episodes = [];
   for (var number = 1; number <= count; number++) {
-    if (wantSub) episodes.push(_episode(anilistId, malId, number, 'sub'));
-    if (wantDub) episodes.push(_episode(anilistId, malId, number, 'dub'));
+    var category;
+    if (audio === 'sub') { if (!sub) continue; category = 'sub'; }
+    else if (audio === 'dub') { if (!dub) continue; category = 'dub'; }
+    else {
+      if (!sub && !dub) continue;
+      category = sub && dub ? 'both' : (sub ? 'sub' : 'dub');
+    }
+    episodes.push(_episode(anilistId, malId, number, category));
   }
   return episodes;
 }
@@ -325,8 +341,8 @@ function getDetail(url, opts) {
       var item = _item(media);
       if (!item) throw new Error('Zoko: title is hidden by settings');
       item.episodes = _episodeItems(id, malId, media, availability);
-      item.subCount = item.episodes.filter(function (x) { return x.category === 'sub'; }).length;
-      item.dubCount = item.episodes.filter(function (x) { return x.category === 'dub'; }).length;
+      item.subCount = item.episodes.filter(function (x) { return x.category === 'sub' || x.category === 'both'; }).length;
+      item.dubCount = item.episodes.filter(function (x) { return x.category === 'dub' || x.category === 'both'; }).length;
       return item;
     });
   });
@@ -337,7 +353,7 @@ function getEpisodes(url, opts) {
 
 function _parseEpisode(value) {
   var text = String(value || '');
-  var match = text.match(/^zoko:\/\/episode\/(\d+)\/(\d+)\/([0-9]+(?:\.[0-9]+)?)\/(sub|dub)$/i);
+  var match = text.match(/^zoko:\/\/episode\/(\d+)\/(\d+)\/([0-9]+(?:\.[0-9]+)?)\/(sub|dub|both)$/i);
   if (!match) throw new Error('Zoko: invalid episode URL');
   return { anilistId: Number(match[1]), malId: Number(match[2]), number: Number(match[3]), category: match[4].toLowerCase() };
 }
@@ -366,23 +382,29 @@ function getVideoSources(episodeUrl, opts) {
   var episode;
   try { episode = _parseEpisode(episodeUrl); }
   catch (e) { return Promise.resolve([]); }
-  return _episodePage(episode.malId, episode.number, episode.category).then(function (payload) {
-    var stream = _absolute(_extractHls('', payload));
-    if (!stream) throw new Error('Zoko returned no playable HLS source');
-    return [{
-      url: stream,
-      type: 'hls',
-      container: 'hls',
-      hls: true,
-      quality: 'Auto',
-      label: 'Zoko',
-      kind: episode.category,
-      audio: episode.category,
-      audioLang: episode.category === 'dub' ? 'en' : 'ja',
-      headers: { 'User-Agent': UA, Referer: SITE + '/', Origin: SITE },
-      subtitles: _subtitles(payload),
-      isActive: true
-    }];
+  // A 'both' episode row exposes each audio track as its own stream so the
+  // episode list does not need a separate SUB and DUB row per number.
+  var categories = episode.category === 'both' ? ['sub', 'dub'] : [episode.category];
+  var resolveOne = function (cat) {
+    return _episodePage(episode.malId, episode.number, cat).then(function (payload) {
+      var stream = _absolute(_extractHls('', payload));
+      if (!stream) return null;
+      return { url: stream, type: 'hls', container: 'hls', hls: true,
+        quality: 'Auto', label: 'Zoko', kind: cat, audio: cat,
+        audioLang: cat === 'dub' ? 'en' : 'ja',
+        headers: { 'User-Agent': UA, Referer: SITE + '/', Origin: SITE },
+        subtitles: _subtitles(payload), isActive: true };
+    });
+  };
+  return Promise.all(categories.map(resolveOne)).then(function (groups) {
+    var out = [], seen = {};
+    groups.forEach(function (stream) {
+      if (!stream || !stream.url || seen[stream.url]) return;
+      seen[stream.url] = 1;
+      out.push(stream);
+    });
+    if (out.length === 0) throw new Error('Zoko returned no playable HLS source');
+    return out;
   });
 }
 function getStreams(url, opts) { return getVideoSources(url, opts); }
@@ -390,7 +412,7 @@ function getLinks(url, opts) { return getVideoSources(url, opts); }
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    version: '1.0.2', getInfo: getInfo, getSettings: getSettings,
+    version: '1.0.3', getInfo: getInfo, getSettings: getSettings,
     getHome: getHome, popular: popular, search: search,
     getDetail: getDetail, getEpisodes: getEpisodes,
     getVideoSources: getVideoSources, getStreams: getStreams, getLinks: getLinks,
