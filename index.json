@@ -1,6 +1,6 @@
 {
-  "name": "𝑴𝒆𝒘𝒕𝒘𝒐♡ Repo",
-  "description": "𝑴𝒆𝒘𝒕𝒘𝒐♡ community sources for Zangetsu. Third-party provider integrations; this repository does not host video files.",
+  "name": "\ud835\udc74\ud835\udc86\ud835\udc98\ud835\udc95\ud835\udc98\ud835\udc90\u2661 Repo",
+  "description": "\ud835\udc74\ud835\udc86\ud835\udc98\ud835\udc95\ud835\udc98\ud835\udc90\u2661 community sources for Zangetsu. Third-party provider integrations; this repository does not host video files.",
   "sources": [
     {
       "id": "jellyfin",
@@ -140,7 +140,7 @@
         {
           "key": "tmdbApiKey",
           "label": "TMDB API key or Read Access Token (optional)",
-          "description": "Leave blank to use Zangetsu’s built-in TMDB key. Or provide your own v3 API key or Read Access Token.",
+          "description": "Leave blank to use Zangetsu\u2019s built-in TMDB key. Or provide your own v3 API key or Read Access Token.",
           "type": "text",
           "default": ""
         },
@@ -266,14 +266,14 @@
         {
           "key": "tmdbApiKey",
           "label": "TMDB API Key (optional; blank uses app default)",
-          "description": "Your personal TMDB v3 API key. Leave blank to use Zangetsu’s built-in key. Sent only to TMDB.",
+          "description": "Your personal TMDB v3 API key. Leave blank to use Zangetsu\u2019s built-in key. Sent only to TMDB.",
           "type": "text",
           "default": ""
         },
         {
           "key": "addonUrls",
           "label": "Streaming Add-on URLs (manifest URLs; comma/newline separated)",
-          "description": "Stremio-compatible add-on manifest URLs used to fetch playback streams. Keep each add-on’s required URL path and token intact.",
+          "description": "Stremio-compatible add-on manifest URLs used to fetch playback streams. Keep each add-on\u2019s required URL path and token intact.",
           "type": "text",
           "default": ""
         },
@@ -342,7 +342,7 @@
         {
           "key": "tmdbApiKey",
           "label": "TMDB API Key (optional; blank uses app default)",
-          "description": "Your personal TMDB v3 API key. Leave blank to use Zangetsu’s built-in key. Sent only to TMDB.",
+          "description": "Your personal TMDB v3 API key. Leave blank to use Zangetsu\u2019s built-in key. Sent only to TMDB.",
           "type": "text",
           "default": ""
         },
@@ -1126,11 +1126,180 @@
           "options": [
             {
               "value": "sub",
-              "label": "SUB · Original audio"
+              "label": "SUB \u00b7 Original audio"
             },
             {
               "value": "dub",
-              "label": "DUB · English audio"
+              "label": "DUB \u00b7 English audio"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "animeonsen",
+      "name": "AnimeOnsen",
+      "version": "1.0.1",
+      "type": "anime",
+      "lang": "all",
+      "file": "providers/animeonsen.js",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=animeonsen.xyz",
+      "nsfw": false,
+      "settings": [
+        {
+          "key": "requestTimeoutMs",
+          "label": "Request timeout",
+          "description": "Maximum wait for an individual AnimeOnsen API request.",
+          "type": "enum",
+          "default": "12000",
+          "options": [
+            {
+              "value": "6000",
+              "label": "6 seconds"
+            },
+            {
+              "value": "12000",
+              "label": "12 seconds"
+            },
+            {
+              "value": "18000",
+              "label": "18 seconds"
+            }
+          ]
+        },
+        {
+          "key": "homeLimit",
+          "label": "Home catalogue size",
+          "description": "Number of titles requested for the AnimeOnsen home row.",
+          "type": "enum",
+          "default": "30",
+          "options": [
+            {
+              "value": "15",
+              "label": "15 titles"
+            },
+            {
+              "value": "30",
+              "label": "30 titles"
+            },
+            {
+              "value": "50",
+              "label": "50 titles"
+            }
+          ]
+        },
+        {
+          "key": "includeSubtitles",
+          "label": "Include external subtitles",
+          "description": "Add AnimeOnsen ASS subtitle tracks to each episode when available.",
+          "type": "bool",
+          "default": true
+        }
+      ]
+    },
+    {
+      "id": "animegg",
+      "name": "AnimeGG",
+      "version": "1.0.2",
+      "type": "anime",
+      "lang": "en",
+      "file": "providers/animegg.js",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=animegg.org",
+      "nsfw": false,
+      "settings": [
+        {
+          "key": "audioMode",
+          "label": "Audio tracks",
+          "description": "Show both SUB and DUB when AnimeGG lists them, or filter to one track.",
+          "type": "enum",
+          "default": "both",
+          "options": [
+            {
+              "value": "both",
+              "label": "Sub and dub"
+            },
+            {
+              "value": "sub",
+              "label": "Sub only"
+            },
+            {
+              "value": "dub",
+              "label": "Dub only"
+            }
+          ]
+        },
+        {
+          "key": "requestTimeoutMs",
+          "label": "Request timeout",
+          "description": "Maximum wait for each AnimeGG catalogue or player request.",
+          "type": "enum",
+          "default": "12000",
+          "options": [
+            {
+              "value": "6000",
+              "label": "6 seconds"
+            },
+            {
+              "value": "12000",
+              "label": "12 seconds"
+            },
+            {
+              "value": "18000",
+              "label": "18 seconds"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "animeav1",
+      "name": "AnimeAV1",
+      "version": "1.0.1",
+      "type": "anime",
+      "lang": "es",
+      "file": "providers/animeav1.js",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=animeav1.com",
+      "nsfw": false,
+      "settings": [
+        {
+          "key": "audioMode",
+          "label": "Audio tracks",
+          "description": "Show the Spanish subtitled version, the Latino dub, or both when AnimeAV1 lists them.",
+          "type": "enum",
+          "default": "both",
+          "options": [
+            {
+              "value": "both",
+              "label": "Sub and dub"
+            },
+            {
+              "value": "sub",
+              "label": "Sub only"
+            },
+            {
+              "value": "dub",
+              "label": "Dub only"
+            }
+          ]
+        },
+        {
+          "key": "requestTimeoutMs",
+          "label": "Request timeout",
+          "description": "Maximum wait for each AnimeAV1 page or embed request.",
+          "type": "enum",
+          "default": "12000",
+          "options": [
+            {
+              "value": "6000",
+              "label": "6 seconds"
+            },
+            {
+              "value": "12000",
+              "label": "12 seconds"
+            },
+            {
+              "value": "18000",
+              "label": "18 seconds"
             }
           ]
         }

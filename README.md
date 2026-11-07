@@ -25,7 +25,7 @@
 
 ## At a glance
 
-This repository documents six main integrations and one additional anime source, AniChan. Choose the sources you need; **you do not need to install all of them**.
+This repository documents six main integrations and a set of individual anime sources. Choose the sources you need; **you do not need to install all of them**.
 
 | Integration | Catalogue & metadata | Playback |
 |:--|:--|:--|
@@ -260,6 +260,24 @@ AniChan uses AniList for title discovery and its own watch API for episode metad
 ### Limitations
 
 AniChan currently publishes a null Cloudflare Turnstile site key. The provider sends an empty token and **never** solves or bypasses CAPTCHA. If the site enables Turnstile, session creation fails with an explicit error. Its watch session is short-lived and may need refreshing between requests. As a third-party source, AniChan can change markup, rotate hosts, block requests, or become unavailable without notice.
+
+</details>
+
+<details>
+<summary><strong>Additional anime sources</strong> · AnimeOnsen, AnimeGG, AnimeAV1</summary>
+
+Each source below is installed individually from the manifest. They search and play directly from
+their own site, with no shared metadata backend.
+
+| Source | Language | Playback | Notes |
+|:--|:--|:--|:--|
+| **AnimeOnsen** | Multi-audio | DASH | DASH manifest and subtitle tracks require the AnimeOnsen `Referer`. |
+| **AnimeGG** | English | Progressive MP4 | MP4 requires the AnimeGG `Referer`. |
+| **AnimeAV1** | Spanish | HLS / MP4 | Spanish catalogue; VOE HLS with YourUpload MP4 fallback. |
+
+Search, detail, episode, and playback coverage for these sources is documented in
+[`PROVIDER_AUDIT.md`](PROVIDER_AUDIT.md), which also records every Anilili provider that was
+rejected and why.
 
 </details>
 
