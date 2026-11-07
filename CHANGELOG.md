@@ -2,20 +2,15 @@
 
 ## Unreleased
 
-- Add seven live-verified anime sources from the Anilili provider audit:
-  - **Zoko 1.0.2** — AniList-backed search, SUB/DUB episode tracks, and HLS playback.
+- Add four live-verified anime sources from the Anilili provider audit:
   - **AnimeOnsen 1.0.0** — multi-audio DASH playback with subtitle tracks.
-  - **KickAssAnime 1.0.2** — catalogue and HLS playback with the required upstream headers.
-  - **Re:Anime 1.0.2** — FlixCloud resolution with direct MKV downloads.
   - **AnimeGG 1.0.0** — series/episode scraping and progressive MP4 playback.
-  - **AnimeAV1 1.0.0** — Spanish catalogue with VOE HLS and YourUpload MP4 fallback.
-  - **AnimeGG 1.0.1** — series/episode scraping and progressive MP4 playback; retry on timeout/connection-reset errors.
+  - **AnimeAV1 1.0.1** — Spanish catalogue with VOE HLS and YourUpload MP4 fallback; HLS master playlist parsed into explicit quality variants (720p).
+  - **AnimeGG 1.0.2** — series/episode scraping and progressive MP4 playback; retry on timeout/connection-reset errors; JWPlayer videoSources parsed for per-quality MP4 entries.
+  - **AnimeOnsen 1.0.1** — multi-audio DASH playback with subtitle tracks; DASH manifest parsed into explicit quality variants.
 - Add `PROVIDER_AUDIT.md` with the complete Anilili provider comparison, live playback evidence, and
   the rejection reason for every provider that was not added.
-- Fix the three sources flagged in the Zangetsu playback log:
-  - **Re:Anime 1.0.3** — emit one episode row per number (SUB/DUB are stream variants, not duplicate rows) and poll the FlixCloud progress endpoint until the download is ready before returning the download URL, avoiding 404s.
-  - **KickAssAnime 1.0.3** — emit one episode row per number (SUB/DUB are stream variants, not duplicate rows), resolve both audio tracks for a combined episode row, and fall back to any listed server when no preferred native player server is available.
-  - **Zoko 1.0.3** — fix HLS payload extraction from truncated `__P` payloads; emit one episode row per number (SUB/DUB are stream variants).
+- Remove **Re:Anime**, **KickAssAnime**, and **Zoko** from the repository.
 - Remove **AnimeHeaven** (v1.0.1): the animeheaven.me domain persistently resets connections and returns zero search results for all titles; the source is unavailable and has been removed from the repository.
 - Fix the Jellyfin source icon by switching from SVG to the official square PNG asset, which is compatible with Zangetsu's cached network-image renderer; bump provider version to 3.0.3.
 

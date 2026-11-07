@@ -17,7 +17,7 @@ var _searchToken = null;
 function getInfo() {
   return { name: 'AnimeOnsen', lang: 'all', baseUrl: SITE,
     logo: 'https://www.google.com/s2/favicons?sz=256&domain=animeonsen.xyz',
-    type: 'anime', version: '1.0.0' };
+    type: 'anime', version: '1.0.1' };
 }
 function getSettings() {
   return [
@@ -274,6 +274,17 @@ function _episodeParts(value) {
 function _subtitleFormat(_url) {
   return 'ass';
 }
+function _raceTimeout(promise, ms, expired) {
+  if (typeof setTimeout !== 'function' || typeof Promise === 'undefined' || !Promise.race) return promise;
+  var t;
+  var timeout = new Promise(function (resolve) {
+    t = setTimeout(function () { resolve(expired); }, ms);
+  });
+  return Promise.race([promise, timeout]).then(function (v) {
+    try { if (typeof clearTimeout === 'function') clearTimeout(t); } catch (e) {}
+    return v;
+  });
+}
 function _streamQuality(metadata) {
   var raw = metadata && typeof metadata === 'object'
     ? (metadata.quality || metadata.height || metadata.resolution)
@@ -283,9 +294,52 @@ function _streamQuality(metadata) {
   if (/^\d{3,4}$/.test(text)) return text + 'p';
   return text;
 }
+function _dashQualities(manifestUrl, hdrs, cat, subs, fallbackQuality) {
+  function autoEntry(ct, q) {
+    return { url: manifestUrl, quality: q || 'Auto', label: 'AnimeOnsen',
+      type: ct === 'dash' ? 'dash' : 'mp4', container: ct, headers: hdrs, kind: cat, audioLang: 'ja', subtitles: subs, isActive: true };
+  }
+  if (!/\.mpd(\?|$)/i.test(String(manifestUrl))) {
+    return Promise.resolve([autoEntry('mp4', fallbackQuality)]);
+  }
+  var bodyP = fetch(manifestUrl, { headers: hdrs })
+    .then(function (r) { return String((r && r.body) || ''); });
+  bodyP.catch(function () {});
+  return _raceTimeout(bodyP, 5000, '').then(function (body) {
+      if (body.indexOf('<Representation') === -1) return [autoEntry('dash', fallbackQuality)];
+      // Find the video AdaptationSet and its Representations
+      var videoSetMatch = body.match(/<AdaptationSet[^>]*contentType=["']video["'][^>]*>[\s\S]*?<\/AdaptationSet>/i);
+      var setBody = videoSetMatch ? videoSetMatch[0] : body;
+      var re = /<Representation\b([^>]*)\/?>/gi, m;
+      var vars = [], seen = {};
+      while ((m = re.exec(setBody)) !== null) {
+        var attrs = m[1];
+        var height = attrs.match(/height=["'](\d+)["']/i);
+        var bw = attrs.match(/bandwidth=["'](\d+)["']/i);
+        var width = attrs.match(/width=["'](\d+)["']/i);
+        var h = height ? parseInt(height[1], 10) : 0;
+        if (!h) continue; // skip audio-only representations
+        var key = h;
+        if (seen[key]) continue; seen[key] = 1;
+        vars.push({ h: h, bw: bw ? parseInt(bw[1], 10) : 0, w: width ? parseInt(width[1], 10) : 0 });
+      }
+      if (!vars.length) return [autoEntry('dash', fallbackQuality)];
+      vars.sort(function (a, b) { return (b.h - a.h) || (b.bw - a.bw); });
+      var out = [autoEntry('dash', 'Auto')], i, v;
+      for (i = 0; i < vars.length; i++) {
+        v = vars[i];
+        out.push({ url: manifestUrl, quality: v.h + 'p', label: 'AnimeOnsen ' + v.h + 'p',
+          type: 'dash', container: 'dash', headers: hdrs, kind: cat, audioLang: 'ja', subtitles: subs, isActive: false });
+      }
+      out[0].isActive = true;
+      return out;
+    })
+    .catch(function () { return [autoEntry('dash', fallbackQuality)]; });
+}
 function getVideoSources(episodeUrl) {
   var p = _episodeParts(episodeUrl);
   if (!p) return Promise.reject(new Error('AnimeOnsen: invalid episode reference'));
+  var hdrs = _headers(SITE + '/');
   return _apiJson('/content/' + encodeURIComponent(p.contentId) + '/video/' + encodeURIComponent(p.epNum),
     SITE + '/details/' + p.contentId).then(function (j) {
       var uri = j && j.uri || {};
@@ -301,15 +355,19 @@ function getVideoSources(episodeUrl) {
           if (!/^https:\/\//i.test(u)) return;
           var lang = String(subtitleLangs[key] || key || 'Subtitle');
           subs.push({ url: u, lang: key, label: lang, format: _subtitleFormat(u),
-            headers: _headers(SITE + '/'), default: String(key).toLowerCase().indexOf('en') === 0 });
+            headers: hdrs, default: String(key).toLowerCase().indexOf('en') === 0 });
         });
       }
       var dash = /\.mpd(?:[?#]|$)/i.test(media);
       var container = dash ? 'dash' : (/\.m3u8(?:[?#]|$)/i.test(media) ? 'hls' : 'mp4');
+      var fallbackQ = _streamQuality(metadata);
+      if (dash) {
+        return _dashQualities(media, hdrs, 'sub', subs, fallbackQ);
+      }
       return [{
-        url: media, quality: _streamQuality(metadata), label: 'AnimeOnsen',
+        url: media, quality: fallbackQ, label: 'AnimeOnsen',
         type: container, container: container, hls: container === 'hls',
-        headers: _headers(SITE + '/'), kind: 'sub', audioLang: 'ja', subtitles: subs,
+        headers: hdrs, kind: 'sub', audioLang: 'ja', subtitles: subs,
         isActive: true
       }];
     });
@@ -319,7 +377,7 @@ function getLinks(id, opts) { return getVideoSources(id, opts); }
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    version: '1.0.0', getInfo: getInfo, getSettings: getSettings,
+    version: '1.0.1', getInfo: getInfo, getSettings: getSettings,
     getHome: getHome, popular: popular, search: search,
     getDetail: getDetail, getEpisodes: getEpisodes,
     getVideoSources: getVideoSources, getStreams: getStreams, getLinks: getLinks,

@@ -264,17 +264,14 @@ AniChan currently publishes a null Cloudflare Turnstile site key. The provider s
 </details>
 
 <details>
-<summary><strong>Additional anime sources</strong> · Zoko, AnimeOnsen, KickAssAnime, Re:Anime, AnimeGG, AnimeAV1</summary>
+<summary><strong>Additional anime sources</strong> · AnimeOnsen, AnimeGG, AnimeAV1</summary>
 
 Each source below is installed individually from the manifest. They search and play directly from
 their own site, with no shared metadata backend.
 
 | Source | Language | Playback | Notes |
 |:--|:--|:--|:--|
-| **Zoko** | English | HLS | AniList-backed search and episode metadata; SUB/DUB availability. |
 | **AnimeOnsen** | Multi-audio | DASH | DASH manifest and subtitle tracks require the AnimeOnsen `Referer`. |
-| **KickAssAnime** | English | HLS | HLS master requires the KickAssAnime `Referer`. |
-| **Re:Anime** | English | Direct MKV | FlixCloud resolution with direct download fallback. |
 | **AnimeGG** | English | Progressive MP4 | MP4 requires the AnimeGG `Referer`. |
 | **AnimeAV1** | Spanish | HLS / MP4 | Spanish catalogue; VOE HLS with YourUpload MP4 fallback. |
 

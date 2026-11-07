@@ -3,7 +3,7 @@
 // embed id whose page carries the final /play/.../video.mp4 URL; the provider
 // returns that URL directly, never an iframe.
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID) ? String(__SOURCE_ID) : 'animegg';
-var VERSION = '1.0.1';
+var VERSION = '1.0.2';
 var SITE = 'https://www.animegg.org';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36';
 var RETRIES = 2;
@@ -291,6 +291,34 @@ function _ogVideo(html) {
   var value = match ? _decode(match[1]) : '';
   return /^https:\/\//i.test(value) ? value : _absolute(value);
 }
+// Extract JWPlayer videoSources array from the embed page.
+// Each entry has file (URL), label (quality like "360p"/"720p"), and optional bk (backup).
+function _videoSources(embedHtml) {
+  var text = String(embedHtml || '');
+  var m = text.match(/var\s+videoSources\s*=\s*(\[[\s\S]*?\])\s*;/i);
+  if (!m) return null;
+  var arrText = m[1];
+  var out = [];
+  // Match each object entry: {file: "...", label: "...", ...}
+  var re = /\{\s*file\s*:\s*["']([^"']+)["'][^}]*?label\s*:\s*["']([^"']+)["'][^}]*\}/gi;
+  var mm;
+  while ((mm = re.exec(arrText)) !== null) {
+    var url = _absolute(mm[1]);
+    var label = String(mm[2] || '').trim();
+    if (!url) continue;
+    out.push({ url: url, quality: label || 'Auto', label: label || 'Auto' });
+  }
+  // Fallback: if no label-qualified entries were parsed, try file-only entries
+  if (!out.length) {
+    var re2 = /\{\s*file\s*:\s*["']([^"']+)["']/gi;
+    var mm2;
+    while ((mm2 = re2.exec(arrText)) !== null) {
+      var url2 = _absolute(mm2[1]);
+      if (url2) out.push({ url: url2, quality: 'Auto', label: 'Auto' });
+    }
+  }
+  return out.length ? out : null;
+}
 function getVideoSources(episodeUrl, opts) {
   var episode;
   try { episode = _parseEpisode(episodeUrl); }
@@ -301,21 +329,22 @@ function getVideoSources(episodeUrl, opts) {
     if (!id) throw new Error('AnimeGG episode has no ' + episode.category + ' player');
     var embedUrl = SITE + '/embed/' + encodeURIComponent(id);
     return _get(embedUrl, pageUrl).then(function (embed) {
-      var media = _ogVideo(embed);
-      if (!media) throw new Error('AnimeGG embed did not expose a playable MP4');
-      return [{
-        url: media,
-        quality: 'Auto',
-        label: 'AnimeGG',
-        type: 'mp4',
-        container: 'mp4',
-        headers: { 'User-Agent': UA, 'Referer': SITE + '/' },
-        kind: episode.category,
-        audio: episode.category,
-        audioLang: episode.category === 'dub' ? 'en' : 'ja',
-        subtitles: [],
-        isActive: true
-      }];
+      var sources = _videoSources(embed);
+      if (!sources || !sources.length) {
+        var media = _ogVideo(embed);
+        if (!media) throw new Error('AnimeGG embed did not expose a playable MP4');
+        sources = [{ url: media, quality: 'Auto', label: 'Auto' }];
+      }
+      var hdrs = { 'User-Agent': UA, 'Referer': SITE + '/' };
+      return sources.map(function (s, i) {
+        return {
+          url: s.url, quality: s.quality, label: 'AnimeGG ' + s.label,
+          type: 'mp4', container: 'mp4',
+          headers: hdrs, kind: episode.category, audio: episode.category,
+          audioLang: episode.category === 'dub' ? 'en' : 'ja',
+          subtitles: [], isActive: i === 0
+        };
+      });
     });
   }).catch(function (error) {
     console.warn('AnimeGG playback failed:', String(error && error.message || error));

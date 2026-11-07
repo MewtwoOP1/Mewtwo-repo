@@ -4,7 +4,7 @@
 // the episode's own embeds: VOE (HLS) and YourUpload (MP4), both resolved to
 // real media URLs instead of iframes.
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID) ? String(__SOURCE_ID) : 'animeav1';
-var VERSION = '1.0.0';
+var VERSION = '1.0.1';
 var SITE = 'https://animeav1.com';
 var CDN = 'https://cdn.animeav1.com';
 var UA = 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36';
@@ -388,16 +388,60 @@ function _resolveVoe(url, category) {
     });
   }).catch(function () { return null; });
 }
+function _raceTimeout(promise, ms, expired) {
+  if (typeof setTimeout !== 'function' || typeof Promise === 'undefined' || !Promise.race) return promise;
+  var t;
+  var timeout = new Promise(function (resolve) {
+    t = setTimeout(function () { resolve(expired); }, ms);
+  });
+  return Promise.race([promise, timeout]).then(function (v) {
+    try { if (typeof clearTimeout === 'function') clearTimeout(t); } catch (e) {}
+    return v;
+  });
+}
 function _voeStream(source, category) {
   if (!/^https:\/\//i.test(String(source || ''))) return null;
-  return {
-    url: String(source), quality: 'Auto', label: 'AnimeAV1 VOE',
-    type: 'hls', container: 'hls', hls: true,
-    headers: { 'User-Agent': UA },
-    kind: category, audio: category,
-    audioLang: category === 'dub' ? 'es' : 'ja',
-    subtitles: [], isActive: true
-  };
+  var base = String(source).replace(/[^/]*(\?.*)?$/, '');
+  var origin = (String(source).match(/^(https?:\/\/[^/]+)/) || [])[1] || '';
+  var hdrs = { 'User-Agent': UA };
+  function autoEntry(ct) {
+    return { url: String(source), quality: 'Auto', label: 'AnimeAV1 VOE',
+      type: ct === 'hls' ? 'hls' : 'mp4', container: ct, hls: ct === 'hls',
+      headers: hdrs, kind: category, audio: category,
+      audioLang: category === 'dub' ? 'es' : 'ja', subtitles: [], isActive: true };
+  }
+  var bodyP = fetch(String(source), { headers: hdrs })
+    .then(function (r) { return String((r && r.body) || ''); });
+  bodyP.catch(function () {});
+  return _raceTimeout(bodyP, 5000, '').then(function (body) {
+      if (body.indexOf('#EXT-X-STREAM-INF') === -1) return [autoEntry('hls')];
+      var re = /#EXT-X-STREAM-INF:([^\r\n]*)\r?\n([^\r\n]+)/g, m;
+      var vars = [], seen = {};
+      while ((m = re.exec(body)) !== null) {
+        var uri = m[2].trim();
+        if (!uri || uri.charAt(0) === '#') continue;
+        var url = uri;
+        if (!/^https?:\/\//i.test(uri)) url = (uri.charAt(0) === '/') ? origin + uri : base + uri;
+        if (seen[url]) continue; seen[url] = 1;
+        var hm = m[1].match(/RESOLUTION=\d+x(\d+)/i);
+        var bw = m[1].match(/BANDWIDTH=(\d+)/i);
+        vars.push({ url: url, h: hm ? parseInt(hm[1], 10) : 0, bw: bw ? parseInt(bw[1], 10) : 0 });
+      }
+      if (!vars.length) return [autoEntry('hls')];
+      vars.sort(function (a, b) { return (b.h - a.h) || (b.bw - a.bw); });
+      var out = [autoEntry('hls')], i, v;
+      for (i = 0; i < vars.length; i++) {
+        v = vars[i];
+        out.push({ url: v.url, quality: v.h ? (v.h + 'p') : 'Auto',
+          label: 'AnimeAV1 VOE ' + (v.h ? (v.h + 'p') : 'Auto'),
+          type: 'hls', container: 'hls', hls: true,
+          headers: hdrs, kind: category, audio: category,
+          audioLang: category === 'dub' ? 'es' : 'ja', subtitles: [], isActive: false });
+      }
+      out[0].isActive = true;
+      return out;
+    })
+    .catch(function () { return [autoEntry('hls')]; });
 }
 function _resolveYourUpload(url, category) {
   return _get(url, SITE + '/').then(function (html) {
@@ -422,10 +466,13 @@ function _resolveEmbeds(embeds, category) {
   });
   return Promise.all(jobs).then(function (rows) {
     var out = [], seen = {};
-    rows.forEach(function (stream) {
-      if (!stream || !stream.url || seen[stream.url]) return;
-      seen[stream.url] = 1;
-      out.push(stream);
+    rows.forEach(function (row) {
+      var streams = Array.isArray(row) ? row : [row];
+      streams.forEach(function (stream) {
+        if (!stream || !stream.url || seen[stream.url]) return;
+        seen[stream.url] = 1;
+        out.push(stream);
+      });
     });
     out.forEach(function (stream, index) { stream.isActive = index === 0; });
     return out;
