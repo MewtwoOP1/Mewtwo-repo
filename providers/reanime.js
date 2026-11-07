@@ -3,7 +3,7 @@
 // the original MKV download to be ready and returns that direct file. It never
 // returns an iframe or a not-yet-generated download.
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID) ? String(__SOURCE_ID) : 'reanime';
-var VERSION = '1.0.2';
+var VERSION = '1.0.3';
 var SITE = 'https://reanime.to';
 var API = SITE + '/api/v1';
 var FLIX_API = SITE + '/api/flix';

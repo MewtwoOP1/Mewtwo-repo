@@ -2,7 +2,7 @@
 // Search uses the site's fast-search endpoint and playback resolves the
 // session-bound gate.php mirrors. No embed player or third-party API is used.
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID) ? String(__SOURCE_ID) : 'animeheaven';
-var VERSION = '1.0.0';
+var VERSION = '1.0.1';
 var SITE = 'https://animeheaven.me';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
 var HEAVEN_COOKIES = {};

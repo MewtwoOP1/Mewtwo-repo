@@ -1268,7 +1268,7 @@
     {
       "id": "kickassanime",
       "name": "KickAssAnime",
-      "version": "1.0.2",
+      "version": "1.0.3",
       "type": "anime",
       "lang": "en",
       "file": "providers/kickassanime.js",
@@ -1336,7 +1336,7 @@
     {
       "id": "reanime",
       "name": "Re:Anime",
-      "version": "1.0.2",
+      "version": "1.0.3",
       "type": "anime",
       "lang": "en",
       "file": "providers/reanime.js",
@@ -1519,7 +1519,7 @@
     {
       "id": "animeheaven",
       "name": "AnimeHeaven",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "type": "anime",
       "lang": "en",
       "file": "providers/animeheaven.js",

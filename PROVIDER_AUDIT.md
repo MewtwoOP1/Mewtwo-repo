@@ -78,11 +78,11 @@ that cannot be mapped from Zangetsu's normal search input.
 |:--|:--|:--|:--|:--|
 | Zoko | `zoko` | 1.0.2 | English | HLS master fetched with 200 and `#EXTM3U` |
 | AnimeOnsen | `animeonsen` | 1.0.0 | Multi-audio | DASH manifest fetched with 206 and `<MPD>` |
-| KickAssAnime | `kickassanime` | 1.0.2 | English | HLS master fetched with 200 and `#EXTM3U` |
-| Re:Anime | `reanime` | 1.0.2 | English | Direct MKV fetched with 206 and `video/x-matroska` |
+| KickAssAnime | `kickassanime` | 1.0.3 | English | HLS master fetched with 200 and `#EXTM3U` |
+| Re:Anime | `reanime` | 1.0.3 | English | Direct MKV fetched with 206 and `video/x-matroska` |
 | AnimeGG | `animegg` | 1.0.0 | English | Progressive MP4 fetched with 206 and `video/mp4` |
 | AnimeAV1 | `animeav1` | 1.0.0 | Spanish | VOE HLS fetched with 200 and `#EXTM3U`; YourUpload MP4 fallback |
-| AnimeHeaven | `animeheaven` | 1.0.0 | English | Mirror MP4 fetched with 206 and `video/mp4` |
+| AnimeHeaven | `animeheaven` | 1.0.1 | English | Mirror MP4 fetched with 206 and `video/mp4` |
 
 AnimeAV1 is not a duplicate of the existing `anv.js` source: its streams are Spanish, with burned-in
 Spanish subtitles and a Latino dub on some titles. It is therefore declared as Spanish rather than
