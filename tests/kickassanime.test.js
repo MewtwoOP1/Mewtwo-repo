@@ -188,32 +188,24 @@ async function main() {
     'duplicate English/romaji titles are searched once and a confident match stops alias probing');
   assert.equal(detail.title, 'Mock Anime (2024)');
   assert.equal(detail.status, 'ongoing');
-  assert.equal(detail.episodes.length, 5, 'three sub and two dub rows');
+  assert.equal(detail.episodes.length, 3, 'one row per episode number, both audio tracks');
   assert.equal(detail.subCount, 3);
   assert.equal(detail.dubCount, 2);
-  assert.equal(detail.episodes[0].url, 'kaa://episode/151807/mock-anime-da47/1/sub');
+  assert.equal(detail.episodes[0].url, 'kaa://episode/151807/mock-anime-da47/1/both');
   assert.equal(detail.episodes[0].title, 'Episode 1: Start');
-  const dubOne = detail.episodes.find((entry) => entry.number === 1 && entry.category === 'dub');
-  assert.equal(dubOne.title, 'Episode 1: Start Dub');
+  assert.equal(detail.episodes[1].url, 'kaa://episode/151807/mock-anime-da47/2/both');
+  assert.equal(detail.episodes[2].url, 'kaa://episode/151807/mock-anime-da47/3/sub');
 
-  const subOne = detail.episodes.find((entry) => entry.number === 1 && entry.category === 'sub');
-  const subStreams = await provider.getVideoSources(subOne.url, {});
-  assert.equal(subStreams.length, 1);
-  assert.equal(subStreams[0].url, 'https://hls.krussdomi.com/manifest/abc123/master.m3u8');
-  assert.equal(subStreams[0].type, 'hls');
-  assert.equal(subStreams[0].container, 'hls');
-  assert.equal(subStreams[0].kind, 'sub');
-  assert.equal(subStreams[0].headers.Referer, 'https://krussdomi.com/');
-  assert.equal(subStreams[0].headers.Origin, 'https://krussdomi.com');
-  assert.equal(subStreams[0].subtitles.length, 2, 'duplicate subtitle URLs are deduplicated');
-  assert.equal(subStreams[0].subtitles[0].format, 'vtt');
-  assert.equal(subStreams[0].subtitles[0].url, 'https://cdn.example/en.vtt');
-
-  const dubStreams = await provider.getVideoSources(dubOne.url, {});
-  assert.equal(dubStreams.length, 1);
-  assert.equal(dubStreams[0].url, 'https://hls.krussdomi.com/manifest/dub123/master.m3u8');
-  assert.equal(dubStreams[0].kind, 'dub');
-  assert.equal(dubStreams[0].audioLang, 'en-US');
+  const bothOne = detail.episodes[0];
+  const bothStreams = await provider.getVideoSources(bothOne.url, {});
+  assert.equal(bothStreams.length, 2, 'a both episode exposes sub and dub streams');
+  assert.ok(bothStreams.some((entry) => entry.url === 'https://hls.krussdomi.com/manifest/abc123/master.m3u8' && entry.kind === 'sub'),
+    'sub VidStreaming HLS');
+  assert.ok(bothStreams.some((entry) => entry.url === 'https://hls.krussdomi.com/manifest/dub123/master.m3u8' && entry.kind === 'dub' && entry.audioLang === 'en-US'),
+    'dub VidStreaming HLS');
+  assert.equal(bothStreams[0].subtitles.length, 2, 'duplicate subtitle URLs are deduplicated');
+  assert.equal(bothStreams[0].subtitles[0].format, 'vtt');
+  assert.equal(bothStreams[0].subtitles[0].url, 'https://cdn.example/en.vtt');
 
   const catManifest = provider._playerManifest(catPlayerHtml);
   assert.deepEqual(catManifest, { url: 'https://bl.krussdomi.com/playlist/cat123/master.m3u8', type: 'hls' });
@@ -230,15 +222,19 @@ async function main() {
   ] }), 'https://krussdomi.com/cat-player/player?id=cat123&type=hls&source=catstream',
     'the native priority prefers VidStreaming, then CatStream, then BirdStream');
 
-  const subTwo = detail.episodes.find((entry) => entry.number === 2 && entry.category === 'sub');
-  const catStreams = await provider.getVideoSources(subTwo.url, {});
-  assert.equal(catStreams.length, 1);
+  const bothTwo = detail.episodes.find((entry) => entry.number === 2 && entry.category === 'both');
+  const catStreams = await provider.getVideoSources(bothTwo.url, {});
+  assert.equal(catStreams.length, 1, 'a both episode with a dub-only empty server list still returns the sub stream');
   assert.equal(catStreams[0].url, 'https://bl.krussdomi.com/playlist/cat123/master.m3u8');
   assert.equal(catStreams[0].type, 'hls');
+  assert.equal(catStreams[0].kind, 'sub');
   assert.equal(catStreams[0].subtitles[0].format, 'srt');
 
-  const dubTwo = detail.episodes.find((entry) => entry.number === 2 && entry.category === 'dub');
-  const dubFallback = await provider.getVideoSources(dubTwo.url, {});
+  // A dub-only row whose server list is empty falls back to the Japanese stream.
+  global.__settings.kickassanime.audioMode = 'dub';
+  const dubOnlyForFallback = await provider.getDetail('kaa://anime/151807', {});
+  const dubOnlyRow = dubOnlyForFallback.episodes.find((entry) => entry.number === 2 && entry.category === 'dub');
+  const dubFallback = await provider.getVideoSources(dubOnlyRow.url, {});
   assert.equal(dubFallback.length, 1, 'a dub row with no servers falls back to the Japanese stream');
   assert.equal(dubFallback[0].kind, 'sub');
   assert.match(dubFallback[0].label, /dub unavailable/i);

@@ -303,14 +303,21 @@ function _episodeItems(episodes, slug, anilistId, d) {
   var audio = cfg.audioMode;
   var subCount = Number(d.subbed || episodes.length) || episodes.length;
   var dubCount = Number(d.dubbed || 0) || 0;
-  var wantSub = audio !== 'dub';
-  var wantDub = audio !== 'sub' && dubCount > 0;
-  if (audio === 'sub' && !subCount) wantDub = dubCount > 0;
-  if (audio === 'dub' && !dubCount) wantSub = subCount > 0;
+  var hasSub = subCount > 0;
+  var hasDub = dubCount > 0;
+  // One row per episode number. When both audio tracks exist the row covers
+  // both and playback exposes each as its own stream; this keeps the episode
+  // list from doubling every episode into a SUB row and a DUB row.
   var out = [];
   episodes.forEach(function (ep, index) {
-    if (wantSub) out.push(_episode(ep, index, slug, anilistId, 'sub'));
-    if (wantDub) out.push(_episode(ep, index, slug, anilistId, 'dub'));
+    var category;
+    if (audio === 'sub') { if (!hasSub) return; category = 'sub'; }
+    else if (audio === 'dub') { if (!hasDub) return; category = 'dub'; }
+    else {
+      if (!hasSub && !hasDub) return;
+      category = hasSub && hasDub ? 'both' : (hasSub ? 'sub' : 'dub');
+    }
+    out.push(_episode(ep, index, slug, anilistId, category));
   });
   return out;
 }
@@ -334,8 +341,8 @@ function getDetail(url) {
     item.malId = Number(d.mal_id || 0) || undefined;
     item.anilistId = Number(anilistId) || item.anilistId;
     item.episodes = _episodeItems(episodes, slug, anilistId, d);
-    item.subCount = item.episodes.filter(function (x) { return x.category === 'sub'; }).length;
-    item.dubCount = item.episodes.filter(function (x) { return x.category === 'dub'; }).length;
+    item.subCount = item.episodes.filter(function (x) { return x.category === 'sub' || x.category === 'both'; }).length;
+    item.dubCount = item.episodes.filter(function (x) { return x.category === 'dub' || x.category === 'both'; }).length;
     return item;
   });
 }
@@ -390,9 +397,12 @@ function _pollFlixDownload(meta, attempt) {
   }).then(function (result) {
     if (result.state === 'ready') return true;
     if (result.state === 'failed') throw new Error(result.message);
-    if (attempt < 1 && (result.state === 'pending' ||
+    // Poll the progress endpoint until the file is ready, then follow the
+    // download redirect. A pending result means FlixCloud is still
+    // generating the MKV; returning too early produces a 404 download URL.
+    if (attempt < 10 && (result.state === 'pending' ||
         !/HTTP 4(?:00|01|03|04)\b/.test(result.message || ''))) {
-      return _delay(650).then(function () { return _pollFlixDownload(meta, attempt + 1); });
+      return _delay(1000).then(function () { return _pollFlixDownload(meta, attempt + 1); });
     }
     throw new Error(result.message || 'FlixCloud download is not ready');
   });
@@ -490,14 +500,14 @@ function _episodeParts(value) {
   var epNum = Number(parts[1] || 0);
   var suppliedAid = String(parts[3] || '').trim();
   var category = String(parts[4] || '').toLowerCase();
-  return { slug: slug, epNum: epNum, suppliedAid: suppliedAid, category: category === 'dub' ? 'dub' : 'sub' };
+  if (category !== 'sub' && category !== 'dub' && category !== 'both') category = 'sub';
+  return { slug: slug, epNum: epNum, suppliedAid: suppliedAid, category: category };
 }
 function getVideoSources(episodeUrl, opts) {
   var p = _episodeParts(episodeUrl);
   if (!p.slug || !(p.epNum > 0)) return Promise.resolve([]);
-  var audio = p.category || (opts && String(opts.category || '').toLowerCase() === 'dub' ? 'dub' : 'sub');
-  if (audio !== 'dub') audio = 'sub';
-  var cacheKey = p.slug + '|' + p.epNum + '|' + p.suppliedAid + '|' + audio;
+  var wantAudio = p.category === 'dub' ? ['dub'] : (p.category === 'sub' ? ['sub'] : ['sub', 'dub']);
+  var cacheKey = p.slug + '|' + p.epNum + '|' + p.suppliedAid + '|' + wantAudio.join(',');
   var cachedStreams = STREAM_CACHE[cacheKey];
   if (cachedStreams && cachedStreams.expiresAt > Date.now()) return Promise.resolve(cachedStreams.value);
   var referer = SITE + '/watch/' + p.slug + '?ep=' + p.epNum;
@@ -529,12 +539,13 @@ function getVideoSources(episodeUrl, opts) {
     var tasks = [];
     servers.forEach(function (server) {
       var serverType = _serverAudio(server);
-      if (serverType && serverType !== audio) return;
-      var label = '[' + (serverType || audio).toUpperCase() + '] ' + String(server.serverName || server.name || 'Re:Anime');
+      if (serverType && wantAudio.indexOf(serverType) < 0) return;
+      var streamAudio = serverType || wantAudio[0];
+      var label = '[' + streamAudio.toUpperCase() + '] ' + String(server.serverName || server.name || 'Re:Anime');
       var link = String(_first(server, ['dataLink', 'url', 'link', 'src']) || '');
-      var direct = _directMedia(link, label, audio);
+      var direct = _directMedia(link, label, streamAudio);
       if (direct) tasks.push(Promise.resolve([direct]));
-      else if (/flixcloud/i.test(link) && /\/e\//i.test(link)) tasks.push(_resolveFlixDownload(link, label, audio));
+      else if (/flixcloud/i.test(link) && /\/e\//i.test(link)) tasks.push(_resolveFlixDownload(link, label, streamAudio));
     });
     return Promise.all(tasks).then(function (groups) {
       var out = [], seen = {}, seenFiles = {};

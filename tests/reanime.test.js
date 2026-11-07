@@ -162,32 +162,33 @@ async function main() {
   assert.equal(detail.year, '2024');
   assert.equal(detail.malId, 456);
   assert.equal(detail.anilistId, 123);
-  assert.equal(detail.episodes.length, 4, 'two sub and two dub rows');
+  assert.equal(detail.episodes.length, 2, 'one row per episode number, both audio tracks');
   assert.equal(detail.subCount, 2);
   assert.equal(detail.dubCount, 2);
-  assert.equal(detail.episodes[0].url, 'mock-anime|1|ep-1|123|sub');
+  assert.equal(detail.episodes[0].url, 'mock-anime|1|ep-1|123|both');
   assert.equal(detail.episodes[0].title, 'Episode 1 - First');
-  const dubOne = detail.episodes.find((entry) => entry.number === 1 && entry.category === 'dub');
-  assert.equal(dubOne.url, 'mock-anime|1|ep-1|123|dub');
+  assert.equal(detail.episodes[1].url, 'mock-anime|2|ep-2|123|both');
 
-  const subOne = detail.episodes.find((entry) => entry.number === 1 && entry.category === 'sub');
-  const subStreams = await provider.getVideoSources(subOne.url, {});
-  assert.equal(subStreams.length, 2, 'the duplicate direct link is deduplicated and the FlixCloud download is included');
-  assert.equal(subStreams[0].url, 'https://cdn.example/episode.mkv');
-  assert.equal(subStreams[0].container, 'mkv');
-  assert.equal(subStreams[0].kind, 'sub');
-  assert.equal(subStreams[1].url, 'https://fetch8.flixcloud.cc/download/11111111-1111-1111-1111-111111111111?token=eyJhbGciOiJIUzI1NiJ9.eyJ2aWRlbyI6IjEifQ.signature');
-  assert.equal(subStreams[1].quality, '1080p');
-  assert.equal(subStreams[1].container, 'mkv');
-  assert.equal(subStreams[1].headers.Referer, 'https://flixcloud.cc/');
-  const cachedSubStreams = await provider.getVideoSources(subOne.url, {});
-  assert.equal(cachedSubStreams, subStreams, 'resolved streams are cached for repeated source sweeps');
+  const bothOne = detail.episodes[0];
+  const bothStreams = await provider.getVideoSources(bothOne.url, {});
+  assert.equal(bothStreams.length, 3, 'a both episode exposes the direct sub link plus sub and dub FlixCloud downloads');
+  assert.ok(bothStreams.some((entry) => entry.url === 'https://cdn.example/episode.mkv' && entry.kind === 'sub' && entry.container === 'mkv'),
+    'direct sub MKV stream');
+  assert.ok(bothStreams.some((entry) => entry.url.indexOf('https://fetch8.flixcloud.cc/download/11111111-1111-1111-1111-111111111111') === 0 && entry.kind === 'sub'),
+    'sub FlixCloud download');
+  assert.ok(bothStreams.some((entry) => entry.url.indexOf('https://fetch9.flixcloud.cc/download/22222222-2222-2222-2222-222222222222') === 0 && entry.kind === 'dub'),
+    'dub FlixCloud download');
+  const cachedBothStreams = await provider.getVideoSources(bothOne.url, {});
+  assert.equal(cachedBothStreams, bothStreams, 'resolved streams are cached for repeated source sweeps');
 
-  const dubStreams = await provider.getVideoSources(dubOne.url, {});
-  assert.equal(dubStreams.length, 1);
-  assert.equal(dubStreams[0].kind, 'dub');
-  assert.equal(dubStreams[0].quality, '720p');
-  assert.equal(dubStreams[0].url, 'https://fetch9.flixcloud.cc/download/22222222-2222-2222-2222-222222222222?token=eyJhbGciOiJIUzI1NiJ9.eyJ2aWRlbyI6IjIifQ.signature');
+  // A sub-only sweep collapses the both row to sub streams only.
+  global.__settings.reanime.audioMode = 'sub';
+  const subOnlyDetail = await provider.getDetail('mock-anime', {});
+  assert.equal(subOnlyDetail.episodes.length, 2);
+  assert.ok(subOnlyDetail.episodes.every((entry) => entry.category === 'sub'));
+  const subStreams = await provider.getVideoSources(subOnlyDetail.episodes[0].url, {});
+  assert.ok(subStreams.every((entry) => entry.kind === 'sub'));
+  assert.ok(subStreams.some((entry) => entry.url.indexOf('https://fetch8.flixcloud.cc/download/11111111') === 0));
 
   global.__settings.reanime.audioMode = 'sub';
   const subOnly = await provider.getDetail('mock-anime', {});
@@ -198,6 +199,9 @@ async function main() {
   const dubOnly = await provider.getDetail('mock-anime', {});
   assert.equal(dubOnly.episodes.length, 2);
   assert.ok(dubOnly.episodes.every((entry) => entry.category === 'dub'));
+  const dubStreams = await provider.getVideoSources(dubOnly.episodes[0].url, {});
+  assert.ok(dubStreams.every((entry) => entry.kind === 'dub'));
+  assert.ok(dubStreams.some((entry) => entry.url.indexOf('https://fetch9.flixcloud.cc/download/22222222') === 0));
   global.__settings.reanime.audioMode = 'both';
 
   assert.equal(provider._mergeServers({ episode_links: watch.episode_links }, { servers: watch.episode_links }).length, 3);

@@ -88,6 +88,11 @@ AnimeAV1 is not a duplicate of the existing `anv.js` source: its streams are Spa
 Spanish subtitles and a Latino dub on some titles. It is therefore declared as Spanish rather than
 presented as another English catalogue.
 
+### Post-audit fixes (after the Zangetsu playback log review)
+- **AnimeHeaven:** search now retries the fast-search endpoint on connection resets, falls back to the full search page, then to the new/popular catalogue index filtered by query, instead of returning zero results.
+- **Re:Anime:** one episode row per number (SUB/DUB are exposed as stream variants on the same row) and the FlixCloud progress endpoint is polled until the download is ready before returning the download URL, avoiding 404s.
+- **KickAssAnime:** one episode row per number (SUB/DUB are stream variants on the same row), both audio tracks are resolved for a combined episode row, and playback falls back to any listed server when no preferred native player server is available.
+
 ## Notes on the rejected providers
 
 - **AniPm** — the embed handshake (`embed.settlar.io/api/embed/session`) answers HTTP 403 behind

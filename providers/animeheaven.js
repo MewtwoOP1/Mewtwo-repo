@@ -218,7 +218,8 @@ function getHome(opts) {
 function search(query, page, opts) {
   var q = String(query || '').trim();
   if (!q || (Number(page) > 1)) return Promise.resolve([]);
-  var url = SITE + '/fastsearch.php?xhr=1&s=' + encodeURIComponent(q);
+  var fastUrl = SITE + '/fastsearch.php?xhr=1&s=' + encodeURIComponent(q);
+  var searchUrl = SITE + '/search.php?s=' + encodeURIComponent(q);
   function fallback() {
     return Promise.all([
       _cardsWithRetry(SITE + '/new.php', SITE + '/'),
@@ -231,16 +232,36 @@ function search(query, page, opts) {
       return all.slice(0, 50);
     });
   }
-  function attempt(n) {
-    return _getRetry(url, SITE + '/', { 'X-Requested-With': 'XMLHttpRequest' }, 2).then(function (r) {
+  // AnimeHeaven frequently resets idle connections. Retry the fast-search
+  // endpoint once, then the full search page once, then fall back to the
+  // catalogue index. Each stage is bounded so a persistently failing upstream
+  // still settles quickly.
+  function tryFast(n) {
+    return _getRetry(fastUrl, SITE + '/', { 'X-Requested-With': 'XMLHttpRequest' }, 2).then(function (r) {
       var results = _cards(r.body);
       if (results.length) return results;
-      if (r.status === 0 || r.status >= 500) return [];
-      if (n >= 2) return fallback();
-      return _wait(200 * n).then(function () { return attempt(n + 1); });
-    }).catch(function () { return n >= 2 ? fallback() : _wait(200 * n).then(function () { return attempt(n + 1); }); });
+      if (r.status === 0 || r.status >= 500) {
+        if (n >= 2) return trySearch(1);
+        return _wait(250 * n).then(function () { return tryFast(n + 1); });
+      }
+      return trySearch(1);
+    }).catch(function () {
+      if (n >= 2) return trySearch(1);
+      return _wait(250 * n).then(function () { return tryFast(n + 1); });
+    });
   }
-  return attempt(1).catch(function () { return []; });
+  function trySearch(n) {
+    return _getRetry(searchUrl, SITE + '/', {}, 2).then(function (r) {
+      var results = _cards(r.body);
+      if (results.length) return results;
+      if (n >= 2) return fallback();
+      return _wait(250 * n).then(function () { return trySearch(n + 1); });
+    }).catch(function () {
+      if (n >= 2) return fallback();
+      return _wait(250 * n).then(function () { return trySearch(n + 1); });
+    });
+  }
+  return tryFast(1).catch(function () { return fallback(); });
 }
 function _payloadEpisode(key, referer, title, number) {
   var payload = { key: String(key), referer: referer, title: title || ('Episode ' + number), number: Number(number) || 1 };

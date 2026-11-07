@@ -430,14 +430,27 @@ function _episodeItems(anilistId, show, availability) {
   var sub = {}, dub = {};
   availability.sub.forEach(function (n) { sub[n] = true; });
   availability.dub.forEach(function (n) { dub[n] = true; });
-  var wantSub = cfg.audioMode !== 'dub';
-  var wantDub = cfg.audioMode !== 'sub';
-  if (cfg.audioMode === 'sub' && !availability.sub.length) wantDub = true;
-  if (cfg.audioMode === 'dub' && !availability.dub.length) wantSub = true;
+  var audio = cfg.audioMode;
+  if (audio === 'sub' && availability.sub.length === 0) audio = 'dub';
+  if (audio === 'dub' && availability.dub.length === 0) audio = 'sub';
+  // One row per episode number. When both audio tracks exist the row covers
+  // both and playback exposes each as its own stream; this keeps the episode
+  // list from doubling every episode into a SUB row and a DUB row.
   var episodes = [];
   numbers.forEach(function (number) {
-    if (wantSub && sub[number]) episodes.push(_episode(anilistId, show.slug, number, 'sub', availability.subTitles[number]));
-    if (wantDub && dub[number]) episodes.push(_episode(anilistId, show.slug, number, 'dub', availability.dubTitles[number]));
+    var hasSub = !!sub[number];
+    var hasDub = !!dub[number];
+    var category;
+    if (audio === 'sub') { if (!hasSub) return; category = 'sub'; }
+    else if (audio === 'dub') { if (!hasDub) return; category = 'dub'; }
+    else {
+      if (!hasSub && !hasDub) return;
+      category = hasSub && hasDub ? 'both' : (hasSub ? 'sub' : 'dub');
+    }
+    var title = (category === 'sub' ? availability.subTitles[number] : '') ||
+                (category === 'dub' ? availability.dubTitles[number] : '') ||
+                (availability.subTitles[number] || availability.dubTitles[number]);
+    episodes.push(_episode(anilistId, show.slug, number, category, title));
   });
   return episodes;
 }
@@ -449,8 +462,8 @@ function getDetail(url, opts) {
         var item = _item(media);
         if (!item) throw new Error('KickAssAnime: title is hidden by settings');
         item.episodes = _episodeItems(id, show, availability);
-        item.subCount = item.episodes.filter(function (x) { return x.category === 'sub'; }).length;
-        item.dubCount = item.episodes.filter(function (x) { return x.category === 'dub'; }).length;
+        item.subCount = item.episodes.filter(function (x) { return x.category === 'sub' || x.category === 'both'; }).length;
+        item.dubCount = item.episodes.filter(function (x) { return x.category === 'dub' || x.category === 'both'; }).length;
         item.episodeCount = item.episodes.length;
         return item;
       });
@@ -463,7 +476,7 @@ function getEpisodes(url, opts) {
 
 function _parseEpisode(value) {
   var text = String(value || '');
-  var match = text.match(/^kaa:\/\/episode\/(\d+)\/([^/]+)\/([0-9]+(?:\.[0-9]+)?)\/(sub|dub)$/i);
+  var match = text.match(/^kaa:\/\/episode\/(\d+)\/([^/]+)\/([0-9]+(?:\.[0-9]+)?)\/(sub|dub|both)$/i);
   if (!match) throw new Error('KickAssAnime: invalid episode URL');
   var slug;
   try { slug = decodeURIComponent(match[2]); } catch (e) { slug = match[2]; }
@@ -492,6 +505,14 @@ function _serverUrl(root) {
         if (url) return url;
       }
     }
+  }
+  // Some titles only expose an embed or alternate CDN server. Fall back to the
+  // first listed server so playback still works instead of throwing.
+  for (var i = 0; i < servers.length; i++) {
+    var server = servers[i] || {};
+    var src = String(server.src || server.url || '');
+    var url = _absolute(src);
+    if (url) return url;
   }
   return '';
 }
@@ -620,26 +641,50 @@ function _resolveEpisodeStream(episode, locale, category) {
       });
   });
 }
+function _tagStream(stream, cat) {
+  var locale = cat === 'dub' ? DUB_LOCALE : ORIGINAL_LOCALE;
+  return Object.assign({}, stream, {
+    kind: cat, audio: cat,
+    audioLang: locale,
+    label: cat === 'dub' ? 'KickAssAnime English' : 'KickAssAnime Japanese'
+  });
+}
 function getVideoSources(episodeUrl, opts) {
   var episode;
   try { episode = _parseEpisode(episodeUrl); }
   catch (e) { return Promise.resolve([]); }
-  var locale = episode.category === 'dub' ? DUB_LOCALE : ORIGINAL_LOCALE;
-  return _resolveEpisodeStream(episode, locale, episode.category).catch(function (error) {
-    // Some KAA titles list dub episode rows but leave the dub server list
-    // empty. Fall back to the Japanese stream for that episode instead of
-    // returning a dead-end with zero streams.
-    if (episode.category !== 'dub') throw error;
-    return _resolveEpisodeStream(episode, ORIGINAL_LOCALE, 'sub').then(function (streams) {
-      return streams.map(function (stream) {
-        return Object.assign({}, stream, {
-          kind: 'sub',
-          audio: 'sub',
-          audioLang: ORIGINAL_LOCALE,
-          label: 'KickAssAnime Japanese (dub unavailable)'
-        });
+  // A 'both' episode row exposes each audio track as its own stream so the
+  // episode list does not need a separate SUB and DUB row per number.
+  var categories = episode.category === 'both' ? ['sub', 'dub'] : [episode.category];
+  var resolveOne = function (cat) {
+    var locale = cat === 'dub' ? DUB_LOCALE : ORIGINAL_LOCALE;
+    return _resolveEpisodeStream(episode, locale, cat).then(function (streams) {
+      return streams.map(function (stream) { return _tagStream(stream, cat); });
+    }).catch(function () {
+      // A dub track that lists an episode but exposes no server falls back to
+      // the Japanese stream instead of returning a dead-end.
+      if (cat === 'dub') {
+        return _resolveEpisodeStream(episode, ORIGINAL_LOCALE, 'sub').then(function (streams) {
+          return streams.map(function (stream) {
+            var tagged = _tagStream(stream, 'sub');
+            tagged.label = 'KickAssAnime Japanese (dub unavailable)';
+            return tagged;
+          });
+        }).catch(function () { return []; });
+      }
+      return [];
+    });
+  };
+  return Promise.all(categories.map(resolveOne)).then(function (groups) {
+    var out = [], seen = {};
+    groups.forEach(function (group) {
+      (group || []).forEach(function (stream) {
+        if (!stream || !stream.url || seen[stream.url]) return;
+        seen[stream.url] = 1;
+        out.push(stream);
       });
-    }).catch(function () { return []; });
+    });
+    return out;
   });
 }
 function getStreams(url, opts) { return getVideoSources(url, opts); }
