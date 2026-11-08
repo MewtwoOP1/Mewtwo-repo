@@ -287,6 +287,9 @@ async function main() {
   assert.ok(/Mozilla\/5\.0/.test(streams[0].headers['User-Agent']));
   assert.ok(!/\/view|\/preview/.test(streams[0].url));
 
+  assert.equal(provider._movieTitle('[Kayoanime] [The Boy and the Beast] - [720p] - [Dual Audio].mkv'), 'The Boy and the Beast');
+  assert.equal(provider._movieTitle('Test Movie 720p.mkv'), 'Test Movie');
+
   const movie = await provider.getDetail('https://kayoanime.com/test-movie-variants/', {});
   assert.equal(movie.type, 'movie');
   assert.equal(movie.episodes.length, 1);

@@ -711,14 +711,25 @@ function _baseName(name) {
   return _oneLine(String(name || '').replace(/\.[a-z0-9]{2,5}$/i, '').replace(/[_.]+/g, ' '));
 }
 
+function _movieTitle(name) {
+  var value = _baseName(name);
+  // Remove release tags while keeping the actual title (including any title
+  // that the uploader put inside brackets).
+  value = value.replace(/\[\s*(?:kayoanime|kayo|1080p|720p|480p|2160p|4k|hevc|x265|h\.?264|x264|av1|10[\s-]?bit|dual[\s-]?audio|multi[\s-]?audio|eng(?:lish)?[\s-]?sub(?:bed)?|subbed|dub(?:bed)?|bluray|blu-ray|web-dl|webrip|bdrip|aac|flac)\s*\]/gi, ' ');
+  value = value.replace(/[\[\]]+/g, ' ');
+  value = value.replace(/\b(?:1080p|720p|480p|2160p|4k|hevc|x265|h\.?264|x264|av1|10[\s-]?bit|dual[\s-]?audio|multi[\s-]?audio|eng(?:lish)?[\s-]?sub(?:bed)?|subbed|dub(?:bed)?|bluray|blu-ray|web-dl|webrip|bdrip)\b/gi, ' ');
+  value = value.replace(/\s*[-–—]\s*/g, ' ');
+  return _oneLine(value);
+}
+
 function _episodeTitle(file, episode, multiple) {
   var name = String(file && file.name || '');
   if (/\bmovie\b|\bfilm\b/i.test(name)) {
-    return multiple ? (_baseName(name) || ('Movie ' + episode)) : 'Movie';
+    return multiple ? (_movieTitle(name) || ('Movie ' + episode)) : 'Movie';
   }
   if (/\bova\b/i.test(name)) return 'OVA' + (episode > 1 ? ' ' + episode : '');
   if (/\bspecial\b|\bsp\b/i.test(name)) return 'Special' + (episode > 1 ? ' ' + episode : '');
-  if (file && file.isMovie) return multiple ? (_baseName(name) || ('Movie ' + episode)) : 'Movie';
+  if (file && file.isMovie) return multiple ? (_movieTitle(name) || ('Movie ' + episode)) : 'Movie';
   return 'Episode ' + episode;
 }
 
@@ -1162,7 +1173,10 @@ function getHome(opts) {
     }).catch(function () { return null; });
   }).then(function (rows) {
     var out = (rows || []).filter(Boolean);
-    return _cacheSet('home', out, CACHE_TTL);
+    // Do not cache a partial home page: a transient section failure should be
+    // retried on the next visit instead of hiding that row for five minutes.
+    if (out.length === sections.length) _cacheSet('home', out, CACHE_TTL);
+    return out;
   });
 }
 
@@ -1374,6 +1388,7 @@ if (typeof module !== 'undefined' && module.exports) {
     _parseEpisodeUrl: _parseEpisodeUrl,
     _fileInfo: _fileInfo,
     _seriesTitle: _seriesTitle,
+    _movieTitle: _movieTitle,
     _quality: _quality,
     _encoding: _encoding,
     _audio: _audio
