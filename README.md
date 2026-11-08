@@ -264,7 +264,7 @@ AniChan currently publishes a null Cloudflare Turnstile site key. The provider s
 </details>
 
 <details>
-<summary><strong>Additional anime sources</strong> · AnimeOnsen, AnimeGG, AnimeAV1</summary>
+<summary><strong>Additional anime sources</strong> · AnimeOnsen, AnimeGG, AnimeAV1, KayoAnime</summary>
 
 Each source below is installed individually from the manifest. They search and play directly from
 their own site, with no shared metadata backend.
@@ -274,10 +274,30 @@ their own site, with no shared metadata backend.
 | **AnimeOnsen** | Multi-audio | DASH | DASH manifest and subtitle tracks require the AnimeOnsen `Referer`. |
 | **AnimeGG** | English | Progressive MP4 | MP4 requires the AnimeGG `Referer`. |
 | **AnimeAV1** | Spanish | HLS / MP4 | Spanish catalogue; VOE HLS with YourUpload MP4 fallback. |
+| **KayoAnime** | English | Google Drive MKV/MP4 | WordPress release index. Lists public Drive folders/files, groups real quality variants, and reports private "Google Group" drives instead of bypassing Google sign-in. |
 
-Search, detail, episode, and playback coverage for these sources is documented in
-[`PROVIDER_AUDIT.md`](PROVIDER_AUDIT.md), which also records every Anilili provider that was
-rejected and why.
+**KayoAnime** is a download index rather than a streaming site. Its WordPress REST API is used for
+search, home sections, and post metadata; each post's Google Drive folder is listed, and every real
+video file becomes one episode row. Files that differ only by quality, encoding, or audio are grouped
+as selectable streams of the same episode. Specials, recaps, and OVAs are classified by filename and
+listed separately from regular episodes; decimal episode numbers (e.g. S01E9.5 recaps) are preserved
+as distinct entries and never merged into the preceding regular episode. Playback uses Google Drive's
+byte endpoint (`drive.usercontent.google.com/download`) only after a HEAD/Range check confirms media
+bytes, so Drive preview pages, HTML sign-in pages, expired files, and restricted folders are never
+returned as playable URLs. A complete-season archive is not turned into a fake episode.
+
+Settings:
+
+- **Verify Drive files before playback** (default on) — rejects expired, private, or HTML responses.
+- **Maximum files per title** — 100, 300, 600, or 1000 files; protects large season collections.
+- **Preferred audio** — order `any`, `dual`, `sub`, or `dub` variants first.
+
+Limitations: private Google Groups and "Drivate Drive" folders remain inaccessible and are reported
+in the description; external hosts such as MEGA or MediaFire are reported but not played; some
+KayoAnime posts are placeholders ("DRIVE FIXING LINKS") or contain site-side copy/paste metadata
+errors, which the provider reflects faithfully rather than inventing data. Google Drive may throttle
+large folder listings. See [`PROVIDER_AUDIT.md`](PROVIDER_AUDIT.md) for the live evidence and the
+complete rejected-provider list.
 
 </details>
 
