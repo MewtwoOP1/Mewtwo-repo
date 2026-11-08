@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Add five live-verified anime sources from Yuzono's anime-repo:
+  - **Anichi 1.0.0** — English catalogue at anichi.to; /anime/ and /watch/ pages; VOE embeds for playback.
+  - **AniHQ 1.0.0** — English catalogue at anihq.cc; WordPress with custom anime/episode post types; VOE embeds for playback.
+  - **AnimeKhor 1.0.0** — English catalogue at animekhor.org; WordPress catalogue; direct MP4/M3U8 links parsed from detail pages.
+  - **AnimeNosub 1.0.0** — English catalogue at animenosub.to; WordPress catalogue with category-based posts; direct media links.
+  - **AnimeToki 1.0.0** — English catalogue at animetoki.com; WordPress catalogue; individual episode posts; direct media links.
 - Add four live-verified anime sources from the Anilili provider audit:
   - **AnimeOnsen 1.0.0** — multi-audio DASH playback with subtitle tracks.
   - **AnimeGG 1.0.0** — series/episode scraping and progressive MP4 playback.

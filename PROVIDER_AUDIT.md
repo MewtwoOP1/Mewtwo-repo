@@ -75,6 +75,11 @@ that cannot be mapped from Zangetsu's normal search input.
 | AnimeOnsen | `animeonsen` | 1.0.1 | Multi-audio | DASH manifest fetched with 206 and `<MPD>`; parsed into explicit quality variants |
 | AnimeGG | `animegg` | 1.0.2 | English | Progressive MP4 fetched with 206 and `video/mp4`; JWPlayer videoSources parsed per quality |
 | AnimeAV1 | `animeav1` | 1.0.1 | Spanish | VOE HLS fetched with 200 and `#EXTM3U`; YourUpload MP4 fallback; HLS master parsed into explicit quality variants |
+| Anichi | `anichi` | 1.0.0 | English | Search via /filter?keyword=; detail and episodes from /anime/ pages; VOE embeds resolved from /watch/ pages |
+| AniHQ | `anihq` | 1.0.0 | English | WordPress REST with custom anime/episode post types; VOE embeds resolved from watch pages |
+| AnimeKhor | `animekhor` | 1.0.0 | English | WordPress REST posts; direct MP4/M3U8 links parsed from detail page HTML |
+| AnimeNosub | `animenosub` | 1.0.0 | English | WordPress REST posts; direct media links parsed from detail/category pages |
+| AnimeToki | `animetoki` | 1.0.0 | English | WordPress REST posts; individual episode posts; direct media links parsed from detail pages |
 
 AnimeAV1 is not a duplicate of the existing `anv.js` source: its streams are Spanish, with burned-in
 Spanish subtitles and a Latino dub on some titles. It is therefore declared as Spanish rather than
@@ -103,9 +108,10 @@ timeout/retry improvement noted in the changelog.
   search or episode request is not shippable.
 - **2Dhive** — playback is gated by a "Cap" proof-of-work challenge. Zangetsu has no challenge
   solver and the audit does not add one.
-- **ToonHub / AnimeDekho / AnimeKhor** — these return third-party embed pages rather than a media
-  URL. Extracting a stream would mean adding per-embed resolvers that were not verifiable, so they
-  are not direct sources.
+- **ToonHub / AnimeDekho** — these return third-party embed pages rather than a media URL.
+  Extracting a stream would mean adding per-embed resolvers that were not verifiable, so they are
+  not direct sources. (AnimeKhor was subsequently added as a direct source after its episode detail
+  pages were found to contain direct media links.)
 - **UniqueStream** — the manifest is encrypted and needs an AES-128 key supplied through a custom
   data source, which the Zangetsu provider interface does not expose.
 - **Kartoons** — streams are minted from a private account token pool; without an account the
@@ -121,6 +127,6 @@ timeout/retry improvement noted in the changelog.
   source would duplicate the same catalogue and playback path.
 ## Validation
 
-`node scripts/check-and-run.mjs` passes with 25/25 providers loaded, and no
+`node scripts/check-and-run.mjs` passes with 30/30 providers loaded, and no
 failures. Each added provider also has a mocked test that covers manifest parity, search, detail,
 episodes, stream resolution, settings, and invalid input.
