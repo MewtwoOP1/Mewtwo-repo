@@ -120,8 +120,69 @@ timeout/retry improvement noted in the changelog.
   and telli are all reached through the existing `miruro.js` provider. Adding each as a separate
   source would duplicate the same catalogue and playback path.
 
+## KayoAnime (WordPress download index)
+
+KayoAnime (`kayoanime.com`) is not an Anilili streaming provider and is not a duplicate of any source
+in this repository. It is a WordPress release blog: each post is a title or episode page with a
+synopsis, an information block, and links to Google Drive folders/files (some posts use MEGA,
+MediaFire, or Google Group placeholders instead). It was added because the Drive links are genuine
+and can be played directly by Zangetsu once resolved.
+
+### Method
+
+1. Enumerated the real site structure: WordPress REST posts, the homepage sections, search, post
+   metadata, and the Google Drive links inside each post's content.
+2. Verified the REST endpoints and categories (`Anime Movie` = 2, `Ongoing Anime` = 3,
+   `Anime Series` = 4, `Chinese Anime` = 31) and used the REST API for search, home, and post
+   metadata, with the site's HTML search as a fallback.
+3. Listed public Drive folders from Google's escaped `_DRIVE_ivd` payload, recursed into
+   subfolders with depth/file limits, and detected private folders by the absence of entries plus a
+   Google sign-in/request-access page. No Google authentication, Google Group join, CAPTCHA, or
+   access restriction was bypassed.
+4. Converted each real video file to one episode row. Files with the same season+episode are
+   grouped as quality/encoding/audio variants; a movie's 720p folder and 1080p file become one
+   movie with two streams. Archive files, external hosts, and missing files are reported but never
+   turned into playable episodes.
+5. Probed the Drive byte endpoint (`drive.usercontent.google.com/download?id=…&export=download&confirm=t`)
+   with HEAD/Range before returning a stream, and followed Google's confirmation form when present.
+   A URL is only exposed if the response confirms media bytes (200/206 with `content-length` or
+   `content-range`).
+
+### Live evidence
+
+| Check | Result |
+|:--|:--|
+| WordPress search (`barakamon`, `one piece`, `link click`) | PASS — REST search returns matching posts; the One Piece post appears in the `one piece` results |
+| Home sections | PASS — Latest Releases, Ongoing Anime, Anime Movies, Chinese Anime; second call served from cache |
+| Barakamon detail | PASS — 12 episodes, Type TV, 2014, Comedy/Slice of Life, Kinema Citrus |
+| Barakamon playback | PASS — direct Drive endpoint returned HTTP 206, 255,545,615 bytes, MKV, 1080p, HEVC, Dual Audio |
+| The Boy and the Beast | PASS — 1 movie, 2 genuine variants (1080p direct file and 720p folder), 1080p first |
+| Link Click | PASS — 12 Season 2 episodes; Season 1 and Season 3 private folders reported restricted; Google Group access note included |
+| One Piece post | PASS — no links on the page; 0 episodes with an accurate "no public Google Drive links" note |
+| Mahoutsukai Reimeiki | PASS — private folder reported restricted; 0 episodes, no bypass |
+| Private Google Drive folder | BLOCKED — Google sign-in page; correctly reported as restricted, not played |
+| Private Google Drive file | BLOCKED — HTTP 403; rejected by playback validation |
+
+### Limitations
+
+- KayoAnime is a download index, not a streaming catalogue. Titles that only have MEGA/MediaFire
+  links, a Google Group placeholder, or a "DRIVE FIXING LINKS" notice have no playable episode and
+  are reported as such.
+- Private Google Groups and "Drivate Drive" folders require the user to join the group in a browser;
+  the provider does not join, authenticate, or bypass Google.
+- Some posts contain site-side copy/paste metadata errors (for example the Link Click post carries a
+  "Scissor Seven" synopsis). The provider uses the site's published metadata rather than inventing a
+  correction; episode filenames and seasons come from the Drive folder itself.
+- Google Drive can rate-limit or slow large recursive folder listings. The per-title file limit and
+  folder cache bound the work; the first request to each host may take several seconds on a cold
+  connection.
+- Google Drive confirmation tokens can expire. Playback re-probes the file when the episode is
+  opened, so a stale token is not cached as a permanent stream URL.
+
 ## Validation
 
-`node scripts/check-and-run.mjs` passes with 29/29 providers loaded, 471 assertions passed, and no
+`node scripts/check-and-run.mjs` passes with 26/26 providers loaded, 418 assertions passed, and no
 failures. Each added provider also has a mocked test that covers manifest parity, search, detail,
-episodes, stream resolution, settings, and invalid input.
+episodes, stream resolution, settings, and invalid input. `tests/kayoanime.test.js` additionally
+covers public/private Drive folders, direct Drive files, confirmation pages, movie variant grouping,
+private-file rejection, and HTTPS-only requests.

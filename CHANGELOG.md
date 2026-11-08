@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- Add **KayoAnime 1.0.0**, a native WordPress download-index source:
+  - Search and home sections use the WordPress REST API, with an HTML search fallback.
+  - Post metadata (type, episodes, status, year, studios, genres, duration, rating, audio,
+    resolution, encoding) is parsed from the site's information block.
+  - Public Google Drive folders are listed recursively; every real video file becomes one episode.
+    Quality/encoding/audio variants of the same season+episode are grouped into selectable streams.
+  - Direct Drive files are probed through `drive.usercontent.google.com/download`; only responses
+    that confirm media bytes (200/206 with length or `content-range`) are offered for playback.
+  - Private "Google Group"/"Drivate Drive" folders and Google sign-in pages are reported as
+    restricted and never bypassed. Missing files, archives, and external hosts are reported
+    separately. No preview URL, fake episode, or invented quality label is returned.
+  - Settings: playback verification, per-title file limit, and preferred audio ordering.
+- Add `tests/kayoanime.test.js` covering manifest parity, REST search/home/detail, the HTML search
+  fallback, public/private Drive folders, direct files, confirmation pages, variant grouping,
+  private-file rejection, HTTPS-only requests, and playback validation.
 - Add four live-verified anime sources from the Anilili provider audit:
   - **AnimeOnsen 1.0.0** — multi-audio DASH playback with subtitle tracks.
   - **AnimeGG 1.0.0** — series/episode scraping and progressive MP4 playback.
