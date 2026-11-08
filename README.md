@@ -264,7 +264,7 @@ AniChan currently publishes a null Cloudflare Turnstile site key. The provider s
 </details>
 
 <details>
-<summary><strong>Additional anime sources</strong> · AnimeOnsen, AnimeGG, AnimeAV1</summary>
+<summary><strong>Additional anime sources</strong> · AnimeOnsen, AnimeGG, AnimeAV1, Anichi, AniHQ, AnimeKhor, AnimeNosub, AnimeToki</summary>
 
 Each source below is installed individually from the manifest. They search and play directly from
 their own site, with no shared metadata backend.
@@ -274,6 +274,11 @@ their own site, with no shared metadata backend.
 | **AnimeOnsen** | Multi-audio | DASH | DASH manifest and subtitle tracks require the AnimeOnsen `Referer`. |
 | **AnimeGG** | English | Progressive MP4 | MP4 requires the AnimeGG `Referer`. |
 | **AnimeAV1** | Spanish | HLS / MP4 | Spanish catalogue; VOE HLS with YourUpload MP4 fallback. |
+| **Anichi** | English | VOE embeds | WordPress-style catalogue with /anime/ and /watch/ pages. |
+| **AniHQ** | English | VOE embeds | WordPress with custom anime/episode post types; VOE embeds for playback. |
+| **AnimeKhor** | English | Direct media | WordPress catalogue; direct MP4/M3U8 links parsed from detail pages. |
+| **AnimeNosub** | English | Direct media | WordPress catalogue with category-based posts; direct media links. |
+| **AnimeToki** | English | Direct media | WordPress catalogue; individual episode posts; direct media links. |
 
 </details>
 
