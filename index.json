@@ -1308,7 +1308,7 @@
     {
       "id": "kayoanime",
       "name": "KayoAnime",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "type": "anime",
       "lang": "en",
       "file": "providers/kayoanime.js",

@@ -279,10 +279,12 @@ their own site, with no shared metadata backend.
 **KayoAnime** is a download index rather than a streaming site. Its WordPress REST API is used for
 search, home sections, and post metadata; each post's Google Drive folder is listed, and every real
 video file becomes one episode row. Files that differ only by quality, encoding, or audio are grouped
-as selectable streams of the same episode. Playback uses Google Drive's byte endpoint
-(`drive.usercontent.google.com/download`) only after a HEAD/Range check confirms media bytes, so
-Drive preview pages, HTML sign-in pages, expired files, and restricted folders are never returned as
-playable URLs. A complete-season archive is not turned into a fake episode.
+as selectable streams of the same episode. Specials, recaps, and OVAs are classified by filename and
+listed separately from regular episodes; decimal episode numbers (e.g. S01E9.5 recaps) are preserved
+as distinct entries and never merged into the preceding regular episode. Playback uses Google Drive's
+byte endpoint (`drive.usercontent.google.com/download`) only after a HEAD/Range check confirms media
+bytes, so Drive preview pages, HTML sign-in pages, expired files, and restricted folders are never
+returned as playable URLs. A complete-season archive is not turned into a fake episode.
 
 Settings:
 

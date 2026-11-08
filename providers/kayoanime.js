@@ -10,7 +10,7 @@
 //
 // Keep VERSION in sync with index.json whenever this source changes.
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID) ? String(__SOURCE_ID) : 'kayoanime';
-var VERSION = '1.0.0';
+var VERSION = '1.1.0';
 var SITE = 'https://kayoanime.com';
 var REST = SITE + '/wp-json/wp/v2';
 var DRIVE_FOLDER = 'https://drive.google.com/drive/folders/';
@@ -678,11 +678,11 @@ function _seasonFrom(text, fallback) {
 
 function _episodeFrom(text) {
   var value = String(text || '');
-  var match = value.match(/\bS\d{1,2}\s*E(\d{1,4})\b/i) ||
-    value.match(/\bEpisode\s*(\d{1,4})\b/i) ||
-    value.match(/\bE(?:p(?:isode)?)?\s*[-_. ]?(\d{1,4})\b/i) ||
-    value.match(/\s-\s*(\d{1,4})(?:\s|$|\[)/) ||
-    value.match(/\[(\d{1,4})\]/);
+  var match = value.match(/\bS\d{1,2}\s*E(\d+(?:\.\d+)?)\b/i) ||
+    value.match(/\bEpisode\s*(\d+(?:\.\d+)?)\b/i) ||
+    value.match(/\bE(?:p(?:isode)?)?\s*[-_. ]?(\d+(?:\.\d+)?)\b/i) ||
+    value.match(/\s-\s*(\d+(?:\.\d+)?)(?:\s|$|\[|\.)/) ||
+    value.match(/\[(\d+(?:\.\d+)?)\]/);
   return match ? Number(match[1]) : null;
 }
 
@@ -722,13 +722,33 @@ function _movieTitle(name) {
   return _oneLine(value);
 }
 
+// Classify a Drive file by its filename. Returns one of:
+//   'movie'   - a film release
+//   'ova'     - an original video animation
+//   'special' - a special episode (SP, special, bonus)
+//   'recap'   - a recap episode
+//   'regular' - a normal numbered episode
+//   'unknown' - no clear classification
+function _classifyFile(name) {
+  var value = String(name || '');
+  var lower = value.toLowerCase();
+  if (/\b(?:movie|film)\b/i.test(lower)) return 'movie';
+  if (/\bova\b/i.test(lower)) return 'ova';
+  if (/\brecap\b/i.test(lower)) return 'recap';
+  if (/\bspecial\b|\bsp\b/i.test(lower)) return 'special';
+  if (_episodeFrom(value)) return 'regular';
+  return 'unknown';
+}
+
 function _episodeTitle(file, episode, multiple) {
   var name = String(file && file.name || '');
-  if (/\bmovie\b|\bfilm\b/i.test(name)) {
+  var lower = name.toLowerCase();
+  if (/\bmovie\b|\bfilm\b/i.test(lower)) {
     return multiple ? (_movieTitle(name) || ('Movie ' + episode)) : 'Movie';
   }
-  if (/\bova\b/i.test(name)) return 'OVA' + (episode > 1 ? ' ' + episode : '');
-  if (/\bspecial\b|\bsp\b/i.test(name)) return 'Special' + (episode > 1 ? ' ' + episode : '');
+  if (/\bova\b/i.test(lower)) return 'OVA' + (episode > 1 ? ' ' + episode : '');
+  if (/\brecap\b/i.test(lower)) return 'Recap';
+  if (/\bspecial\b|\bsp\b/i.test(lower)) return 'Special' + (episode > 1 ? ' ' + episode : '');
   if (file && file.isMovie) return multiple ? (_movieTitle(name) || ('Movie ' + episode)) : 'Movie';
   return 'Episode ' + episode;
 }
@@ -746,7 +766,7 @@ function _episodeUrl(postId, season, episode, variants) {
 
 function _parseEpisodeUrl(value) {
   var raw = String(value == null ? '' : value).trim();
-  var match = raw.match(/^kayoanime:\/\/episode\/([^/]+)\/(\d+)\/(\d+)(?:\?v=([\s\S]*))?$/i);
+  var match = raw.match(/^kayoanime:\/\/episode\/([^/]+)\/(\d+(?:\.\d+)?)\/(\d+(?:\.\d+)?)(?:\?v=([\s\S]*))?$/i);
   if (match) {
     var variants = [];
     if (match[4]) {
@@ -783,11 +803,12 @@ function _parseEpisodeUrl(value) {
 
 function _groupEpisodes(files, cfg) {
   var groups = {};
-  files.forEach(function (file, index) {
+  files.forEach(function (file) {
     var season = file.season || 1;
     var episode = file.episode;
-    if (!(episode > 0)) episode = index + 1;
-    var key = season + '|' + episode;
+    // Skip files without a valid episode number: never invent fictional episodes.
+    if (!(episode > 0)) return;
+    var key = season + '|' + String(episode);
     if (!groups[key]) groups[key] = { season: season, episode: episode, files: [] };
     groups[key].files.push(file);
   });
@@ -832,12 +853,15 @@ function _audioRank(audio, preferred) {
 function _folderEpisodeFiles(link, post, meta, cfg) {
   return _listFolder(link.id, 0, cfg, {}).then(function (folder) {
     var rows = folder.files || [];
-    var single = rows.length === 1;
-    var postEpisode = single ? _episodeFrom(meta.rawTitle) : null;
     var files = rows.map(function (file) {
       var info = _fileInfo(file.name, meta.rawTitle, link.label, folder.rootName);
-      var episode = info.episode || postEpisode;
-      if (!episode && meta.isMovie) episode = _movieNumber(file.name) || 1;
+      var classification = _classifyFile(file.name);
+      var episode = info.episode;
+      // Movies may carry an explicit movie number; otherwise fall back to 1.
+      if (!episode && classification === 'movie') episode = _movieNumber(file.name) || 1;
+      if (!episode && meta.isMovie) episode = 1;
+      // Never invent an episode number for files that lack one: skip them
+      // instead of generating a fictional episode.
       return {
         id: file.id,
         name: file.name,
@@ -848,12 +872,20 @@ function _folderEpisodeFiles(link, post, meta, cfg) {
         quality: info.quality,
         encoding: info.encoding,
         audio: info.audio,
+        specialType: classification,
         isMovie: !!meta.isMovie,
         label: link.label,
         folder: file.parentName || folder.rootName || link.label,
         postId: post.id,
         postLink: post.link
       };
+    }).filter(function (file) {
+      // Keep regular episodes and classified specials/OVAs/movies.
+      // For movie posts, keep unknown files too (the file itself may be the movie).
+      // Drop unknown files (no episode number, not a special) to avoid fake episodes.
+      if (file.specialType !== 'unknown') return true;
+      if (meta.isMovie) return true;
+      return false;
     });
     return {
       files: files,
@@ -978,10 +1010,9 @@ function _probeDrive(url, id) {
 function _fileEpisode(link, post, meta, cfg) {
   var fallbackName = link.label || meta.rawTitle || 'Google Drive file';
   var fallbackInfo = _fileInfo(fallbackName, meta.rawTitle, link.label, '');
-  var postEpisode = _episodeFrom(meta.rawTitle);
   function row(name, size, info) {
-    var episode = info.episode || postEpisode;
-    if (!episode && meta.isMovie) episode = _movieNumber(name) || 1;
+    var episode = info.episode;
+    if (!episode && meta.isMovie) episode = 1;
     return {
       id: link.id,
       name: name,
@@ -992,6 +1023,7 @@ function _fileEpisode(link, post, meta, cfg) {
       quality: info.quality,
       encoding: info.encoding,
       audio: info.audio,
+      specialType: _classifyFile(name),
       isMovie: !!meta.isMovie,
       label: link.label,
       folder: link.label,
@@ -1021,8 +1053,8 @@ function _fileEpisode(link, post, meta, cfg) {
 function _directEpisode(link, post, meta) {
   var name = link.label || link.url || 'Direct video';
   var info = _fileInfo(name, meta.rawTitle, link.label, '');
-  var episode = info.episode || _episodeFrom(meta.rawTitle);
-  if (!episode && meta.isMovie) episode = _movieNumber(name) || 1;
+  var episode = info.episode;
+  if (!episode && meta.isMovie) episode = 1;
   return {
     files: [{
       url: link.url,
@@ -1033,6 +1065,7 @@ function _directEpisode(link, post, meta) {
       quality: info.quality,
       encoding: info.encoding,
       audio: info.audio,
+      specialType: _classifyFile(name),
       isMovie: !!meta.isMovie,
       label: link.label,
       folder: link.label,
@@ -1389,6 +1422,9 @@ if (typeof module !== 'undefined' && module.exports) {
     _fileInfo: _fileInfo,
     _seriesTitle: _seriesTitle,
     _movieTitle: _movieTitle,
+    _episodeFrom: _episodeFrom,
+    _listFolder: _listFolder,
+    _folderEpisodeFiles: _folderEpisodeFiles,
     _quality: _quality,
     _encoding: _encoding,
     _audio: _audio

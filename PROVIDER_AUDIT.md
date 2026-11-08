@@ -160,6 +160,9 @@ and can be played directly by Zangetsu once resolved.
 | Link Click | PASS — 12 Season 2 episodes; Season 1 and Season 3 private folders reported restricted; Google Group access note included |
 | One Piece post | PASS — no links on the page; 0 episodes with an accurate "no public Google Drive links" note |
 | Mahoutsukai Reimeiki | PASS — private folder reported restricted; 0 episodes, no bypass |
+| Gangsta (S01E9.5 Recap) | PASS — 13 episodes; Recap at 9.5 listed separately between Ep 9 and Ep 10; not merged with Ep 9 |
+| Gangsta Ep 1 playback | PASS — resolves to S01E01 Drive file, not the recap |
+| Gangsta Recap playback | PASS — resolves to S01E9.5 (Recap) Drive file, correct source |
 | Private Google Drive folder | BLOCKED — Google sign-in page; correctly reported as restricted, not played |
 | Private Google Drive file | BLOCKED — HTTP 403; rejected by playback validation |
 
@@ -185,4 +188,4 @@ and can be played directly by Zangetsu once resolved.
 failures. Each added provider also has a mocked test that covers manifest parity, search, detail,
 episodes, stream resolution, settings, and invalid input. `tests/kayoanime.test.js` additionally
 covers public/private Drive folders, direct Drive files, confirmation pages, movie variant grouping,
-private-file rejection, and HTTPS-only requests.
+private-file rejection, special/recap separation, decimal episode numbers, and HTTPS-only requests.

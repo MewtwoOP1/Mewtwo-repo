@@ -96,7 +96,12 @@ const posts = {
     '<p>Confirm synopsis.</p>' + infoBlock({ type: 'Movie', episodes: '1', status: 'Finished Airing', aired: 'Jan 1, 2022', studios: 'Test Studio', genres: 'Drama', duration: '2 hr.', rating: 'PG-13' }) +
     '<div class="toggle"><h3 class="toggle-head">Confirm Movie</h3><div class="toggle-content">' +
     '<a href="https://drive.google.com/file/d/FILE_CONFIRM/view">1080p</a>' +
-    '</div></div>', null)
+    '</div></div>', null),
+  'test-specials': makePost(104, 'test-specials', 'Test Specials (Season 1) 1080p Dual Audio HEVC', [4],
+    '<p>A test synopsis with specials.</p>' + infoBlock({ type: 'TV', episodes: '4', status: 'Finished Airing', aired: 'Jan 1, 2020', studios: 'Test Studio', genres: 'Action, Fantasy' }) +
+    '<div class="toggle"><h3 class="toggle-head">Test Specials</h3><div class="toggle-content">' +
+    '<a href="https://drive.google.com/drive/folders/FOLDER_SPECIALS">1080p</a>' +
+    '</div></div>', 'https://img.example/test-specials.jpg')
 };
 
 const folders = {
@@ -108,6 +113,12 @@ const folders = {
   FOLDER_PRIVATE: '<html><head><title>Google Drive: Sign-in</title></head><body>Sign in to continue</body></html>',
   FOLDER_720: drivePage('Test Movie', [
     { id: 'FILE_720', name: 'Test Movie 720p.mkv', size: 1000 }
+  ]),
+  FOLDER_SPECIALS: drivePage('Test Specials - S01', [
+    { id: 'FILE_SP_EP1', name: 'Test Specials - S01E01.mkv', size: 1000 },
+    { id: 'FILE_SP_EP2', name: 'Test Specials - S01E02.mkv', size: 2000 },
+    { id: 'FILE_SP_EP3', name: 'Test Specials - S01E03.mkv', size: 3000 },
+    { id: 'FILE_SP_RECAP', name: 'Test Specials - S01E9.5 (Recap).mkv', size: 4000 }
   ])
 };
 
@@ -117,7 +128,11 @@ const files = {
   FILE_720: { type: 'application/octet-stream', length: '1000', disposition: 'attachment; filename="Test Movie 720p.mkv"' },
   FILE_1080_DIRECT: { type: 'application/octet-stream', length: '2000', headHtml: true, disposition: 'attachment; filename="Test Movie.mkv"' },
   FILE_CONFIRM: 'html',
-  FILE_PRIVATE: 'private'
+  FILE_PRIVATE: 'private',
+  FILE_SP_EP1: { type: 'application/octet-stream', length: '1000', disposition: 'attachment; filename="Test Specials - S01E01.mkv"' },
+  FILE_SP_EP2: { type: 'application/octet-stream', length: '2000', disposition: 'attachment; filename="Test Specials - S01E02.mkv"' },
+  FILE_SP_EP3: { type: 'application/octet-stream', length: '3000', disposition: 'attachment; filename="Test Specials - S01E03.mkv"' },
+  FILE_SP_RECAP: { type: 'application/octet-stream', length: '4000', disposition: 'attachment; filename="Test Specials - S01E9.5 (Recap).mkv"' }
 };
 
 const confirmationHtml = '<html><body><form action="https://drive.usercontent.google.com/download" method="post">' +
@@ -315,6 +330,29 @@ async function main() {
   assert.equal(confirmStreams[0].container, 'mkv');
   assert.equal(confirmStreams[0].size, 5000);
 
+  // Special/recap separation: decimal episode numbers preserved, recap not merged with regular episodes
+  const specials = await provider.getDetail('https://kayoanime.com/test-specials/', {});
+  assert.equal(specials.type, 'anime');
+  assert.equal(specials.episodes.length, 4, 'should have 3 regular episodes + 1 recap, not 3');
+  const epNumbers = specials.episodes.map((e) => e.number);
+  assert.deepEqual(epNumbers, [1, 2, 3, 9.5], 'regular episodes 1-3 plus recap at 9.5');
+  assert.equal(specials.episodes[0].title, 'Episode 1');
+  assert.equal(specials.episodes[1].title, 'Episode 2');
+  assert.equal(specials.episodes[2].title, 'Episode 3');
+  assert.equal(specials.episodes[3].title, 'Recap');
+  assert.equal(specials.episodes[3].season, 1);
+  // Recap must have its own Drive file, not share with Episode 3
+  assert.notEqual(specials.episodes[2].url, specials.episodes[3].url);
+
+  const recapStreams = await provider.getVideoSources(specials.episodes[3].url, {});
+  assert.equal(recapStreams.length, 1);
+  assert.equal(recapStreams[0].size, 4000);
+
+  // Decimal episode number parsing
+  assert.equal(provider._episodeFrom('Test - S01E9.5.mkv'), 9.5);
+  assert.equal(provider._episodeFrom('Test - S01E09.mkv'), 9);
+  assert.equal(provider._episodeFrom('Test - E01.mkv'), 1);
+
   await assert.rejects(
     provider.getVideoSources('kayoanime://file/FILE_PRIVATE?name=Private.mkv', {}),
     /private|access-restricted/i
@@ -325,7 +363,7 @@ async function main() {
   assert.ok(calls.length > 0, 'the provider should have made requests');
   assert.ok(calls.every((call) => /^https:\/\//i.test(call.url)), 'every provider request must be HTTPS');
 
-  console.log('KayoAnime WordPress search, metadata, public/private Drive folders, direct files, confirmation pages, variant grouping, and playback validation tests passed.');
+  console.log('KayoAnime WordPress search, metadata, public/private Drive folders, direct files, confirmation pages, variant grouping, special/recap separation, decimal episode numbers, and playback validation tests passed.');
 }
 
 main().catch((error) => {

@@ -2,12 +2,18 @@
 
 ## Unreleased
 
-- Add **KayoAnime 1.0.0**, a native WordPress download-index source:
+- Add **KayoAnime 1.1.0**, a native WordPress download-index source:
   - Search and home sections use the WordPress REST API, with an HTML search fallback.
   - Post metadata (type, episodes, status, year, studios, genres, duration, rating, audio,
     resolution, encoding) is parsed from the site's information block.
   - Public Google Drive folders are listed recursively; every real video file becomes one episode.
     Quality/encoding/audio variants of the same season+episode are grouped into selectable streams.
+  - **Fixed episode mapping**: decimal episode numbers (e.g. S01E9.5 recaps) are now parsed and
+    preserved as distinct episodes instead of being merged into the preceding regular episode.
+    Specials, recaps, and OVAs are classified by filename and listed separately from regular
+    episodes. Files without a valid episode number are never turned into fictional episodes.
+  - **Fixed playback URL parsing**: episode URLs now support decimal episode numbers so specials
+    and recaps resolve to their correct Drive file.
   - Direct Drive files are probed through `drive.usercontent.google.com/download`; only responses
     that confirm media bytes (200/206 with length or `content-range`) are offered for playback.
   - Private "Google Group"/"Drivate Drive" folders and Google sign-in pages are reported as
@@ -16,7 +22,8 @@
   - Settings: playback verification, per-title file limit, and preferred audio ordering.
 - Add `tests/kayoanime.test.js` covering manifest parity, REST search/home/detail, the HTML search
   fallback, public/private Drive folders, direct files, confirmation pages, variant grouping,
-  private-file rejection, HTTPS-only requests, and playback validation.
+  private-file rejection, HTTPS-only requests, playback validation, special/recap separation, and
+  decimal episode number handling.
 - Add four live-verified anime sources from the Anilili provider audit:
   - **AnimeOnsen 1.0.0** — multi-audio DASH playback with subtitle tracks.
   - **AnimeGG 1.0.0** — series/episode scraping and progressive MP4 playback.
