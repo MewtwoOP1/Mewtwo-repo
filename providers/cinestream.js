@@ -19,13 +19,143 @@ var ANILIST = 'https://graphql.anilist.co';
 var ARM = 'https://arm.haglund.dev/api/v2';
 var MULTI = 'https://enc-dec.app/api';
 var WYZIE = 'https://sub.wyzie.io';
-var FETCH_TIMEOUT = 7000;
+var FETCH_TIMEOUT = 5000;
 var META_TIMEOUT = 8000;
-var SOURCE_TIMEOUT = 22000;
-// Overall budget for getVideoSources in quick (playback) mode. Zangetsu gives a
+var SOURCE_TIMEOUT = 15000;
+// Overall budget for getVideoSources in playback mode. Zangetsu gives a
 // ~20s playback budget on a single JS bridge; return whatever streams we have
 // before it elapses rather than waiting for slow/dead providers.
 var SOURCES_BUDGET_MS = 18000;
+
+// ── Caching layer ────────────────────────────────────────────────────────
+// TTL cache for metadata/API responses. Stream URLs are NOT cached (they
+// expire quickly and are session/signer bound).
+var _CACHE = {};
+var _CACHE_ORDER = [];
+var _CACHE_MAX = 128;
+var _CACHE_TTL = {
+  tmdb: 300000,   // 5 min
+  anilist: 600000, // 10 min
+  arm: 600000,    // 10 min
+  search: 120000,  // 2 min
+  home: 300000,   // 5 min
+  default: 300000  // 5 min
+};
+function _cacheGet(key) {
+  var entry = _CACHE[key];
+  if (!entry) return null;
+  if (Date.now() - entry.ts > entry.ttl) {
+    delete _CACHE[key];
+    return null;
+  }
+  return entry.data;
+}
+function _cacheSet(key, data, ttl) {
+  if (_CACHE_ORDER.length >= _CACHE_MAX) {
+    var old = _CACHE_ORDER.shift();
+    delete _CACHE[old];
+  }
+  _CACHE[key] = { ts: Date.now(), ttl: ttl || _CACHE_TTL.default, data: data };
+  _CACHE_ORDER.push(key);
+}
+// Request deduplication: track in-flight promises by URL to avoid
+// duplicate fetches for the same resource.
+var _INFLIGHT = {};
+function _inflightKey(method, url, body) {
+  return method + '|' + url + '|' + (body || '');
+}
+function _inflightFetch(url, opts) {
+  var method = (opts && opts.method) || 'GET';
+  var body = opts && opts.body != null ? opts.body : '';
+  var k = _inflightKey(method, url, body);
+  var p = _INFLIGHT[k];
+  if (p) return p;
+  p = _fetch(url, opts);
+  _INFLIGHT[k] = p;
+  p.then(function () { delete _INFLIGHT[k]; }, function () { delete _INFLIGHT[k]; });
+  return p;
+}
+
+// ── Cached TMDB/AniList/ARM wrappers ────────────────────────────────────
+var _tmdbCache = {};
+async function _tmdbJsonCached(path, params, ttlKey) {
+  var cacheKey = 'tmdb:' + path + ':' + JSON.stringify(params || {});
+  var cached = _cacheGet(cacheKey);
+  if (cached) return cached;
+  var r = await _tmdbJson(path, params);
+  if (r) _cacheSet(cacheKey, r, _CACHE_TTL[ttlKey || 'tmdb']);
+  return r;
+}
+async function _aniListSearchCached(title, year) {
+  var cacheKey = 'anilist:' + title + ':' + (year || '');
+  var cached = _cacheGet(cacheKey);
+  if (cached) return cached;
+  var r = await _aniListSearch(title, year);
+  if (r) _cacheSet(cacheKey, r, _CACHE_TTL.anilist);
+  return r;
+}
+async function _armFromAniListCached(anilistId) {
+  var cacheKey = 'arm:' + anilistId;
+  var cached = _cacheGet(cacheKey);
+  if (cached) return cached;
+  var r = await _armFromAniList(anilistId);
+  if (r) _cacheSet(cacheKey, r, _CACHE_TTL.arm);
+  return r;
+}
+// ── Cached search/home ─────────────────────────────────────────────────
+var _SEARCH_CACHE = {};
+var _HOME_CACHE = null;
+var _HOME_CACHE_TS = 0;
+var _HOME_CACHE_TTL = 300000;
+async function _cachedSearch(q) {
+  var key = 'search:' + q.toLowerCase();
+  var cached = _SEARCH_CACHE[key];
+  if (cached && Date.now() - cached.ts < _CACHE_TTL.search) return cached.data;
+  // Actual search implementation (TMDB multi search)
+  q = _trim(q);
+  if (!q) return [];
+  var j = await _tmdbJsonCached('/search/multi', { query: q, include_adult: 'false', page: 1 }, 'tmdb');
+  var out = [];
+  if (j && j.results) {
+    for (var i = 0; i < j.results.length; i++) {
+      var it = _tmdbItem(j.results[i], j.results[i].media_type);
+      if (it) out.push(it);
+    }
+  }
+  var result = _uniqBy(out, function (x) { return x.url; });
+  _SEARCH_CACHE[key] = { ts: Date.now(), data: result };
+  // Trim cache
+  var keys = Object.keys(_SEARCH_CACHE);
+  if (keys.length > 50) { delete _SEARCH_CACHE[keys[0]]; }
+  return result;
+}
+async function _cachedHome() {
+  if (_HOME_CACHE && Date.now() - _HOME_CACHE_TS < _HOME_CACHE_TTL) return _HOME_CACHE;
+  var rows = [];
+  var defs = [
+    { title: 'Trending Movies', path: '/trending/movie/week', kind: 'movie' },
+    { title: 'Trending Series', path: '/trending/tv/week', kind: 'tv' },
+    { title: 'Popular Movies', path: '/movie/popular', kind: 'movie' },
+    { title: 'Popular Series', path: '/tv/popular', kind: 'tv' },
+    { title: 'Popular Anime', path: '/discover/tv', kind: 'tv', params: { with_genres: '16', with_origin_country: 'JP', sort_by: 'popularity.desc' } }
+  ];
+  var results = await _parallel(defs, 5, async function (d) {
+    var j = await _tmdbJsonCached(d.path, d.params, 'tmdb');
+    return j && j.results ? j.results : null;
+  });
+  for (var i = 0; i < defs.length; i++) {
+    var list = results[i] || [];
+    var items = [];
+    for (var k = 0; k < list.length; k++) {
+      var it = _tmdbItem(list[k], defs[i].kind);
+      if (it) items.push(it);
+    }
+    if (items.length) rows.push({ title: defs[i].title, items: items });
+  }
+  _HOME_CACHE = rows;
+  _HOME_CACHE_TS = Date.now();
+  return rows;
+}
 
 // ── Settings ───────────────────────────────────────────────────────────
 var PROVIDERS = [
@@ -753,7 +883,8 @@ function _tmdbUrl(path, params) {
 async function _tmdbJson(path, params) {
   var headers = { Accept: 'application/json' };
   if (_tmdbKey()) headers.Host = 'api.themoviedb.org';
-  var r = await _fetch(_tmdbUrl(path, params), { headers: headers, timeoutMs: META_TIMEOUT });
+  var url = _tmdbUrl(path, params);
+  var r = await _inflightFetch(url, { headers: headers, timeoutMs: META_TIMEOUT });
   if (!r.ok && !r.body) return null;
   var j = _parseJson(r.body);
   if (j && j.status_code) return null;
@@ -787,28 +918,7 @@ function _tmdbItem(rec, kind) {
   return { id: u, url: u, title: title, cover: _img(rec.poster_path, 'w500'), type: anime ? 'anime' : 'movie', sourceId: SOURCE_ID };
 }
 async function getHome() {
-  var rows = [];
-  var defs = [
-    { title: 'Trending Movies', path: '/trending/movie/week', kind: 'movie' },
-    { title: 'Trending Series', path: '/trending/tv/week', kind: 'tv' },
-    { title: 'Popular Movies', path: '/movie/popular', kind: 'movie' },
-    { title: 'Popular Series', path: '/tv/popular', kind: 'tv' },
-    { title: 'Popular Anime', path: '/discover/tv', kind: 'tv', params: { with_genres: '16', with_origin_country: 'JP', sort_by: 'popularity.desc' } }
-  ];
-  var results = await _parallel(defs, 3, async function (d) {
-    var j = await _tmdbJson(d.path, d.params);
-    return j && j.results ? j.results : null;
-  });
-  for (var i = 0; i < defs.length; i++) {
-    var list = results[i] || [];
-    var items = [];
-    for (var k = 0; k < list.length; k++) {
-      var it = _tmdbItem(list[k], defs[i].kind);
-      if (it) items.push(it);
-    }
-    if (items.length) rows.push({ title: defs[i].title, items: items });
-  }
-  return rows;
+  return _cachedHome();
 }
 async function popular() {
   var rows = await getHome(), out = [];
@@ -818,15 +928,7 @@ async function popular() {
 async function search(q) {
   q = _trim(q);
   if (!q) return [];
-  var j = await _tmdbJson('/search/multi', { query: q, include_adult: 'false', page: 1 });
-  var out = [];
-  if (j && j.results) {
-    for (var i = 0; i < j.results.length; i++) {
-      var it = _tmdbItem(j.results[i], j.results[i].media_type);
-      if (it) out.push(it);
-    }
-  }
-  return _uniqBy(out, function (x) { return x.url; });
+  return _cachedSearch(q);
 }
 async function _aniListSearch(title, year) {
   if (!title) return null;
@@ -843,13 +945,13 @@ async function _armFromAniList(anilistId) {
   var j = await _getJson(ARM + '/ids?source=anilist&id=' + encodeURIComponent(anilistId), { timeoutMs: META_TIMEOUT });
   return j && !j.message ? j : null;
 }
-async function _animeIds(title, year) {
+async function _animeIdsCached(title, year) {
   var out = { anilistId: null, malId: null, kitsuId: null, imdbId: null, tmdbId: null };
-  var al = await _aniListSearch(title, year);
+  var al = await _aniListSearchCached(title, year);
   if (!al) return out;
   out.anilistId = al.anilistId;
   out.malId = al.malId;
-  var arm = await _armFromAniList(al.anilistId);
+  var arm = await _armFromAniListCached(al.anilistId);
   if (arm) {
     out.kitsuId = arm.kitsu ? String(arm.kitsu) : null;
     out.imdbId = arm.imdb || null;
@@ -895,7 +997,7 @@ async function getDetail(url) {
   var t = _parseTmdbUrl(url);
   if (!t) return null;
   var tv = t.kind === 'tv';
-  var info = await _tmdbJson('/' + t.kind + '/' + t.id, { append_to_response: 'external_ids' });
+  var info = await _tmdbJsonCached('/' + t.kind + '/' + t.id, { append_to_response: 'external_ids' }, 'tmdb');
   if (!info) return null;
   var genres = (info.genres || []).map(function (g) { return g.name; });
   var countries = info.origin_country || info.production_countries && info.production_countries.map(function (c) { return c.iso_3166_1; }) || [];
@@ -908,7 +1010,7 @@ async function getDetail(url) {
   var tmdbId = parseInt(t.id, 10);
   var anilistId = null, malId = null, kitsuId = null;
   if (anime) {
-    var ids = await _animeIds(title, year);
+    var ids = await _animeIdsCached(title, year);
     anilistId = ids.anilistId; malId = ids.malId; kitsuId = ids.kitsuId;
     if (!imdbId) imdbId = ids.imdbId;
     if (tmdbId == null && ids.tmdbId) tmdbId = ids.tmdbId;
