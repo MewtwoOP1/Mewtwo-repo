@@ -2,12 +2,13 @@
 
 ## Unreleased
 
-- Split **CineStream** quick mode by content type: anime gets Anikage + Animekizz, movies get VaPlayer. This fixes movies returning 0 streams (no movie providers were running) while keeping anime within the ~20s playback budget.
-- VaPlayer re-added for movies: `streamdata.vaplayer.ru` returns HLS variants (confirmed working on device).
-- Tighten overall `getVideoSources` budget to 11s for more margin under Zangetsu's 20s playback ceiling.
-- Bump **CineStream** to v1.0.5.
+- Fix **CineStream** `provMoviebox` auth: extract JWT token from `set-cookie` header as fallback when `x-user` response header is stripped by Zangetsu's fetch bridge; fix `_jsonPost` call signature (was passing headers object directly instead of `{headers, timeoutMs}`).
+- Fix **CineStream** quick mode: exclude MovieBox (cannot authenticate due to stripped response headers → 0 streams); keep VaPlayer for movies and Anikage/Animekizz for anime.
+- Reduce Anikage/Animekizz internal timeouts from 10s to 8s for faster provider completion.
+- Increase overall `getVideoSources` budget to 14s so anime providers (Anikage + Animekizz) can complete within Zangetsu's ~20s playback ceiling.
+- Bump **CineStream** to v1.0.6.
 
-## CineStream 1.0.4
+## CineStream 1.0.5
 
 - Fix **CineStream** `_post()` silently sending GET instead of POST, which broke the enc-dec.app stage1 server and the VidFastPro/Vidcore/Vidup/Hexa stream extraction (device log showed `404 Cannot GET ...`). All `_post()` callers now correctly send `method: 'POST'`.
 - Add hard overall budget (`SOURCES_BUDGET_MS`) and native `Promise.race` so `getVideoSources` returns within Zangetsu's ~20s playback budget.

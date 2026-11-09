@@ -10,7 +10,7 @@
 // intentionally NOT ported (user requirement). All native HTTP providers
 // and Wyzie Subs are preserved.
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID) ? String(__SOURCE_ID) : 'cinestream';
-var VERSION = '1.0.5';
+var VERSION = '1.0.6';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36';
 var MOBILE_UA = 'Mozilla/5.0 (Linux; Android 12; Pixel 6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.6367.82 Mobile Safari/537.36';
 var TMDB = 'https://api.themoviedb.org/3';
@@ -25,7 +25,7 @@ var SOURCE_TIMEOUT = 22000;
 // Overall budget for getVideoSources in quick (playback) mode. Zangetsu gives a
 // ~20s playback budget on a single JS bridge; return whatever streams we have
 // before it elapses rather than waiting for slow/dead providers.
-var SOURCES_BUDGET_MS = 11000;
+var SOURCES_BUDGET_MS = 14000;
 
 // ── Settings ───────────────────────────────────────────────────────────
 var PROVIDERS = [
@@ -1577,9 +1577,16 @@ async function provMoviebox(r, ctx) {
   var title = r.title; if (!title) return;
   var base = API.movieboxHost;
   var latest = await _fetch(base + '/wefeed-h5api-bff/app/get-latest-app-pkgs?app_name=moviebox', { timeoutMs: 10000 });
-  var xUser = _hget(latest.headers, 'x-user');
-  if (!xUser) return;
-  var xu = _parseJson(xUser); var token = xu && xu.token ? xu.token : '';
+  // Zangetsu's fetch bridge strips some response headers (e.g. x-user). Fall back
+  // to extracting the JWT token from the set-cookie header.
+  var xUser = _hget(latest.headers, 'x-user') || _hget(latest.headers, 'set-cookie') || '';
+  var token = '';
+  var m = xUser.match(/"token"\s*:\s*"([^"]+)"/);
+  if (m) token = m[1];
+  else {
+    m = xUser.match(/token=([^;]+)/);
+    if (m) token = m[1];
+  }
   if (!token) return;
   var baseHeaders = {
     'X-Client-Info': '{"timezone":"Africa/Nairobi"}', 'Accept-Language': 'en-US,en;q=0.5', Accept: 'application/json',
@@ -1587,7 +1594,7 @@ async function provMoviebox(r, ctx) {
     'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36'
   };
   var subjectType = r.season != null ? 2 : 1;
-  var search = await _jsonPost(base + '/wefeed-h5api-bff/subject/search', { keyword: title, page: 1, perPage: 24, subjectType: subjectType }, baseHeaders, 10000);
+  var search = await _jsonPost(base + '/wefeed-h5api-bff/subject/search', { keyword: title, page: 1, perPage: 24, subjectType: subjectType }, { headers: baseHeaders, timeoutMs: 10000 });
   var items = search && _unwrapData(search).items ? _unwrapData(search).items : null;
   if (!items) return;
   var titleRe = new RegExp('^' + String(title).replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?:\\s+\\[([^\\]]+)\\])?$', 'i');
@@ -3475,7 +3482,7 @@ async function provAnikoto(r, ctx) {
 async function provAnikage(r, ctx) {
   if (!r.title || r.anilistId == null) return;
   var base = API.anikage;
-  var search = _parseJson(await _get(base + '/api/media/anime/browse?q=' + _quote(r.title) + '&sort=popularity&page=1&limit=25&adult=true', { headers: { Referer: base + '/' }, timeoutMs: 10000 }));
+  var search = _parseJson(await _get(base + '/api/media/anime/browse?q=' + _quote(r.title) + '&sort=popularity&page=1&limit=25&adult=true', { headers: { Referer: base + '/' }, timeoutMs: 8000 }));
   var arr = search && search.data;
   if (!Array.isArray(arr)) return;
   var match = null;
@@ -3492,7 +3499,7 @@ async function provAnikage(r, ctx) {
     for (var l = 0; l < langs.length; l++) tasks.push({ server: server, lang: langs[l] });
   }
   await _parallel(tasks, 8, async function (t) {
-    var sourceRes = _parseJson(await _get(base + '/api/media/anime/' + match.slug + '/episodes/' + ep + '/sources?provider=' + _quote(t.server) + '&lang=' + _quote(t.lang), { headers: { Referer: base + '/' }, timeoutMs: 10000 }));
+    var sourceRes = _parseJson(await _get(base + '/api/media/anime/' + match.slug + '/episodes/' + ep + '/sources?provider=' + _quote(t.server) + '&lang=' + _quote(t.lang), { headers: { Referer: base + '/' }, timeoutMs: 8000 }));
     if (!sourceRes) return null;
     var label = 'Anikage[' + _cap(t.server) + '] ' + _cap(t.lang);
     var srcs = Array.isArray(sourceRes.sources) ? sourceRes.sources : [];
@@ -3619,12 +3626,12 @@ async function provAnimekizz(r, ctx) {
   if (!r.title || r.anilistId == null) return;
   var base = API.animekizz;
   var query = r.title.replace(/ /g, '-') + '-' + r.anilistId + ':' + (r.episode || 1);
-  var srv = _parseJson(await _get(base + '/api/v1/video/servers/' + query, { headers: { Referer: base + '/' }, timeoutMs: 10000 }));
+  var srv = _parseJson(await _get(base + '/api/v1/video/servers/' + query, { headers: { Referer: base + '/' }, timeoutMs: 8000 }));
   if (!srv || !Array.isArray(srv.servers)) return;
   await _parallel(srv.servers, 8, async function (s) {
     if (!s || !s.id) return null;
     var name = _cap(s.name), stype = _cap(s.server_type);
-    var rr = await _postJson(base + '/api/v1/video/resolve', { episode_id: query, server_id: s.id }, { headers: { Referer: base + '/' }, timeoutMs: 10000 });
+    var rr = await _postJson(base + '/api/v1/video/resolve', { episode_id: query, server_id: s.id }, { headers: { Referer: base + '/' }, timeoutMs: 8000 });
     var resolve = rr && typeof rr.body === 'string' ? _parseJson(rr.body) : null;
     if (!resolve || !Array.isArray(resolve.sources)) return null;
     for (var k = 0; k < resolve.sources.length; k++) {
@@ -3730,8 +3737,10 @@ async function getVideoSources(id, fast) {
   } else {
     // Fast mode: run only providers that reliably return playable streams,
     // split by content type so movies and anime each get working sources.
-    // VaPlayer works for movies (streamdata.vaplayer.ru returns HLS variants).
-    // Anikage/Animekizz work for anime (HLS via og.bakayaro.live / animekizz.live).
+    // MovieBox is excluded from quick mode: Zangetsu's fetch bridge strips all
+    // response headers, so its JWT auth token is unreachable and it returns 0
+    // streams. VaPlayer works for movies (HLS variants). Anikage/Animekizz
+    // work for anime (HLS via og.bakayaro.live / animekizz.live).
     var quick = {};
     if (r.isAnime) {
       ['p_anikage', 'p_animekizz'].forEach(function (k) { quick[k] = 1; });

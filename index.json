@@ -1308,7 +1308,7 @@
     {
     "id": "cinestream",
     "name": "CineStream",
-    "version": "1.0.5",
+    "version": "1.0.6",
     "type": "movie",
     "lang": "en",
     "file": "providers/cinestream.js",
