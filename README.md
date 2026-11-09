@@ -183,6 +183,56 @@ TMDB provides search, title details, catalogue metadata, and episode information
 
 </details>
 
+<details>
+<summary><strong>CineStream</strong> · 58 HTTP providers + Wyzie Subs (aggregate movie source)</summary>
+
+### What it does
+
+CineStream is a native JavaScript port of the GPL-3.0 CineStream CloudStream extension (megix/CSX). It aggregates 58 HTTP streaming providers plus Wyzie Subs into a single Zangetsu source for movies and TV. TMDB provides metadata and episode lists; each registered provider independently resolves playback streams. The provider gating matches upstream (anime-only hosts run for anime, Bollywood-only hosts run for Bollywood titles, etc.).
+
+### Setup
+
+1. Add this repository using the manifest URL above and install **CineStream**.
+2. Open **CineStream → Settings**.
+3. Choose which providers to enable with **Enabled providers** (multi-select). All 59 providers are listed; disable hosts you do not need.
+4. Configure optional credentials (leave blank to skip that provider):
+   - **Showbox / Febbox UI token** — required for Showbox
+   - **Wyzie Subs API key** — required for Wyzie Subtitles
+   - **GramCinema bearer token** — required for Gramcinema
+   - **TMDB API key (optional)** — leave blank to use Zangetsu's built-in key
+   - **MovieBlast token / API / signing key** — build-time values; MovieBlast returns early when unset
+   - **Castle APK sign key** — build-time value; Castle returns early when unset
+5. Set **Provider concurrency** (default 10) and **Include download-only links** as desired.
+6. Save your settings, search for a title, open its details, and choose a stream.
+
+### Provider gating
+
+Providers run only when their upstream gate matches the title:
+
+| Gate | Applies to | Providers |
+|:--|:--|:--|
+| Anime only | `isAnime` | Animekizz, Anizone, Anineko, Animedao, Anikoto, Anikage, Anidb, AnimeToshoHttp, TokyoInsider |
+| Asian only | `isAsian` | KissKH |
+| Non-anime only | `!isAnime` | Skymovies, Asiaflix |
+| Bollywood | `isBollywood` | Gramcinema, VegaMovies, RogMovies, Bollyflix |
+| Anime or cartoon | `isAnime || isCartoon` | Toonstream |
+| Unrestricted | — | All other 40+ HTTP providers |
+
+### Credits and licensing
+
+- **CineStream:** GPL-3.0. Upstream: https://github.com/SaurabhKaperwan/CSX/tree/master/CineStream
+- **Derivative work:** `providers/cinestream.js` is distributed under GPL-3.0. See [LICENSE-CINESTREAM.md](LICENSE-CINESTREAM.md) and [NOTICE-CINESTREAM.md](NOTICE-CINESTREAM.md).
+- **Not ported:** Stremio add-on discovery/manifests/registration, Torrentio, TorrentsDB, AnimeTosho-torrent, StremioSubs. No Stremio functionality is included.
+- **MovieBlast / Castle:** require build-time credentials not present in this repository; exposed as optional settings and return early when unset.
+
+### Limitations
+
+- Real-player playback verification was not possible in this porting environment (no Android runtime / Zangetsu app). HTTP-level extraction is validated; in-app playback should be tested on a real device.
+- Many upstream provider hosts change domains frequently. Hosts refresh from the upstream `urls.json` when reachable, with public defaults embedded as fallback.
+- MovieBlast and Castle are non-functional until the user supplies their build-time credentials.
+
+</details>
+
 ---
 
 
@@ -363,6 +413,7 @@ This repository contains provider integrations for Zangetsu. It does not host me
 
 - **MIT:** original repository code. See [LICENSE](LICENSE).
 - **Apache-2.0:** the Yuzono-derived serenity-animekai and serenity-aniwave providers. See [LICENSE-APACHE-2.0](LICENSE-APACHE-2.0) and [the upstream notice](NOTICE-YUZONO-ANIME-EXTENSIONS.md).
+- **GPL-3.0:** CineStream (`providers/cinestream.js`), a derivative of the GPL-3.0 CineStream CloudStream extension. See [LICENSE-CINESTREAM.md](LICENSE-CINESTREAM.md) and [the upstream notice](NOTICE-CINESTREAM.md). This does not relicense unrelated MIT files in this repository.
 - **Jellyfin icon:** official asset from [Jellyfin UX](https://github.com/jellyfin/jellyfin-ux/tree/master/logos/SVG), under [CC BY-SA 4.0](https://github.com/jellyfin/jellyfin-ux/blob/master/LICENSE). It is shown only to identify Jellyfin compatibility. This is an independent, unofficial integration and is not endorsed by Jellyfin.
 
 For the provider interface and manifest format, see [Spyou/Zangetsu](https://github.com/Spyou/Zangetsu) and [Spyou/zangetsu-providers](https://github.com/Spyou/zangetsu-providers).
