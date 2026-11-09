@@ -75,8 +75,6 @@ that cannot be mapped from Zangetsu's normal search input.
 | AnimeOnsen | `animeonsen` | 1.0.1 | Multi-audio | DASH manifest fetched with 206 and `<MPD>`; parsed into explicit quality variants |
 | AnimeGG | `animegg` | 1.0.2 | English | Progressive MP4 fetched with 206 and `video/mp4`; JWPlayer videoSources parsed per quality |
 | AnimeAV1 | `animeav1` | 1.0.1 | Spanish | VOE HLS fetched with 200 and `#EXTM3U`; YourUpload MP4 fallback; HLS master parsed into explicit quality variants |
-| Anichi | `anichi` | 1.0.0 | English | Search via /filter?keyword=; detail and episodes from /anime/ pages; VOE embeds resolved from /watch/ pages |
-| AniHQ | `anihq` | 1.0.0 | English | WordPress REST with custom anime/episode post types; VOE embeds resolved from watch pages |
 | AnimeKhor | `animekhor` | 1.0.0 | English | WordPress REST posts; direct MP4/M3U8 links parsed from detail page HTML |
 | AnimeNosub | `animenosub` | 1.0.0 | English | WordPress REST posts; direct media links parsed from detail/category pages |
 | AnimeToki | `animetoki` | 1.0.0 | English | WordPress REST posts; individual episode posts; direct media links parsed from detail pages |
