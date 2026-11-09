@@ -1342,63 +1342,6 @@
           "default": true
         }
       ]
-    },
-    {
-      "id": "animekhor",
-      "name": "AnimeKhor",
-      "version": "1.0.1",
-      "type": "anime",
-      "lang": "en",
-      "file": "providers/animekhor.js",
-      "logo": "https://www.google.com/s2/favicons?sz=256&domain=animekhor.org",
-      "nsfw": false,
-      "settings": [
-        {
-          "key": "verifyPlayback",
-          "label": "Verify playback before showing streams",
-          "description": "Probe media URLs so expired or HTML responses are never offered as playable streams.",
-          "type": "bool",
-          "default": true
-        }
-      ]
-    },
-    {
-      "id": "animenosub",
-      "name": "AnimeNosub",
-      "version": "1.0.1",
-      "type": "anime",
-      "lang": "en",
-      "file": "providers/animenosub.js",
-      "logo": "https://www.google.com/s2/favicons?sz=256&domain=animenosub.to",
-      "nsfw": false,
-      "settings": [
-        {
-          "key": "verifyPlayback",
-          "label": "Verify playback before showing streams",
-          "description": "Probe media URLs so expired or HTML responses are never offered as playable streams.",
-          "type": "bool",
-          "default": true
-        }
-      ]
-    },
-    {
-      "id": "animetoki",
-      "name": "AnimeToki",
-      "version": "1.0.1",
-      "type": "anime",
-      "lang": "en",
-      "file": "providers/animetoki.js",
-      "logo": "https://www.google.com/s2/favicons?sz=256&domain=animetoki.com",
-      "nsfw": false,
-      "settings": [
-        {
-          "key": "verifyPlayback",
-          "label": "Verify playback before showing streams",
-          "description": "Probe media URLs so expired or HTML responses are never offered as playable streams.",
-          "type": "bool",
-          "default": true
-        }
-      ]
     }
   ]
 }

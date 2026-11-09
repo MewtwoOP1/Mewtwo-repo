@@ -211,7 +211,7 @@ function getDetail(url, opts) {
           else if (term.taxonomy === 'studio') studios.push(name);
           else if (term.taxonomy === 'anime_status') status = name;
           else if (term.taxonomy === 'anime_type') { /* TV/Movie → anime */ }
-          else if (term.taxonomy === 'premiered') { var m = String(term.name).match(/\b(19|20)\d{2}\b/); if (m) year = Number(m[0]); }
+          else if (term.taxonomy === 'premiered') { var m = String(term.name).match(/\b(19|20)\d{2}\b/); if (m) year = String(m[0]); }
         });
       });
     }
@@ -301,7 +301,36 @@ function _resolveVoe(url, cfg) {
     var type = '';
     if (response.headers && typeof response.headers.get === 'function') type = String(response.headers.get('content-type') || '');
     if (status === 401 || status === 403) return null;
-    if (/text\/html/i.test(type)) return null;
+    if (/text\/html/i.test(type)) {
+      // VOE embed pages are HTML; look for video URLs in the page
+      return _text(response).then(function (html) {
+        // Look for direct video URLs
+        var videoUrl = '';
+        var m = html.match(/["'](https?:\/\/[^"']+\.(?:mp4|m3u8)[^"']*)["']/gi);
+        if (m && m.length > 0) videoUrl = m[0][1];
+        if (!videoUrl) {
+          // Look for any URL that might be a video stream
+          m = html.match(/https?:\/\/[^"\s<>]+\.(?:mp4|m3u8)[^"\s<>]*/gi);
+          if (m && m.length > 0) videoUrl = m[0];
+        }
+        if (!videoUrl) return null;
+        return {
+          url: videoUrl,
+          quality: 'Auto',
+          label: 'AniHQ VOE',
+          type: videoUrl.endsWith('.m3u8') ? 'hls' : 'mp4',
+          container: videoUrl.endsWith('.m3u8') ? 'hls' : 'mp4',
+          hls: videoUrl.endsWith('.m3u8'),
+          headers: { 'User-Agent': UA, 'Referer': url },
+          kind: 'sub',
+          audioLang: 'ja',
+          subtitles: [],
+          downloadable: true,
+          size: 0,
+          isActive: false
+        };
+      });
+    }
     if ((status === 200 || status === 206) && !/text\/html/i.test(type)) {
       return {
         url: url,
