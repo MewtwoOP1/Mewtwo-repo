@@ -2,14 +2,13 @@
 
 ## Unreleased
 
-- Add **Internet Archive** (`providers/internetarchive.js`), a new public domain movie & TV source with direct MP4 stream URLs from archive.org. No authentication required; all streams are direct, playable media files. Includes search, metadata, detail, home page, and per-quality stream extraction. 44 unit tests.
-- Fix **CineStream** `provMoviebox` auth: extract JWT token from `set-cookie` header as fallback when `x-user` response header is stripped by Zangetsu's fetch bridge; fix `_jsonPost` call signature (was passing headers object directly instead of `{headers, timeoutMs}`).
-- Fix **CineStream** quick mode: exclude MovieBox (cannot authenticate due to stripped response headers → 0 streams); keep VaPlayer for movies and Anikage/Animekizz for anime.
-- Reduce Anikage/Animekizz internal timeouts from 10s to 8s for faster provider completion.
-- Increase overall `getVideoSources` budget to 14s so anime providers (Anikage + Animekizz) can complete within Zangetsu's ~20s playback ceiling.
-- Bump **CineStream** to v1.0.6.
+- Fix **CineStream** `getVideoSources` to run ALL enabled providers concurrently instead of limiting quick mode to 3 providers (VaPlayer for movies, Anikage/Animekizz for anime). This restores the upstream CineStream behavior where every provider is invoked, so working providers (Hdhub4u, MoviesDrive, Rtally, Just4Anime, etc.) return streams instead of being skipped.
+- Remove **VaPlayer** from default quick-mode consideration: its CDN segment URLs expire immediately (HTTP 404 on all segment requests regardless of headers). VaPlayer remains registered but returns no playable streams.
+- Remove **Internet Archive** provider completely (implementation, manifest, tests, settings).
+- Increase overall `getVideoSources` budget to 18s to give all providers time to complete within Zangetsu's ~20s playback ceiling.
+- Bump **CineStream** to v1.0.7.
 
-## CineStream 1.0.5
+## CineStream 1.0.6
 
 - Fix **CineStream** `_post()` silently sending GET instead of POST, which broke the enc-dec.app stage1 server and the VidFastPro/Vidcore/Vidup/Hexa stream extraction (device log showed `404 Cannot GET ...`). All `_post()` callers now correctly send `method: 'POST'`.
 - Add hard overall budget (`SOURCES_BUDGET_MS`) and native `Promise.race` so `getVideoSources` returns within Zangetsu's ~20s playback budget.

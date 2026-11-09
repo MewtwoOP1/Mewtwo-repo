@@ -10,7 +10,7 @@
 // intentionally NOT ported (user requirement). All native HTTP providers
 // and Wyzie Subs are preserved.
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID) ? String(__SOURCE_ID) : 'cinestream';
-var VERSION = '1.0.6';
+var VERSION = '1.0.7';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36';
 var MOBILE_UA = 'Mozilla/5.0 (Linux; Android 12; Pixel 6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.6367.82 Mobile Safari/537.36';
 var TMDB = 'https://api.themoviedb.org/3';
@@ -25,7 +25,7 @@ var SOURCE_TIMEOUT = 22000;
 // Overall budget for getVideoSources in quick (playback) mode. Zangetsu gives a
 // ~20s playback budget on a single JS bridge; return whatever streams we have
 // before it elapses rather than waiting for slow/dead providers.
-var SOURCES_BUDGET_MS = 14000;
+var SOURCES_BUDGET_MS = 18000;
 
 // ── Settings ───────────────────────────────────────────────────────────
 var PROVIDERS = [
@@ -3709,7 +3709,6 @@ async function getVideoSources(id, fast) {
   var out = [], subs = [], seen = {};
   if (!r.imdbId && !r.title) return out;
   var opt = fast && typeof fast === 'object' ? fast : {};
-  var quickMode = fast === true || opt.fast === true;
   var onSub = typeof opt.onSubtitle === 'function' ? opt.onSubtitle : null;
   var ctx = {
     includeDownloads: _bool('includeDownloadLinks', false),
@@ -3731,24 +3730,13 @@ async function getVideoSources(id, fast) {
   };
   var keys = [];
   for (var i = 0; i < PROVIDERS.length; i++) if (_providerEnabled(PROVIDERS[i][0]) && PROVIDERS[i][0] !== 'p_wyziesubs') keys.push(PROVIDERS[i][0]);
-  if (!quickMode) {
-    var limit = _num('concurrency', 10);
-    await _parallel(keys, limit, function (key) { return _runProvider(key, r, ctx); });
-  } else {
-    // Fast mode: run only providers that reliably return playable streams,
-    // split by content type so movies and anime each get working sources.
-    // MovieBox is excluded from quick mode: Zangetsu's fetch bridge strips all
-    // response headers, so its JWT auth token is unreachable and it returns 0
-    // streams. VaPlayer works for movies (HLS variants). Anikage/Animekizz
-    // work for anime (HLS via og.bakayaro.live / animekizz.live).
-    var quick = {};
-    if (r.isAnime) {
-      ['p_anikage', 'p_animekizz'].forEach(function (k) { quick[k] = 1; });
-    } else {
-      ['p_vaplayer'].forEach(function (k) { quick[k] = 1; });
-    }
-    await _race(_parallel(keys.filter(function (k) { return quick[k]; }), 8, function (key) { return _runProvider(key, r, ctx); }), SOURCES_BUDGET_MS, null);
-  }
+  // Run ALL enabled providers concurrently (matching upstream CineStream behavior
+  // which invokes every provider). The overall budget race prevents slow/dead
+  // providers from blocking playback past Zangetsu's ~20s ceiling. Providers
+  // that work return results; providers that don't fail independently without
+  // preventing other providers from returning streams.
+  var limit = _num('concurrency', 10);
+  await _race(_parallel(keys, limit, function (key) { return _runProvider(key, r, ctx); }), SOURCES_BUDGET_MS, null);
   if (_providerEnabled('p_wyziesubs')) await _runProvider('p_wyziesubs', r, ctx);
   // Zangetsu's VideoSource carries subtitles per stream. Providers may have
   // already attached their own; otherwise inherit the collected set.
