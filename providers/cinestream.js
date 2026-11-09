@@ -10,7 +10,7 @@
 // intentionally NOT ported (user requirement). All native HTTP providers
 // and Wyzie Subs are preserved.
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID) ? String(__SOURCE_ID) : 'cinestream';
-var VERSION = '1.0.1';
+var VERSION = '1.0.2';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36';
 var MOBILE_UA = 'Mozilla/5.0 (Linux; Android 12; Pixel 6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.6367.82 Mobile Safari/537.36';
 var TMDB = 'https://api.themoviedb.org/3';
@@ -2040,8 +2040,14 @@ async function provVidfastpro(r, ctx) {
   var response = await _get(url, { headers: headers, timeoutMs: 12000 });
   var enc = _first(/\\?"(?:en|token)\\?":\\?"(.*?)\\?"/i, response);
   if (!enc) return;
-  var j1 = await _getJson(MULTI + '/enc-vidfast?text=' + encodeURIComponent(enc), { timeoutMs: 12000 });
-  var d = j1 && j1.result ? j1.result : null;
+  // Two-stage enc-dec.app flow (API changed: requires stage param)
+  var s1 = await _getJson(MULTI + '/enc-vidfast?text=' + encodeURIComponent(enc) + '&stage=1', { timeoutMs: 12000 });
+  if (!s1 || !s1.result || !s1.result.stage1 || !s1.result.token) return;
+  headers['X-CSRF-Token'] = s1.result.token;
+  var s1text = await _post(s1.result.stage1, { headers: headers, timeoutMs: 12000 });
+  if (!s1text || !s1text.body) return;
+  var s2 = await _getJson(MULTI + '/enc-vidfast?text=' + encodeURIComponent(s1text.body) + '&stage=2', { timeoutMs: 12000 });
+  var d = s2 && s2.result ? s2.result : null;
   if (!d || !d.servers || !d.stream || !d.token) return;
   headers['X-CSRF-Token'] = d.token;
   var serversEnc = await _post(d.servers, { headers: headers, timeoutMs: 12000 });
@@ -2120,8 +2126,14 @@ async function provVidcore(r, ctx) {
   var page = await _get(base, { timeoutMs: 12000 });
   var enc = _first(/\\?"(?:en|token)\\?":\\?"(.*?)\\?"/i, page);
   if (!enc) return;
-  var j1 = await _getJson(MULTI + '/enc-vidcore?text=' + encodeURIComponent(enc), { timeoutMs: 12000 });
-  var d = j1 && j1.result ? j1.result : null;
+  // Two-stage enc-dec.app flow (API changed: requires stage param)
+  var s1 = await _getJson(MULTI + '/enc-vidcore?text=' + encodeURIComponent(enc) + '&stage=1', { timeoutMs: 12000 });
+  if (!s1 || !s1.result || !s1.result.stage1 || !s1.result.token) return;
+  headers['X-CSRF-Token'] = s1.result.token;
+  var s1text = await _post(s1.result.stage1, { headers: headers, timeoutMs: 12000 });
+  if (!s1text || !s1text.body) return;
+  var s2 = await _getJson(MULTI + '/enc-vidcore?text=' + encodeURIComponent(s1text.body) + '&stage=2', { timeoutMs: 12000 });
+  var d = s2 && s2.result ? s2.result : null;
   if (!d || !d.servers || !d.stream || !d.token) return;
   headers['X-CSRF-Token'] = d.token;
   var serversEnc = await _post(d.servers, { headers: headers, timeoutMs: 12000 });
@@ -2602,11 +2614,17 @@ async function provVidup(r, ctx) {
   var text = await _get(url, { timeoutMs: 12000 });
   var enc = _first(/\\?"(?:en|token)\\?":\\?"(.*?)\\?"/i, text);
   if (!enc) return;
-  var j1 = await _getJson(MULTI + '/enc-vidup?text=' + encodeURIComponent(enc), { headers: headers, timeoutMs: 12000 });
-  if (!j1 || j1.status !== 200 || !j1.result) return;
-  var d = j1.result;
+  // Two-stage enc-dec.app flow (API changed: requires stage param)
+  var s1 = await _getJson(MULTI + '/enc-vidup?text=' + encodeURIComponent(enc) + '&stage=1', { headers: headers, timeoutMs: 12000 });
+  if (!s1 || s1.status !== 200 || !s1.result || !s1.result.stage1 || !s1.result.token) return;
+  var ph = Object.assign({}, headers, { 'X-CSRF-Token': s1.result.token });
+  var s1text = await _post(s1.result.stage1, { headers: ph, timeoutMs: 12000 });
+  if (!s1text || !s1text.body) return;
+  var s2 = await _getJson(MULTI + '/enc-vidup?text=' + encodeURIComponent(s1text.body) + '&stage=2', { headers: headers, timeoutMs: 12000 });
+  if (!s2 || s2.status !== 200 || !s2.result) return;
+  var d = s2.result;
   if (!d.servers || !d.stream || !d.token) return;
-  var ph = Object.assign({}, headers, { 'X-CSRF-Token': d.token });
+  ph['X-CSRF-Token'] = d.token;
   var serversEnc = await _post(d.servers, { headers: ph, timeoutMs: 12000 });
   var dec = await _jsonPost(MULTI + '/dec-vidup', { text: serversEnc.body }, {}, 12000);
   if (!dec || dec.status !== 200 || !dec.result) return;

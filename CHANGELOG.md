@@ -4,6 +4,10 @@
 
 - Fix **CineStream** `getDetail` `year` type (int→String) for Dart `MediaDetail`, resolving `type 'int' is not a subtype of type 'String?'` crashes on every detail load (e.g. Black Clover, Project Hail Mary, The Dark Knight). Bump to v1.0.1.
 
+## CineStream 1.0.2
+
+- Fix **CineStream** stream playback for VidFastPro, Vidcore, and Vidup: the enc-dec.app API changed to require a two-stage `stage=1`/`stage=2` flow on `enc-*` endpoints. Providers now send the `stage` query parameter and POST to the intermediate `stage1` URL before calling `stage=2`. Without this fix, all `enc-*` requests returned HTTP 400 and no playable streams were produced.
+
 ## CineStream 1.0.1
 
 - Fix **CineStream** `getDetail` `year` type (int→String) for Dart `MediaDetail`, resolving `type 'int' is not a subtype of type 'String?'` crashes on every detail load (e.g. Black Clover, Project Hail Mary, The Dark Knight).
