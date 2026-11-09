@@ -1304,44 +1304,6 @@
           ]
         }
       ]
-    },
-    {
-      "id": "anichi",
-      "name": "Anichi",
-      "version": "1.0.1",
-      "type": "anime",
-      "lang": "en",
-      "file": "providers/anichi.js",
-      "logo": "https://www.google.com/s2/favicons?sz=256&domain=anichi.to",
-      "nsfw": false,
-      "settings": [
-        {
-          "key": "verifyPlayback",
-          "label": "Verify playback before showing streams",
-          "description": "Probe server embed URLs so expired or HTML responses are never offered as playable streams.",
-          "type": "bool",
-          "default": true
-        }
-      ]
-    },
-    {
-      "id": "anihq",
-      "name": "AniHQ",
-      "version": "1.0.1",
-      "type": "anime",
-      "lang": "en",
-      "file": "providers/anihq.js",
-      "logo": "https://www.google.com/s2/favicons?sz=256&domain=anihq.cc",
-      "nsfw": false,
-      "settings": [
-        {
-          "key": "verifyPlayback",
-          "label": "Verify playback before showing streams",
-          "description": "Probe media URLs so expired or HTML responses are never offered as playable streams.",
-          "type": "bool",
-          "default": true
-        }
-      ]
     }
   ]
 }

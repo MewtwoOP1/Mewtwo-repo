@@ -59,7 +59,6 @@ that cannot be mapped from Zangetsu's normal search input.
 | animedekho | No | No | No — returns third-party embeds only | Rejected — no direct stream |
 | toonhub | No | No | No — returns third-party embeds only | Rejected — no direct stream |
 | uniquestream | No | No | No — AES-128 key requires a custom data source | Rejected — unsupported crypto source |
-| animekhor | No | No | No — returns third-party embeds only | Rejected — no direct stream |
 | kartoons | No | No | No — requires a private account token pool | Rejected — account-gated |
 | animeav1 | No | Yes | Yes — VOE HLS 200, `#EXTM3U` (Spanish) | **Added** (1.0.0) |
 | rift | No | No | No — private Firebase device registration plus per-episode session API; flow not verified | Rejected — unverified private session |
@@ -75,11 +74,6 @@ that cannot be mapped from Zangetsu's normal search input.
 | AnimeOnsen | `animeonsen` | 1.0.1 | Multi-audio | DASH manifest fetched with 206 and `<MPD>`; parsed into explicit quality variants |
 | AnimeGG | `animegg` | 1.0.2 | English | Progressive MP4 fetched with 206 and `video/mp4`; JWPlayer videoSources parsed per quality |
 | AnimeAV1 | `animeav1` | 1.0.1 | Spanish | VOE HLS fetched with 200 and `#EXTM3U`; YourUpload MP4 fallback; HLS master parsed into explicit quality variants |
-| Anichi | `anichi` | 1.0.0 | English | Search via /filter?keyword=; detail and episodes from /anime/ pages; VOE embeds resolved from /watch/ pages |
-| AniHQ | `anihq` | 1.0.0 | English | WordPress REST with custom anime/episode post types; VOE embeds resolved from watch pages |
-| AnimeKhor | `animekhor` | 1.0.0 | English | WordPress REST posts; direct MP4/M3U8 links parsed from detail page HTML |
-| AnimeNosub | `animenosub` | 1.0.0 | English | WordPress REST posts; direct media links parsed from detail/category pages |
-| AnimeToki | `animetoki` | 1.0.0 | English | WordPress REST posts; individual episode posts; direct media links parsed from detail pages |
 
 AnimeAV1 is not a duplicate of the existing `anv.js` source: its streams are Spanish, with burned-in
 Spanish subtitles and a Latino dub on some titles. It is therefore declared as Spanish rather than

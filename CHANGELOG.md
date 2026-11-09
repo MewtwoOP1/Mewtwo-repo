@@ -2,20 +2,13 @@
 
 ## Unreleased
 
-- Add five live-verified anime sources from Yuzono's anime-repo:
-  - **Anichi 1.0.0** — English catalogue at anichi.to; /anime/ and /watch/ pages; VOE embeds for playback.
-  - **AniHQ 1.0.0** — English catalogue at anihq.cc; WordPress with custom anime/episode post types; VOE embeds for playback.
-  - **AnimeKhor 1.0.0** — English catalogue at animekhor.org; WordPress catalogue; direct MP4/M3U8 links parsed from detail pages.
-  - **AnimeNosub 1.0.0** — English catalogue at animenosub.to; WordPress catalogue with category-based posts; direct media links.
-  - **AnimeToki 1.0.0** — English catalogue at animetoki.com; WordPress catalogue; individual episode posts; direct media links.
-- Add four live-verified anime sources from the Anilili provider audit:
-  - **AnimeOnsen 1.0.0** — multi-audio DASH playback with subtitle tracks.
-  - **AnimeGG 1.0.0** — series/episode scraping and progressive MP4 playback.
-  - **AnimeAV1 1.0.1** — Spanish catalogue with VOE HLS and YourUpload MP4 fallback; HLS master playlist parsed into explicit quality variants (720p).
-  - **AnimeGG 1.0.2** — series/episode scraping and progressive MP4 playback; retry on timeout/connection-reset errors; JWPlayer videoSources parsed for per-quality MP4 entries.
-  - **AnimeOnsen 1.0.1** — multi-audio DASH playback with subtitle tracks; DASH manifest parsed into explicit quality variants.
-- Add `PROVIDER_AUDIT.md` with the complete Anilili provider comparison, live playback evidence, and
-  the rejection reason for every provider that was not added.
+- Remove **AnimeKhor**, **AnimeNosub**, **AnimeToki**, **AniHQ**, and **Anichi** from the repository: these providers could not provide working playback in Zangetsu.
+  - AnimeKhor: search endpoint returned 0 results for all queries
+  - AnimeNosub: DNS resolution failures, connection timeouts
+  - AnimeToki: episode posts not found via WordPress search
+  - AniHQ: `type 'int' is not a subtype of type 'String?'` crash in metadata detail
+  - Anichi: playback never worked (JavaScript-driven player with no direct media URLs)
+
 - Remove **Re:Anime**, **KickAssAnime**, and **Zoko** from the repository.
 - Remove **AnimeHeaven** (v1.0.1): the animeheaven.me domain persistently resets connections and returns zero search results for all titles; the source is unavailable and has been removed from the repository.
 - Fix the Jellyfin source icon by switching from SVG to the official square PNG asset, which is compatible with Zangetsu's cached network-image renderer; bump provider version to 3.0.3.
