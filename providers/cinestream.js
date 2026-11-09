@@ -10,7 +10,7 @@
 // intentionally NOT ported (user requirement). All native HTTP providers
 // and Wyzie Subs are preserved.
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID) ? String(__SOURCE_ID) : 'cinestream';
-var VERSION = '1.0.2';
+var VERSION = '1.0.3';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36';
 var MOBILE_UA = 'Mozilla/5.0 (Linux; Android 12; Pixel 6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.6367.82 Mobile Safari/537.36';
 var TMDB = 'https://api.themoviedb.org/3';
@@ -22,6 +22,10 @@ var WYZIE = 'https://sub.wyzie.io';
 var FETCH_TIMEOUT = 7000;
 var META_TIMEOUT = 8000;
 var SOURCE_TIMEOUT = 22000;
+// Overall budget for getVideoSources in quick (playback) mode. Zangetsu gives a
+// ~20s playback budget on a single JS bridge; return whatever streams we have
+// before it elapses rather than waiting for slow/dead providers.
+var SOURCES_BUDGET_MS = 12000;
 
 // ── Settings ───────────────────────────────────────────────────────────
 var PROVIDERS = [
@@ -624,17 +628,10 @@ function _storeCookies(url, headers) {
   }
 }
 function _race(p, ms, fallback) {
-  return new Promise(function (resolve) {
-    var done = false, timer = null;
-    function finish(v) {
-      if (done) return;
-      done = true;
-      if (timer && typeof clearTimeout === 'function') clearTimeout(timer);
-      resolve(v);
-    }
-    if (typeof setTimeout === 'function') timer = setTimeout(function () { finish(fallback); }, ms || 1);
-    Promise.resolve().then(function () { return p; }).then(finish, function () { finish(fallback); });
-  });
+  return Promise.race([
+    p,
+    new Promise(function (res) { if (typeof setTimeout === 'function') setTimeout(function () { res(fallback); }, ms || 1); else res(fallback); })
+  ]);
 }
 async function _fetch(url, opts) {
   opts = opts || {};
@@ -673,7 +670,14 @@ async function _fetch(url, opts) {
 async function _get(url, opts) { var r = await _fetch(url, opts); return r.body; }
 async function _getJson(url, opts) { return _parseJson(await _get(url, opts)); }
 async function _post(url, opts) {
-  opts = opts || {};
+  // NOTE: this used to call _fetch(url, opts) without method:'POST', so every
+  // "POST" in the port silently became a GET. enc-dec.app's stage1 server and
+  // the vidfast/vidcore/vidup stream endpoints answer GET with 404
+  // "Cannot GET ...", which is exactly what the device log showed. Keep the
+  // method explicit here and let callers pass an optional body.
+  opts = Object.assign({}, opts || {});
+  opts.method = 'POST';
+  if (opts.body == null) opts.body = '';
   return _fetch(url, opts);
 }
 function _formBody(obj) {
@@ -1998,19 +2002,19 @@ async function provPeachify(r, ctx) {
   if (!r.tmdbId) return;
   var headers = { Origin: API.peachifyBase, Referer: API.peachifyBase + '/', 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36' };
   var servers = ['multi', 'hr', 'holly', 'air', 'moviebox'];
-  for (var i = 0; i < servers.length; i++) {
-    var server = servers[i];
-    var url = r.season == null ? API.peachify + '/' + server + '/movie/' + r.tmdbId
-      : API.peachify + '/' + server + '/tv/' + r.tmdbId + '/' + r.season + '/' + r.episode;
-    var text = await _get(url, { headers: headers, timeoutMs: 12000 });
-    if (!text) continue;
+  var tasks = servers.map(function (server) {
+    return { server: server, url: r.season == null ? API.peachify + '/' + server + '/movie/' + r.tmdbId : API.peachify + '/' + server + '/tv/' + r.tmdbId + '/' + r.season + '/' + r.episode };
+  });
+  await _parallel(tasks, 5, async function (t) {
+    var text = await _get(t.url, { headers: headers, timeoutMs: 6000 });
+    if (!text) return null;
     var j = _parseJson(text);
     var enc = j && j.data ? j.data : '';
-    if (!enc) continue;
+    if (!enc) return null;
     var dec = _decryptPeachify(enc);
-    if (!dec) continue;
+    if (!dec) return null;
     var data = _parseJson(dec);
-    if (!data || !data.sources) continue;
+    if (!data || !data.sources) return null;
     var provider = _cap(data.providerName || 'Peachify');
     for (var s = 0; s < data.sources.length; s++) {
       var src = data.sources[s]; if (!src || !src.url) continue;
@@ -2028,7 +2032,8 @@ async function provPeachify(r, ctx) {
       var uh = ph['user-agent'] || sh['user-agent'] || UA;
       _emitH(ctx, finalUrl, parseInt(src.quality, 10) || 0, 'Peachify[' + provider + ']' + (src.dub ? ' • ' + src.dub : ''), src.type === 'hls' ? 'hls' : null, { Origin: oh, Referer: rh, 'User-Agent': uh });
     }
-  }
+    return null;
+  });
 }
 
 // ── 14. VidFastPro ─────────────────────────────────────────────────────
@@ -3470,38 +3475,40 @@ async function provAnikoto(r, ctx) {
 async function provAnikage(r, ctx) {
   if (!r.title || r.anilistId == null) return;
   var base = API.anikage;
-  var search = _parseJson(await _get(base + '/api/media/anime/browse?q=' + _quote(r.title) + '&sort=popularity&page=1&limit=25&adult=true', { headers: { Referer: base + '/' }, timeoutMs: 15000 }));
+  var search = _parseJson(await _get(base + '/api/media/anime/browse?q=' + _quote(r.title) + '&sort=popularity&page=1&limit=25&adult=true', { headers: { Referer: base + '/' }, timeoutMs: 10000 }));
   var arr = search && search.data;
   if (!Array.isArray(arr)) return;
   var match = null;
   for (var i = 0; i < arr.length; i++) if (Number(arr[i].anilistId) === Number(r.anilistId)) { match = arr[i]; break; }
   if (!match || !match.slug) return;
   var ep = r.episode || 1;
-  var srv = _parseJson(await _get(base + '/api/media/anime/' + match.slug + '/episodes/' + ep + '/servers', { headers: { Referer: base + '/' }, timeoutMs: 15000 }));
+  var srv = _parseJson(await _get(base + '/api/media/anime/' + match.slug + '/episodes/' + ep + '/servers', { headers: { Referer: base + '/' }, timeoutMs: 8000 }));
   if (!srv || !Array.isArray(srv.servers)) return;
   var langs = ['sub', 'dub'];
+  var tasks = [];
   for (var s = 0; s < srv.servers.length; s++) {
     var server = srv.servers[s] && srv.servers[s].id;
     if (!server) continue;
-    for (var l = 0; l < langs.length; l++) {
-      var lang = langs[l];
-      var sourceRes = _parseJson(await _get(base + '/api/media/anime/' + match.slug + '/episodes/' + ep + '/sources?provider=' + _quote(server) + '&lang=' + lang, { headers: { Referer: base + '/' }, timeoutMs: 15000 }));
-      if (!sourceRes) continue;
-      var label = 'Anikage[' + _cap(server) + '] ' + _cap(lang);
-      var srcs = Array.isArray(sourceRes.sources) ? sourceRes.sources : [];
-      for (var k = 0; k < srcs.length; k++) {
-        if (!srcs[k] || !srcs[k].url) continue;
-        var proxied = 'https://og.bakayaro.live/' + (srcs[k].isM3U8 ? 'm3u8' : 'stream') + '/' + srcs[k].url;
-        _emitH(ctx, proxied, 1080, label, srcs[k].isM3U8 ? 'hls' : null, { Referer: base + '/' }, null, null);
-      }
-      var embeds = Array.isArray(sourceRes.embeds) ? sourceRes.embeds : [];
-      for (var e = 0; e < embeds.length; e++) {
-        if (embeds[e] && embeds[e].url) await _loadSource('Anikage [' + _cap(embeds[e].type) + ']', embeds[e].url, base + '/', ctx);
-      }
-      var subs = Array.isArray(sourceRes.subtitles) ? sourceRes.subtitles : [];
-      for (var q = 0; q < subs.length; q++) if (subs[q] && subs[q].file) ctx.sub(subs[q].label || 'Unknown', subs[q].file, 'Anikage');
-    }
+    for (var l = 0; l < langs.length; l++) tasks.push({ server: server, lang: langs[l] });
   }
+  await _parallel(tasks, 8, async function (t) {
+    var sourceRes = _parseJson(await _get(base + '/api/media/anime/' + match.slug + '/episodes/' + ep + '/sources?provider=' + _quote(t.server) + '&lang=' + _quote(t.lang), { headers: { Referer: base + '/' }, timeoutMs: 10000 }));
+    if (!sourceRes) return null;
+    var label = 'Anikage[' + _cap(t.server) + '] ' + _cap(t.lang);
+    var srcs = Array.isArray(sourceRes.sources) ? sourceRes.sources : [];
+    for (var k = 0; k < srcs.length; k++) {
+      if (!srcs[k] || !srcs[k].url) continue;
+      var proxied = 'https://og.bakayaro.live/' + (srcs[k].isM3U8 ? 'm3u8' : 'stream') + '/' + srcs[k].url;
+      _emitH(ctx, proxied, 1080, label, srcs[k].isM3U8 ? 'hls' : null, { Referer: base + '/' }, null, null);
+    }
+    var embeds = Array.isArray(sourceRes.embeds) ? sourceRes.embeds : [];
+    for (var e = 0; e < embeds.length; e++) {
+      if (embeds[e] && embeds[e].url) await _loadSource('Anikage [' + _cap(embeds[e].type) + ']', embeds[e].url, base + '/', ctx);
+    }
+    var subs = Array.isArray(sourceRes.subtitles) ? sourceRes.subtitles : [];
+    for (var q = 0; q < subs.length; q++) if (subs[q] && subs[q].file) ctx.sub(subs[q].label || 'Unknown', subs[q].file, 'Anikage');
+    return null;
+  });
 }
 
 // ── 54. Anidb ──────────────────────────────────────────────────────────
@@ -3612,17 +3619,14 @@ async function provAnimekizz(r, ctx) {
   if (!r.title || r.anilistId == null) return;
   var base = API.animekizz;
   var query = r.title.replace(/ /g, '-') + '-' + r.anilistId + ':' + (r.episode || 1);
-  var srv = _parseJson(await _get(base + '/api/v1/video/servers/' + query, { headers: { Referer: base + '/' }, timeoutMs: 15000 }));
+  var srv = _parseJson(await _get(base + '/api/v1/video/servers/' + query, { headers: { Referer: base + '/' }, timeoutMs: 10000 }));
   if (!srv || !Array.isArray(srv.servers)) return;
-  for (var i = 0; i < srv.servers.length; i++) {
-    var s = srv.servers[i];
-    if (!s || !s.id) continue;
+  await _parallel(srv.servers, 8, async function (s) {
+    if (!s || !s.id) return null;
     var name = _cap(s.name), stype = _cap(s.server_type);
-    var resolve = _parseJson(await (async function () {
-      var rr = await _postJson(base + '/api/v1/video/resolve', { episode_id: query, server_id: s.id }, { headers: { Referer: base + '/' }, timeoutMs: 15000 });
-      return rr.body;
-    })());
-    if (!resolve || !Array.isArray(resolve.sources)) continue;
+    var rr = await _postJson(base + '/api/v1/video/resolve', { episode_id: query, server_id: s.id }, { headers: { Referer: base + '/' }, timeoutMs: 10000 });
+    var resolve = rr && typeof rr.body === 'string' ? _parseJson(rr.body) : null;
+    if (!resolve || !Array.isArray(resolve.sources)) return null;
     for (var k = 0; k < resolve.sources.length; k++) {
       var src = resolve.sources[k];
       if (!src || !src.url) continue;
@@ -3630,7 +3634,8 @@ async function provAnimekizz(r, ctx) {
       var q = src.quality === 'auto' ? 1080 : (_quality(src.quality) || 1080);
       _emitH(ctx, u, q, 'Animekizz [' + name + '] [' + stype + ']', /hls/i.test(src.format || '') ? 'hls' : null, { Referer: base + '/', Origin: base }, null, null);
     }
-  }
+    return null;
+  });
 }
 
 // ── 59. Wyzie Subs (subtitles only) ────────────────────────────────────
@@ -3723,12 +3728,11 @@ async function getVideoSources(id, fast) {
     var limit = _num('concurrency', 10);
     await _parallel(keys, limit, function (key) { return _runProvider(key, r, ctx); });
   } else {
-    // Fast mode: skip the slowest scraping providers, keep direct APIs.
+    // Fast mode: run only the providers that reliably return playable streams,
+    // so getVideoSources returns well within Zangetsu's ~20s playback budget.
     var quick = {};
-    ['p_videasy', 'p_vaplayer', 'p_vidfastpro', 'p_vidcore', 'p_vidup', 'p_vidzee',
-     'p_peachify', 'p_hexa', 'p_moviebox', 'p_showbox', 'p_fshare', 'p_reanime',
-     'p_anikoto', 'p_anikage', 'p_anizone', 'p_animekizz'].forEach(function (k) { quick[k] = 1; });
-    await _parallel(keys.filter(function (k) { return quick[k]; }), 8, function (key) { return _runProvider(key, r, ctx); });
+    ['p_anikage', 'p_animekizz', 'p_vaplayer'].forEach(function (k) { quick[k] = 1; });
+    await _race(_parallel(keys.filter(function (k) { return quick[k]; }), 8, function (key) { return _runProvider(key, r, ctx); }), SOURCES_BUDGET_MS, null);
   }
   if (_providerEnabled('p_wyziesubs')) await _runProvider('p_wyziesubs', r, ctx);
   // Zangetsu's VideoSource carries subtitles per stream. Providers may have

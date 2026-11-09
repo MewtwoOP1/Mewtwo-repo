@@ -14,7 +14,7 @@ function g(t) { console.log('\n\x1b[36m' + t + '\x1b[0m'); }
   g('1. Contract exports');
   ['getInfo','getSettings','getHome','popular','search','getDetail','getEpisodes','getVideoSources','getStreams']
     .forEach(function (k) { ok('export .' + k, typeof P[k] === 'function'); });
-  ok('version is 1.0.2', P.version === '1.0.2', String(P.version));
+  ok('version is 1.0.3', P.version === '1.0.3', String(P.version));
   ok('getInfo() name = CineStream', P.getInfo().name === 'CineStream');
   ok('getInfo() type = movie', P.getInfo().type === 'movie');
   ok('getInfo().lang = en', P.getInfo().lang === 'en');

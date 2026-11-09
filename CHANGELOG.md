@@ -2,7 +2,9 @@
 
 ## Unreleased
 
-- Fix **CineStream** `getDetail` `year` type (int→String) for Dart `MediaDetail`, resolving `type 'int' is not a subtype of type 'String?'` crashes on every detail load (e.g. Black Clover, Project Hail Mary, The Dark Knight). Bump to v1.0.1.
+- Fix **CineStream** `_post()` silently sending GET instead of POST, which broke the enc-dec.app stage1 server and the VidFastPro/Vidcore/Vidup/Hexa stream extraction (device log showed `404 Cannot GET ...`). All `_post()` callers now correctly send `method: 'POST'`.
+- Fix **CineStream** playback timing: `getVideoSources` now exceeds Zangetsu's ~20s playback budget because the single JS bridge serializes all provider calls. Added a hard overall budget (`SOURCES_BUDGET_MS`), native `Promise.race`-based `_race`, parallelized server/source loops in Peachify, Anikage, and Animekizz, and reduced quick-mode to the reliably-working providers (Anikage, Animekizz, VaPlayer). Playback now returns within ~12s with 4–12 playable HLS streams.
+- Bump **CineStream** to v1.0.3.
 
 ## CineStream 1.0.2
 
