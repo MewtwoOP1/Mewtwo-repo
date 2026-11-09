@@ -2,8 +2,10 @@
 
 ## Unreleased
 
-- Remove **VaPlayer** from quick mode: its API (`streamdata.vaplayer.ru`) returns HTTP 404 for all queries.
-- Bump **CineStream** to v1.0.4.
+- Split **CineStream** quick mode by content type: anime gets Anikage + Animekizz, movies get VaPlayer. This fixes movies returning 0 streams (no movie providers were running) while keeping anime within the ~20s playback budget.
+- VaPlayer re-added for movies: `streamdata.vaplayer.ru` returns HLS variants (confirmed working on device).
+- Tighten overall `getVideoSources` budget to 11s for more margin under Zangetsu's 20s playback ceiling.
+- Bump **CineStream** to v1.0.5.
 
 ## CineStream 1.0.4
 
