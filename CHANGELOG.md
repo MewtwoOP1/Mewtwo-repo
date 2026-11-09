@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Add **CineStream** (`providers/cinestream.js`), a native JavaScript port of the GPL-3.0 CineStream CloudStream extension, as an aggregate Zangetsu source with 58 HTTP providers plus Wyzie Subs. Preserves Showbox/Febbox token, Wyzie Subs API key, and GramCinema bearer token settings. TMDB metadata with AniList/ARM ID mapping replaces Cinemeta. Excludes Stremio addon functionality, Torrentio, TorrentsDB, AnimeTosho-torrent, and StremioSubs per project requirements. See [NOTICE-CINESTREAM.md](NOTICE-CINESTREAM.md).
 - Remove **AnimeKhor**, **AnimeNosub**, **AnimeToki**, **AniHQ**, and **Anichi** from the repository: these providers could not provide working playback in Zangetsu.
   - AnimeKhor: search endpoint returned 0 results for all queries
   - AnimeNosub: DNS resolution failures, connection timeouts
