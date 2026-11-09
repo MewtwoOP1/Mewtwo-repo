@@ -2,7 +2,7 @@
 // Search/detail use the WordPress REST API; episodes are parsed from the
 // anime detail page HTML; playback resolves direct media links.
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID) ? String(__SOURCE_ID) : 'animenosub';
-var VERSION = '1.0.0';
+var VERSION = '1.0.1';
 var SITE = 'https://animenosub.to';
 var API = SITE + '/wp-json/wp/v2';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36';
@@ -232,7 +232,7 @@ function getDetail(url, opts) {
       altTitles: [],
       studios: [],
       status: 'unknown',
-      year: m ? Number(m[0]) : null,
+      year: m ? String(m[0]) : null,
       type: /\bmovie\b/i.test(rawTitle) ? 'movie' : 'anime',
       sourceId: SOURCE_ID,
       episodes: [],
@@ -246,6 +246,15 @@ function getDetail(url, opts) {
 
 function getEpisodes(url, opts) {
   var ref = _refFromUrl(url);
+  // Extract anime name from slug to strip from episode titles
+  var slug = ref.slug || '';
+  var animeName = slug
+    .replace(/-\d+$/, '')
+    .replace(/-(?:episode|ep|dual|sub|dub|eng|jpn|audio|1080p|720p|480p|bluray|webrip|web-dl|bdrip|hevc|x265|h264|multi|mkv|mp4)(?:-\d+)*/gi, '')
+    .replace(/-/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  var animeNameRegex = animeName ? new RegExp('^' + animeName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*[-–—]?\\s*', 'i') : null;
   return _text(ref.url || SITE).then(function (html) {
     var episodes = [];
     var seen = {};
@@ -258,12 +267,16 @@ function getEpisodes(url, opts) {
       seen[link] = 1;
       var numMatch = String(title || link).match(/[Ee]pisode\s*(\d+)/i) || String(link).match(/episode-(\d+)/i);
       var num = numMatch ? Number(numMatch[1]) : episodes.length + 1;
+      // Strip anime name prefix from episode title
+      var epTitle = title;
+      if (animeNameRegex) epTitle = epTitle.replace(animeNameRegex, '').trim();
+      if (!epTitle) epTitle = 'Episode ' + num;
       episodes.push({
         id: link,
         url: link,
         number: num,
         season: 1,
-        title: title || ('Episode ' + num),
+        title: epTitle,
         category: 'sub',
         type: 'anime',
         sourceId: SOURCE_ID,

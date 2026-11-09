@@ -2,7 +2,7 @@
 // Search/detail use the WordPress REST API; episodes are parsed from the
 // anime detail page HTML; playback resolves direct media links.
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID) ? String(__SOURCE_ID) : 'animekhor';
-var VERSION = '1.0.0';
+var VERSION = '1.0.1';
 var SITE = 'https://animekhor.org';
 var API = SITE + '/wp-json/wp/v2';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36';
@@ -146,8 +146,9 @@ function search(query, page, opts) {
   var text = String(query == null ? '' : query).trim();
   if (!text) return Promise.resolve([]);
   var number = Math.max(1, parseInt(page, 10) || 1);
-  // WP search endpoint returns 0 for all queries on this site; fall back to HTML search
-  return _text(SITE + '/?s=' + encodeURIComponent(text) + (number > 1 ? '&paged=' + number : '')).then(function (html) {
+  // Use HTML search with a longer timeout since the WP REST 'search' param
+  // returns 0 results on this site but HTML search works fine.
+  return _text(SITE + '/?s=' + encodeURIComponent(text) + (number > 1 ? '&paged=' + number : ''), { timeoutMs: 30000 }).then(function (html) {
     var items = [];
     var seen = {};
     var re = /<a[^>]+href="([^"]*\/anime\/[^"]+)"[^>]*>([\s\S]*?)<\/a>/gi;
@@ -232,7 +233,7 @@ function getDetail(url, opts) {
       altTitles: [],
       studios: [],
       status: 'unknown',
-      year: m ? Number(m[0]) : null,
+      year: m ? String(m[0]) : null,
       type: /\bmovie\b/i.test(rawTitle) ? 'movie' : 'anime',
       sourceId: SOURCE_ID,
       episodes: [],

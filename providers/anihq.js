@@ -1,7 +1,7 @@
 // AniHQ — WordPress catalogue with custom `anime`/`episode` post types.
 // Video playback is resolved from VOE embeds found on episode watch pages.
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID) ? String(__SOURCE_ID) : 'anihq';
-var VERSION = '1.0.0';
+var VERSION = '1.0.1';
 var SITE = 'https://anihq.cc';
 var API = SITE + '/wp-json/wp/v2';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36';
@@ -236,7 +236,7 @@ function getDetail(url, opts) {
       altTitles: [],
       studios: studios,
       status: status,
-      year: year || null,
+      year: year ? String(year) : null,
       type: type,
       sourceId: SOURCE_ID,
       episodes: [],

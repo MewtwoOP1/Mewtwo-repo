@@ -95,7 +95,7 @@ async function main() {
   assert.equal(detail.title, 'Test Anime');
   assert.equal(detail.cover, 'https://img.example/test.jpg');
   assert.ok(detail.status === 'Finished Airing' || detail.status === 'unknown', 'status should be Finished Airing or unknown');
-  assert.equal(detail.year, 2020);
+  assert.equal(detail.year, '2020');
   assert.equal(detail.type, 'anime');
   assert.deepEqual(detail.genres, ['Action']);
   assert.deepEqual(detail.studios, ['Test Studio']);
