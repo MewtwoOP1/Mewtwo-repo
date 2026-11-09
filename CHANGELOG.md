@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Add **Internet Archive** (`providers/internetarchive.js`), a new public domain movie & TV source with direct MP4 stream URLs from archive.org. No authentication required; all streams are direct, playable media files. Includes search, metadata, detail, home page, and per-quality stream extraction. 44 unit tests.
 - Fix **CineStream** `provMoviebox` auth: extract JWT token from `set-cookie` header as fallback when `x-user` response header is stripped by Zangetsu's fetch bridge; fix `_jsonPost` call signature (was passing headers object directly instead of `{headers, timeoutMs}`).
 - Fix **CineStream** quick mode: exclude MovieBox (cannot authenticate due to stripped response headers → 0 streams); keep VaPlayer for movies and Anikage/Animekizz for anime.
 - Reduce Anikage/Animekizz internal timeouts from 10s to 8s for faster provider completion.

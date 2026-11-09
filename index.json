@@ -1713,6 +1713,45 @@
         "default": false
       }
     ]
+  },
+  {
+    "id": "internetarchive",
+    "name": "Internet Archive",
+    "version": "1.0.1",
+    "type": "movie",
+    "lang": "en",
+    "file": "providers/internetarchive.js",
+    "logo": "https://archive.org/images/archive-icon.png",
+    "nsfw": false,
+    "settings": [
+      {
+        "key": "maxResults",
+        "label": "Max search results",
+        "description": "Maximum number of search results to return.",
+        "type": "enum",
+        "default": "20",
+        "options": [
+          { "value": "10", "label": "10" },
+          { "value": "20", "label": "20 (default)" },
+          { "value": "50", "label": "50" },
+          { "value": "100", "label": "100" }
+        ]
+      },
+      {
+        "key": "includeMovies",
+        "label": "Include movies",
+        "description": "Include public domain movies in search results.",
+        "type": "bool",
+        "default": true
+      },
+      {
+        "key": "includeTV",
+        "label": "Include TV shows",
+        "description": "Include public domain TV shows in search results.",
+        "type": "bool",
+        "default": true
+      }
+    ]
   }
-  ]
+]
 }
