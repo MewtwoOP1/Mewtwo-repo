@@ -1308,7 +1308,7 @@
     {
       "id": "anichi",
       "name": "Anichi",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "type": "anime",
       "lang": "en",
       "file": "providers/anichi.js",
@@ -1327,7 +1327,7 @@
     {
       "id": "anihq",
       "name": "AniHQ",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "type": "anime",
       "lang": "en",
       "file": "providers/anihq.js",
