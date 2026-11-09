@@ -2,7 +2,7 @@
 // Search uses /filter?keyword=; detail and episodes are parsed from HTML;
 // playback resolves VOE/server embeds found on watch pages.
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID) ? String(__SOURCE_ID) : 'anichi';
-var VERSION = '1.0.0';
+var VERSION = '1.0.1';
 var SITE = 'https://anichi.to';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36';
 var CACHE = {};
@@ -221,7 +221,7 @@ function getDetail(url, opts) {
       altTitles: [],
       studios: [],
       status: 'unknown',
-      year: m ? Number(m[0]) : null,
+      year: m ? String(m[0]) : null,
       type: /\bmovie\b/i.test(rawTitle) ? 'movie' : 'anime',
       sourceId: SOURCE_ID,
       episodes: [],

@@ -2,7 +2,7 @@
 // Search/detail use the WordPress REST API; episodes are parsed from the
 // anime detail page HTML; playback resolves direct media links.
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID) ? String(__SOURCE_ID) : 'animetoki';
-var VERSION = '1.0.0';
+var VERSION = '1.0.1';
 var SITE = 'https://animetoki.com';
 var API = SITE + '/wp-json/wp/v2';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36';
@@ -196,15 +196,22 @@ function getDetail(url, opts) {
     var description = synopsis;
     var terms = row._embedded && row._embedded['wp:term'];
     var genres = [];
+    var studios = [];
+    var status = 'unknown';
+    var type = 'anime';
+    var year = null;
     if (Array.isArray(terms)) {
       terms.forEach(function (group) {
         if (!Array.isArray(group)) return;
         group.forEach(function (term) {
           if (!term || term.taxonomy !== 'category' || !term.name) return;
           var name = _oneLine(term.name);
-          if (['Uncategorized'].indexOf(name) === -1) {
-            if (genres.indexOf(name) === -1) genres.push(name);
-          }
+          if (!name) return;
+          if (term.taxonomy === 'genre') genres.push(name);
+          else if (term.taxonomy === 'studio') studios.push(name);
+          else if (term.taxonomy === 'anime_status') status = name;
+          else if (term.taxonomy === 'anime_type') { /* TV/Movie → anime */ }
+          else if (term.taxonomy === 'premiered') { var pm = String(term.name).match(/\b(19|20)\d{2}\b/); if (pm) year = String(pm[0]); }
         });
       });
     }
@@ -215,27 +222,124 @@ function getDetail(url, opts) {
     if (m) info.push('Year: ' + m[0]);
     if (genres.length) info.push('Genres: ' + genres.join(', '));
     if (info.length) description = (description ? description + '\n\n' : '') + info.join('\n');
-    var detail = {
-      id: String(row.id),
-      title: rawTitle.replace(/\s*-\s*Episode\s*\d+[\s\S]*$/i, '').replace(/\s+Episode\s*\d+[\s\S]*$/i, ''),
-      rawTitle: rawTitle,
-      url: row.link || ref.url,
-      cover: cover,
-      poster: cover,
-      description: description,
-      genres: genres,
-      altTitles: [],
-      studios: [],
-      status: 'unknown',
-      year: m ? Number(m[0]) : null,
-      type: /\bmovie\b/i.test(rawTitle) ? 'movie' : 'anime',
-      sourceId: SOURCE_ID,
-      episodes: [],
-      subCount: 0,
-      dubCount: 0
-    };
-    _cacheSet(cacheKey, detail, CACHE_TTL);
-    return detail;
+    
+    // Extract anime name from slug for episode search
+    var slug = ref.slug || '';
+    var animeName = slug
+      .replace(/-\d+$/, '')
+      .replace(/-(?:season\s*\d+|dual|sub|dub|eng|jpn|audio|1080p|720p|480p|bluray|webrip|web-dl|bdrip|hevc|x265|h264|x264|multi|mkv|mp4)(?:-\d+)*/gi, '')
+      .replace(/-/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    
+    return _json(API + '/posts?search=' + encodeURIComponent(animeName) + '&per_page=100&_embed=1').then(function (epRows) {
+      var episodes = [];
+      var seen = {};
+      (Array.isArray(epRows) ? epRows : []).forEach(function (epRow) {
+        var title = _oneLine(epRow.title && epRow.title.rendered);
+        if (!title || seen[epRow.link]) return;
+        seen[epRow.link] = 1;
+        var numMatch = String(title).match(/[Ee]pisode\s*(\d+)/i) ||
+          String(epRow.slug || '').match(/-episode-(\d+)(?:\/|$)/i);
+        if (!numMatch) return;
+        var num = Number(numMatch[1]);
+        var epMedia = epRow._embedded && epRow._embedded['wp:featuredmedia'];
+        var epCover = null;
+        if (Array.isArray(epMedia) && epMedia.length && epMedia[0].source_url) epCover = epMedia[0].source_url;
+        episodes.push({
+          id: String(epRow.id),
+          url: 'animetoki://media/' + encodeURIComponent(epRow.link || ''),
+          number: num,
+          season: 1,
+          title: title,
+          category: 'sub',
+          type: 'anime',
+          sourceId: SOURCE_ID,
+          quality: '',
+          encoding: '',
+          audio: '',
+          cover: epCover
+        });
+      });
+      episodes.sort(function (a, b) { return a.number - b.number; });
+      
+      if (episodes.length > 0) {
+        var detail = {
+          id: String(row.id),
+          title: rawTitle.replace(/\s*-\s*Episode\s*\d+[\s\S]*$/i, '').replace(/\s+Episode\s*\d+[\s\S]*$/i, ''),
+          rawTitle: rawTitle,
+          url: row.link || ref.url,
+          cover: cover,
+          poster: cover,
+          description: description,
+          genres: genres,
+          altTitles: [],
+          studios: studios,
+          status: status,
+          year: year,
+          type: type,
+          sourceId: SOURCE_ID,
+          episodes: episodes,
+          subCount: episodes.filter(function (e) { return e.category === 'sub'; }).length,
+          dubCount: episodes.filter(function (e) { return e.category === 'dub'; }).length
+        };
+        _cacheSet(cacheKey, detail, CACHE_TTL);
+        return detail;
+      }
+      // Fallback: fetch anime detail page HTML and parse episode links from there
+      return _text(row.link || ref.url).then(function (html) {
+        var eps2 = [];
+        var seen2 = {};
+        var re = /<a[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi;
+        var match;
+        while ((match = re.exec(html)) !== null) {
+          var link = _absolute(match[1]);
+          var title = _oneLine(match[3]);
+          if (!link || !title || seen2[link]) continue;
+          seen2[link] = 1;
+          if (link.indexOf(SITE) !== 0) continue;
+          var numMatch = String(title).match(/[Ee]pisode\s*(\d+)/i) ||
+            String(link).match(/-episode-(\d+)(?:\/|$)/i);
+          if (!numMatch) continue;
+          var num = Number(numMatch[1]);
+          eps2.push({
+            id: link,
+            url: link,
+            number: num,
+            season: 1,
+            title: title,
+            category: 'sub',
+            type: 'anime',
+            sourceId: SOURCE_ID,
+            quality: '',
+            encoding: '',
+            audio: ''
+          });
+        }
+        eps2.sort(function (a, b) { return a.number - b.number; });
+        var detail = {
+          id: String(row.id),
+          title: rawTitle.replace(/\s*-\s*Episode\s*\d+[\s\S]*$/i, '').replace(/\s+Episode\s*\d+[\s\S]*$/i, ''),
+          rawTitle: rawTitle,
+          url: row.link || ref.url,
+          cover: cover,
+          poster: cover,
+          description: description,
+          genres: genres,
+          altTitles: [],
+          studios: studios,
+          status: status,
+          year: year,
+          type: type,
+          sourceId: SOURCE_ID,
+          episodes: eps2,
+          subCount: eps2.filter(function (e) { return e.category === 'sub'; }).length,
+          dubCount: eps2.filter(function (e) { return e.category === 'dub'; }).length
+        };
+        _cacheSet(cacheKey, detail, CACHE_TTL);
+        return detail;
+      });
+    });
   });
 }
 
@@ -249,6 +353,7 @@ function getEpisodes(url, opts) {
     .replace(/-/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+  var animeNameRegex = animeName ? new RegExp('^' + animeName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*[-–—]?\\s*', 'i') : null;
   return _json(API + '/posts?search=' + encodeURIComponent(animeName) + '&per_page=100&_embed=1').then(function (rows) {
     var episodes = [];
     var seen = {};
@@ -263,12 +368,16 @@ function getEpisodes(url, opts) {
       var media = row._embedded && row._embedded['wp:featuredmedia'];
       var cover = null;
       if (Array.isArray(media) && media.length && media[0].source_url) cover = media[0].source_url;
+      // Strip anime name prefix from episode title
+      var epTitle = title;
+      if (animeNameRegex) epTitle = epTitle.replace(animeNameRegex, '').trim();
+      if (!epTitle) epTitle = 'Episode ' + num;
       episodes.push({
         id: String(row.id),
         url: 'animetoki://media/' + encodeURIComponent(row.link || ''),
         number: num,
         season: 1,
-        title: title,
+        title: epTitle,
         category: 'sub',
         type: 'anime',
         sourceId: SOURCE_ID,
@@ -278,8 +387,44 @@ function getEpisodes(url, opts) {
         cover: cover
       });
     });
-    episodes.sort(function (a, b) { return a.number - b.number; });
-    return episodes;
+    if (episodes.length > 0) {
+      episodes.sort(function (a, b) { return a.number - b.number; });
+      return episodes;
+    }
+    // Fallback: fetch anime detail page HTML and parse episode links from there
+    return _text(ref.url || SITE).then(function (html) {
+      var eps2 = [];
+      var seen2 = {};
+      var re = /<a[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi;
+      var match;
+      while ((match = re.exec(html)) !== null) {
+        var link = _absolute(match[1]);
+        var title = _oneLine(match[3]);
+        if (!link || !title || seen2[link]) continue;
+        seen2[link] = 1;
+        // Only consider links on the same site that look like episode posts
+        if (link.indexOf(SITE) !== 0) continue;
+        var numMatch = String(title).match(/[Ee]pisode\s*(\d+)/i) ||
+          String(link).match(/-episode-(\d+)(?:\/|$)/i);
+        if (!numMatch) continue;
+        var num = Number(numMatch[1]);
+        eps2.push({
+          id: link,
+          url: link,
+          number: num,
+          season: 1,
+          title: title,
+          category: 'sub',
+          type: 'anime',
+          sourceId: SOURCE_ID,
+          quality: '',
+          encoding: '',
+          audio: ''
+        });
+      }
+      eps2.sort(function (a, b) { return a.number - b.number; });
+      return eps2;
+    });
   }).catch(function () { return []; });
 }
 

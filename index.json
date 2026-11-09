@@ -1,6 +1,6 @@
 {
-  "name": "𝑴𝒆𝒘𝒕𝒘𝒐♡ Repo",
-  "description": "𝑴𝒆𝒘𝒕𝒘𝒐♡ community sources for Zangetsu. Third-party provider integrations; this repository does not host video files.",
+  "name": "\ud835\udc74\ud835\udc86\ud835\udc98\ud835\udc95\ud835\udc98\ud835\udc90\u2661 Repo",
+  "description": "\ud835\udc74\ud835\udc86\ud835\udc98\ud835\udc95\ud835\udc98\ud835\udc90\u2661 community sources for Zangetsu. Third-party provider integrations; this repository does not host video files.",
   "sources": [
     {
       "id": "jellyfin",
@@ -140,7 +140,7 @@
         {
           "key": "tmdbApiKey",
           "label": "TMDB API key or Read Access Token (optional)",
-          "description": "Leave blank to use Zangetsu’s built-in TMDB key. Or provide your own v3 API key or Read Access Token.",
+          "description": "Leave blank to use Zangetsu\u2019s built-in TMDB key. Or provide your own v3 API key or Read Access Token.",
           "type": "text",
           "default": ""
         },
@@ -266,14 +266,14 @@
         {
           "key": "tmdbApiKey",
           "label": "TMDB API Key (optional; blank uses app default)",
-          "description": "Your personal TMDB v3 API key. Leave blank to use Zangetsu’s built-in key. Sent only to TMDB.",
+          "description": "Your personal TMDB v3 API key. Leave blank to use Zangetsu\u2019s built-in key. Sent only to TMDB.",
           "type": "text",
           "default": ""
         },
         {
           "key": "addonUrls",
           "label": "Streaming Add-on URLs (manifest URLs; comma/newline separated)",
-          "description": "Stremio-compatible add-on manifest URLs used to fetch playback streams. Keep each add-on’s required URL path and token intact.",
+          "description": "Stremio-compatible add-on manifest URLs used to fetch playback streams. Keep each add-on\u2019s required URL path and token intact.",
           "type": "text",
           "default": ""
         },
@@ -342,7 +342,7 @@
         {
           "key": "tmdbApiKey",
           "label": "TMDB API Key (optional; blank uses app default)",
-          "description": "Your personal TMDB v3 API key. Leave blank to use Zangetsu’s built-in key. Sent only to TMDB.",
+          "description": "Your personal TMDB v3 API key. Leave blank to use Zangetsu\u2019s built-in key. Sent only to TMDB.",
           "type": "text",
           "default": ""
         },
@@ -1126,11 +1126,11 @@
           "options": [
             {
               "value": "sub",
-              "label": "SUB · Original audio"
+              "label": "SUB \u00b7 Original audio"
             },
             {
               "value": "dub",
-              "label": "DUB · English audio"
+              "label": "DUB \u00b7 English audio"
             }
           ]
         }
@@ -1308,7 +1308,7 @@
     {
       "id": "anichi",
       "name": "Anichi",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "type": "anime",
       "lang": "en",
       "file": "providers/anichi.js",
@@ -1327,7 +1327,7 @@
     {
       "id": "anihq",
       "name": "AniHQ",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "type": "anime",
       "lang": "en",
       "file": "providers/anihq.js",
@@ -1346,7 +1346,7 @@
     {
       "id": "animekhor",
       "name": "AnimeKhor",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "type": "anime",
       "lang": "en",
       "file": "providers/animekhor.js",
@@ -1365,7 +1365,7 @@
     {
       "id": "animenosub",
       "name": "AnimeNosub",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "type": "anime",
       "lang": "en",
       "file": "providers/animenosub.js",
@@ -1384,7 +1384,7 @@
     {
       "id": "animetoki",
       "name": "AnimeToki",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "type": "anime",
       "lang": "en",
       "file": "providers/animetoki.js",
