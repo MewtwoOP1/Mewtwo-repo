@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Optimize **CineStream** performance: add TTL cache for TMDB/AniList/ARM metadata (5-10 min), search (2 min), home page (5 min); add request deduplication via `_inflightFetch` to avoid duplicate fetches; reduce `FETCH_TIMEOUT` 7000→5000ms and `SOURCE_TIMEOUT` 22000→15000ms; use cached wrappers in `getDetail` and `search`; cache home page results.
+- Bump **CineStream** to v1.0.8.
+
+## CineStream 1.0.7
+
 - Fix **CineStream** `getVideoSources` to run ALL enabled providers concurrently instead of limiting quick mode to 3 providers (VaPlayer for movies, Anikage/Animekizz for anime). This restores the upstream CineStream behavior where every provider is invoked, so working providers (Hdhub4u, MoviesDrive, Rtally, Just4Anime, etc.) return streams instead of being skipped.
 - Remove **VaPlayer** from default quick-mode consideration: its CDN segment URLs expire immediately (HTTP 404 on all segment requests regardless of headers). VaPlayer remains registered but returns no playable streams.
 - Remove **Internet Archive** provider completely (implementation, manifest, tests, settings).
