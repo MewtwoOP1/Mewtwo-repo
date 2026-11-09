@@ -10,7 +10,7 @@
 // intentionally NOT ported (user requirement). All native HTTP providers
 // and Wyzie Subs are preserved.
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID) ? String(__SOURCE_ID) : 'cinestream';
-var VERSION = '1.0.3';
+var VERSION = '1.0.4';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36';
 var MOBILE_UA = 'Mozilla/5.0 (Linux; Android 12; Pixel 6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.6367.82 Mobile Safari/537.36';
 var TMDB = 'https://api.themoviedb.org/3';
@@ -3730,8 +3730,9 @@ async function getVideoSources(id, fast) {
   } else {
     // Fast mode: run only the providers that reliably return playable streams,
     // so getVideoSources returns well within Zangetsu's ~20s playback budget.
+    // VaPlayer is excluded: its API (streamdata.vaplayer.ru) returns 404.
     var quick = {};
-    ['p_anikage', 'p_animekizz', 'p_vaplayer'].forEach(function (k) { quick[k] = 1; });
+    ['p_anikage', 'p_animekizz'].forEach(function (k) { quick[k] = 1; });
     await _race(_parallel(keys.filter(function (k) { return quick[k]; }), 8, function (key) { return _runProvider(key, r, ctx); }), SOURCES_BUDGET_MS, null);
   }
   if (_providerEnabled('p_wyziesubs')) await _runProvider('p_wyziesubs', r, ctx);

@@ -2,19 +2,26 @@
 
 ## Unreleased
 
-- Fix **CineStream** `_post()` silently sending GET instead of POST, which broke the enc-dec.app stage1 server and the VidFastPro/Vidcore/Vidup/Hexa stream extraction (device log showed `404 Cannot GET ...`). All `_post()` callers now correctly send `method: 'POST'`.
-- Fix **CineStream** playback timing: `getVideoSources` now exceeds Zangetsu's ~20s playback budget because the single JS bridge serializes all provider calls. Added a hard overall budget (`SOURCES_BUDGET_MS`), native `Promise.race`-based `_race`, parallelized server/source loops in Peachify, Anikage, and Animekizz, and reduced quick-mode to the reliably-working providers (Anikage, Animekizz, VaPlayer). Playback now returns within ~12s with 4–12 playable HLS streams.
-- Bump **CineStream** to v1.0.3.
+- Remove **VaPlayer** from quick mode: its API (`streamdata.vaplayer.ru`) returns HTTP 404 for all queries.
+- Bump **CineStream** to v1.0.4.
 
-## CineStream 1.0.2
+## CineStream 1.0.4
+
+- Fix **CineStream** `_post()` silently sending GET instead of POST, which broke the enc-dec.app stage1 server and the VidFastPro/Vidcore/Vidup/Hexa stream extraction (device log showed `404 Cannot GET ...`). All `_post()` callers now correctly send `method: 'POST'`.
+- Add hard overall budget (`SOURCES_BUDGET_MS`) and native `Promise.race` so `getVideoSources` returns within Zangetsu's ~20s playback budget.
+- Parallelize Peachify, Anikage, and Animekizz server/source loops.
+- Reduce quick-mode to reliably-working providers (Anikage, Animekizz).
+- Reduce Anikage/Animekizz internal timeouts (15s → 8–10s).
+
+## CineStream 1.0.3
 
 - Fix **CineStream** stream playback for VidFastPro, Vidcore, and Vidup: the enc-dec.app API changed to require a two-stage `stage=1`/`stage=2` flow on `enc-*` endpoints. Providers now send the `stage` query parameter and POST to the intermediate `stage1` URL before calling `stage=2`. Without this fix, all `enc-*` requests returned HTTP 400 and no playable streams were produced.
 
-## CineStream 1.0.1
+## CineStream 1.0.2
 
 - Fix **CineStream** `getDetail` `year` type (int→String) for Dart `MediaDetail`, resolving `type 'int' is not a subtype of type 'String?'` crashes on every detail load (e.g. Black Clover, Project Hail Mary, The Dark Knight).
 
-## CineStream 1.0.0
+## CineStream 1.0.1
 
 - Add **CineStream** (`providers/cinestream.js`), a native JavaScript port of the GPL-3.0 CineStream CloudStream extension, as an aggregate Zangetsu source with 58 HTTP providers plus Wyzie Subs. Preserves Showbox/Febbox token, Wyzie Subs API key, and GramCinema bearer token settings. TMDB metadata with AniList/ARM ID mapping replaces Cinemeta. Excludes Stremio addon functionality, Torrentio, TorrentsDB, AnimeTosho-torrent, and StremioSubs per project requirements. See [NOTICE-CINESTREAM.md](NOTICE-CINESTREAM.md).
 - Remove **AnimeKhor**, **AnimeNosub**, **AnimeToki**, **AniHQ**, and **Anichi** from the repository: these providers could not provide working playback in Zangetsu.
