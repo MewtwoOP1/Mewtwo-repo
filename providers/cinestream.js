@@ -910,7 +910,7 @@ async function getDetail(url) {
     if (tmdbId == null && ids.tmdbId) tmdbId = ids.tmdbId;
   }
   var base = {
-    tmdbId: tmdbId, imdbId: imdbId, title: title, year: year,
+    tmdbId: tmdbId, imdbId: imdbId, title: title, year: year == null ? null : String(year),
     isAnime: anime, isBollywood: _isBollywood(countries), isAsian: _isAsian(countries),
     isCartoon: genres.some(function (g) { return /^animation$/i.test(g); }),
     anilistId: anilistId, malId: malId, kitsuId: kitsuId,
@@ -954,7 +954,7 @@ async function getDetail(url) {
     cover: _img(info.poster_path, 'w500'), banner: _img(info.backdrop_path, 'w780'),
     description: info.overview || '', type: anime ? 'anime' : 'movie',
     isAnime: anime, isSeries: tv, genres: genres, originCountry: countries, originalLanguage: lang,
-    sourceId: SOURCE_ID, year: year, imdbId: imdbId, tmdbId: tmdbId,
+    sourceId: SOURCE_ID, year: year == null ? null : String(year), imdbId: imdbId, tmdbId: tmdbId,
     anilistId: anilistId, malId: malId, kitsuId: kitsuId, episodes: eps
   };
 }
