@@ -1,0 +1,351 @@
+{
+  "_comment": "Human-written notes that the generator in scripts/generate-extensions-doc.mjs merges with index.json to produce docs/EXTENSIONS.md. Everything factual about a source's identity, version, type, language and settings comes from index.json (and is therefore always accurate); this file only holds the prose that cannot be derived from the manifest. Keep one entry per source id in index.json.",
+  "setupLevels": {
+    "ready": {
+      "label": "Ready to use",
+      "badge": "🟢 Ready to use",
+      "short": "No settings at all — install and search.",
+      "sort": 0
+    },
+    "ready-with-defaults": {
+      "label": "Ready with defaults",
+      "badge": "🔵 Ready with defaults",
+      "short": "Settings exist, but every default already works.",
+      "sort": 1
+    },
+    "optional-credentials": {
+      "label": "Optional credentials",
+      "badge": "🟡 Optional credentials",
+      "short": "Works as installed; a key unlocks extra providers.",
+      "sort": 2
+    },
+    "requires-config": {
+      "label": "Requires configuration",
+      "badge": "🟠 Requires configuration",
+      "short": "A URL, key or list must be entered before streams appear.",
+      "sort": 3
+    },
+    "requires-account": {
+      "label": "Requires an account or server",
+      "badge": "🔴 Requires an account or server",
+      "short": "Needs your own server address and login.",
+      "sort": 4
+    }
+  },
+  "sources": {
+    "jellyfin": {
+      "purpose": "Read a Jellyfin — or AIOStreams media server — library as a native catalogue and play the media versions that server exposes.",
+      "metadata": "The Jellyfin server itself (libraries, seasons, episodes, artwork, subtitle tracks). No TMDB involved.",
+      "setup": "requires-account",
+      "setupNote": "Needs a reachable server address plus either a username and password or an API key.",
+      "credentials": [
+        "serverUrl — full server URL including any base path",
+        "username + password — normal Jellyfin login",
+        "apiKey — optional alternative to password login (userId only if the server cannot resolve a user from the key)"
+      ],
+      "behaviour": "Authenticates with POST /Users/AuthenticateByName or an X-Emby-Token API key. Catalogue and episode-list requests deliberately omit MediaSources, so stream add-ons are only resolved when playback versions are requested. Playback is negotiated through POST /Items/{itemId}/PlaybackInfo; the version's required request headers are preserved and never forwarded to an unrelated external host. A library that advertises a mandatory genre is resolved automatically.",
+      "limitations": [
+        "The JavaScript provider interface exposes no playback start, stop or progress callbacks, so Continue Watching and Next Up are read from the server but playback progress is never reported back.",
+        "Generic source settings render text fields without masking, so a password or API key is visible while editing. Use a dedicated account with only the permissions you need, prefer HTTPS outside a trusted LAN, and never share screenshots that contain credentials."
+      ]
+    },
+    "aiostreams": {
+      "purpose": "Browse and search through TMDB, then resolve playback through the add-ons configured in your own AIOStreams instance.",
+      "metadata": "TMDB for the catalogue; your AIOStreams instance for streams.",
+      "setup": "requires-config",
+      "setupNote": "The personalised manifest URL is the one value you must supply.",
+      "credentials": [
+        "manifestUrl — required, ends in /stremio/<id>/<config>/manifest.json",
+        "userDataBase64 — optional x-aiostreams-user-data value; takes precedence over Basic authentication",
+        "tmdbApiKey — optional personal v3 API key or Read Access Token; blank uses the key the app injects"
+      ],
+      "behaviour": "Stream lookups are rejected with an explicit error when the manifest URL is empty. The instance's embedded credentials are sent as HTTP Basic authentication, or as the UserData header when one is supplied. When TMDB returns no streams for an anime episode the source maps the title through AIOStreams' own anime database and retries with MAL, AniList, Kitsu, AniDB, IMDb or TVDB identifiers. A priority queue keeps playback lookups ahead of queued metadata requests under a hard total deadline.",
+      "limitations": [
+        "Installing this source does not import any Stremio add-on. The add-ons live in your own AIOStreams instance.",
+        "Your manifest URL and UserData value are private. Treat them as credentials and never publish them."
+      ]
+    },
+    "tmdb-stremio": {
+      "purpose": "Use TMDB as the catalogue and any Stremio-compatible add-on you configure as the playback provider.",
+      "metadata": "TMDB, with optional catalogue and metadata add-ons.",
+      "setup": "requires-config",
+      "setupNote": "At least one streaming add-on manifest URL is needed before the source can return streams.",
+      "credentials": [
+        "addonUrls — required, one or more add-on manifest URLs",
+        "metadataAddonUrls — optional separate catalogue and metadata add-ons",
+        "tmdbApiKey — optional personal v3 API key; blank uses the key the app injects"
+      ],
+      "behaviour": "Every configured streaming add-on is queried independently, so one failing add-on does not stop the others. Catalogue and metadata responses are cached and can be served stale during a transient network failure. Anime lookups use only identifiers that are actually present in the metadata — no anime-ID mapping is invented.",
+      "limitations": [
+        "A catalogue entry can appear even when no configured add-on has a matching stream.",
+        "Torrent and magnet results are hidden unless Show torrent / P2P streams is enabled and the player understands magnet links.",
+        "A personal TMDB key is routed through a trailing-dot hostname so the app's own key interceptor cannot replace it."
+      ]
+    },
+    "tmdb-pencari": {
+      "purpose": "The simplest way to get started: TMDB supplies the catalogue, a PencariMovie server supplies the streams.",
+      "metadata": "TMDB for titles, artwork and episode lists.",
+      "setup": "ready-with-defaults",
+      "setupNote": "The public PencariMovie manifest URL is prefilled, so nothing has to be entered.",
+      "credentials": [],
+      "behaviour": "Streams are requested from the add-on's /stream/{type}/{id}.json route and de-duplicated by URL. A custom tokenised /manifest.json URL can replace the default if you run your own server.",
+      "limitations": [
+        "A title appearing in TMDB does not guarantee that PencariMovie has a playable stream for it."
+      ]
+    },
+    "animesuge": {
+      "purpose": "AnimeSuge catalogue with its own player extraction, listing every working server for an episode.",
+      "metadata": "AnimeSuge's own catalogue.",
+      "setup": "ready",
+      "setupNote": "No settings and no credentials.",
+      "credentials": [],
+      "behaviour": "Derives the site's VRF token locally and decrypts MegaPlay and VidWish payloads with AES-256-CBC in pure JavaScript. A stream is listed per working server, so one dead server no longer empties the whole list.",
+      "limitations": []
+    },
+    "anikoto": {
+      "purpose": "AniKoto catalogue with a two-step server chain and a fallback mapper for extra servers.",
+      "metadata": "AniKoto's own catalogue.",
+      "setup": "ready",
+      "setupNote": "No settings and no credentials.",
+      "credentials": [],
+      "behaviour": "Resolves the episode's encrypted server list, walks the site's own server chain and extracts a plain m3u8 plus subtitle tracks from the embed host. When an episode's own servers produce nothing playable, a mapper service is asked for additional servers. This provider is written in the original script-global form the app evaluates directly.",
+      "limitations": [
+        "Some episodes list only servers that no longer return a plain file. Those episodes may have no stream at all."
+      ]
+    },
+    "animesalt": {
+      "purpose": "AnimeSalt catalogue with multi-server listing and local AES decryption.",
+      "metadata": "AnimeSalt's own catalogue.",
+      "setup": "ready",
+      "setupNote": "No settings and no credentials.",
+      "credentials": [],
+      "behaviour": "Uses the same VRF and AES-256-CBC scheme as AnimeSuge, and tags each stream with the server it came from.",
+      "limitations": []
+    },
+    "desidubanime": {
+      "purpose": "Hindi, Tamil and Telugu dubbed catalogue served by a WordPress JSON API.",
+      "metadata": "The site's own WordPress API.",
+      "setup": "ready",
+      "setupNote": "No settings and no credentials.",
+      "credentials": [],
+      "behaviour": "Home rows are filtered by language tag. Playback resolves through the statically extractable server only.",
+      "limitations": [
+        "Only the VidMoly server ships. The remaining servers need a real browser to mint their token, so they are skipped."
+      ]
+    },
+    "animeparadise": {
+      "purpose": "Its own catalogue and REST API, with short-lived episode stream tokens.",
+      "metadata": "AnimeParadise's own API.",
+      "setup": "ready",
+      "setupNote": "No settings and no credentials.",
+      "credentials": [],
+      "behaviour": "Episode stream tokens are short-lived and are resolved at play time rather than cached; a 30 second episode cache avoids resolving the same episode twice.",
+      "limitations": []
+    },
+    "anv": {
+      "purpose": "AnV catalogue with a self-minted session cookie and freshly signed stream URLs.",
+      "metadata": "AnV's own catalogue.",
+      "setup": "ready",
+      "setupNote": "No settings and no credentials — the session cookie is obtained at runtime.",
+      "credentials": [],
+      "behaviour": "Loads the episode watch page to capture the session cookie the site sets for itself. Signed /stream/ URLs are always resolved fresh instead of being reused, because they are short-lived.",
+      "limitations": [
+        "One server prepends a fake PNG header to every segment, which players reject. It is skipped whenever a clean server is available.",
+        "Catalogue objects are shaped like AniList records but use the site's own id space, so an AniList id does not address the same title here."
+      ]
+    },
+    "hianime": {
+      "purpose": "HiAnime catalogue with MegaPlay and Zoko extraction.",
+      "metadata": "HiAnime's own catalogue; Kitsu is used for episode thumbnails only.",
+      "setup": "ready",
+      "setupNote": "No settings and no credentials.",
+      "credentials": [],
+      "behaviour": "Tries the listed player servers in turn and falls back to the Zoko route when MegaPlay cannot be decrypted.",
+      "limitations": [
+        "MegaPlay now encrypts both of its source endpoints, so the Zoko route carries the playback.",
+        "Roughly a quarter of episodes list no playable server at all."
+      ]
+    },
+    "miruro": {
+      "purpose": "Multi-server anime catalogue with per-episode server fallback.",
+      "metadata": "Miruro's own JSON API, mirrored across three hosts.",
+      "setup": "ready-with-defaults",
+      "setupNote": "Three API mirrors and the full server order are prefilled. Every setting can be overridden.",
+      "credentials": [],
+      "behaviour": "Rotates through the configured API hosts when one is blocked, times out, is rate limited or returns invalid JSON. During playback it tries the watch endpoint, then the quality-aware stream endpoint, then the detailed sources endpoint, and finally moves on to the next available server for the same episode. Episodes are grouped by number, so several servers can serve one episode without creating duplicate rows.",
+      "limitations": [
+        "Miruro and its API hosts are independently operated services. Fallback improves resilience but cannot guarantee a playable link for every title."
+      ]
+    },
+    "anichan": {
+      "purpose": "AniList discovery with AniChan's own watch API and encrypted HLS playback.",
+      "metadata": "AniList's public GraphQL API for discovery; AniChan for episodes and servers.",
+      "setup": "ready",
+      "setupNote": "No settings and no credentials.",
+      "credentials": [],
+      "behaviour": "Resolves titles through AniList, then asks AniChan for the episode count, dub flag and available servers. Playback uses a short-lived session cookie minted by POST /api/watch/session. Encrypted replies are decrypted locally and the keyset is re-read when the site rotates it. Server requests are tiered, trying the fast tier before the rest tier. MegaPlay and VidHawk results are filtered out because other sources here already cover them.",
+      "limitations": [
+        "AniChan publishes a null Cloudflare Turnstile site key. The provider sends an empty token and never solves or bypasses a CAPTCHA — if the site enables Turnstile, session creation fails with an explicit error.",
+        "The watch session is short-lived and may need refreshing between requests.",
+        "AniList search can return titles AniChan does not carry. Those fail at detail time so the picker can move on."
+      ]
+    },
+    "hdhub4u": {
+      "purpose": "Hindi movies and shows with TMDB enrichment and several link-hub resolvers.",
+      "metadata": "HDHub4u's own Typesense-backed search, enriched with TMDB titles and artwork.",
+      "setup": "ready",
+      "setupNote": "No settings and no credentials.",
+      "credentials": [],
+      "behaviour": "The live domain is refreshed from a published domain list and a cached domain is used only when that list cannot be reached. Stream links are followed through several link-hub hops and decrypted locally where the host requires it. Direct links carry the real quality and release name from the upstream filename.",
+      "limitations": [
+        "The live domain changes frequently, so a source that worked yesterday may need the domain list to refresh."
+      ]
+    },
+    "serenity-animekai": {
+      "purpose": "AnimeKai catalogue with a pure-JavaScript MegaPlay decoder.",
+      "metadata": "AnimeKai's own catalogue.",
+      "setup": "ready-with-defaults",
+      "setupNote": "All five settings ship with working defaults.",
+      "credentials": [],
+      "behaviour": "Decodes the MegaPlay payload with AES-256-CBC in pure JavaScript, so no browser, Node runtime or cookie is needed. Audio language, track selection, subtitle inclusion, timeout and home section order are all tunable.",
+      "limitations": [
+        "The newer getSourcesNew endpoint needs a byte-rewriting proxy and is deliberately not advertised."
+      ],
+      "licence": "Apache-2.0"
+    },
+    "serenity-aniwave": {
+      "purpose": "AniWave catalogue with the same pure-JavaScript MegaPlay decoder.",
+      "metadata": "AniWave's own catalogue.",
+      "setup": "ready-with-defaults",
+      "setupNote": "All five settings ship with working defaults.",
+      "credentials": [],
+      "behaviour": "Byte-for-byte the same extraction logic as the AnimeKai provider, pointed at a different site.",
+      "limitations": [
+        "The newer getSourcesNew endpoint needs a byte-rewriting proxy and is deliberately not advertised."
+      ],
+      "licence": "Apache-2.0"
+    },
+    "megaplay": {
+      "purpose": "MegaPlay playback for the AniKoto catalogue.",
+      "metadata": "AniKoto's catalogue, played through MegaPlay.",
+      "setup": "ready",
+      "setupNote": "No settings and no credentials.",
+      "credentials": [],
+      "behaviour": "Walks the server list in order until one resolves, then decrypts the source locally.",
+      "limitations": [
+        "Titles that AniKoto does not list are not searchable here.",
+        "Server list and site URLs are shared with the AniKoto provider, so they change together."
+      ]
+    },
+    "mmani": {
+      "purpose": "MMani catalogue with HLS playback and subtitle tracks.",
+      "metadata": "MMani's own catalogue.",
+      "setup": "ready",
+      "setupNote": "No settings and no credentials.",
+      "credentials": [],
+      "behaviour": "Resolves the episode's servers and then reads the player configuration for the HLS playlist and its subtitle tracks. Streams are ordered by ascending quality because the app auto-plays the last entry in the list.",
+      "limitations": []
+    },
+    "anizone": {
+      "purpose": "AniZone catalogue with HLS playback and subtitle tracks.",
+      "metadata": "AniZone's own catalogue.",
+      "setup": "ready",
+      "setupNote": "No settings and no credentials.",
+      "credentials": [],
+      "behaviour": "The catalogue is parsed from an inline JSON payload embedded in the page. Playback is returned with the Referer and Origin headers the host expects.",
+      "limitations": []
+    },
+    "rareanimes-streambeta": {
+      "purpose": "RareAnimes catalogue with multi-language playback.",
+      "metadata": "RareAnimes' own catalogue.",
+      "setup": "ready",
+      "setupNote": "No settings and no credentials.",
+      "credentials": [],
+      "behaviour": "Tries five player-extraction methods in turn and every link of a variant, so one dead link does not hide a working one. It follows meta-refresh, iframe and data-attribute wrappers.",
+      "limitations": [
+        "Playback is served through wrapper pages that change often.",
+        "Hindi, Tamil and Telugu dubs appear only when the upstream page lists them."
+      ]
+    },
+    "mewstream": {
+      "purpose": "One source that queries sixteen anime and movie hosts at the same time.",
+      "metadata": "TMDB for the catalogue, enriched with Kitsu and other public anime databases.",
+      "setup": "optional-credentials",
+      "setupNote": "Works as installed. Only Showbox needs a credential, and only to enable that one host.",
+      "credentials": [
+        "showboxToken — optional Showbox / Febbox ui cookie value; without it the Showbox host is skipped",
+        "tmdbApiKey — optional personal v3 API key; blank uses the key the app injects"
+      ],
+      "behaviour": "Sixteen adapters run concurrently and every real HTTP result is kept, so one dead host does not empty the list. Each adapter can be switched off individually. Showbox is skipped unless both an IMDb ID and a token are present. Diagnostics distinguish a host you disabled from a host that was tried and produced nothing.",
+      "limitations": [
+        "Showbox is the only host in this source that needs a credential.",
+        "Host domains change often, so individual adapters can stop working without a code change."
+      ]
+    },
+    "zenkaii": {
+      "purpose": "AniList metadata with native MegaPlay, VidStream and ACDN multi-audio playback.",
+      "metadata": "AniList for discovery, with AniMap mapping AniList ids to MAL ids.",
+      "setup": "ready-with-defaults",
+      "setupNote": "The server and audio preference both ship with defaults.",
+      "credentials": [],
+      "behaviour": "ACDN returns a single multi-audio HLS playlist rather than a normal sub or dub file; the signed CDN playlist is offered first with the upstream proxy kept as a fallback. AniList is rate limited, so requests are spaced out and retried after a cooldown.",
+      "limitations": [
+        "FlixCloud falls back to the supported direct MegaPlay and VidStream resolvers until a public direct resolver is available.",
+        "Long-running episode totals fall back to MAL and the raw AniList next-airing record when AniList does not have them."
+      ]
+    },
+    "animeonsen": {
+      "purpose": "AnimeOnsen catalogue with DASH playback and ASS subtitle tracks.",
+      "metadata": "AnimeOnsen's own API.",
+      "setup": "ready-with-defaults",
+      "setupNote": "The public AnimeOnsen client credentials are built into the provider and the access token is refreshed automatically — there is nothing for you to configure.",
+      "credentials": [],
+      "behaviour": "Resolves DASH manifests with multiple quality representations and attaches the site's ASS subtitle tracks. The search token is read from the page's own meta tag.",
+      "limitations": [
+        "Playback quality is limited to the representations the host publishes."
+      ]
+    },
+    "animegg": {
+      "purpose": "AnimeGG catalogue that returns a direct progressive MP4.",
+      "metadata": "AnimeGG's own catalogue.",
+      "setup": "ready-with-defaults",
+      "setupNote": "Both settings ship with defaults.",
+      "credentials": [],
+      "behaviour": "Returns the direct progressive MP4 file rather than an iframe, and attaches the Referer header the host requires.",
+      "limitations": []
+    },
+    "animeav1": {
+      "purpose": "AnimeAV1 catalogue in Spanish with VOE and YourUpload playback.",
+      "metadata": "AnimeAV1's own catalogue.",
+      "setup": "ready-with-defaults",
+      "setupNote": "Both settings ship with defaults.",
+      "credentials": [],
+      "behaviour": "Resolves VOE HLS and YourUpload MP4 embeds down to real media URLs. When only a subtitled version is listed, the dub track falls back to it.",
+      "limitations": [
+        "The catalogue is Spanish-language only."
+      ]
+    },
+    "cinestream": {
+      "purpose": "An aggregate movie and TV source covering 58 HTTP providers plus Wyzie Subs.",
+      "metadata": "TMDB, with AniList and other public anime databases used for id mapping.",
+      "setup": "optional-credentials",
+      "setupNote": "The source works as installed. Each credential unlocks one specific host.",
+      "credentials": [
+        "showboxToken — required by the Showbox provider only",
+        "wyzieSubsKey — required by the Wyzie Subtitles provider only; a free key is available from sub.wyzie.io",
+        "gramcinemaToken — required by the GramCinema provider only",
+        "movieblastToken, movieblastApi, movieblastKey — build-time values in the upstream project; MovieBlast stays dormant until they are supplied",
+        "castleKey — build-time value in the upstream project; Castle stays dormant until it is supplied",
+        "tmdbApiKey — optional personal v3 API key; blank uses the key the app injects"
+      ],
+      "behaviour": "All enabled providers run concurrently under a hard 18 second playback budget, and each provider is isolated so one failure does not affect the others. Providers are gated by title: anime-only hosts run for anime, Bollywood-only hosts for Bollywood titles, and unrestricted hosts always run. Metadata, search and home responses are cached with a TTL and duplicate requests are de-duplicated, but stream URLs are never cached because they are short-lived and signer-bound.",
+      "limitations": [
+        "MovieBlast and Castle need build-time credentials that are not part of this repository, so they produce no streams until you supply them.",
+        "Stremio add-on discovery, Torrentio, TorrentsDB, AnimeTosho-torrent and StremioSubs are intentionally not part of this port.",
+        "Many upstream hosts change domain frequently. Hosts refresh from the upstream url list when it is reachable, with public defaults embedded as a fallback.",
+        "Real-player playback could not be verified in the porting environment. HTTP-level extraction is covered by tests; in-app playback should be confirmed on a real device."
+      ],
+      "licence": "GPL-3.0"
+    }
+  }
+}

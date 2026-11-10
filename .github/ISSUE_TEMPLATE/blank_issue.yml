@@ -1,0 +1,14 @@
+name: Blank issue
+description: Raise something that is not a bug report or a feature request
+title: ""
+labels: []
+body:
+  - type: textarea
+    id: body
+    attributes:
+      label: Describe it
+      description: |
+        For a question about using a source, the [FAQ](../docs/FAQ.md) and
+        [the troubleshooting guide](../docs/TROUBLESHOOTING.md) may already answer it.
+    validations:
+      required: true

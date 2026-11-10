@@ -1,0 +1,78 @@
+name: Feature request or new source
+description: Propose a new source, or a change to an existing one
+title: "[Feature] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A new source is very welcome. The quickest way to a merged pull request is to open one
+        yourself — see [the development guide](../docs/DEVELOPMENT.md).
+
+        Before proposing, please check that the site is not already covered by
+        [the source catalogue](../docs/EXTENSIONS.md).
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What are you proposing?
+      options:
+        - A new source for a site that is not covered yet
+        - A new provider inside an existing aggregate source
+        - An improvement to an existing source
+        - A change to the documentation
+        - A change to the repository tooling
+        - Something else
+    validations:
+      required: true
+
+  - type: input
+    id: site
+    attributes:
+      label: Site
+      description: The site the source would talk to. Only for a new source.
+      placeholder: https://example.com
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What should this do?
+      description: Describe the outcome you want, not the implementation.
+    validations:
+      required: true
+
+  - type: textarea
+    id: why
+    attributes:
+      label: Why is this useful?
+      description: What can users do with it that they cannot do today?
+    validations:
+      required: true
+
+  - type: textarea
+    id: credentials
+    attributes:
+      label: Does it need any credentials?
+      description: |
+        Say whether the site needs an API key, token, cookie, account or a custom URL to work.
+        Use placeholders only — never a real credential.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: |
+        For a new source: does an existing source already cover this site? If so, what would
+        this one do differently — a different language, a different host set, better fallback?
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: The site works for me today in a browser.
+          required: true
+        - label: I did not include a real credential, token, cookie or personalised URL.
+          required: true

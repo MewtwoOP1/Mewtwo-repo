@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+### Documentation
+
+- Rewrite the root `README.md` around the repository's actual contents: 26 sources, the real setup requirements, the real installation path in the app, and a licence section that states which licence applies to which file.
+- Remove the previous README's references to **AniHQ, AnimeKhor, AnimeNosub and AnimeToki**, which were removed from the repository in v1.0.1 and are no longer published.
+- Add `docs/README.md` as the documentation index, plus `docs/INSTALLATION.md`, `docs/GETTING_STARTED.md`, `docs/EXTENSIONS.md`, `docs/SOURCE_CONFIGURATION.md`, `docs/ARCHITECTURE.md`, `docs/DEVELOPMENT.md`, `docs/TROUBLESHOOTING.md` and `docs/FAQ.md`.
+- Add `CONTRIBUTING.md`, `SECURITY.md` and `THIRD_PARTY_NOTICES.md`, and add bug, feature and blank issue templates plus a pull-request template.
+- Add original SVG artwork under `assets/`: a redesigned hero banner, a documentation header, an architecture diagram, an installation flow diagram, a provider-flow diagram, a setup-requirement legend and a section divider. No third-party character artwork is used.
+- Record the PokéAPI sprite used as the **MegaPlay** and **Mewstream** source icon as an open trademark question in `THIRD_PARTY_NOTICES.md`. No icon was changed, because that decision belongs to the maintainers.
+
+### Tooling
+
+- Add `scripts/generate-extensions-doc.mjs`, which generates `docs/EXTENSIONS.md` from `index.json` and `docs/source-notes.json` so the source catalogue can never drift from the manifest. It fails if a source has no entry, if an entry has no source, or if the README's source-count badge disagrees with the manifest.
+- Add `scripts/check-docs.mjs`, which validates every relative link, heading anchor and image path in the Markdown files, and checks that every SVG has a `viewBox`, no embedded raster image and no external dependency.
+- Replace `scripts/vidflix-live-smoke.mjs` — which referenced `providers/vidflix.js`, a file removed from the repository, and used `require` inside an ES module — with `scripts/live-smoke.mjs`, a working live smoke test that takes any registered source id.
+- Add the documentation checks to `.github/workflows/test.yml`.
+
+### Unchanged
+
+- No provider source file was modified. No manifest entry was added, removed or re-versioned. The `index.json` contract and every provider's behaviour are exactly as before.
+
 - Optimize **CineStream** performance: add TTL cache for TMDB/AniList/ARM metadata (5-10 min), search (2 min), home page (5 min); add request deduplication via `_inflightFetch` to avoid duplicate fetches; reduce `FETCH_TIMEOUT` 7000→5000ms and `SOURCE_TIMEOUT` 22000→15000ms; use cached wrappers in `getDetail` and `search`; cache home page results.
 - Bump **CineStream** to v1.0.8.
 

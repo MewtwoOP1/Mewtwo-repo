@@ -1,43 +1,174 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="340" viewBox="0 0 1200 340" role="img" aria-labelledby="title desc">
-  <title id="title">Mewtwo Repo — community sources for Zangetsu</title>
-  <desc id="desc">A dark indigo banner with violet and teal gradients, abstract orbital curves, and the Mewtwo Repo title.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="420" viewBox="0 0 1200 420" role="img" aria-labelledby="heroTitle heroDesc" preserveAspectRatio="xMidYMid meet">
+  <title id="heroTitle">Mewtwo Repo — community sources for Zangetsu</title>
+  <desc id="heroDesc">A deep navy and midnight purple banner with a soft pink horizon glow, concentric orbital rings, drifting light motes and stylized petal shapes, carrying the Mewtwo Repo wordmark and its tagline.</desc>
+
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#0B1020"/>
-      <stop offset="0.56" stop-color="#171A3B"/>
-      <stop offset="1" stop-color="#102B36"/>
+    <linearGradient id="heroBg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#060A1C"/>
+      <stop offset="0.42" stop-color="#131034"/>
+      <stop offset="0.78" stop-color="#1B1042"/>
+      <stop offset="1" stop-color="#2A1140"/>
     </linearGradient>
-    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" stop-color="#A78BFA"/>
-      <stop offset="0.55" stop-color="#818CF8"/>
-      <stop offset="1" stop-color="#5EEAD4"/>
+
+    <linearGradient id="heroHorizon" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#EC4899" stop-opacity="0"/>
+      <stop offset="0.45" stop-color="#F472B6" stop-opacity=".55"/>
+      <stop offset="0.75" stop-color="#A78BFA" stop-opacity=".45"/>
+      <stop offset="1" stop-color="#22D3EE" stop-opacity="0"/>
     </linearGradient>
-    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
-      <stop offset="0" stop-color="#8B5CF6" stop-opacity=".34"/>
+
+    <linearGradient id="heroRing" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#F472B6"/>
+      <stop offset="0.5" stop-color="#A78BFA"/>
+      <stop offset="1" stop-color="#67E8F9"/>
+    </linearGradient>
+
+    <linearGradient id="heroWordmark" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="0.55" stop-color="#F5E9FF"/>
+      <stop offset="1" stop-color="#FBCFE8"/>
+    </linearGradient>
+
+    <radialGradient id="heroBloom" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#F472B6" stop-opacity=".42"/>
+      <stop offset="0.55" stop-color="#8B5CF6" stop-opacity=".18"/>
       <stop offset="1" stop-color="#8B5CF6" stop-opacity="0"/>
     </radialGradient>
-    <pattern id="dots" width="26" height="26" patternUnits="userSpaceOnUse">
-      <circle cx="2" cy="2" r="1.2" fill="#C4B5FD" opacity=".22"/>
+
+    <radialGradient id="heroBloomCool" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#22D3EE" stop-opacity=".26"/>
+      <stop offset="1" stop-color="#22D3EE" stop-opacity="0"/>
+    </radialGradient>
+
+    <radialGradient id="heroVignette" cx="50%" cy="45%" r="72%">
+      <stop offset="0.55" stop-color="#000000" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000000" stop-opacity=".45"/>
+    </radialGradient>
+
+    <pattern id="heroGrid" width="48" height="48" patternUnits="userSpaceOnUse">
+      <path d="M48 0 L0 0 0 48" fill="none" stroke="#A78BFA" stroke-opacity=".10" stroke-width="1"/>
     </pattern>
+
+    <pattern id="heroDots" width="30" height="30" patternUnits="userSpaceOnUse">
+      <circle cx="2" cy="2" r="1.1" fill="#E9D5FF" fill-opacity=".20"/>
+    </pattern>
+
+    <clipPath id="heroClip">
+      <rect width="1200" height="420" rx="26"/>
+    </clipPath>
+
+    <linearGradient id="petalA" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FBCFE8" stop-opacity=".85"/>
+      <stop offset="1" stop-color="#C084FC" stop-opacity=".18"/>
+    </linearGradient>
+
+    <linearGradient id="petalB" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#A5F3FC" stop-opacity=".65"/>
+      <stop offset="1" stop-color="#818CF8" stop-opacity=".12"/>
+    </linearGradient>
   </defs>
-  <rect width="1200" height="340" rx="28" fill="url(#bg)"/>
-  <rect width="1200" height="340" rx="28" fill="url(#dots)"/>
-  <circle cx="890" cy="130" r="280" fill="url(#glow)"/>
-  <circle cx="1000" cy="170" r="150" fill="none" stroke="#A78BFA" stroke-width="1.4" opacity=".35"/>
-  <circle cx="1000" cy="170" r="110" fill="none" stroke="#5EEAD4" stroke-width="1.4" opacity=".3"/>
-  <circle cx="1000" cy="170" r="70" fill="none" stroke="#C4B5FD" stroke-width="1.4" opacity=".35"/>
-  <path d="M760 22 C900 90 930 230 1178 285" fill="none" stroke="url(#accent)" stroke-width="2.5" opacity=".7"/>
-  <path d="M825 8 C925 90 1050 230 1192 225" fill="none" stroke="#5EEAD4" stroke-width="1.5" opacity=".4"/>
-  <g transform="translate(855 83)">
-    <circle cx="145" cy="87" r="44" fill="#15172F" stroke="url(#accent)" stroke-width="2.5"/>
-    <path d="M122 105 L122 70 L145 92 L168 70 L168 105" fill="none" stroke="#E9D5FF" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
-    <circle cx="145" cy="87" r="56" fill="none" stroke="#A78BFA" stroke-width="1" stroke-dasharray="3 8" opacity=".6"/>
+
+  <g clip-path="url(#heroClip)">
+    <rect width="1200" height="420" fill="url(#heroBg)"/>
+    <rect width="1200" height="420" fill="url(#heroGrid)"/>
+    <rect width="1200" height="420" fill="url(#heroDots)"/>
+
+    <!-- atmospheric light -->
+    <ellipse cx="930" cy="150" rx="330" ry="270" fill="url(#heroBloom)"/>
+    <ellipse cx="1130" cy="330" rx="260" ry="200" fill="url(#heroBloomCool)"/>
+    <ellipse cx="210" cy="430" rx="330" ry="180" fill="url(#heroBloom)" opacity=".55"/>
+
+    <!-- horizon light sweep -->
+    <path d="M0 300 C240 246 420 330 640 296 C840 264 1010 196 1200 232 L1200 420 L0 420 Z" fill="url(#heroHorizon)" opacity=".28"/>
+
+    <!-- orbital rings -->
+    <g transform="translate(930 190)" fill="none">
+      <circle r="168" stroke="url(#heroRing)" stroke-width="1.6" stroke-opacity=".55" stroke-dasharray="260 120"/>
+      <circle r="138" stroke="#C4B5FD" stroke-width="1.1" stroke-opacity=".32"/>
+      <circle r="108" stroke="#67E8F9" stroke-width="1.1" stroke-opacity=".28"/>
+      <circle r="76" stroke="#F472B6" stroke-width="1.3" stroke-opacity=".38" stroke-dasharray="3 7"/>
+      <circle r="44" stroke="#FDE68A" stroke-width="1" stroke-opacity=".35"/>
+    </g>
+
+    <!-- rising arcs -->
+    <path d="M690 420 C760 250 1010 150 1200 176" fill="none" stroke="url(#heroRing)" stroke-width="2.2" stroke-opacity=".62"/>
+    <path d="M742 420 C820 286 1040 196 1200 214" fill="none" stroke="#67E8F9" stroke-width="1.4" stroke-opacity=".34"/>
+    <path d="M640 420 C706 292 900 216 1104 232" fill="none" stroke="#F472B6" stroke-width="1.2" stroke-opacity=".26"/>
+
+    <!-- drifting light motes -->
+    <g fill="#FDE68A">
+      <circle cx="742" cy="152" r="2.1" fill-opacity=".75"/>
+      <circle cx="806" cy="286" r="1.5" fill-opacity=".55"/>
+      <circle cx="1092" cy="120" r="1.8" fill-opacity=".65"/>
+      <circle cx="1154" cy="248" r="1.3" fill-opacity=".45"/>
+      <circle cx="688" cy="330" r="1.6" fill-opacity=".5"/>
+    </g>
+    <g fill="#E9D5FF">
+      <circle cx="880" cy="96" r="1.4" fill-opacity=".6"/>
+      <circle cx="1004" cy="304" r="1.2" fill-opacity=".5"/>
+      <circle cx="1178" cy="176" r="1.7" fill-opacity=".55"/>
+      <circle cx="962" cy="358" r="1.1" fill-opacity=".45"/>
+    </g>
+
+    <!-- stylised petals (original vector motif, not a character) -->
+    <g transform="translate(1078 74) rotate(24)">
+      <path d="M0 0 C16 -18 44 -16 52 2 C40 20 14 22 0 0 Z" fill="url(#petalA)"/>
+      <path d="M4 2 C18 -8 36 -8 44 2" fill="none" stroke="#FDE68A" stroke-opacity=".35" stroke-width="1"/>
+    </g>
+    <g transform="translate(1150 168) rotate(-18) scale(.72)">
+      <path d="M0 0 C16 -18 44 -16 52 2 C40 20 14 22 0 0 Z" fill="url(#petalB)"/>
+    </g>
+    <g transform="translate(836 336) rotate(38) scale(.55)">
+      <path d="M0 0 C16 -18 44 -16 52 2 C40 20 14 22 0 0 Z" fill="url(#petalA)" opacity=".8"/>
+    </g>
+    <g transform="translate(112 96) rotate(-30) scale(.62)">
+      <path d="M0 0 C16 -18 44 -16 52 2 C40 20 14 22 0 0 Z" fill="url(#petalB)" opacity=".9"/>
+    </g>
+    <g transform="translate(206 268) rotate(16) scale(.42)">
+      <path d="M0 0 C16 -18 44 -16 52 2 C40 20 14 22 0 0 Z" fill="url(#petalA)" opacity=".7"/>
+    </g>
+
+    <!-- monogram badge -->
+    <g transform="translate(78 62)">
+      <circle cx="46" cy="46" r="44" fill="#0B1026" fill-opacity=".72" stroke="url(#heroRing)" stroke-width="2"/>
+      <circle cx="46" cy="46" r="34" fill="none" stroke="#A78BFA" stroke-opacity=".35" stroke-width="1" stroke-dasharray="2 6"/>
+      <path d="M28 58 L28 34 L46 46 L64 34 L64 58" fill="none" stroke="#F5E9FF" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M46 46 L46 68" stroke="#F472B6" stroke-width="3" stroke-linecap="round"/>
+    </g>
+
+    <!-- wordmark -->
+    <g font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif">
+      <text x="196" y="92" fill="#C4B5FD" font-size="15" font-weight="700" letter-spacing="5.5">ZANGETSU · COMMUNITY SOURCE REPO</text>
+
+      <text x="78" y="196" fill="url(#heroWordmark)" font-size="76" font-weight="800" letter-spacing="-3">Mewtwo Repo</text>
+
+      <rect x="80" y="216" width="132" height="5" rx="2.5" fill="url(#heroRing)"/>
+
+      <text x="78" y="266" fill="#EDE9FE" font-size="25" font-weight="500">Twenty-six hand-tuned sources. One manifest.</text>
+      <text x="78" y="302" fill="#B9A8E8" font-size="17.5" font-weight="400">Catalogue metadata and playback resolved separately — you pick the provider.</text>
+
+      <!-- capability chips -->
+      <g transform="translate(78 330)">
+        <g>
+          <rect width="152" height="30" rx="15" fill="#F472B6" fill-opacity=".14" stroke="#F472B6" stroke-opacity=".45"/>
+          <circle cx="18" cy="15" r="4" fill="#F9A8D4"/>
+          <text x="32" y="20" fill="#FCE7F3" font-size="13.5" font-weight="600">Anime &amp; movies</text>
+        </g>
+        <g transform="translate(164 0)">
+          <rect width="176" height="30" rx="15" fill="#A78BFA" fill-opacity=".14" stroke="#A78BFA" stroke-opacity=".45"/>
+          <circle cx="18" cy="15" r="4" fill="#C4B5FD"/>
+          <text x="32" y="20" fill="#EDE9FE" font-size="13.5" font-weight="600">MIT + GPL-3.0</text>
+        </g>
+        <g transform="translate(352 0)">
+          <rect width="184" height="30" rx="15" fill="#22D3EE" fill-opacity=".12" stroke="#22D3EE" stroke-opacity=".40"/>
+          <circle cx="18" cy="15" r="4" fill="#67E8F9"/>
+          <text x="32" y="20" fill="#CFFAFE" font-size="13.5" font-weight="600">Android · TV · iOS</text>
+        </g>
+      </g>
+    </g>
+
+    <rect width="1200" height="420" fill="url(#heroVignette)"/>
   </g>
-  <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
-    <text x="76" y="89" fill="#C4B5FD" font-size="17" font-weight="700" letter-spacing="4">ZANGETSU • COMMUNITY SOURCES</text>
-    <text x="72" y="169" fill="#FFFFFF" font-size="62" font-weight="800" letter-spacing="-2">Mewtwo Repo</text>
-    <rect x="76" y="196" width="110" height="5" rx="2.5" fill="url(#accent)"/>
-    <text x="76" y="239" fill="#DCE3F5" font-size="24" font-weight="500">One catalogue. Your choice of playback.</text>
-    <text x="76" y="282" fill="#AAB6D3" font-size="16" letter-spacing="1.3">PENCARIMOVIE  /  AIOSTREAMS  /  STREMIO</text>
-  </g>
+
+  <rect x="0.75" y="0.75" width="1198.5" height="418.5" rx="25.25" fill="none" stroke="#A78BFA" stroke-opacity=".35" stroke-width="1.5"/>
 </svg>

@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="220" viewBox="0 0 1200 220" role="img" aria-labelledby="dhTitle dhDesc">
+  <title id="dhTitle">Mewtwo Repo documentation</title>
+  <desc id="dhDesc">A wide midnight purple banner with soft pink and violet light, thin orbital rings and a drifting petal motif, carrying the title Mewtwo Repo Documentation.</desc>
+  <defs>
+    <linearGradient id="dhBg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#080C1E"/>
+      <stop offset="0.5" stop-color="#151036"/>
+      <stop offset="1" stop-color="#241040"/>
+    </linearGradient>
+    <linearGradient id="dhRing" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#F472B6"/>
+      <stop offset="0.55" stop-color="#A78BFA"/>
+      <stop offset="1" stop-color="#67E8F9"/>
+    </linearGradient>
+    <radialGradient id="dhBloom" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#A78BFA" stop-opacity=".35"/>
+      <stop offset="1" stop-color="#A78BFA" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="dhPetal" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FBCFE8" stop-opacity=".8"/>
+      <stop offset="1" stop-color="#C084FC" stop-opacity=".15"/>
+    </linearGradient>
+    <pattern id="dhDots" width="28" height="28" patternUnits="userSpaceOnUse">
+      <circle cx="2" cy="2" r="1" fill="#E9D5FF" fill-opacity=".18"/>
+    </pattern>
+  </defs>
+
+  <rect width="1200" height="220" rx="18" fill="url(#dhBg)"/>
+  <rect width="1200" height="220" rx="18" fill="url(#dhDots)"/>
+  <ellipse cx="1010" cy="96" rx="260" ry="180" fill="url(#dhBloom)"/>
+
+  <g transform="translate(1010 96)" fill="none">
+    <circle r="118" stroke="url(#dhRing)" stroke-width="1.5" stroke-opacity=".5" stroke-dasharray="200 90"/>
+    <circle r="88" stroke="#C4B5FD" stroke-width="1" stroke-opacity=".3"/>
+    <circle r="58" stroke="#67E8F9" stroke-width="1" stroke-opacity=".28"/>
+    <circle r="30" stroke="#F472B6" stroke-width="1.2" stroke-opacity=".35" stroke-dasharray="3 6"/>
+  </g>
+
+  <g transform="translate(1108 40) rotate(20)">
+    <path d="M0 0 C14 -16 38 -14 45 2 C35 17 12 19 0 0 Z" fill="url(#dhPetal)"/>
+  </g>
+  <g transform="translate(900 168) rotate(-16) scale(.6)">
+    <path d="M0 0 C14 -16 38 -14 45 2 C35 17 12 19 0 0 Z" fill="url(#dhPetal)" opacity=".75"/>
+  </g>
+
+  <g font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif">
+    <text x="52" y="78" fill="#C4B5FD" font-size="14" font-weight="700" letter-spacing="4.5">MEWTWO REPO</text>
+    <text x="52" y="132" fill="#FFFFFF" font-size="46" font-weight="800" letter-spacing="-1.4">Documentation</text>
+    <rect x="54" y="152" width="96" height="4" rx="2" fill="url(#dhRing)"/>
+    <text x="52" y="186" fill="#B9A8E8" font-size="15">Install · configure · extend · contribute</text>
+  </g>
+
+  <rect x="0.75" y="0.75" width="1198.5" height="218.5" rx="17.25" fill="none" stroke="#A78BFA" stroke-opacity=".3"/>
+</svg>
