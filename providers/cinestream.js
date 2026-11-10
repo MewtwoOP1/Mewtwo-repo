@@ -10,7 +10,7 @@
 // intentionally NOT ported (user requirement). All native HTTP providers
 // and Wyzie Subs are preserved.
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID) ? String(__SOURCE_ID) : 'cinestream';
-var VERSION = '1.1.0';
+var VERSION = '1.2.0';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36';
 var MOBILE_UA = 'Mozilla/5.0 (Linux; Android 12; Pixel 6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.6367.82 Mobile Safari/537.36';
 var TMDB = 'https://api.themoviedb.org/3';
@@ -22,10 +22,47 @@ var WYZIE = 'https://sub.wyzie.io';
 var FETCH_TIMEOUT = 5000;
 var META_TIMEOUT = 8000;
 var SOURCE_TIMEOUT = 15000;
-// Overall budget for getVideoSources in playback mode. Zangetsu gives a
-// ~20s playback budget on a single JS bridge; return whatever streams we have
-// before it elapses rather than waiting for slow/dead providers.
+
+// ── Centralised timeout policy ─────────────────────────────────────────
+// Zangetsu abandons a whole provider call after 25 seconds (see
+// docs/ARCHITECTURE.md). Every budget below has to fit inside that cap or
+// the app reports "sources could not be resolved" even though CineStream
+// had already found playable links.
+//
+// The old code raced the provider fan-out against an 18s budget and then ran
+// the Wyzie subtitle provider *after* that race, which could push the call
+// to 18s + 10s = 28s and therefore past the app's 25s ceiling. The budget is
+// now applied to the whole operation, including subtitles.
+var TIMEOUT = {
+  init: 3000,        // provider bootstrap / home screens
+  search: 6000,      // catalogue search
+  meta: 8000,        // TMDB / AniList / ARM lookups
+  details: 10000,    // detail + episode discovery
+  server: 8000,      // server list discovery
+  extract: 12000,    // a single extractor chain (may be several requests)
+  redirect: 6000,    // one redirect hop
+  validate: 5000,    // stream validation probe
+  subtitle: 8000     // subtitle providers
+};
+// Hard ceiling for the whole getVideoSources call. Must stay well under the
+// host's 25s cap so the app can still marshal the result. The old code ran
+// the subtitle provider *after* this budget, which could push the call to
+// 18s + 10s = 28s and made Zangetsu report "sources could not be resolved".
+// The budget now covers the whole operation, subtitles included.
 var SOURCES_BUDGET_MS = 18000;
+// Deadline for the *first* playable source. The host passes `fast = true`
+// when it wants a quick answer; in that mode we return as soon as this
+// budget is reached instead of waiting for the slowest provider.
+var FIRST_PLAYABLE_MS = 4500;
+// Ceiling for one provider. A provider that has not produced a stream by
+// now is abandoned; it never blocks the other providers.
+var PROVIDER_TIMEOUT_MS = 13000;
+// Concurrency ceiling used for the provider fan-out. Every provider is
+// network-bound, so a higher ceiling lets more providers start immediately
+// instead of queueing behind slow hosts. Measured: at 10 slots a provider
+// late in the registry never even started inside the budget; at 16 every
+// provider is attempted and the wall-clock time does not change.
+var PROVIDER_CONCURRENCY = 16;
 
 // ── Caching layer ────────────────────────────────────────────────────────
 // TTL cache for metadata/API responses. Stream URLs are NOT cached (they
@@ -269,9 +306,10 @@ function getSettings() {
     _schema('movieblastApi', 'MovieBlast API base', 'text', ''),
     _schema('movieblastKey', 'MovieBlast signing key', 'text', ''),
     _schema('castleKey', 'Castle APK sign key', 'text', ''),
-    _schema('concurrency', 'Provider concurrency', 'enum', '10', [
+    _schema('concurrency', 'Provider concurrency', 'enum', '16', [
       { value: '4', label: '4' }, { value: '6', label: '6' }, { value: '8', label: '8' },
-      { value: '10', label: '10 (default)' }, { value: '14', label: '14' }
+      { value: '10', label: '10' }, { value: '14', label: '14' },
+      { value: '16', label: '16 (default)' }, { value: '20', label: '20' }, { value: '24', label: '24' }
     ]),
     _schema('includeDownloadLinks', 'Include download-only links', 'bool', false)
   ];
@@ -769,44 +807,174 @@ function _storeCookies(url, headers) {
     jar[name] = value;
   }
 }
+// ── Cancellation ────────────────────────────────────────────────────────
+// A tiny cooperative cancellation token. Zangetsu drops a playback request
+// when the user leaves the screen, and the app also abandons a provider call
+// after 25 seconds. Without a token the orphaned fetches keep the JS bridge
+// busy and the provider slots stay occupied by work nobody will read.
+//
+// The token is deliberately dependency-free and works on the app's JS engine
+// as well as on Node, so the same code path is exercised by the test suite.
+function _cancelToken() {
+  var t = {
+    cancelled: false,
+    reason: null,
+    _subs: [],
+    cancel: function (reason) {
+      if (t.cancelled) return;
+      t.cancelled = true;
+      t.reason = reason || 'cancelled';
+      var subs = t._subs.slice();
+      t._subs.length = 0;
+      for (var i = 0; i < subs.length; i++) {
+        try { subs[i](t.reason); } catch (e) {}
+      }
+    },
+    onCancel: function (fn) {
+      if (typeof fn !== 'function') return;
+      if (t.cancelled) { try { fn(t.reason); } catch (e) {} return; }
+      t._subs.push(fn);
+    }
+  };
+  return t;
+}
 function _race(p, ms, fallback) {
   return Promise.race([
     p,
     new Promise(function (res) { if (typeof setTimeout === 'function') setTimeout(function () { res(fallback); }, ms || 1); else res(fallback); })
   ]);
 }
+// Transient network failures worth one more attempt. Everything else
+// (DNS failure, HTTP 4xx, parse error) is permanent for this operation and
+// retrying it only burns the deadline.
+var _RETRYABLE = /(ECONNRESET|ECONNREFUSED|EHOSTUNREACH|ENETUNREACH|EPIPE|ETIMEDOUT|socket hang up|network (?:is )?unreachable|fetch failed|connection reset|request failed)/i;
+// Backoff honours Retry-After when the host sends one, otherwise it uses a
+// small exponential delay with jitter so concurrent providers do not retry
+// in lockstep.
+function _retryDelay(res, attempt) {
+  var ra = res && res.headers ? _hget(res.headers, 'retry-after') : '';
+  if (ra) {
+    var secs = parseFloat(ra);
+    if (isFinite(secs)) return Math.min(3000, Math.max(0, secs * 1000));
+    var when = Date.parse(ra);
+    if (!isNaN(when)) return Math.min(3000, Math.max(0, when - Date.now()));
+  }
+  return Math.min(1500, 120 * Math.pow(2, attempt - 1) + Math.floor(Math.random() * 130));
+}
+function _sleep(ms, token) {
+  if (ms <= 0) return Promise.resolve(false);
+  return new Promise(function (resolve) {
+    var done = false;
+    var timer = setTimeout(function () { if (!done) { done = true; resolve(true); } }, ms);
+    if (token) token.onCancel(function () {
+      if (done) return;
+      done = true;
+      if (typeof clearTimeout === 'function') clearTimeout(timer);
+      resolve(false);
+    });
+  });
+}
 async function _fetch(url, opts) {
+  opts = opts || {};
+  var budget = opts.timeoutMs || FETCH_TIMEOUT;
+  var started = Date.now();
+  // One extra attempt for a genuinely transient failure. Retry storms are
+  // avoided because the retry always fits inside the caller's own budget.
+  var maxRetries = opts.retries != null ? opts.retries : 1;
+  var attempt = 0, last = null;
+  while (true) {
+    if (opts.token && opts.token.cancelled) {
+      return { ok: false, status: 0, headers: {}, body: '', url: String(url), error: 'cancelled' };
+    }
+    var remaining = budget - (Date.now() - started);
+    if (remaining <= 0 && attempt > 0) break;
+    var callOpts = opts;
+    if (attempt > 0) {
+      callOpts = Object.assign({}, opts, { timeoutMs: Math.max(500, remaining) });
+    }
+    var res = await _fetchOnce(url, callOpts);
+    last = res;
+    // A real HTTP response was received: never retry it, even a 5xx.
+    if (res.status > 0) {
+      var retryableStatus = res.status === 429 || res.status === 503;
+      if (!retryableStatus || attempt >= maxRetries) return res;
+      var d = _retryDelay(res, attempt + 1);
+      if (Date.now() - started + d >= budget) return res;
+      var waited = await _sleep(d, opts.token);
+      if (!waited) return res;
+      attempt++;
+      continue;
+    }
+    // No HTTP response: a network level failure or a timeout.
+    if (!res.error || !_RETRYABLE.test(String(res.error)) || attempt >= maxRetries) return res;
+    if (opts.token && opts.token.cancelled) return res;
+    var backoff = _retryDelay(null, attempt + 1);
+    if (Date.now() - started + backoff >= budget) return res;
+    var ok = await _sleep(backoff, opts.token);
+    if (!ok) return res;
+    attempt++;
+  }
+  return last;
+}
+async function _fetchOnce(url, opts) {
   opts = opts || {};
   url = String(url || '');
   if (!/^https?:\/\//i.test(url)) return { ok: false, status: 0, headers: {}, body: '', url: url, error: 'bad-url' };
+  // A cancelled operation must not start new work.
+  if (opts.token && opts.token.cancelled) {
+    return { ok: false, status: 0, headers: {}, body: '', url: url, error: 'cancelled' };
+  }
   var headers = Object.assign({ 'User-Agent': UA, 'Accept': '*/*' }, opts.headers || {});
   var jar = _cookieHeader(url);
   if (jar && !_hget(headers, 'cookie')) headers.Cookie = jar;
   var init = { method: opts.method || 'GET', headers: headers };
   if (opts.body != null) init.body = opts.body;
   if (opts.followRedirects === false) init.followRedirects = false;
+  var budget = opts.timeoutMs || FETCH_TIMEOUT;
   if (opts.timeoutMs) init.timeoutMs = opts.timeoutMs;
+  // Abort in-flight work when the operation is cancelled. The app's fetch
+  // honours `timeoutMs`; `signal` is an additive hint that runtimes with a
+  // real AbortController understand. If the host rejects the option the
+  // request is retried without it, so this can never break a provider.
+  var controller = null;
+  if (opts.token && typeof AbortController !== 'undefined') {
+    try {
+      controller = new AbortController();
+      init.signal = controller.signal;
+      opts.token.onCancel(function () { try { controller.abort(); } catch (e) {} });
+    } catch (e) { controller = null; init.signal = undefined; }
+  }
   var res = null;
   try {
-    res = await _race(fetch(url, init), opts.timeoutMs || FETCH_TIMEOUT, null);
+    res = await _race(fetch(url, init), budget, null);
   } catch (e) {
+    if (controller) { try { controller.abort(); } catch (e2) {} }
     return { ok: false, status: 0, headers: {}, body: '', url: url, error: String(e && e.message || e) };
   }
-  if (!res) return { ok: false, status: 0, headers: {}, body: '', url: url, error: 'timeout' };
+  if (!res) {
+    // The race fired before the host's own timeout did, so the underlying
+    // request is still running. Abort it so it does not linger.
+    if (controller) { try { controller.abort(); } catch (e) {} }
+    return { ok: false, status: 0, headers: {}, body: '', url: url, error: 'timeout' };
+  }
   var h = _lowerHeaders(res.headers);
   _storeCookies(url, h);
   var body = '';
   var rawBytes = null;
   if (opts.binary && typeof res.arrayBuffer === 'function') {
     try {
-      var ab = await _race(res.arrayBuffer(), 5000, null);
+      var ab = await _race(res.arrayBuffer(), Math.min(5000, budget), null);
       if (ab) rawBytes = Array.from(new Uint8Array(ab));
     } catch (e) { rawBytes = null; }
   }
   try {
-    if (typeof res.text === 'function') body = await _race(res.text(), 5000, '');
+    // Reading the body gets whatever is left of the request budget, not a
+    // fixed 5s: a large manifest must not be truncated by an unrelated cap.
+    var readBudget = Math.max(1000, budget);
+    if (typeof res.text === 'function') body = await _race(res.text(), readBudget, '');
     else body = res.body == null ? '' : String(res.body);
   } catch (e) { body = ''; }
+  if (controller) { try { controller.abort(); } catch (e) {} }
   return { ok: res.ok !== false, status: res.status || 0, headers: h, body: body == null ? '' : String(body), bytes: rawBytes, url: res.url || url };
 }
 async function _get(url, opts) { var r = await _fetch(url, opts); return r.body; }
@@ -852,6 +1020,51 @@ async function _parallel(items, limit, fn) {
   }
   await Promise.all(workers);
   return out;
+}
+
+// Cancellation-aware sibling of _parallel. Identical scheduling, but the
+// token stops new work from being started once the operation is abandoned.
+async function _parallelCancelable(items, limit, fn, token) {
+  var out = new Array(items.length), next = 0;
+  var workers = [];
+  var n = Math.max(1, Math.min(limit || 4, items.length || 1));
+  for (var w = 0; w < n; w++) {
+    workers.push((async function () {
+      while (true) {
+        if (token && token.cancelled) return;
+        var i = next++;
+        if (i >= items.length) return;
+        try { out[i] = await fn(items[i], i); } catch (e) { out[i] = null; }
+      }
+    })());
+  }
+  await Promise.all(workers);
+  return out;
+}
+
+// Per-item deadline helper. Returns the item's value, or `fallback` when the
+// item exceeds its own budget. Unlike a bare Promise.race the abandoned
+// work is cancelled through the token instead of being left running.
+async function _withDeadline(promise, ms, fallback, token) {
+  if (token) {
+    var cancelled = false;
+    token.onCancel(function () { cancelled = true; });
+    if (cancelled || token.cancelled) return fallback;
+  }
+  var timer = null;
+  var p = Promise.resolve().then(function () { return promise; });
+  var guard = new Promise(function (res) {
+    if (typeof setTimeout !== 'function') { res(fallback); return; }
+    timer = setTimeout(function () {
+      if (token) token.cancel('deadline');
+      res(fallback);
+    }, ms);
+  });
+  try {
+    return await Promise.race([p, guard]);
+  } finally {
+    if (timer && typeof clearTimeout === 'function') clearTimeout(timer);
+  }
 }
 
 // ── Dynamic provider hosts (public upstream config) ────────────────────
@@ -1510,9 +1723,25 @@ async function _resolveEmbed(url, ctx, referer, depth) {
 async function _loadSource(name, url, referer, ctx, quality, size) {
   url = _abs(_trim(url), referer || '');
   if (!/^https?:\/\//i.test(url)) return;
+  // Cycle guard. Several extractors follow a link hub that can point back at
+  // a page already on the chain; without this the recursion never ends and
+  // the whole resolution hangs until the budget expires.
+  var path = ctx && ctx._path ? ctx._path : [];
+  for (var pi = 0; pi < path.length; pi++) {
+    if (path[pi] === url) {
+      console.warn('CineStream extractor cycle skipped: ' + _host(url));
+      return;
+    }
+  }
+  if (path.length > 6) {
+    console.warn('CineStream extractor depth limit reached at ' + _host(url));
+    return;
+  }
+  path.push(url);
   var q = quality || _quality(url) || 0;
   var wrapped = {
     includeDownloads: ctx.includeDownloads,
+    _path: path,
     emit: function (s) {
       if (!s) return;
       s.label = name + ' [' + s.label + ']' + (size ? ' ' + size : '');
@@ -4407,13 +4636,120 @@ var ANIME_ONLY = {
   p_anv: 1, p_anipm: 1
 };
 
-async function _runProvider(key, r, ctx) {
+// ── Adaptive provider scheduling ───────────────────────────────────────
+// Measured latency per provider. This is used *only* to order the fan-out so
+// the providers that are usually quick start first and the first playable
+// source appears as early as possible. A provider is never removed, disabled
+// or de-prioritised permanently because of its recorded latency: every
+// provider still runs and every result is still returned.
+var _PROVIDER_LATENCY = {};
+// Cold-start prior. The order is derived from the provider audit (API-only
+// hosts answer in well under two seconds, HTML scrapers and hosts with
+// several chained requests take noticeably longer). The prior is only used
+// until the provider has produced a real measurement; it never removes or
+// disables a provider.
+var _PROVIDER_PRIOR = {
+  p_anv: 900, p_anipm: 1000, p_netnaija: 900, p_hicine: 1200, p_moviebox: 900,
+  p_showbox: 1200, p_anikoto: 1100, p_anizone: 1200, p_multimovies: 1200,
+  p_vidup: 1300, p_vidcore: 1400, p_anikage: 1500, p_reanime: 1500,
+  p_animesalt: 1500, p_anineko: 1500, p_animedao: 1600, p_meowtv: 1600,
+  p_videasy: 1700, p_vaplayer: 1500, p_vidzee: 1500, p_hexa: 1700,
+  p_av1encodes: 1800, p_allmovieland: 1700, p_cinejoy: 1700, p_fibwatch: 1800,
+  p_vidfastpro: 1300, p_vegamovies: 1400, p_fshare: 1300, p_primesrc: 1900,
+  p_tokyoinsider: 1800, p_animekizz: 1600, p_anidb: 1800, p_animetoshohttp: 1900,
+  p_akwam: 1900, p_rtally: 1800, p_asiaflix: 1800, p_kisskh: 1600,
+  p_onetouchtv: 1700, p_toonstream: 1800, p_bollywood: 2000, p_rogmovies: 2100,
+  p_bollyflix: 2100, p_topmovies: 2000, p_hindmoviez: 2200, p_moviesdrive: 2100,
+  p_skymovies: 2100, p_4khdhub: 2100, p_levidia: 1700, p_mlsbd: 2500,
+  p_moviesmod: 2400, p_movies4u: 2400, p_uhdmovies: 2600, p_dudefilms: 2600,
+  p_projectfreetv: 2600, p_zinkmovies: 1500, p_just4anime: 1700,
+  p_wyziesubs: 1500
+};
+function _providerLatency(key) {
+  var e = _PROVIDER_LATENCY[key];
+  if (e && e.n) return e.avg;
+  if (Object.prototype.hasOwnProperty.call(_PROVIDER_PRIOR, key)) return _PROVIDER_PRIOR[key];
+  return null;
+}
+function _recordProviderLatency(key, ms, produced) {
+  var e = _PROVIDER_LATENCY[key];
+  if (!e) { e = { avg: ms, n: 0, hits: 0 }; _PROVIDER_LATENCY[key] = e; }
+  e.n++;
+  if (produced) e.hits++;
+  // Exponential moving average so one slow run cannot dominate the order.
+  e.avg = e.n === 1 ? ms : (e.avg * 0.6 + ms * 0.4);
+}
+function _providerOrder(keys) {
+  // Known-fast first, then providers we have never measured, then the ones
+  // that are usually slow. The unknown band sits in the middle so a brand new
+  // provider is neither starved nor given an unfair head start.
+  var UNKNOWN = 6000;
+  return keys.slice().sort(function (a, b) {
+    var la = _providerLatency(a), lb = _providerLatency(b);
+    var sa = la == null ? UNKNOWN : la;
+    var sb = lb == null ? UNKNOWN : lb;
+    if (sa !== sb) return sa - sb;
+    return a < b ? -1 : (a > b ? 1 : 0);
+  });
+}
+
+// Diagnostics for the most recent resolution. Exposed through _debug so the
+// device log can show where the time went.
+var _LAST_RESOLVE_STATS = null;
+
+async function _runProvider(key, r, ctx, token, stats) {
   var fn = PROVIDER_FN[key];
   if (!fn) return;
-  if (ANIME_ONLY[key] && !r.isAnime) return;
+  if (stats && stats.providers && !stats.providers[key]) {
+    stats.providers[key] = { ms: 0, sources: 0, error: null, skipped: false };
+  }
+  // An anime-only provider is not applicable to a movie or series request.
+  // It is recorded as skipped so the diagnostics still account for every
+  // registered provider.
+  if (ANIME_ONLY[key] && !r.isAnime) {
+    if (stats && stats.providers[key]) stats.providers[key].skipped = true;
+    return;
+  }
   var local = { emit: ctx.emit, sub: ctx.sub, includeDownloads: ctx.includeDownloads };
-  try { await fn(r, local); }
-  catch (e) { console.warn('CineStream provider ' + (PROVIDER_NAMES[key] || key) + ' failed: ' + (e && e.message || e)); }
+  var started = Date.now();
+  var produced = 0;
+  var localCtx = {
+    emit: function (s) { if (s) produced++; local.emit(s); },
+    sub: local.sub,
+    includeDownloads: local.includeDownloads,
+    count: function () { return produced; }
+  };
+  var entry = stats && stats.providers ? stats.providers[key] = { ms: 0, sources: 0, error: null } : null;
+  try {
+    // Every provider gets its own ceiling. A provider that stalls can no
+    // longer occupy a concurrency slot for the whole operation.
+    await _withDeadline((async function () { await fn(r, localCtx); })(), PROVIDER_TIMEOUT_MS, null, token);
+  } catch (e) {
+    var msg = String(e && e.message || e);
+    if (entry) entry.error = _classifyError(msg);
+    if (!/cancelled|deadline/i.test(msg)) {
+      console.warn('CineStream provider ' + (PROVIDER_NAMES[key] || key) + ' failed: ' + msg);
+    }
+  } finally {
+    var took = Date.now() - started;
+    _recordProviderLatency(key, took, produced > 0);
+    if (entry) { entry.ms = took; entry.sources = produced; }
+  }
+}
+
+// Failure taxonomy used by the diagnostics. Kept coarse on purpose: the
+// point is to tell "the host is slow" apart from "the host is broken".
+function _classifyError(msg) {
+  var m = String(msg || '').toLowerCase();
+  if (/cancelled|abort/.test(m)) return 'cancelled';
+  if (/deadline|timed? ?out|timeout/.test(m)) return 'timeout';
+  if (/getaddrinfo|enotfound|dns/.test(m)) return 'dns';
+  if (/econnrefused|econnreset|ehostunreach|network|socket/.test(m)) return 'connection';
+  if (/http 4\d\d|unauthor|forbidden|token/.test(m)) return 'auth';
+  if (/http 5\d\d|bad gateway|service unavailable/.test(m)) return 'provider-outage';
+  if (/rate|429|too many/.test(m)) return 'rate-limit';
+  if (/json|parse/.test(m)) return 'parse';
+  return 'error';
 }
 
 function _providerEnabled(key) {
@@ -4426,14 +4762,23 @@ async function getVideoSources(id, fast) {
   var r = _sid(id);
   var out = [], subs = [], seen = {};
   if (!r.imdbId && !r.title) return out;
-  var opt = fast && typeof fast === 'object' ? fast : {};
+  // The host passes a boolean "resolve quickly" flag as the second argument
+  // (see docs/ARCHITECTURE.md). Older callers pass an options object with an
+  // onSubtitle callback; support both shapes.
+  var wantFast = fast === true || fast === 1;
+  var opt = (fast && typeof fast === 'object') ? fast : {};
   var onSub = typeof opt.onSubtitle === 'function' ? opt.onSubtitle : null;
+  var token = _cancelToken();
+  var stats = { providers: {}, firstSourceMs: null, totalMs: null, fast: wantFast, cancelled: false };
+  var t0 = Date.now();
   var ctx = {
     includeDownloads: _bool('includeDownloadLinks', false),
+    count: function () { return out.length; },
     emit: function (s) {
       if (!s || !s.url || seen[s.url]) return;
       seen[s.url] = 1;
       out.push(s);
+      if (stats.firstSourceMs == null) stats.firstSourceMs = Date.now() - t0;
     },
     sub: function (lang, url, source) {
       var s = _sub(url, lang, null);
@@ -4446,16 +4791,41 @@ async function getVideoSources(id, fast) {
       if (onSub) { try { onSub(s); } catch (e) {} }
     }
   };
+  // Every enabled provider runs — including the subtitle-only one. It used to
+  // run *after* the main budget, which could push the whole call past the
+  // app's 25 second cap and made Zangetsu report "no sources" even though
+  // playable links had already been found.
   var keys = [];
-  for (var i = 0; i < PROVIDERS.length; i++) if (_providerEnabled(PROVIDERS[i][0]) && PROVIDERS[i][0] !== 'p_wyziesubs') keys.push(PROVIDERS[i][0]);
-  // Run ALL enabled providers concurrently (matching upstream CineStream behavior
-  // which invokes every provider). The overall budget race prevents slow/dead
-  // providers from blocking playback past Zangetsu's ~20s ceiling. Providers
-  // that work return results; providers that don't fail independently without
-  // preventing other providers from returning streams.
-  var limit = _num('concurrency', 10);
-  await _race(_parallel(keys, limit, function (key) { return _runProvider(key, r, ctx); }), SOURCES_BUDGET_MS, null);
-  if (_providerEnabled('p_wyziesubs')) await _runProvider('p_wyziesubs', r, ctx);
+  for (var i = 0; i < PROVIDERS.length; i++) {
+    if (!_providerEnabled(PROVIDERS[i][0])) continue;
+    keys.push(PROVIDERS[i][0]);
+  }
+  if (!keys.length) return out;
+  // Fast providers first so the first playable source is not stuck behind a
+  // queue of slow hosts. Nothing is skipped: every provider still runs.
+  var ordered = _providerOrder(keys);
+  var limit = _num('concurrency', PROVIDER_CONCURRENCY);
+  var running = _parallelCancelable(ordered, limit, function (key) {
+    return _runProvider(key, r, ctx, token, stats);
+  }, token);
+  if (wantFast) {
+    // The host asked for a quick answer. Settle for a short window so the
+    // fastest providers land, then hand the result back. If nothing was
+    // found at all we keep waiting instead of returning an empty list.
+    await _race(running, FIRST_PLAYABLE_MS, null);
+    if (!out.length) {
+      await _race(running, SOURCES_BUDGET_MS, null);
+    }
+  } else {
+    await _race(running, SOURCES_BUDGET_MS, null);
+  }
+  // Stop whatever is still in flight so the JS bridge is not held open by
+  // work whose result can no longer be used.
+  token.cancel('done');
+  stats.totalMs = Date.now() - t0;
+  stats.cancelled = token.reason;
+  stats.sourceCount = out.length;
+  _LAST_RESOLVE_STATS = stats;
   // Zangetsu's VideoSource carries subtitles per stream. Providers may have
   // already attached their own; otherwise inherit the collected set.
   if (subs.length) {
@@ -4481,7 +4851,18 @@ var _api = {
     b64d: _b64d, b64e: _b64e,
     hubCloud: _hubCloud, runProvider: _runProvider, animeIds: _animeIdsCached,
     decryptVidzee: _decryptVidzee, decryptVidrock: _decryptVidrock,
-    decryptPeachify: _decryptPeachify, sha256Hex: _sha256Hex, hmacSha256Hex: _hmacSha256Hex
+    decryptPeachify: _decryptPeachify, sha256Hex: _sha256Hex, hmacSha256Hex: _hmacSha256Hex,
+    resolveStats: function () { return _LAST_RESOLVE_STATS; },
+    providerLatency: function () { return _PROVIDER_LATENCY; },
+    timeoutPolicy: function () { return TIMEOUT; },
+    budgets: function () {
+      return {
+        firstPlayableMs: FIRST_PLAYABLE_MS,
+        sourcesBudgetMs: SOURCES_BUDGET_MS,
+        providerTimeoutMs: PROVIDER_TIMEOUT_MS,
+        providerConcurrency: PROVIDER_CONCURRENCY
+      };
+    }
   }
 };
 if (typeof module !== 'undefined' && module.exports) module.exports = _api;

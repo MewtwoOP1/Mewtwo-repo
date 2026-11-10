@@ -14,7 +14,7 @@ function g(t) { console.log('\n\x1b[36m' + t + '\x1b[0m'); }
   g('1. Contract exports');
   ['getInfo','getSettings','getHome','popular','search','getDetail','getEpisodes','getVideoSources','getStreams']
     .forEach(function (k) { ok('export .' + k, typeof P[k] === 'function'); });
-  ok('version is 1.0.9', P.version === '1.1.0', String(P.version));
+  ok('version is 1.2.0', P.version === '1.2.0', String(P.version));
   ok('getInfo() name = CineStream', P.getInfo().name === 'CineStream');
   ok('getInfo() type = movie', P.getInfo().type === 'movie');
   ok('getInfo().lang = en', P.getInfo().lang === 'en');
@@ -29,7 +29,7 @@ function g(t) { console.log('\n\x1b[36m' + t + '\x1b[0m'); }
   ok('enabledProviders is multiEnum', settings[0].type === 'multiEnum', settings[0].type);
   ok('enabledProviders values == provider keys', JSON.stringify(settings[0].options.map(function (o) { return o.value; })) === JSON.stringify(P._providers.map(function (p) { return p[0]; })));
   ok('multiEnum options match providers 1:1', settings[0].options.length === P._providers.length, String(settings[0].options.length));
-  ok('default concurrency is 10', settings.filter(function (s) { return s.key === 'concurrency'; })[0].default === '10');
+  ok('default concurrency is 16', settings.filter(function (s) { return s.key === 'concurrency'; })[0].default === '16');
   ok('includeDownloadLinks defaults false', settings.filter(function (s) { return s.key === 'includeDownloadLinks'; })[0].default === false);
 
   g('3. _debug helpers');
