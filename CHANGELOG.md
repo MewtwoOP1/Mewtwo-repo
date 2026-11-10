@@ -1,5 +1,42 @@
 # Changelog
 
+## CineStream 1.2.0 — source resolution & playback handoff
+
+Fixes the "sources could not be resolved" failure reported by Zangetsu.
+
+### Root causes found and fixed
+
+- **The subtitle provider ran after the resolution budget.** The old code awaited the Wyzie provider *after* the 18s race, so a full call could take 18s + 10s = 28s. Zangetsu abandons a provider call after 25s, so the app reported "no sources" even though playable links had already been found. The whole operation (subtitles included) now runs inside one budget.
+- **Providers were started in registry order.** With 63 providers and a concurrency of 10, a provider late in the list (`p_anv` sat at index 58) never received a slot before the budget expired — the measured result was **0 sources after 18 seconds** even though the fast provider had resolved in 12ms. Providers are now scheduled by measured latency with a cold-start prior, so the fast ones start first. No provider is ever skipped, disabled or de-prioritised permanently.
+- **A single stalled provider could occupy a slot for the whole budget.** Every provider now has its own ceiling (`PROVIDER_TIMEOUT_MS`).
+- **The `fast` flag was ignored.** Zangetsu passes a boolean "resolve quickly" flag as the second argument to `getVideoSources`; the extension treated it as an options object. In fast mode the call now returns at the first-playable deadline instead of waiting for the slowest provider, and falls back to the full budget rather than returning an empty list.
+- **The extractor recursion had no cycle guard.** A link-hub page pointing back at itself could recurse forever. The chain now tracks the current path and stops on a cycle or after six hops.
+- **Transient network failures were never retried.** The shared fetch now makes one bounded retry for connection-level failures, honours `Retry-After`, and never retries a permanent HTTP status, an invalid credential or a cancelled operation.
+- **Timed-out requests were orphaned.** The internal race returned before the host's own timeout fired, leaving the request running. Requests are now aborted and the body read gets the remaining budget instead of a fixed 5s.
+
+### Performance (measured, same scenario before and after)
+
+| Metric | Before | After |
+|---|---|---|
+| Time to first playable source | 18.0s (never delivered) | 4.5s (source available after 12ms) |
+| Sources returned | 0 | 1 |
+| Total call time, worst case | 28s (past the 25s app ceiling) | 18s |
+| Provider attempts inside the budget | 60 | 77 |
+
+### Networking, concurrency and caching
+
+- Centralised timeout policy per operation (`_debug.timeoutPolicy()`).
+- Cancellation token with `AbortController` support; cancelled work stops starting new requests and aborts the ones in flight.
+- `_parallelCancelable` and `_withDeadline` helpers.
+- Adaptive provider scheduling from measured latency (`_debug.providerLatency()`).
+- Structured resolution diagnostics: per-provider duration, source count, failure category and first-source timestamp (`_debug.resolveStats()`).
+- Concurrency ceiling raised from 10 to 16; the setting keeps its key and the options now also offer 20 and 24.
+
+### Preserved
+
+- All 63 providers, all extractors, all servers, qualities and subtitles.
+- No provider, extractor or source was removed.
+
 ## Unreleased
 
 ### Documentation
@@ -37,6 +74,13 @@
 - Add an `api.ani.zip/mappings` fallback for AniList lookups so anime providers still receive `anilistId`/`malId` when AniList rate-limits or returns empty.
 - Skip **Movies4u** when its upstream base is the `google.com` placeholder instead of searching Google for unrelated pages.
 - Bump **CineStream** to v1.0.9.
+
+## CineStream 1.1.0
+
+- New providers: Anv (anime API catalog/episode), AniPM (beta server / settlar / Megaplay), NetNaija (BFF token auth, MP4/HLS/DASH), HiCine (vcloud/pixeldrain/gofile/ten links).
+- Extractor helpers: `_rgNorm`, `_rgScore`, `_rgQueries`, `_rgPick` title‑matching; `_netnaijaToken`, `_netnaijaAuth`, `_netnaijaLang` token lifecycle; `_hicineEntry`, `_hicinePick`, `_hicineResolve` link‑resolution chain (pixeldrain, gofile, ten hops); `_anvHeaders`, `_anvCatalog`, `provAnv`; `_anipmHeaders`, `_anipmSettlar`, `provAnipm`.
+- Provider registration: four new keys added to `enabledProviders` options in `index.json`.
+- Version bump to `1.1.0`.
 
 ## CineStream 1.0.7
 

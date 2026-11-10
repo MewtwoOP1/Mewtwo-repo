@@ -1308,7 +1308,7 @@
     {
     "id": "cinestream",
     "name": "CineStream",
-    "version": "1.0.9",
+    "version": "1.2.0",
     "type": "movie",
     "lang": "en",
     "file": "providers/cinestream.js",
@@ -1379,6 +1379,10 @@
           "p_tokyoinsider",
           "p_anizone",
           "p_animekizz",
+          "p_anv",
+          "p_anipm",
+          "p_netnaija",
+          "p_hicine",
           "p_wyziesubs"
         ],
         "options": [
@@ -1615,6 +1619,22 @@
             "label": "Animekizz"
           },
           {
+            "value": "p_anv",
+            "label": "Anv"
+          },
+          {
+            "value": "p_anipm",
+            "label": "AniPM"
+          },
+          {
+            "value": "p_netnaija",
+            "label": "NetNaija"
+          },
+          {
+            "value": "p_hicine",
+            "label": "HiCine"
+          },
+          {
             "value": "p_wyziesubs",
             "label": "Wyzie Subs"
           }
@@ -1681,7 +1701,7 @@
         "label": "Provider concurrency",
         "description": "How many providers may resolve in parallel. Higher is faster but heavier on the phone.",
         "type": "enum",
-        "default": "10",
+        "default": "16",
         "options": [
           {
             "value": "4",
@@ -1697,11 +1717,23 @@
           },
           {
             "value": "10",
-            "label": "10 (default)"
+            "label": "10"
           },
           {
             "value": "14",
             "label": "14"
+          },
+          {
+            "value": "16",
+            "label": "16 (default)"
+          },
+          {
+            "value": "20",
+            "label": "20"
+          },
+          {
+            "value": "24",
+            "label": "24"
           }
         ]
       },

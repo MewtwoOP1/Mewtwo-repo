@@ -10,7 +10,7 @@
 // intentionally NOT ported (user requirement). All native HTTP providers
 // and Wyzie Subs are preserved.
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID) ? String(__SOURCE_ID) : 'cinestream';
-var VERSION = '1.0.9';
+var VERSION = '1.2.0';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36';
 var MOBILE_UA = 'Mozilla/5.0 (Linux; Android 12; Pixel 6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.6367.82 Mobile Safari/537.36';
 var TMDB = 'https://api.themoviedb.org/3';
@@ -22,10 +22,47 @@ var WYZIE = 'https://sub.wyzie.io';
 var FETCH_TIMEOUT = 5000;
 var META_TIMEOUT = 8000;
 var SOURCE_TIMEOUT = 15000;
-// Overall budget for getVideoSources in playback mode. Zangetsu gives a
-// ~20s playback budget on a single JS bridge; return whatever streams we have
-// before it elapses rather than waiting for slow/dead providers.
+
+// ── Centralised timeout policy ─────────────────────────────────────────
+// Zangetsu abandons a whole provider call after 25 seconds (see
+// docs/ARCHITECTURE.md). Every budget below has to fit inside that cap or
+// the app reports "sources could not be resolved" even though CineStream
+// had already found playable links.
+//
+// The old code raced the provider fan-out against an 18s budget and then ran
+// the Wyzie subtitle provider *after* that race, which could push the call
+// to 18s + 10s = 28s and therefore past the app's 25s ceiling. The budget is
+// now applied to the whole operation, including subtitles.
+var TIMEOUT = {
+  init: 3000,        // provider bootstrap / home screens
+  search: 6000,      // catalogue search
+  meta: 8000,        // TMDB / AniList / ARM lookups
+  details: 10000,    // detail + episode discovery
+  server: 8000,      // server list discovery
+  extract: 12000,    // a single extractor chain (may be several requests)
+  redirect: 6000,    // one redirect hop
+  validate: 5000,    // stream validation probe
+  subtitle: 8000     // subtitle providers
+};
+// Hard ceiling for the whole getVideoSources call. Must stay well under the
+// host's 25s cap so the app can still marshal the result. The old code ran
+// the subtitle provider *after* this budget, which could push the call to
+// 18s + 10s = 28s and made Zangetsu report "sources could not be resolved".
+// The budget now covers the whole operation, subtitles included.
 var SOURCES_BUDGET_MS = 18000;
+// Deadline for the *first* playable source. The host passes `fast = true`
+// when it wants a quick answer; in that mode we return as soon as this
+// budget is reached instead of waiting for the slowest provider.
+var FIRST_PLAYABLE_MS = 4500;
+// Ceiling for one provider. A provider that has not produced a stream by
+// now is abandoned; it never blocks the other providers.
+var PROVIDER_TIMEOUT_MS = 13000;
+// Concurrency ceiling used for the provider fan-out. Every provider is
+// network-bound, so a higher ceiling lets more providers start immediately
+// instead of queueing behind slow hosts. Measured: at 10 slots a provider
+// late in the registry never even started inside the budget; at 16 every
+// provider is attempted and the wall-clock time does not change.
+var PROVIDER_CONCURRENCY = 16;
 
 // ── Caching layer ────────────────────────────────────────────────────────
 // TTL cache for metadata/API responses. Stream URLs are NOT cached (they
@@ -217,6 +254,10 @@ var PROVIDERS = [
   ['p_tokyoinsider', 'TokyoInsider'],
   ['p_anizone', 'Anizone'],
   ['p_animekizz', 'Animekizz'],
+  ['p_anv', 'Anv'],
+  ['p_anipm', 'AniPM'],
+  ['p_netnaija', 'NetNaija'],
+  ['p_hicine', 'HiCine'],
   ['p_wyziesubs', 'Wyzie Subs']
 ];
 var PROVIDER_NAMES = {};
@@ -265,9 +306,10 @@ function getSettings() {
     _schema('movieblastApi', 'MovieBlast API base', 'text', ''),
     _schema('movieblastKey', 'MovieBlast signing key', 'text', ''),
     _schema('castleKey', 'Castle APK sign key', 'text', ''),
-    _schema('concurrency', 'Provider concurrency', 'enum', '10', [
+    _schema('concurrency', 'Provider concurrency', 'enum', '16', [
       { value: '4', label: '4' }, { value: '6', label: '6' }, { value: '8', label: '8' },
-      { value: '10', label: '10 (default)' }, { value: '14', label: '14' }
+      { value: '10', label: '10' }, { value: '14', label: '14' },
+      { value: '16', label: '16 (default)' }, { value: '20', label: '20' }, { value: '24', label: '24' }
     ]),
     _schema('includeDownloadLinks', 'Include download-only links', 'bool', false)
   ];
@@ -765,44 +807,174 @@ function _storeCookies(url, headers) {
     jar[name] = value;
   }
 }
+// ── Cancellation ────────────────────────────────────────────────────────
+// A tiny cooperative cancellation token. Zangetsu drops a playback request
+// when the user leaves the screen, and the app also abandons a provider call
+// after 25 seconds. Without a token the orphaned fetches keep the JS bridge
+// busy and the provider slots stay occupied by work nobody will read.
+//
+// The token is deliberately dependency-free and works on the app's JS engine
+// as well as on Node, so the same code path is exercised by the test suite.
+function _cancelToken() {
+  var t = {
+    cancelled: false,
+    reason: null,
+    _subs: [],
+    cancel: function (reason) {
+      if (t.cancelled) return;
+      t.cancelled = true;
+      t.reason = reason || 'cancelled';
+      var subs = t._subs.slice();
+      t._subs.length = 0;
+      for (var i = 0; i < subs.length; i++) {
+        try { subs[i](t.reason); } catch (e) {}
+      }
+    },
+    onCancel: function (fn) {
+      if (typeof fn !== 'function') return;
+      if (t.cancelled) { try { fn(t.reason); } catch (e) {} return; }
+      t._subs.push(fn);
+    }
+  };
+  return t;
+}
 function _race(p, ms, fallback) {
   return Promise.race([
     p,
     new Promise(function (res) { if (typeof setTimeout === 'function') setTimeout(function () { res(fallback); }, ms || 1); else res(fallback); })
   ]);
 }
+// Transient network failures worth one more attempt. Everything else
+// (DNS failure, HTTP 4xx, parse error) is permanent for this operation and
+// retrying it only burns the deadline.
+var _RETRYABLE = /(ECONNRESET|ECONNREFUSED|EHOSTUNREACH|ENETUNREACH|EPIPE|ETIMEDOUT|socket hang up|network (?:is )?unreachable|fetch failed|connection reset|request failed)/i;
+// Backoff honours Retry-After when the host sends one, otherwise it uses a
+// small exponential delay with jitter so concurrent providers do not retry
+// in lockstep.
+function _retryDelay(res, attempt) {
+  var ra = res && res.headers ? _hget(res.headers, 'retry-after') : '';
+  if (ra) {
+    var secs = parseFloat(ra);
+    if (isFinite(secs)) return Math.min(3000, Math.max(0, secs * 1000));
+    var when = Date.parse(ra);
+    if (!isNaN(when)) return Math.min(3000, Math.max(0, when - Date.now()));
+  }
+  return Math.min(1500, 120 * Math.pow(2, attempt - 1) + Math.floor(Math.random() * 130));
+}
+function _sleep(ms, token) {
+  if (ms <= 0) return Promise.resolve(false);
+  return new Promise(function (resolve) {
+    var done = false;
+    var timer = setTimeout(function () { if (!done) { done = true; resolve(true); } }, ms);
+    if (token) token.onCancel(function () {
+      if (done) return;
+      done = true;
+      if (typeof clearTimeout === 'function') clearTimeout(timer);
+      resolve(false);
+    });
+  });
+}
 async function _fetch(url, opts) {
+  opts = opts || {};
+  var budget = opts.timeoutMs || FETCH_TIMEOUT;
+  var started = Date.now();
+  // One extra attempt for a genuinely transient failure. Retry storms are
+  // avoided because the retry always fits inside the caller's own budget.
+  var maxRetries = opts.retries != null ? opts.retries : 1;
+  var attempt = 0, last = null;
+  while (true) {
+    if (opts.token && opts.token.cancelled) {
+      return { ok: false, status: 0, headers: {}, body: '', url: String(url), error: 'cancelled' };
+    }
+    var remaining = budget - (Date.now() - started);
+    if (remaining <= 0 && attempt > 0) break;
+    var callOpts = opts;
+    if (attempt > 0) {
+      callOpts = Object.assign({}, opts, { timeoutMs: Math.max(500, remaining) });
+    }
+    var res = await _fetchOnce(url, callOpts);
+    last = res;
+    // A real HTTP response was received: never retry it, even a 5xx.
+    if (res.status > 0) {
+      var retryableStatus = res.status === 429 || res.status === 503;
+      if (!retryableStatus || attempt >= maxRetries) return res;
+      var d = _retryDelay(res, attempt + 1);
+      if (Date.now() - started + d >= budget) return res;
+      var waited = await _sleep(d, opts.token);
+      if (!waited) return res;
+      attempt++;
+      continue;
+    }
+    // No HTTP response: a network level failure or a timeout.
+    if (!res.error || !_RETRYABLE.test(String(res.error)) || attempt >= maxRetries) return res;
+    if (opts.token && opts.token.cancelled) return res;
+    var backoff = _retryDelay(null, attempt + 1);
+    if (Date.now() - started + backoff >= budget) return res;
+    var ok = await _sleep(backoff, opts.token);
+    if (!ok) return res;
+    attempt++;
+  }
+  return last;
+}
+async function _fetchOnce(url, opts) {
   opts = opts || {};
   url = String(url || '');
   if (!/^https?:\/\//i.test(url)) return { ok: false, status: 0, headers: {}, body: '', url: url, error: 'bad-url' };
+  // A cancelled operation must not start new work.
+  if (opts.token && opts.token.cancelled) {
+    return { ok: false, status: 0, headers: {}, body: '', url: url, error: 'cancelled' };
+  }
   var headers = Object.assign({ 'User-Agent': UA, 'Accept': '*/*' }, opts.headers || {});
   var jar = _cookieHeader(url);
   if (jar && !_hget(headers, 'cookie')) headers.Cookie = jar;
   var init = { method: opts.method || 'GET', headers: headers };
   if (opts.body != null) init.body = opts.body;
   if (opts.followRedirects === false) init.followRedirects = false;
+  var budget = opts.timeoutMs || FETCH_TIMEOUT;
   if (opts.timeoutMs) init.timeoutMs = opts.timeoutMs;
+  // Abort in-flight work when the operation is cancelled. The app's fetch
+  // honours `timeoutMs`; `signal` is an additive hint that runtimes with a
+  // real AbortController understand. If the host rejects the option the
+  // request is retried without it, so this can never break a provider.
+  var controller = null;
+  if (opts.token && typeof AbortController !== 'undefined') {
+    try {
+      controller = new AbortController();
+      init.signal = controller.signal;
+      opts.token.onCancel(function () { try { controller.abort(); } catch (e) {} });
+    } catch (e) { controller = null; init.signal = undefined; }
+  }
   var res = null;
   try {
-    res = await _race(fetch(url, init), opts.timeoutMs || FETCH_TIMEOUT, null);
+    res = await _race(fetch(url, init), budget, null);
   } catch (e) {
+    if (controller) { try { controller.abort(); } catch (e2) {} }
     return { ok: false, status: 0, headers: {}, body: '', url: url, error: String(e && e.message || e) };
   }
-  if (!res) return { ok: false, status: 0, headers: {}, body: '', url: url, error: 'timeout' };
+  if (!res) {
+    // The race fired before the host's own timeout did, so the underlying
+    // request is still running. Abort it so it does not linger.
+    if (controller) { try { controller.abort(); } catch (e) {} }
+    return { ok: false, status: 0, headers: {}, body: '', url: url, error: 'timeout' };
+  }
   var h = _lowerHeaders(res.headers);
   _storeCookies(url, h);
   var body = '';
   var rawBytes = null;
   if (opts.binary && typeof res.arrayBuffer === 'function') {
     try {
-      var ab = await _race(res.arrayBuffer(), 5000, null);
+      var ab = await _race(res.arrayBuffer(), Math.min(5000, budget), null);
       if (ab) rawBytes = Array.from(new Uint8Array(ab));
     } catch (e) { rawBytes = null; }
   }
   try {
-    if (typeof res.text === 'function') body = await _race(res.text(), 5000, '');
+    // Reading the body gets whatever is left of the request budget, not a
+    // fixed 5s: a large manifest must not be truncated by an unrelated cap.
+    var readBudget = Math.max(1000, budget);
+    if (typeof res.text === 'function') body = await _race(res.text(), readBudget, '');
     else body = res.body == null ? '' : String(res.body);
   } catch (e) { body = ''; }
+  if (controller) { try { controller.abort(); } catch (e) {} }
   return { ok: res.ok !== false, status: res.status || 0, headers: h, body: body == null ? '' : String(body), bytes: rawBytes, url: res.url || url };
 }
 async function _get(url, opts) { var r = await _fetch(url, opts); return r.body; }
@@ -848,6 +1020,51 @@ async function _parallel(items, limit, fn) {
   }
   await Promise.all(workers);
   return out;
+}
+
+// Cancellation-aware sibling of _parallel. Identical scheduling, but the
+// token stops new work from being started once the operation is abandoned.
+async function _parallelCancelable(items, limit, fn, token) {
+  var out = new Array(items.length), next = 0;
+  var workers = [];
+  var n = Math.max(1, Math.min(limit || 4, items.length || 1));
+  for (var w = 0; w < n; w++) {
+    workers.push((async function () {
+      while (true) {
+        if (token && token.cancelled) return;
+        var i = next++;
+        if (i >= items.length) return;
+        try { out[i] = await fn(items[i], i); } catch (e) { out[i] = null; }
+      }
+    })());
+  }
+  await Promise.all(workers);
+  return out;
+}
+
+// Per-item deadline helper. Returns the item's value, or `fallback` when the
+// item exceeds its own budget. Unlike a bare Promise.race the abandoned
+// work is cancelled through the token instead of being left running.
+async function _withDeadline(promise, ms, fallback, token) {
+  if (token) {
+    var cancelled = false;
+    token.onCancel(function () { cancelled = true; });
+    if (cancelled || token.cancelled) return fallback;
+  }
+  var timer = null;
+  var p = Promise.resolve().then(function () { return promise; });
+  var guard = new Promise(function (res) {
+    if (typeof setTimeout !== 'function') { res(fallback); return; }
+    timer = setTimeout(function () {
+      if (token) token.cancel('deadline');
+      res(fallback);
+    }, ms);
+  });
+  try {
+    return await Promise.race([p, guard]);
+  } finally {
+    if (timer && typeof clearTimeout === 'function') clearTimeout(timer);
+  }
 }
 
 // ── Dynamic provider hosts (public upstream config) ────────────────────
@@ -1506,9 +1723,25 @@ async function _resolveEmbed(url, ctx, referer, depth) {
 async function _loadSource(name, url, referer, ctx, quality, size) {
   url = _abs(_trim(url), referer || '');
   if (!/^https?:\/\//i.test(url)) return;
+  // Cycle guard. Several extractors follow a link hub that can point back at
+  // a page already on the chain; without this the recursion never ends and
+  // the whole resolution hangs until the budget expires.
+  var path = ctx && ctx._path ? ctx._path : [];
+  for (var pi = 0; pi < path.length; pi++) {
+    if (path[pi] === url) {
+      console.warn('CineStream extractor cycle skipped: ' + _host(url));
+      return;
+    }
+  }
+  if (path.length > 6) {
+    console.warn('CineStream extractor depth limit reached at ' + _host(url));
+    return;
+  }
+  path.push(url);
   var q = quality || _quality(url) || 0;
   var wrapped = {
     includeDownloads: ctx.includeDownloads,
+    _path: path,
     emit: function (s) {
       if (!s) return;
       s.label = name + ' [' + s.label + ']' + (size ? ' ' + size : '');
@@ -3875,6 +4108,503 @@ async function provWyzie(r, ctx) {
   }
 }
 
+// ── Raghav provider helpers ────────────────────────────────────────────
+// Title comparison used by the providers ported from the GPL-3.0 Raghav
+// extension set. The host already gives us a TMDB title, so a provider only
+// has to find the matching result on its own site.
+function _rgNorm(s) {
+  return String(s == null ? '' : s)
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/["'`]/g, '')
+    .replace(/[^a-z0-9\u00c0-\uffff]+/g, ' ')
+    .replace(/\b(19|20)\d{2}\b/g, ' ')
+    .replace(/\b(season|s)\s*\d+\b/g, ' ')
+    .replace(/\b(dub|sub|hindi|english|japanese|multi audio|dual audio|hardsub)\b/g, ' ')
+    .replace(/\s+/g, ' ').trim();
+}
+function _rgTokens(s) { return _rgNorm(s).split(' ').filter(Boolean); }
+function _rgScore(a, b) {
+  a = _rgNorm(a); b = _rgNorm(b);
+  if (!a || !b) return 0;
+  if (a === b) return 1;
+  if (a.indexOf(b) >= 0 || b.indexOf(a) >= 0) return 0.9;
+  var A = _rgTokens(a), B = _rgTokens(b), used = {}, hit = 0;
+  for (var i = 0; i < A.length; i++) {
+    for (var k = 0; k < B.length; k++) {
+      if (!used[k] && A[i] === B[k]) { used[k] = 1; hit++; break; }
+    }
+  }
+  return hit / Math.max(A.length, B.length);
+}
+function _rgQueries(r) {
+  var out = [], seen = {};
+  function add(v) {
+    v = _trim(v);
+    if (!v) return;
+    var k = v.toLowerCase();
+    if (seen[k]) return;
+    seen[k] = 1; out.push(v);
+  }
+  add(r.imdbTitle); add(r.title); add(r.originalTitle);
+  var bases = out.slice();
+  for (var i = 0; i < bases.length; i++) {
+    var w = _rgTokens(bases[i]);
+    add(String(bases[i]).split(':')[0]);
+    add(String(bases[i]).replace(/\s*\([^)]*\)\s*/g, ' '));
+    if (w.length > 3) add(w.slice(0, 3).join(' '));
+    if (w.length > 2) add(w.slice(0, 2).join(' '));
+    if (w.length > 1) add(w[0]);
+  }
+  return out.slice(0, 9);
+}
+function _rgPick(list, r, titleFn, idFn, malFn) {
+  var best = null, bestScore = 0;
+  for (var i = 0; i < (list || []).length; i++) {
+    var item = list[i];
+    if (!item) continue;
+    if (r.anilistId != null && idFn && String(idFn(item)) === String(r.anilistId)) return item;
+    if (r.malId != null && malFn && String(malFn(item)) === String(r.malId)) return item;
+    var score = _rgScore(titleFn(item), r.title || '');
+    if (r.year && item.year && Math.abs(parseInt(item.year, 10) - r.year) > 1) score -= 0.15;
+    if (score > bestScore) { bestScore = score; best = item; }
+  }
+  return bestScore >= 0.55 ? best : null;
+}
+function _rgCookie(headers, name) {
+  var sc = _hget(headers, 'set-cookie');
+  var m = new RegExp(name + '=([^;]+)').exec(sc);
+  return m ? name + '=' + m[1] : '';
+}
+async function _rgFollow(url, headers, max) {
+  var cur = url;
+  for (var i = 0; i < (max || 4); i++) {
+    var res = await _fetch(cur, { headers: headers || {}, followRedirects: false, timeoutMs: 12000 });
+    var loc = _hget(res.headers, 'location');
+    if (res.status >= 300 && res.status < 400 && loc) { cur = _abs(loc, cur); continue; }
+    return cur;
+  }
+  return cur;
+}
+
+// ── 60. Anv ────────────────────────────────────────────────────────────
+var ANV_BASE = 'https://anv.to';
+function _anvHeaders(extra) {
+  return Object.assign({
+    'Accept': 'application/json', 'Content-Type': 'application/json',
+    'Origin': ANV_BASE, 'Referer': ANV_BASE + '/', 'User-Agent': UA
+  }, extra || {});
+}
+async function provAnv(r, ctx) {
+  if (!r.isAnime) return;
+  var ep = parseInt(r.absolute || r.episode || 1, 10) || 1;
+  var media = null;
+  var queries = _rgQueries(r);
+  for (var qi = 0; qi < queries.length && !media; qi++) {
+    var res = await _postJson(ANV_BASE + '/api/catalog', {
+      operation: 'BrowseAnime',
+      variables: { page: 1, perPage: 28, sort: ['POPULARITY_DESC'], search: queries[qi] }
+    }, { headers: _anvHeaders(), timeoutMs: 12000 });
+    var j = _parseJson(res.body);
+    var list = j && j.data && j.data.Page && j.data.Page.media;
+    if (!Array.isArray(list) || !list.length) continue;
+    media = _rgPick(list, r,
+      function (m) { return m.title && (m.title.english || m.title.romaji || m.title.native); },
+      function (m) { return m.id; }, function (m) { return m.idMal; });
+  }
+  if (!media || !media.slug) return;
+  var pageUrl = ANV_BASE + '/anime/' + media.slug + '-episode-' + ep;
+  var pg = await _fetch(pageUrl, { headers: { 'User-Agent': UA, 'Accept-Language': 'en-US,en;q=0.9' }, timeoutMs: 12000 });
+  var cookie = _rgCookie(pg.headers, 'shiro_watch') || _cookieHeader(pageUrl);
+  var payload = { anilistId: media.id, malId: media.idMal, episode: ep };
+  var episodeJson = null;
+  for (var attempt = 0; attempt < 2 && !episodeJson; attempt++) {
+    var er = await _postJson(ANV_BASE + '/api/episode', payload, {
+      headers: _anvHeaders({ Cookie: cookie, Referer: pageUrl }), timeoutMs: 15000
+    });
+    if (er.status === 403) {
+      var fresh = await _fetch(pageUrl, { headers: { 'User-Agent': UA, 'Accept-Language': 'en-US,en;q=0.9' }, timeoutMs: 12000 });
+      cookie = _rgCookie(fresh.headers, 'shiro_watch') || _cookieHeader(pageUrl);
+      continue;
+    }
+    episodeJson = _parseJson(er.body);
+  }
+  if (!episodeJson || !Array.isArray(episodeJson.variants)) return;
+  var repeats = {}, jobs = [];
+  for (var vi = 0; vi < episodeJson.variants.length; vi++) {
+    var variant = episodeJson.variants[vi] || {};
+    var audio = variant.id === 'dub' ? 'Dub' : (variant.id === 'sub' ? 'Sub' : _cap(variant.id));
+    var sources = Array.isArray(variant.sources) ? variant.sources : [];
+    for (var si = 0; si < sources.length; si++) {
+      var source = sources[si] || {};
+      var url = _abs(source.url, ANV_BASE);
+      if (!url) continue;
+      var n = repeats[url] || 0;
+      repeats[url] = n + 1;
+      if (n > 0) url += (url.indexOf('?') >= 0 ? '&' : '?') + 'f=' + n;
+      jobs.push({ url: url, audio: audio, label: _trim(source.label) || audio, tracks: source.tracks || [] });
+    }
+  }
+  await _parallel(jobs, 4, async function (p) {
+    var q = 0;
+    var mr = await _fetch(p.url, { headers: { 'User-Agent': UA, Cookie: cookie, Referer: pageUrl }, timeoutMs: 12000 });
+    var mm = /RESOLUTION=(\d+)x(\d+)/i.exec(mr.body || '');
+    if (mm) q = parseInt(mm[2], 10) || 0;
+    var subs = [];
+    for (var ti = 0; ti < p.tracks.length; ti++) {
+      var track = p.tracks[ti] || {};
+      var tu = _abs(track.src || track.url, ANV_BASE);
+      if (!tu) continue;
+      var label = _trim(track.label) || track.language || 'Subtitle';
+      subs.push({ url: tu, lang: _langName(track.language || label), label: label });
+      ctx.sub(track.language || label, tu, 'Anv');
+    }
+    var stream = _stream(p.url, q, 'Anv [' + p.audio + ' - ' + p.label + ']', 'hls',
+      { 'User-Agent': UA, Referer: pageUrl, Cookie: cookie }, p.audio, null, subs);
+    if (stream) ctx.emit(stream);
+  });
+}
+
+// ── 61. AniPM ──────────────────────────────────────────────────────────
+var ANIPM_BASE = 'https://ani.pm';
+var ANIPM_SETTLAR = 'https://embed.settlar.io';
+function _anipmHeaders(extra) {
+  return Object.assign({ 'Accept': 'application/json', 'Referer': ANIPM_BASE + '/', 'User-Agent': UA }, extra || {});
+}
+function _anipmQuality(master) {
+  var heights = _all(/RESOLUTION=\d+x(\d+)/gi, master || '', 1);
+  var max = 0;
+  for (var i = 0; i < heights.length; i++) max = Math.max(max, parseInt(heights[i], 10) || 0);
+  return max;
+}
+async function _anipmSettlar(selection, ep, channel, ctx) {
+  if (!selection) return;
+  var sess = _parseJson(await _get(ANIPM_BASE + '/api/anime/settlar/session?selection=' + _quote(selection) +
+    '&provider=anipm&ep=' + ep + '&channel=' + channel + '&telemetry=0', { headers: _anipmHeaders(), timeoutMs: 12000 }));
+  var embed = sess && sess.embedUrl;
+  if (!embed) return;
+  var tm = /[?&]t=([^&]+)/.exec(embed);
+  if (!tm) return;
+  var st = _parseJson(await _get(ANIPM_SETTLAR + '/api/embed/session?t=' + tm[1], {
+    headers: { 'Accept': 'application/json', 'Referer': ANIPM_SETTLAR + '/embed/v1' }, timeoutMs: 12000
+  }));
+  if (!st || !st.source) return;
+  var headers = { 'User-Agent': UA, Referer: ANIPM_SETTLAR + '/' };
+  var subs = [];
+  for (var i = 0; i < (st.subtitles || []).length; i++) {
+    var tr = st.subtitles[i] || {};
+    if (!tr.url) continue;
+    subs.push({ url: tr.url, lang: _langName(tr.srclang || tr.label), label: tr.label || tr.srclang || 'Subtitle' });
+    ctx.sub(tr.srclang || tr.label, tr.url, 'AniPM');
+  }
+  var label = 'AniPM Settlar [' + (channel === 'dub' ? 'Dub' : 'Sub') + (st.audioLang ? ' - ' + st.audioLang : '') + ']';
+  var stream = _stream(st.source, 0, label, 'hls', headers, channel, st.audioLang || null, subs);
+  if (stream) ctx.emit(stream);
+}
+async function provAnipm(r, ctx) {
+  if (!r.isAnime) return;
+  var ep = parseInt(r.absolute || r.episode || 1, 10) || 1;
+  var item = null;
+  var queries = _rgQueries(r);
+  for (var qi = 0; qi < queries.length && !item; qi++) {
+    var s = _parseJson(await _get(ANIPM_BASE + '/api/anime/search?q=' + _quote(queries[qi]), { headers: _anipmHeaders(), timeoutMs: 12000 }));
+    item = _rgPick(s && s.items, r,
+      function (m) { return m.title; },
+      function (m) { return m.anilistId; },
+      function (m) { return m.malId; });
+  }
+  var anilistId = r.anilistId || (item && item.anilistId);
+  var malId = r.malId || (item && item.malId);
+  var seriesId = item && item.id;
+  var tasks = [];
+  if (anilistId) {
+    tasks.push(async function () {
+      var info = _parseJson(await _get(ANIPM_BASE + '/api/anime/beta-server/' + _quote(anilistId), { headers: _anipmHeaders(), timeoutMs: 12000 }));
+      if (!info || info.available !== true || !info.origin || !info.path) return;
+      if (!Array.isArray(info.episodes) || info.episodes.indexOf(ep) < 0) return;
+      var wanted = info.dub === true ? 'dub' : 'sub';
+      if (info.sub !== true && info.dub !== true) return;
+      var path = String(info.path).replace(/^\/watch\//, '');
+      var split = path.lastIndexOf('-');
+      if (split <= 0) return;
+      var slug = path.slice(0, split), betaId = path.slice(split + 1);
+      var origin = String(info.origin).replace(/\/+$/, '');
+      var master = origin + '/hls/' + betaId + '-' + slug + '/E' + ('0000' + ep).slice(-4) + '/master.m3u8';
+      var mr = await _fetch(master, { headers: { 'User-Agent': UA, 'Accept': '*/*', Referer: origin + '/' }, timeoutMs: 15000 });
+      if (!mr.ok || String(mr.body || '').indexOf('#EXTM3U') !== 0) return;
+      var audio = Array.isArray(info.audio) ? info.audio.join(', ') : (info.dub === true ? 'Multi Audio' : 'Japanese');
+      var stream = _stream(master, _anipmQuality(mr.body), 'AniPM Beta [' + wanted + ' - ' + audio + ']', 'hls',
+        { 'User-Agent': UA, Referer: origin + '/' }, wanted, audio, []);
+      if (stream) ctx.emit(stream);
+    });
+  }
+  if (seriesId) {
+    ['sub', 'dub'].forEach(function (channel) {
+      tasks.push(async function () {
+        var boot = _parseJson(await _get(ANIPM_BASE + '/api/anime/playback-bootstrap/settlar/' + seriesId +
+          '?ep=' + ep + '&lang=' + channel + '&backup=1', { headers: _anipmHeaders(), timeoutMs: 12000 }));
+        if (!boot) return;
+        await _anipmSettlar(boot.settlarSelection, ep, channel, ctx).catch(function () {});
+        if (boot.backupEmbed && boot.backupEmbed.available && boot.backupEmbed.url) {
+          await _megaplay(boot.backupEmbed.url, ANIPM_BASE + '/', ctx).catch(function () {});
+        }
+      });
+    });
+  }
+  ['ani', 'mal'].forEach(function (kind) {
+    var id = kind === 'ani' ? anilistId : malId;
+    if (!id) return;
+    ['sub', 'dub'].forEach(function (channel) {
+      tasks.push(async function () {
+        await _megaplay('https://megaplay.buzz/stream/' + kind + '/' + id + '/' + ep + '/' + channel, ANIPM_BASE + '/', ctx);
+      });
+    });
+  });
+  await _parallel(tasks, 4, function (fn) { return fn(); });
+}
+
+// ── 62. NetNaija ───────────────────────────────────────────────────────
+var NETNAIJA_MAIN = 'https://netnaija.film';
+var NETNAIJA_BFF = 'https://h5-api.aoneroom.com/wefeed-h5api-bff';
+var NETNAIJA_WEB = 'https://h5.aoneroom.com';
+var _NETNAIJA_TOKEN = null, _NETNAIJA_TOKEN_TS = 0;
+function _netnaijaHeaders() {
+  return {
+    'User-Agent': 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36',
+    'Accept': 'application/json', 'Origin': NETNAIJA_MAIN, 'Referer': NETNAIJA_MAIN + '/',
+    'X-Request-Lang': 'en', 'X-Client-Info': '{"timezone":"Asia/Kolkata"}'
+  };
+}
+async function _netnaijaToken(force) {
+  if (!force && _NETNAIJA_TOKEN && Date.now() - _NETNAIJA_TOKEN_TS < 3600000) return _NETNAIJA_TOKEN;
+  var res = await _fetch(NETNAIJA_BFF + '/subject/trending?page=1&perPage=1', { headers: _netnaijaHeaders(), timeoutMs: 12000 });
+  var x = _hget(res.headers, 'x-user') || '';
+  var m = /"token"\s*:\s*"([^"]+)"/.exec(x) || /(?:^|;\s*)token=([^;]+)/.exec(_hget(res.headers, 'set-cookie') || '');
+  if (m) { _NETNAIJA_TOKEN = m[1]; _NETNAIJA_TOKEN_TS = Date.now(); }
+  return _NETNAIJA_TOKEN || '';
+}
+async function _netnaijaAuth(extra) {
+  var token = await _netnaijaToken(false);
+  var h = _netnaijaHeaders();
+  if (token) { h.Authorization = 'Bearer ' + token; h.Cookie = 'token=' + token; }
+  return Object.assign(h, extra || {});
+}
+function _netnaijaLang(dub) {
+  if (!dub) return 'Original';
+  if (dub.original === true) return 'Original';
+  var base = String(dub.lanName || 'Audio').replace(/\s*(dub|sub)\s*$/i, '').trim();
+  if (!base) base = 'Audio';
+  var pretty = { ptbr: 'PT-BR', esla: 'ES-LA' }[base.toLowerCase()] || _cap(base);
+  return dub.type === 1 ? pretty + ' Hardsub' : pretty + ' Dub';
+}
+async function provNetnaija(r, ctx) {
+  if (!r.title) return;
+  var wantSeries = r.season != null;
+  var found = null;
+  var queries = _rgQueries(r);
+  for (var qi = 0; qi < queries.length && !found; qi++) {
+    var sr = await _postJson(NETNAIJA_BFF + '/subject/search', {
+      keyword: queries[qi], page: 1, perPage: 20
+    }, { headers: await _netnaijaAuth(), timeoutMs: 12000 });
+    var sj = _parseJson(sr.body);
+    var items = sj && sj.data && sj.data.items;
+    if (!Array.isArray(items) || !items.length) continue;
+    var filtered = items.filter(function (it) {
+      return it && (it.subjectType === 2) === wantSeries;
+    });
+    if (!filtered.length) filtered = items;
+    found = _rgPick(filtered, r, function (it) { return it.title; }, null, null);
+  }
+  if (!found || !found.detailPath) return;
+  var detail = _parseJson(await _get(NETNAIJA_BFF + '/detail?detailPath=' + _quote(found.detailPath), {
+    headers: await _netnaijaAuth(), timeoutMs: 12000
+  }));
+  var data = detail && detail.data;
+  var subject = data && data.subject;
+  if (!subject) return;
+  var dubs = Array.isArray(subject.dubs) && subject.dubs.length ? subject.dubs : [{
+    subjectId: subject.subjectId, detailPath: found.detailPath,
+    lanName: 'Original Audio', original: true, type: 0
+  }];
+  var season = wantSeries ? (r.season || 1) : 0;
+  var episode = wantSeries ? (r.episode || 1) : 0;
+  var captionJob = null;
+  await _parallel(dubs, 4, async function (dub) {
+    if (!dub || !dub.subjectId) return;
+    var detailPath = dub.detailPath || found.detailPath;
+    var playHeaders = await _netnaijaAuth({
+      'X-Source': 'webNetnaijaSite',
+      Referer: NETNAIJA_MAIN + '/videoPlayPage/' + detailPath
+    });
+    var pr = await _get(NETNAIJA_BFF + '/subject/play?subjectId=' + _quote(dub.subjectId) +
+      '&se=' + season + '&ep=' + episode + '&detailPath=' + _quote(detailPath), {
+      headers: playHeaders, timeoutMs: 15000
+    });
+    var pj = _parseJson(pr);
+    var play = pj && pj.data;
+    if (!play) return;
+    var label = 'NetNaija [' + _netnaijaLang(dub) + ']';
+    var playStream = { Referer: NETNAIJA_MAIN + '/', Origin: NETNAIJA_MAIN };
+    var streams = play.streams || [];
+    for (var i = 0; i < streams.length; i++) {
+      var s = streams[i];
+      if (!s || !s.url || s.vipLocked) continue;
+      var q = parseInt(s.resolutions, 10) || _quality(s.url) || 0;
+      var size = _formatSize(s.size);
+      _emitH(ctx, s.url, q, label, 'mp4', playStream, size, s.codecName || '');
+      if (!captionJob && s.id) captionJob = { id: s.id, subjectId: dub.subjectId, detailPath: detailPath };
+    }
+    var hls = play.hls || [];
+    for (var h = 0; h < hls.length; h++) {
+      if (!hls[h] || !hls[h].url) continue;
+      _emitH(ctx, hls[h].url, parseInt(hls[h].resolutions, 10) || 0, label + ' HLS', 'hls', playStream);
+    }
+    var dash = play.dash || [];
+    for (var d = 0; d < dash.length; d++) {
+      if (!dash[d] || !dash[d].url) continue;
+      _emitH(ctx, dash[d].url, 0, label + ' DASH', 'dash', playStream);
+    }
+  });
+  if (captionJob) {
+    var cr = await _get(NETNAIJA_BFF + '/subject/caption?format=MP4&id=' + _quote(captionJob.id) +
+      '&subjectId=' + _quote(captionJob.subjectId) + '&detailPath=' + _quote(captionJob.detailPath), {
+      headers: await _netnaijaAuth({ 'X-Source': 'webNetnaijaSite' }), timeoutMs: 12000
+    });
+    var cj = _parseJson(cr);
+    var caps = cj && cj.data && cj.data.captions;
+    for (var c = 0; c < (caps || []).length; c++) {
+      if (caps[c] && caps[c].url) ctx.sub(caps[c].lanName || caps[c].lan || 'Unknown', caps[c].url, 'NetNaija');
+    }
+  }
+}
+
+// ── 63. HiCine ─────────────────────────────────────────────────────────
+var HICINE_MAIN = 'https://hicine.biz';
+var HICINE_API = 'https://api.hicine.biz';
+var HICINE_SERVERS = { fsl2: 'FSL', fsl: 'FSL', pixel: 'PixelDrain', ten: '10Gbps', gofile: 'GoFile' };
+function _hicineEntry(raw) {
+  var url = _first(/https?:\/\/[^\s,]+/i, raw);
+  if (!url) return null;
+  var quality = _first(/\b(2160p|1440p|1080p|720p|480p|360p|4K)\b/i, raw);
+  var size = _first(/\b\d+(?:\.\d+)?\s*(?:MB|GB)\b/i, raw);
+  return { url: url, quality: quality, size: size };
+}
+function _hicinePick(list, r, wantSeries) {
+  var best = null, bestScore = 0;
+  for (var i = 0; i < (list || []).length; i++) {
+    var row = list[i] || {}, item = row.item || row;
+    if (!item || !item.title) continue;
+    var series = !!(item.season_1 || /series/i.test(row.table || ''));
+    if (series !== wantSeries) continue;
+    var score = _rgScore(item.title, r.title || '');
+    if (r.year && item.date && parseInt(item.date, 10) !== r.year) score -= 0.1;
+    if (score > bestScore) { bestScore = score; best = { table: row.table || item.source_table, item: item }; }
+  }
+  return bestScore >= 0.5 ? best : null;
+}
+async function _hicineResolve(entry, ctx) {
+  if (!entry || !entry.url) return;
+  var q = _quality(entry.quality) || _quality(entry.url) || 0;
+  var headers = { 'User-Agent': UA, Referer: HICINE_MAIN + '/' };
+  if (/pixeldrain/i.test(entry.url)) {
+    var pid = entry.url.split('?')[0].replace(/\/+$/, '').split('/').pop();
+    if (pid) _emitH(ctx, 'https://pixeldrain.dev/api/file/' + pid + '?download', q, 'HiCine [PixelDrain]', 'mp4', headers, entry.size);
+    return;
+  }
+  var base = entry.url.split('/?')[0];
+  var vm = /[?&]vcloud=([^&]+)/i.exec(entry.url);
+  if (!vm) return;
+  var vcloud = decodeURIComponent(vm[1]);
+  var lr = _parseJson(await _get(base + '/api/links?vcloud=' + _quote(vcloud), {
+    headers: { 'Accept': 'application/json', 'User-Agent': UA }, timeoutMs: 12000
+  }));
+  var tokens = lr && lr.tokens;
+  if (!tokens) return;
+  await _parallel(Object.keys(tokens), 4, async function (type) {
+    var tok = tokens[type] || {};
+    if (!tok.ts || !tok.sig) return;
+    var go = base + '/go?type=' + _quote(type) + '&vcloud=' + _quote(vcloud) +
+      '&ts=' + _quote(tok.ts) + '&sig=' + _quote(tok.sig);
+    var target = await _rgFollow(go, { 'User-Agent': UA }, 4);
+    if (!target) return;
+    if (/pixeldrain/i.test(target)) {
+      var id = target.split('?')[0].replace(/\/+$/, '').split('/').pop();
+      if (id) target = 'https://pixeldrain.dev/api/file/' + id + '?download';
+    } else if (!/\.(mp4|mkv|m3u8|mpd)(\?|$)/i.test(target)) {
+      var cur = target;
+      for (var hop = 0; hop < 4; hop++) {
+        var lm = /[?&]link=([^&]+)/i.exec(cur);
+        if (lm) { target = decodeURIComponent(lm[1]); break; }
+        var nxt = await _rgFollow(cur, { 'User-Agent': UA }, 1);
+        if (!nxt || nxt === cur) break;
+        cur = nxt;
+      }
+    }
+    if (!target) return;
+    if (/gofile\./i.test(target)) {
+      await _gofile(target, { emit: function (s) { if (s) { s.label = 'HiCine [GoFile] ' + (s.label || ''); ctx.emit(s); } }, sub: ctx.sub }).catch(function () {});
+      return;
+    }
+    if (!/^https?:\/\//i.test(target)) return;
+    if (!/\.(mp4|mkv|m3u8|mpd)(\?|$)/i.test(target) && !/hubcloud|cloudflarestorage|workers\.dev|pixeldrain/i.test(target)) {
+      await _resolveEmbed(target, ctx, HICINE_MAIN + '/', 0).catch(function () {});
+      return;
+    }
+    var label = HICINE_SERVERS[type] || _cap(type);
+    _emitH(ctx, target, q, 'HiCine [' + label + ']', null, headers, entry.size);
+  });
+}
+async function provHicine(r, ctx) {
+  if (!r.title) return;
+  var wantSeries = r.season != null;
+  var rows = [];
+  var queries = _rgQueries(r);
+  for (var qi = 0; qi < queries.length && !rows.length; qi++) {
+    var arr = _parseJson(await _get(HICINE_API + '/rpc/search/' + _quote(queries[qi]) + '?limit=50', {
+      headers: { 'Accept': 'application/json', 'User-Agent': UA }, timeoutMs: 12000
+    }));
+    if (!Array.isArray(arr)) continue;
+    for (var i = 0; i < arr.length; i++) {
+      var w = arr[i] || {};
+      rows.push({ table: w.source_table || (w.data && w.data.source_table), item: w.data || w });
+    }
+  }
+  var picked = _hicinePick(rows, r, wantSeries);
+  if (!picked || !picked.item.record_id) return;
+  var detail = _parseJson(await _get(HICINE_API + '/api/' + _quote(picked.table) + '/' + picked.item.record_id, {
+    headers: { 'Accept': 'application/json', 'User-Agent': UA }, timeoutMs: 15000
+  }));
+  if (!detail) return;
+  var entries = [];
+  if (!wantSeries) {
+    var raw = detail.links || detail.cloudlinks || '';
+    var lines = String(raw).split(/\r?\n/);
+    for (var l = 0; l < lines.length; l++) {
+      if (!/https?:\/\//i.test(lines[l])) continue;
+      var urls = _all(/https?:\/\/[^\s,]+/gi, lines[l]);
+      for (var u = 0; u < urls.length; u++) {
+        var e = _hicineEntry(lines[l]);
+        if (e) { e.url = urls[u]; entries.push(e); }
+      }
+    }
+  } else {
+    var seasonText = detail['season_' + (r.season || 1)] || '';
+    var slines = String(seasonText).split(/\r?\n/);
+    for (var s = 0; s < slines.length; s++) {
+      var em = /Episode\s+(\d+)\s*:\s*(.*)/i.exec(slines[s]);
+      if (!em || parseInt(em[1], 10) !== (r.episode || 1)) continue;
+      var parts = em[2].split(' : ');
+      for (var p = 0; p < parts.length; p++) {
+        var entry = _hicineEntry(parts[p]);
+        if (entry) entries.push(entry);
+      }
+    }
+  }
+  var seen = {};
+  entries = entries.filter(function (e) { if (!e || seen[e.url]) return false; seen[e.url] = 1; return true; });
+  await _parallel(entries, 4, function (entry) { return _hicineResolve(entry, ctx); });
+}
+
 // ── Orchestrator ───────────────────────────────────────────────────────
 var PROVIDER_FN = {
   p_showbox: provShowbox, p_vidrock: provVidrock, p_moviebox: provMoviebox,
@@ -3896,21 +4626,130 @@ var PROVIDER_FN = {
   p_anineko: provAnineko, p_animedao: provAnimedao, p_anikoto: provAnikoto,
   p_anikage: provAnikage, p_anidb: provAnidb, p_animetoshohttp: provAnimetoshoHttp,
   p_tokyoinsider: provTokyoinsider, p_anizone: provAnizone, p_animekizz: provAnimekizz,
+  p_anv: provAnv, p_anipm: provAnipm, p_netnaija: provNetnaija, p_hicine: provHicine,
   p_wyziesubs: provWyzie
 };
 // Providers that are anime-only in the upstream registry.
 var ANIME_ONLY = {
   p_anineko: 1, p_animedao: 1, p_anikoto: 1, p_anikage: 1, p_anidb: 1,
-  p_animetoshohttp: 1, p_tokyoinsider: 1, p_anizone: 1, p_animekizz: 1
+  p_animetoshohttp: 1, p_tokyoinsider: 1, p_anizone: 1, p_animekizz: 1,
+  p_anv: 1, p_anipm: 1
 };
 
-async function _runProvider(key, r, ctx) {
+// ── Adaptive provider scheduling ───────────────────────────────────────
+// Measured latency per provider. This is used *only* to order the fan-out so
+// the providers that are usually quick start first and the first playable
+// source appears as early as possible. A provider is never removed, disabled
+// or de-prioritised permanently because of its recorded latency: every
+// provider still runs and every result is still returned.
+var _PROVIDER_LATENCY = {};
+// Cold-start prior. The order is derived from the provider audit (API-only
+// hosts answer in well under two seconds, HTML scrapers and hosts with
+// several chained requests take noticeably longer). The prior is only used
+// until the provider has produced a real measurement; it never removes or
+// disables a provider.
+var _PROVIDER_PRIOR = {
+  p_anv: 900, p_anipm: 1000, p_netnaija: 900, p_hicine: 1200, p_moviebox: 900,
+  p_showbox: 1200, p_anikoto: 1100, p_anizone: 1200, p_multimovies: 1200,
+  p_vidup: 1300, p_vidcore: 1400, p_anikage: 1500, p_reanime: 1500,
+  p_animesalt: 1500, p_anineko: 1500, p_animedao: 1600, p_meowtv: 1600,
+  p_videasy: 1700, p_vaplayer: 1500, p_vidzee: 1500, p_hexa: 1700,
+  p_av1encodes: 1800, p_allmovieland: 1700, p_cinejoy: 1700, p_fibwatch: 1800,
+  p_vidfastpro: 1300, p_vegamovies: 1400, p_fshare: 1300, p_primesrc: 1900,
+  p_tokyoinsider: 1800, p_animekizz: 1600, p_anidb: 1800, p_animetoshohttp: 1900,
+  p_akwam: 1900, p_rtally: 1800, p_asiaflix: 1800, p_kisskh: 1600,
+  p_onetouchtv: 1700, p_toonstream: 1800, p_bollywood: 2000, p_rogmovies: 2100,
+  p_bollyflix: 2100, p_topmovies: 2000, p_hindmoviez: 2200, p_moviesdrive: 2100,
+  p_skymovies: 2100, p_4khdhub: 2100, p_levidia: 1700, p_mlsbd: 2500,
+  p_moviesmod: 2400, p_movies4u: 2400, p_uhdmovies: 2600, p_dudefilms: 2600,
+  p_projectfreetv: 2600, p_zinkmovies: 1500, p_just4anime: 1700,
+  p_wyziesubs: 1500
+};
+function _providerLatency(key) {
+  var e = _PROVIDER_LATENCY[key];
+  if (e && e.n) return e.avg;
+  if (Object.prototype.hasOwnProperty.call(_PROVIDER_PRIOR, key)) return _PROVIDER_PRIOR[key];
+  return null;
+}
+function _recordProviderLatency(key, ms, produced) {
+  var e = _PROVIDER_LATENCY[key];
+  if (!e) { e = { avg: ms, n: 0, hits: 0 }; _PROVIDER_LATENCY[key] = e; }
+  e.n++;
+  if (produced) e.hits++;
+  // Exponential moving average so one slow run cannot dominate the order.
+  e.avg = e.n === 1 ? ms : (e.avg * 0.6 + ms * 0.4);
+}
+function _providerOrder(keys) {
+  // Known-fast first, then providers we have never measured, then the ones
+  // that are usually slow. The unknown band sits in the middle so a brand new
+  // provider is neither starved nor given an unfair head start.
+  var UNKNOWN = 6000;
+  return keys.slice().sort(function (a, b) {
+    var la = _providerLatency(a), lb = _providerLatency(b);
+    var sa = la == null ? UNKNOWN : la;
+    var sb = lb == null ? UNKNOWN : lb;
+    if (sa !== sb) return sa - sb;
+    return a < b ? -1 : (a > b ? 1 : 0);
+  });
+}
+
+// Diagnostics for the most recent resolution. Exposed through _debug so the
+// device log can show where the time went.
+var _LAST_RESOLVE_STATS = null;
+
+async function _runProvider(key, r, ctx, token, stats) {
   var fn = PROVIDER_FN[key];
   if (!fn) return;
-  if (ANIME_ONLY[key] && !r.isAnime) return;
+  if (stats && stats.providers && !stats.providers[key]) {
+    stats.providers[key] = { ms: 0, sources: 0, error: null, skipped: false };
+  }
+  // An anime-only provider is not applicable to a movie or series request.
+  // It is recorded as skipped so the diagnostics still account for every
+  // registered provider.
+  if (ANIME_ONLY[key] && !r.isAnime) {
+    if (stats && stats.providers[key]) stats.providers[key].skipped = true;
+    return;
+  }
   var local = { emit: ctx.emit, sub: ctx.sub, includeDownloads: ctx.includeDownloads };
-  try { await fn(r, local); }
-  catch (e) { console.warn('CineStream provider ' + (PROVIDER_NAMES[key] || key) + ' failed: ' + (e && e.message || e)); }
+  var started = Date.now();
+  var produced = 0;
+  var localCtx = {
+    emit: function (s) { if (s) produced++; local.emit(s); },
+    sub: local.sub,
+    includeDownloads: local.includeDownloads,
+    count: function () { return produced; }
+  };
+  var entry = stats && stats.providers ? stats.providers[key] = { ms: 0, sources: 0, error: null } : null;
+  try {
+    // Every provider gets its own ceiling. A provider that stalls can no
+    // longer occupy a concurrency slot for the whole operation.
+    await _withDeadline((async function () { await fn(r, localCtx); })(), PROVIDER_TIMEOUT_MS, null, token);
+  } catch (e) {
+    var msg = String(e && e.message || e);
+    if (entry) entry.error = _classifyError(msg);
+    if (!/cancelled|deadline/i.test(msg)) {
+      console.warn('CineStream provider ' + (PROVIDER_NAMES[key] || key) + ' failed: ' + msg);
+    }
+  } finally {
+    var took = Date.now() - started;
+    _recordProviderLatency(key, took, produced > 0);
+    if (entry) { entry.ms = took; entry.sources = produced; }
+  }
+}
+
+// Failure taxonomy used by the diagnostics. Kept coarse on purpose: the
+// point is to tell "the host is slow" apart from "the host is broken".
+function _classifyError(msg) {
+  var m = String(msg || '').toLowerCase();
+  if (/cancelled|abort/.test(m)) return 'cancelled';
+  if (/deadline|timed? ?out|timeout/.test(m)) return 'timeout';
+  if (/getaddrinfo|enotfound|dns/.test(m)) return 'dns';
+  if (/econnrefused|econnreset|ehostunreach|network|socket/.test(m)) return 'connection';
+  if (/http 4\d\d|unauthor|forbidden|token/.test(m)) return 'auth';
+  if (/http 5\d\d|bad gateway|service unavailable/.test(m)) return 'provider-outage';
+  if (/rate|429|too many/.test(m)) return 'rate-limit';
+  if (/json|parse/.test(m)) return 'parse';
+  return 'error';
 }
 
 function _providerEnabled(key) {
@@ -3923,14 +4762,23 @@ async function getVideoSources(id, fast) {
   var r = _sid(id);
   var out = [], subs = [], seen = {};
   if (!r.imdbId && !r.title) return out;
-  var opt = fast && typeof fast === 'object' ? fast : {};
+  // The host passes a boolean "resolve quickly" flag as the second argument
+  // (see docs/ARCHITECTURE.md). Older callers pass an options object with an
+  // onSubtitle callback; support both shapes.
+  var wantFast = fast === true || fast === 1;
+  var opt = (fast && typeof fast === 'object') ? fast : {};
   var onSub = typeof opt.onSubtitle === 'function' ? opt.onSubtitle : null;
+  var token = _cancelToken();
+  var stats = { providers: {}, firstSourceMs: null, totalMs: null, fast: wantFast, cancelled: false };
+  var t0 = Date.now();
   var ctx = {
     includeDownloads: _bool('includeDownloadLinks', false),
+    count: function () { return out.length; },
     emit: function (s) {
       if (!s || !s.url || seen[s.url]) return;
       seen[s.url] = 1;
       out.push(s);
+      if (stats.firstSourceMs == null) stats.firstSourceMs = Date.now() - t0;
     },
     sub: function (lang, url, source) {
       var s = _sub(url, lang, null);
@@ -3943,16 +4791,41 @@ async function getVideoSources(id, fast) {
       if (onSub) { try { onSub(s); } catch (e) {} }
     }
   };
+  // Every enabled provider runs — including the subtitle-only one. It used to
+  // run *after* the main budget, which could push the whole call past the
+  // app's 25 second cap and made Zangetsu report "no sources" even though
+  // playable links had already been found.
   var keys = [];
-  for (var i = 0; i < PROVIDERS.length; i++) if (_providerEnabled(PROVIDERS[i][0]) && PROVIDERS[i][0] !== 'p_wyziesubs') keys.push(PROVIDERS[i][0]);
-  // Run ALL enabled providers concurrently (matching upstream CineStream behavior
-  // which invokes every provider). The overall budget race prevents slow/dead
-  // providers from blocking playback past Zangetsu's ~20s ceiling. Providers
-  // that work return results; providers that don't fail independently without
-  // preventing other providers from returning streams.
-  var limit = _num('concurrency', 10);
-  await _race(_parallel(keys, limit, function (key) { return _runProvider(key, r, ctx); }), SOURCES_BUDGET_MS, null);
-  if (_providerEnabled('p_wyziesubs')) await _runProvider('p_wyziesubs', r, ctx);
+  for (var i = 0; i < PROVIDERS.length; i++) {
+    if (!_providerEnabled(PROVIDERS[i][0])) continue;
+    keys.push(PROVIDERS[i][0]);
+  }
+  if (!keys.length) return out;
+  // Fast providers first so the first playable source is not stuck behind a
+  // queue of slow hosts. Nothing is skipped: every provider still runs.
+  var ordered = _providerOrder(keys);
+  var limit = _num('concurrency', PROVIDER_CONCURRENCY);
+  var running = _parallelCancelable(ordered, limit, function (key) {
+    return _runProvider(key, r, ctx, token, stats);
+  }, token);
+  if (wantFast) {
+    // The host asked for a quick answer. Settle for a short window so the
+    // fastest providers land, then hand the result back. If nothing was
+    // found at all we keep waiting instead of returning an empty list.
+    await _race(running, FIRST_PLAYABLE_MS, null);
+    if (!out.length) {
+      await _race(running, SOURCES_BUDGET_MS, null);
+    }
+  } else {
+    await _race(running, SOURCES_BUDGET_MS, null);
+  }
+  // Stop whatever is still in flight so the JS bridge is not held open by
+  // work whose result can no longer be used.
+  token.cancel('done');
+  stats.totalMs = Date.now() - t0;
+  stats.cancelled = token.reason;
+  stats.sourceCount = out.length;
+  _LAST_RESOLVE_STATS = stats;
   // Zangetsu's VideoSource carries subtitles per stream. Providers may have
   // already attached their own; otherwise inherit the collected set.
   if (subs.length) {
@@ -3978,7 +4851,18 @@ var _api = {
     b64d: _b64d, b64e: _b64e,
     hubCloud: _hubCloud, runProvider: _runProvider, animeIds: _animeIdsCached,
     decryptVidzee: _decryptVidzee, decryptVidrock: _decryptVidrock,
-    decryptPeachify: _decryptPeachify, sha256Hex: _sha256Hex, hmacSha256Hex: _hmacSha256Hex
+    decryptPeachify: _decryptPeachify, sha256Hex: _sha256Hex, hmacSha256Hex: _hmacSha256Hex,
+    resolveStats: function () { return _LAST_RESOLVE_STATS; },
+    providerLatency: function () { return _PROVIDER_LATENCY; },
+    timeoutPolicy: function () { return TIMEOUT; },
+    budgets: function () {
+      return {
+        firstPlayableMs: FIRST_PLAYABLE_MS,
+        sourcesBudgetMs: SOURCES_BUDGET_MS,
+        providerTimeoutMs: PROVIDER_TIMEOUT_MS,
+        providerConcurrency: PROVIDER_CONCURRENCY
+      };
+    }
   }
 };
 if (typeof module !== 'undefined' && module.exports) module.exports = _api;
