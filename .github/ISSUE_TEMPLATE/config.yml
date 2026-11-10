@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question about using a source
+    url: https://github.com/MewtwoOP1/Mewtwo-repo/blob/main/docs/FAQ.md
+    about: Check the FAQ and the troubleshooting guide first — most usage questions are answered there.
+  - name: Troubleshooting guide
+    url: https://github.com/MewtwoOP1/Mewtwo-repo/blob/main/docs/TROUBLESHOOTING.md
+    about: Symptom-by-symptom fixes, and how to tell an upstream problem from a real bug.
+  - name: Security vulnerability
+    url: https://github.com/MewtwoOP1/Mewtwo-repo/security/advisories/new
+    about: Report security problems privately. Please do not open a public issue for them.

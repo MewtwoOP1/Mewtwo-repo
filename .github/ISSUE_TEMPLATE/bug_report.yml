@@ -1,0 +1,110 @@
+name: Bug report
+description: A source is broken, returns nothing, or behaves unexpectedly
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. A few things make these much faster to act on.
+
+        - **Redact every secret.** AIOStreams manifest URLs, Stremio add-on URLs, Showbox or GramCinema tokens and Jellyfin passwords are credentials. Replace them with a shape, for example `https://your-host/stremio/<id>/<config>/manifest.json`.
+        - **Run `Settings → Providers → Source health` first.** It tells us whether the source answers at all, and it narrows the report down enormously.
+        - **Say whether it ever worked.** "It worked last week and stopped" points at an upstream change; "it never worked" points at the code.
+
+  - type: input
+    id: source
+    attributes:
+      label: Source
+      description: The name of the source, exactly as it appears in the app.
+      placeholder: CineStream
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Source version
+      description: Shown in the app's source list and in index.json.
+      placeholder: 1.0.9
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: What kind of problem is this?
+      options:
+        - The source returns no results at all
+        - Titles load but no streams appear
+        - A stream starts and then fails
+        - The source cannot be installed or updated
+        - A setting is not accepted
+        - The documentation is wrong or unclear
+        - Something else
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened instead?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: worked
+    attributes:
+      label: Has this source ever worked for you?
+      options:
+        - "Yes, it used to work and stopped"
+        - "No, it has never worked"
+        - "I do not know"
+    validations:
+      required: true
+
+  - type: input
+    id: title
+    attributes:
+      label: Title
+      description: The specific title you tested with, if a particular title is affected.
+      placeholder: One Piece — episode 1
+
+  - type: textarea
+    id: log
+    attributes:
+      label: App log
+      description: |
+        Paste the relevant log lines with secrets redacted. This is usually the most useful part of the report.
+      render: shell
+
+  - type: input
+    id: app-version
+    attributes:
+      label: Zangetsu version
+      placeholder: v2.3.5
+
+  - type: input
+    id: device
+    attributes:
+      label: Device and platform
+      placeholder: Pixel 8, Android 15
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I redacted every credential, token, cookie and personalised URL from this report.
+          required: true
+        - label: I checked that this is not a problem with the third-party site itself.
+          required: true
+        - label: I searched the existing issues for the same source and symptom.
+          required: true
