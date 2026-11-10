@@ -10,7 +10,7 @@
 // intentionally NOT ported (user requirement). All native HTTP providers
 // and Wyzie Subs are preserved.
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID) ? String(__SOURCE_ID) : 'cinestream';
-var VERSION = '1.0.8';
+var VERSION = '1.0.9';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36';
 var MOBILE_UA = 'Mozilla/5.0 (Linux; Android 12; Pixel 6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.6367.82 Mobile Safari/537.36';
 var TMDB = 'https://api.themoviedb.org/3';
@@ -292,6 +292,8 @@ function _yearOf(v) { var m = String(v == null ? '' : v).match(/\d{4}/); return 
 function _abs(u, base) {
   u = _trim(u);
   if (!u) return '';
+  // Never turn script/pseudo schemes into http URLs (e.g. "javascript:var a=").
+  if (/^(javascript|data|mailto|blob|tel|about):/i.test(u)) return '';
   if (/^https?:\/\//i.test(u)) return u;
   if (u.indexOf('//') === 0) return 'https:' + u;
   if (!base) return u;
@@ -480,13 +482,19 @@ function _b64Bytes(bytes) {
   return out;
 }
 function _bytesB64(s) {
-  s = String(s || '').replace(/[^A-Za-z0-9+/]/g, '');
+  // Keep padding: stripping "=" made the final group incomplete, and
+  // charAt() past the end returned "" whose indexOf("") is 0, appending a
+  // stray NUL byte to every padded decode (corrupting URLs).
+  s = String(s || '').replace(/[^A-Za-z0-9+/=]/g, '');
   var out = [];
   for (var i = 0; i < s.length; i += 4) {
-    var e1 = _B64.indexOf(s.charAt(i)), e2 = _B64.indexOf(s.charAt(i + 1));
-    var e3 = _B64.indexOf(s.charAt(i + 2)), e4 = _B64.indexOf(s.charAt(i + 3));
+    var c1 = s.charAt(i), c2 = s.charAt(i + 1), c3 = s.charAt(i + 2), c4 = s.charAt(i + 3);
+    var e1 = _B64.indexOf(c1), e2 = _B64.indexOf(c2);
+    if (e1 < 0 || e2 < 0) break;
     out.push((e1 << 2) | (e2 >> 4));
+    var e3 = c3 ? _B64.indexOf(c3) : -1;
     if (e3 >= 0) out.push(((e2 & 15) << 4) | (e3 >> 2));
+    var e4 = c4 ? _B64.indexOf(c4) : -1;
     if (e4 >= 0) out.push(((e3 & 3) << 6) | e4);
   }
   return out;
@@ -945,17 +953,54 @@ async function _armFromAniList(anilistId) {
   var j = await _getJson(ARM + '/ids?source=anilist&id=' + encodeURIComponent(anilistId), { timeoutMs: META_TIMEOUT });
   return j && !j.message ? j : null;
 }
-async function _animeIdsCached(title, year) {
+// AniList rate-limits by IP and can answer 404/empty for a while. Fall back to
+// ani.zip mappings (keyed by TMDB/IMDb) so anime providers still get their ids.
+async function _aniZipIds(tmdbId, imdbId) {
+  var key = 'anizip:' + (tmdbId || '') + ':' + (imdbId || '');
+  var cached = _cacheGet(key);
+  if (cached) return cached;
+  var urls = [];
+  if (tmdbId) urls.push(API.anizip + '/mappings?themoviedb_id=' + encodeURIComponent(tmdbId));
+  if (imdbId) urls.push(API.anizip + '/mappings?imdb_id=' + encodeURIComponent(imdbId));
+  var out = null;
+  for (var i = 0; i < urls.length && !out; i++) {
+    var j = await _getJson(urls[i], { timeoutMs: META_TIMEOUT });
+    var m = j && j.mappings;
+    if (m && (m.anilist_id || m.mal_id)) {
+      out = {
+        anilistId: m.anilist_id || null,
+        malId: m.mal_id || null,
+        kitsuId: m.kitsu_id ? String(m.kitsu_id) : null,
+        imdbId: m.imdb_id || null,
+        tmdbId: m.themoviedb_id || null
+      };
+    }
+  }
+  if (out) _cacheSet(key, out, _CACHE_TTL.arm);
+  return out;
+}
+async function _animeIdsCached(title, year, tmdbId, imdbId) {
   var out = { anilistId: null, malId: null, kitsuId: null, imdbId: null, tmdbId: null };
   var al = await _aniListSearchCached(title, year);
-  if (!al) return out;
-  out.anilistId = al.anilistId;
-  out.malId = al.malId;
-  var arm = await _armFromAniListCached(al.anilistId);
-  if (arm) {
-    out.kitsuId = arm.kitsu ? String(arm.kitsu) : null;
-    out.imdbId = arm.imdb || null;
-    out.tmdbId = arm.themoviedb || null;
+  if (al && al.anilistId) {
+    out.anilistId = al.anilistId;
+    out.malId = al.malId;
+    var arm = await _armFromAniListCached(al.anilistId);
+    if (arm) {
+      out.kitsuId = arm.kitsu ? String(arm.kitsu) : null;
+      out.imdbId = arm.imdb || null;
+      out.tmdbId = arm.themoviedb || null;
+    }
+  }
+  if (!out.anilistId) {
+    var fb = await _aniZipIds(tmdbId, imdbId);
+    if (fb) {
+      out.anilistId = fb.anilistId || null;
+      if (!out.malId) out.malId = fb.malId || null;
+      if (!out.kitsuId) out.kitsuId = fb.kitsuId;
+      if (!out.imdbId) out.imdbId = fb.imdbId;
+      if (!out.tmdbId) out.tmdbId = fb.tmdbId;
+    }
   }
   return out;
 }
@@ -1010,7 +1055,7 @@ async function getDetail(url) {
   var tmdbId = parseInt(t.id, 10);
   var anilistId = null, malId = null, kitsuId = null;
   if (anime) {
-    var ids = await _animeIdsCached(title, year);
+    var ids = await _animeIdsCached(title, year, tmdbId, imdbId);
     anilistId = ids.anilistId; malId = ids.malId; kitsuId = ids.kitsuId;
     if (!imdbId) imdbId = ids.imdbId;
     if (tmdbId == null && ids.tmdbId) tmdbId = ids.tmdbId;
@@ -1144,7 +1189,12 @@ async function _wpRedirect(url) {
     var combined = '';
     while ((m = re.exec(html)) !== null) combined += m[1] || m[2] || '';
     if (!combined) return '';
-    var decoded = _rot13(_b64d(_b64d(combined)));
+    // Upstream order: decode(decode(combined)) -> rot13 -> decode -> JSON.
+    // Skipping the final decode leaves a base64 blob and JSON.parse fails.
+    var inner = _b64d(_b64d(combined));
+    var decoded = '';
+    if (_parseJson(inner)) decoded = inner;
+    else decoded = _b64d(_rot13(inner));
     var j = _parseJson(decoded);
     if (!j) return '';
     var encodedUrl = _b64d(j.o || '').trim();
@@ -1197,28 +1247,42 @@ async function _hubCloud(url, ctx) {
   var header = _text(_blockByClass(doc, 'card-header'));
   var size = _text((doc.match(/<i[^>]*id=["']size["'][^>]*>([\s\S]*?)<\/i>/i) || [])[1] || '');
   var q = _quality(header) || 0;
-  var anchors = _anchors(doc);
-  for (var a = 0; a < anchors.length; a++) {
-    var href = anchors[a].href, text = anchors[a].text;
-    if (!href) continue;
-    if (/FSL Server|FSLv2|Mega Server|Download File/i.test(text)) {
-      ctx.emit(_mkStream(href, q, 'HubCloud ' + text, null, base, size, header));
-    } else if (/pixeldra/i.test(href)) {
-      var px = doc.match(/var\s+pxl\s*=\s*["']([^"']+)["']/i);
-      var pl = px ? px[1] : href;
-      var pb = _baseUrl(pl);
-      var final = /download/i.test(pl) ? pl : pb + '/api/file/' + pl.split('/').pop() + '?download';
-      ctx.emit(_mkStream(final, q, 'HubCloud [Pixeldrain]', null, base, size, header));
-    } else if (/Buzz Server/i.test(text)) {
-      var buzzBase = _baseUrl(href);
-      var bdoc = await _get(href, { timeoutMs: 8000 });
-      var bm = bdoc.match(/class="[^"]*download-btn[^"]*"[^>]*href=["']([^"']+)/i);
-      if (bm) ctx.emit(_mkStream(buzzBase + bm[1], q, 'HubCloud [Buzz]', null, base, size, header));
-    } else if (/Gofile/i.test(text)) {
-      await _gofile(href, ctx);
-    } else if (ctx.includeDownloads && /10Gbps/i.test(text)) {
-      var rl = await _resolveFinalUrl(href);
-      if (rl) ctx.emit(_mkStream(rl.indexOf('link=') >= 0 ? rl.split('link=')[1] : rl, q, 'HubCloud [Download]', null, base, size, header));
+  // Current HubCloud pages first expose a "Generate Direct Download Link" button;
+  // the real mirrors (FSL / Download File / 10Gbps) live on the page it opens.
+  var docs = [doc];
+  var genAnchors = _anchors(doc);
+  for (var ga = 0; ga < genAnchors.length; ga++) {
+    if (/Generate Direct Download Link/i.test(genAnchors[ga].text) && /^https?:\/\//i.test(genAnchors[ga].href)) {
+      var gdoc = await _get(genAnchors[ga].href, { timeoutMs: 10000, headers: { Referer: base + '/' } });
+      if (gdoc) docs.push(gdoc);
+      break;
+    }
+  }
+  for (var di = 0; di < docs.length; di++) {
+    var cur = docs[di];
+    var anchors = _anchors(cur);
+    for (var a = 0; a < anchors.length; a++) {
+      var href = anchors[a].href, text = anchors[a].text;
+      if (!href) continue;
+      if (/FSL Server|FSLv2|Mega Server|Download File/i.test(text)) {
+        ctx.emit(_mkStream(href, q, 'HubCloud ' + text, null, base, size, header));
+      } else if (/pixeldra/i.test(href)) {
+        var px = cur.match(/var\s+pxl\s*=\s*["']([^"']+)["']/i);
+        var pl = px ? px[1] : href;
+        var pb = _baseUrl(pl);
+        var final = /download/i.test(pl) ? pl : pb + '/api/file/' + pl.split('/').pop() + '?download';
+        ctx.emit(_mkStream(final, q, 'HubCloud [Pixeldrain]', null, base, size, header));
+      } else if (/Buzz Server/i.test(text)) {
+        var buzzBase = _baseUrl(href);
+        var bdoc = await _get(href, { timeoutMs: 8000 });
+        var bm = bdoc.match(/class="[^"]*download-btn[^"]*"[^>]*href=["']([^"']+)/i);
+        if (bm) ctx.emit(_mkStream(buzzBase + bm[1], q, 'HubCloud [Buzz]', null, base, size, header));
+      } else if (/Gofile/i.test(text)) {
+        await _gofile(href, ctx);
+      } else if (ctx.includeDownloads && /10Gbps/i.test(text)) {
+        var rl = await _resolveFinalUrl(href);
+        if (rl) ctx.emit(_mkStream(rl.indexOf('link=') >= 0 ? rl.split('link=')[1] : rl, q, 'HubCloud [Download]', null, base, size, header));
+      }
     }
   }
 }
@@ -1466,6 +1530,19 @@ async function _loadSource(name, url, referer, ctx, quality, size) {
       var lm = await _get(url, { timeoutMs: 8000 });
       var la = _anchors(lm);
       for (var i = 0; i < la.length; i++) if (la[i].href) await _loadSource(name, la[i].href, url, ctx, quality, size);
+      return;
+    }
+    // Hdhub4u's greenmotors wrapper now lands on a link-hub page (hblinks.*)
+    // that lists HubDrive/GDTot/GoFile targets instead of a direct mirror.
+    if (/hblinks?\./i.test(url)) {
+      var hl = await _get(url, { timeoutMs: 10000 });
+      var hla = _anchors(hl), hjobs = [];
+      for (var h = 0; h < hla.length; h++) {
+        var hu = hla[h].href;
+        if (!hu || hu.charAt(0) === '#' || _host(hu) === _host(url)) continue;
+        if (/hubdrive|gdtot|gofile|pixeldra|hubcloud|drive|download|file/i.test(hla[h].text + ' ' + hu)) hjobs.push(hu);
+      }
+      await _parallel(hjobs, 3, async function (hu) { await _loadSource(name, hu, url, ctx, quality, size); });
       return;
     }
     if (/hubdrive\./i.test(url)) {
@@ -1945,8 +2022,26 @@ async function provAllmovieland(r, ctx) {
 
 // ── 7. Hdhub4u ─────────────────────────────────────────────────────────
 async function _hdhubLinks(url) {
-  if (/greenmountmotors|hubcdn/i.test(url)) return await _wpRedirect(url);
+  // Live Hdhub4u/4KHDHub pages now use greenmotors.club; older mirrors used
+  // greenmountmotors / hubcdn. All of them are the same redirect wrapper.
+  if (/greenmountmotors|greenmotors|hubcdn/i.test(url)) return await _wpRedirect(url);
   return url;
+}
+function _normTitle(s) {
+  s = String(s || '');
+  try { s = s.normalize('NFD').replace(/[\u0300-\u036f]/g, ''); } catch (e) {}
+  return s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+// Typesense drops query tokens when there is no exact match, so a search for an
+// IMDb id can return the latest unrelated posts. Only accept verified hits.
+function _hdhubHitMatches(doc, r) {
+  if (!doc) return false;
+  var hitImdb = String(doc.imdb_id || '').trim().toLowerCase();
+  if (hitImdb) return hitImdb === String(r.imdbId || '').trim().toLowerCase();
+  var want = _normTitle(r.title);
+  if (!want) return false;
+  var hay = _normTitle(doc.post_title) + ' ' + _normTitle(doc.permalink);
+  return hay.indexOf(want) >= 0;
 }
 async function _getHdhub4uStreams(url, ctx, q, size) {
   var src = await _hdhubLinks(url);
@@ -1961,7 +2056,9 @@ async function provHdhub4u(r, ctx) {
   var j = await _getJson(searchUrl, { headers: { Referer: base + '/' }, timeoutMs: 10000 });
   if (!j || !j.hits) return;
   for (var i = 0; i < j.hits.length; i++) {
-    var raw = j.hits[i].document && j.hits[i].document.permalink;
+    var hitDoc = j.hits[i].document || {};
+    if (!_hdhubHitMatches(hitDoc, r)) continue;
+    var raw = hitDoc.permalink;
     if (!raw) continue;
     var path = String(raw).replace(/^https?:\/\/[^\/]+/i, '').replace(/^\//, '');
     var page = await _get(base + '/' + path, { timeoutMs: 10000 });
@@ -1969,7 +2066,8 @@ async function provHdhub4u(r, ctx) {
     if (r.season == null) {
       var links = _all(/<a[^>]*data-wpel-link=["']?external["']?[^>]*href=["']([^"']+)/gi, page, 1)
         .concat(_all(/<a[^>]*href=["']([^"']+)["'][^>]*data-wpel-link=["']?external["']?/gi, page, 1));
-      for (var l = 0; l < links.length; l++) if (links[l]) await _getHdhub4uStreams(links[l], ctx);
+      links = _uniqBy(links.map(function (x) { return { url: x }; }), function (x) { return x.url; }).map(function (x) { return x.url; });
+      await _parallel(links, 4, async function (l) { if (l) await _getHdhub4uStreams(l, ctx); });
     } else {
       var titleText = _text(page.match(/<h1[^>]*class="[^"]*page-title[^"]*"[^>]*>([\s\S]*?)<\/h1>/i) ? page.match(/<h1[^>]*class="[^"]*page-title[^"]*"[^>]*>([\s\S]*?)<\/h1>/i)[1] : '') ||
                       _text(_first(/<title[^>]*>([\s\S]*?)<\/title>/i, page));
@@ -1986,11 +2084,11 @@ async function provHdhub4u(r, ctx) {
       var found = _all(/<a[^>]*data-wpel-link=["']?external["']?[^>]*href=["']([^"']+)/gi, chunk, 1)
         .concat(_all(/<a[^>]*href=["']([^"']+)["'][^>]*data-wpel-link=["']?external["']?/gi, chunk, 1));
       var uniq = _uniqBy(found.map(function (x) { return { url: x }; }), function (x) { return x.url; });
-      for (var f = 0; f < uniq.length; f++) {
-        var u = uniq[f].url;
-        if (/whatsapp\.com|telegram|catimages/i.test(u)) continue;
+      await _parallel(uniq, 4, async function (item) {
+        var u = item.url;
+        if (/whatsapp\.com|telegram|catimages/i.test(u)) return;
         await _getHdhub4uStreams(u, ctx);
-      }
+      });
     }
   }
 }
@@ -2156,14 +2254,14 @@ async function provVidfastpro(r, ctx) {
   if (!enc) return;
   // Two-stage enc-dec.app flow (API changed: requires stage param)
   var s1 = await _getJson(MULTI + '/enc-vidfast?text=' + encodeURIComponent(enc) + '&stage=1', { timeoutMs: 12000 });
-  if (!s1 || !s1.result || !s1.result.stage1 || !s1.result.token) return;
-  headers['X-CSRF-Token'] = s1.result.token;
+  if (!s1 || !s1.result || !s1.result.stage1) return;
+  headers['X-CSRF-Token'] = s1.result.token || '';
   var s1text = await _post(s1.result.stage1, { headers: headers, timeoutMs: 12000 });
   if (!s1text || !s1text.body) return;
   var s2 = await _getJson(MULTI + '/enc-vidfast?text=' + encodeURIComponent(s1text.body) + '&stage=2', { timeoutMs: 12000 });
   var d = s2 && s2.result ? s2.result : null;
-  if (!d || !d.servers || !d.stream || !d.token) return;
-  headers['X-CSRF-Token'] = d.token;
+  if (!d || !d.servers || !d.stream) return;
+  headers['X-CSRF-Token'] = d.token || '';
   var serversEnc = await _post(d.servers, { headers: headers, timeoutMs: 12000 });
   var dec = await _jsonPost(MULTI + '/dec-vidfast', { text: serversEnc.body }, {}, 12000);
   var list = dec && dec.result ? dec.result : null;
@@ -2242,14 +2340,14 @@ async function provVidcore(r, ctx) {
   if (!enc) return;
   // Two-stage enc-dec.app flow (API changed: requires stage param)
   var s1 = await _getJson(MULTI + '/enc-vidcore?text=' + encodeURIComponent(enc) + '&stage=1', { timeoutMs: 12000 });
-  if (!s1 || !s1.result || !s1.result.stage1 || !s1.result.token) return;
-  headers['X-CSRF-Token'] = s1.result.token;
+  if (!s1 || !s1.result || !s1.result.stage1) return;
+  headers['X-CSRF-Token'] = s1.result.token || '';
   var s1text = await _post(s1.result.stage1, { headers: headers, timeoutMs: 12000 });
   if (!s1text || !s1text.body) return;
   var s2 = await _getJson(MULTI + '/enc-vidcore?text=' + encodeURIComponent(s1text.body) + '&stage=2', { timeoutMs: 12000 });
   var d = s2 && s2.result ? s2.result : null;
-  if (!d || !d.servers || !d.stream || !d.token) return;
-  headers['X-CSRF-Token'] = d.token;
+  if (!d || !d.servers || !d.stream) return;
+  headers['X-CSRF-Token'] = d.token || '';
   var serversEnc = await _post(d.servers, { headers: headers, timeoutMs: 12000 });
   var dec = await _jsonPost(MULTI + '/dec-vidcore', { text: serversEnc.body }, headers, 12000);
   var list = dec && dec.result ? dec.result : null;
@@ -2730,15 +2828,15 @@ async function provVidup(r, ctx) {
   if (!enc) return;
   // Two-stage enc-dec.app flow (API changed: requires stage param)
   var s1 = await _getJson(MULTI + '/enc-vidup?text=' + encodeURIComponent(enc) + '&stage=1', { headers: headers, timeoutMs: 12000 });
-  if (!s1 || s1.status !== 200 || !s1.result || !s1.result.stage1 || !s1.result.token) return;
-  var ph = Object.assign({}, headers, { 'X-CSRF-Token': s1.result.token });
+  if (!s1 || s1.status !== 200 || !s1.result || !s1.result.stage1) return;
+  var ph = Object.assign({}, headers, { 'X-CSRF-Token': s1.result.token || '' });
   var s1text = await _post(s1.result.stage1, { headers: ph, timeoutMs: 12000 });
   if (!s1text || !s1text.body) return;
   var s2 = await _getJson(MULTI + '/enc-vidup?text=' + encodeURIComponent(s1text.body) + '&stage=2', { headers: headers, timeoutMs: 12000 });
   if (!s2 || s2.status !== 200 || !s2.result) return;
   var d = s2.result;
-  if (!d.servers || !d.stream || !d.token) return;
-  ph['X-CSRF-Token'] = d.token;
+  if (!d.servers || !d.stream) return;
+  ph['X-CSRF-Token'] = d.token || '';
   var serversEnc = await _post(d.servers, { headers: ph, timeoutMs: 12000 });
   var dec = await _jsonPost(MULTI + '/dec-vidup', { text: serversEnc.body }, {}, 12000);
   if (!dec || dec.status !== 200 || !dec.result) return;
@@ -2754,14 +2852,27 @@ async function provVidup(r, ctx) {
 }
 
 // ── 28. Meowtv ─────────────────────────────────────────────────────────
+async function _meowTicket() {
+  var r = await _post(API.meowtv + '/streams/ticket', {
+    headers: { 'User-Agent': UA, Origin: API.meowtvBase, Referer: API.meowtvBase + '/' },
+    timeoutMs: 8000
+  });
+  var j = _parseJson(r && r.body);
+  return j && j.ticket ? j.ticket : '';
+}
 async function provMeowtv(r, ctx) {
   if (!r.tmdbId) return;
   var headers = { 'User-Agent': UA, Origin: API.meowtvBase, Referer: API.meowtvBase + '/' };
   var type = r.season != null ? 'tv' : 'movie';
-  var servers = ['ipcloud', 'dcloud', 'tik', 'turkce', 'hindiv3'];
+  // Live server ids. ipcloud/turkce/hindiv3 now answer "Unknown server".
+  var servers = ['english', 'acme', 'dcloud', 'tik', 'hindi'];
   for (var i = 0; i < servers.length; i++) {
+    // Tickets are single-use: one fresh ticket per server request.
+    var ticket = await _meowTicket();
+    if (!ticket) continue;
+    var h2 = Object.assign({}, headers, { 'X-Stream-Ticket': ticket });
     var url = API.meowtv + '/streams/' + type + '/' + r.tmdbId + (r.season != null ? '/' + r.season + '/' + r.episode : '') + '?s=' + servers[i];
-    var text = await _get(url, { headers: headers, timeoutMs: 12000 });
+    var text = await _get(url, { headers: h2, timeoutMs: 12000 });
     var raw = _parseJson(text);
     if (!raw) continue;
     var dec = await _jsonPost(MULTI + '/dec-meowtv', { data: raw }, { 'Content-Type': 'application/json' }, 12000);
@@ -2813,7 +2924,9 @@ async function provMoviesmod(r, ctx) {
 async function provMovies4u(r, ctx) {
   if (!r.imdbId || !r.title) return;
   var api = await _dyn('movies4u');
-  if (!api) return;
+  // The upstream url list ships a google.com placeholder for this dead host.
+  // Searching Google yields unrelated pages, so skip unless a real host is set.
+  if (!api || /(^|\.)google\.com$/i.test(_host(api))) return;
   var query = r.season == null ? String(r.title).replace(/ /g, '+') + '+' + (r.year || '') : String(r.title).replace(/ /g, '+') + '+season+' + r.season;
   var headers = { Cookie: 'xla=s4t', 'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36', Referer: api + '/' };
   var search = await _get(api + '/?s=' + query, { headers: headers, timeoutMs: 12000 });
@@ -3860,6 +3973,10 @@ var _api = {
   _enabledProviders: _enabledProviders, _providers: PROVIDERS,
   _debug: {
     quality: _quality, slug: _slug, eu: _eu, sid: _sid,
+    abs: _abs, wpRedirect: _wpRedirect, hdhubLinks: _hdhubLinks,
+    hdhubHitMatches: _hdhubHitMatches, anizipIds: _aniZipIds, normTitle: _normTitle,
+    b64d: _b64d, b64e: _b64e,
+    hubCloud: _hubCloud, runProvider: _runProvider, animeIds: _animeIdsCached,
     decryptVidzee: _decryptVidzee, decryptVidrock: _decryptVidrock,
     decryptPeachify: _decryptPeachify, sha256Hex: _sha256Hex, hmacSha256Hex: _hmacSha256Hex
   }
