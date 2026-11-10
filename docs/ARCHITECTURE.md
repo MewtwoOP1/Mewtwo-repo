@@ -102,11 +102,13 @@ Every provider exports the same set of functions. The names, the arguments and t
 | `search(query, page, opts)` | `query`, `page`, `{ category }` | `[MediaItem]` |
 | `getDetail(url, opts)` | the item's `url`, `{ category }` | A `MediaDetail`, including its `episodes` array |
 | `getEpisodes(url, opts)` | the item's `url`, `{ category }` | `[Episode]` |
-| `getVideoSources(episodeUrl, opts)` | the episode's `url` | `[VideoSource]` |
+| `getVideoSources(episodeUrl, fast)` | the episode's `url`, and a boolean "resolve quickly" flag | `[VideoSource]` |
 
 `getHome` and `popular` are optional in the app: a provider without `getHome` still gets home rows synthesised from `popular`.
 
 > `getStreams` and `getLinks` also exist in this repository, but they are **aliases of `getVideoSources`**, not part of the app's API. They exist so the repository's own validation script can check every provider uniformly. Do not expect the app to call them.
+
+> The second argument of `getVideoSources` is a **boolean**, not an options object. Providers in this repository name the parameter `opts` and ignore it; that is harmless, but a provider that wants the fast path should read it as a boolean.
 
 ### `getInfo()`
 
@@ -175,7 +177,7 @@ fetch(url, { headers: { Accept: 'application/json' }, timeoutMs: 12000 })
   });
 ```
 
-The host caps any request at 25 seconds, so `timeoutMs` above that is clamped rather than honoured.
+The host applies two caps: an individual request is capped at **25 seconds**, and so is the whole provider call. A `timeoutMs` above that is clamped rather than honoured, and a provider that exceeds 25 seconds in total is abandoned.
 
 ---
 
@@ -256,7 +258,7 @@ The `url` carries whatever the provider needs to resolve playback later. Three s
 ## The playback flow
 
 ```text
-getVideoSources(episodeUrl, opts)
+getVideoSources(episodeUrl, fast)
         │
         ├──► parse the episode payload back into identifiers
         │
@@ -293,7 +295,7 @@ Request headers matter. Many hosts refuse a request without the right `Referer` 
 | The real media sits behind an embed page | The provider walks the site's own chain — list endpoint, server list, embed — and extracts the final URL |
 | The payload is encrypted | The provider decrypts it in pure JavaScript (AES-256-CBC for MegaPlay and VidWish, AES-GCM for AniChan) |
 | A signed URL expires | Signed URLs are re-resolved every time rather than cached. Stream URLs are deliberately never cached |
-| Many hosts, one slow one | Providers run hosts concurrently, isolate failures, and share a total time budget. CineStream uses an 18-second budget; the app allows roughly 20 seconds |
+| Many hosts, one slow one | Providers run hosts concurrently, isolate failures, and share a total time budget. CineStream uses an 18-second budget; the app abandons any provider call after 25 seconds |
 | A dead host empties the list | Providers list a stream per working host, so one dead host costs you one stream rather than all of them |
 
 ---

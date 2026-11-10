@@ -165,7 +165,7 @@ A source is a single JavaScript file that implements a small, fixed contract:
 | `search(query, page, opts)` | Matching catalogue items |
 | `getDetail(url, opts)` | One title, including its episode list |
 | `getEpisodes(url, opts)` | The episode list for a title |
-| `getVideoSources(episodeUrl, opts)` | Playable stream URLs for one episode |
+| `getVideoSources(episodeUrl, fast)` | Playable stream URLs for one episode |
 
 The app injects `__settings`, `__SOURCE_ID`, a `fetch()` helper with a `timeoutMs` option and a handful of crypto and HTML helpers. A provider never blocks the UI and never throws into the app — a failed lookup is simply an empty result.
 

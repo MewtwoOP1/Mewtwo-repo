@@ -136,7 +136,7 @@ function popular(opts) { return Promise.resolve([]); }
 function search(query, page, opts) { return Promise.resolve([]); }
 function getDetail(url, opts) { return Promise.resolve(null); }
 function getEpisodes(url, opts) { return Promise.resolve([]); }
-function getVideoSources(episodeUrl, opts) { return Promise.resolve([]); }
+function getVideoSources(episodeUrl, fast) { return Promise.resolve([]); }
 function getStreams(id, opts) { return getVideoSources(id, opts); }
 
 if (typeof module !== 'undefined' && module.exports) {
