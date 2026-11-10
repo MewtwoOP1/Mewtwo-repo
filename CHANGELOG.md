@@ -5,6 +5,19 @@
 - Optimize **CineStream** performance: add TTL cache for TMDB/AniList/ARM metadata (5-10 min), search (2 min), home page (5 min); add request deduplication via `_inflightFetch` to avoid duplicate fetches; reduce `FETCH_TIMEOUT` 7000→5000ms and `SOURCE_TIMEOUT` 22000→15000ms; use cached wrappers in `getDetail` and `search`; cache home page results.
 - Bump **CineStream** to v1.0.8.
 
+## CineStream 1.0.9
+
+- Fix the native base64 decoder (`_bytesB64`) appending a stray NUL byte to every padded payload. This silently corrupted decoded URLs and links across extractors; decoding now keeps padding and stops at incomplete groups.
+- Fix `_wpRedirect` dropping the final base64 decode step, which broke every `greenmotors.club` / `greenmountmotors` / `hubcdn` redirect used by **4KHDHub** and **Hdhub4u**.
+- Extend `_hdhubLinks` to the live `greenmotors` host, follow the new **Hdhub4u** `hblinks.*` link-hub hop (HubDrive/GDTot/GoFile), follow **HubCloud**'s "Generate Direct Download Link" mirror page, and parallelize Hdhub4u link extraction to fit the playback budget.
+- Fix **VidFastPro**, **Vidcore** and **Vidup** returning early when enc-dec.app omits the `token` field (now `""`): only the stage endpoints/servers/stream payload are required.
+- Fix **MeowTV** 401s by requesting a single-use `/streams/ticket` per server request and sending `X-Stream-Ticket`; use the live server ids (`english`, `acme`, `dcloud`, `tik`, `hindi`).
+- Reject `javascript:`/`data:`/`mailto:`/`blob:` URLs in `_abs` so anchor parsing can no longer turn script snippets into bogus `https://host/javascript:...` fetches.
+- Verify **Hdhub4u** search hits by `imdb_id` or normalized title before extracting, preventing Typesense token-drop from returning unrelated latest posts.
+- Add an `api.ani.zip/mappings` fallback for AniList lookups so anime providers still receive `anilistId`/`malId` when AniList rate-limits or returns empty.
+- Skip **Movies4u** when its upstream base is the `google.com` placeholder instead of searching Google for unrelated pages.
+- Bump **CineStream** to v1.0.9.
+
 ## CineStream 1.0.7
 
 - Fix **CineStream** `getVideoSources` to run ALL enabled providers concurrently instead of limiting quick mode to 3 providers (VaPlayer for movies, Anikage/Animekizz for anime). This restores the upstream CineStream behavior where every provider is invoked, so working providers (Hdhub4u, MoviesDrive, Rtally, Just4Anime, etc.) return streams instead of being skipped.
