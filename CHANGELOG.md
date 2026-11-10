@@ -18,6 +18,15 @@
 - Skip **Movies4u** when its upstream base is the `google.com` placeholder instead of searching Google for unrelated pages.
 - Bump **CineStream** to v1.0.9.
 
+## CineStream 1.1.0
+
+- New providers: Anv (anime API catalog/episode), AniPM (beta server / settlar / Megaplay), NetNaija (BFF token auth, MP4/HLS/DASH), HiCine (vcloud/pixeldrain/gofile/ten links).
+- Extractor helpers: `_rgNorm`, `_rgScore`, `_rgQueries`, `_rgPick` title‑matching; `_netnaijaToken`, `_netnaijaAuth`, `_netnaijaLang` token lifecycle; `_hicineEntry`, `_hicinePick`, `_hicineResolve` link‑resolution chain (pixeldrain, gofile, ten hops); `_anvHeaders`, `_anvCatalog`, `provAnv`; `_anipmHeaders`, `_anipmSettlar`, `provAnipm`.
+- Provider registration: four new keys added to `enabledProviders` options in `index.json`.
+- Version bump to `1.1.0`.
+
+## Unreleased
+
 ## CineStream 1.0.7
 
 - Fix **CineStream** `getVideoSources` to run ALL enabled providers concurrently instead of limiting quick mode to 3 providers (VaPlayer for movies, Anikage/Animekizz for anime). This restores the upstream CineStream behavior where every provider is invoked, so working providers (Hdhub4u, MoviesDrive, Rtally, Just4Anime, etc.) return streams instead of being skipped.

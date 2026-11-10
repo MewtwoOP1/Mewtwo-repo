@@ -10,7 +10,7 @@
 // intentionally NOT ported (user requirement). All native HTTP providers
 // and Wyzie Subs are preserved.
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID) ? String(__SOURCE_ID) : 'cinestream';
-var VERSION = '1.0.9';
+var VERSION = '1.1.0';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36';
 var MOBILE_UA = 'Mozilla/5.0 (Linux; Android 12; Pixel 6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.6367.82 Mobile Safari/537.36';
 var TMDB = 'https://api.themoviedb.org/3';
@@ -217,6 +217,10 @@ var PROVIDERS = [
   ['p_tokyoinsider', 'TokyoInsider'],
   ['p_anizone', 'Anizone'],
   ['p_animekizz', 'Animekizz'],
+  ['p_anv', 'Anv'],
+  ['p_anipm', 'AniPM'],
+  ['p_netnaija', 'NetNaija'],
+  ['p_hicine', 'HiCine'],
   ['p_wyziesubs', 'Wyzie Subs']
 ];
 var PROVIDER_NAMES = {};
@@ -3875,6 +3879,503 @@ async function provWyzie(r, ctx) {
   }
 }
 
+// ── Raghav provider helpers ────────────────────────────────────────────
+// Title comparison used by the providers ported from the GPL-3.0 Raghav
+// extension set. The host already gives us a TMDB title, so a provider only
+// has to find the matching result on its own site.
+function _rgNorm(s) {
+  return String(s == null ? '' : s)
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/["'`]/g, '')
+    .replace(/[^a-z0-9\u00c0-\uffff]+/g, ' ')
+    .replace(/\b(19|20)\d{2}\b/g, ' ')
+    .replace(/\b(season|s)\s*\d+\b/g, ' ')
+    .replace(/\b(dub|sub|hindi|english|japanese|multi audio|dual audio|hardsub)\b/g, ' ')
+    .replace(/\s+/g, ' ').trim();
+}
+function _rgTokens(s) { return _rgNorm(s).split(' ').filter(Boolean); }
+function _rgScore(a, b) {
+  a = _rgNorm(a); b = _rgNorm(b);
+  if (!a || !b) return 0;
+  if (a === b) return 1;
+  if (a.indexOf(b) >= 0 || b.indexOf(a) >= 0) return 0.9;
+  var A = _rgTokens(a), B = _rgTokens(b), used = {}, hit = 0;
+  for (var i = 0; i < A.length; i++) {
+    for (var k = 0; k < B.length; k++) {
+      if (!used[k] && A[i] === B[k]) { used[k] = 1; hit++; break; }
+    }
+  }
+  return hit / Math.max(A.length, B.length);
+}
+function _rgQueries(r) {
+  var out = [], seen = {};
+  function add(v) {
+    v = _trim(v);
+    if (!v) return;
+    var k = v.toLowerCase();
+    if (seen[k]) return;
+    seen[k] = 1; out.push(v);
+  }
+  add(r.imdbTitle); add(r.title); add(r.originalTitle);
+  var bases = out.slice();
+  for (var i = 0; i < bases.length; i++) {
+    var w = _rgTokens(bases[i]);
+    add(String(bases[i]).split(':')[0]);
+    add(String(bases[i]).replace(/\s*\([^)]*\)\s*/g, ' '));
+    if (w.length > 3) add(w.slice(0, 3).join(' '));
+    if (w.length > 2) add(w.slice(0, 2).join(' '));
+    if (w.length > 1) add(w[0]);
+  }
+  return out.slice(0, 9);
+}
+function _rgPick(list, r, titleFn, idFn, malFn) {
+  var best = null, bestScore = 0;
+  for (var i = 0; i < (list || []).length; i++) {
+    var item = list[i];
+    if (!item) continue;
+    if (r.anilistId != null && idFn && String(idFn(item)) === String(r.anilistId)) return item;
+    if (r.malId != null && malFn && String(malFn(item)) === String(r.malId)) return item;
+    var score = _rgScore(titleFn(item), r.title || '');
+    if (r.year && item.year && Math.abs(parseInt(item.year, 10) - r.year) > 1) score -= 0.15;
+    if (score > bestScore) { bestScore = score; best = item; }
+  }
+  return bestScore >= 0.55 ? best : null;
+}
+function _rgCookie(headers, name) {
+  var sc = _hget(headers, 'set-cookie');
+  var m = new RegExp(name + '=([^;]+)').exec(sc);
+  return m ? name + '=' + m[1] : '';
+}
+async function _rgFollow(url, headers, max) {
+  var cur = url;
+  for (var i = 0; i < (max || 4); i++) {
+    var res = await _fetch(cur, { headers: headers || {}, followRedirects: false, timeoutMs: 12000 });
+    var loc = _hget(res.headers, 'location');
+    if (res.status >= 300 && res.status < 400 && loc) { cur = _abs(loc, cur); continue; }
+    return cur;
+  }
+  return cur;
+}
+
+// ── 60. Anv ────────────────────────────────────────────────────────────
+var ANV_BASE = 'https://anv.to';
+function _anvHeaders(extra) {
+  return Object.assign({
+    'Accept': 'application/json', 'Content-Type': 'application/json',
+    'Origin': ANV_BASE, 'Referer': ANV_BASE + '/', 'User-Agent': UA
+  }, extra || {});
+}
+async function provAnv(r, ctx) {
+  if (!r.isAnime) return;
+  var ep = parseInt(r.absolute || r.episode || 1, 10) || 1;
+  var media = null;
+  var queries = _rgQueries(r);
+  for (var qi = 0; qi < queries.length && !media; qi++) {
+    var res = await _postJson(ANV_BASE + '/api/catalog', {
+      operation: 'BrowseAnime',
+      variables: { page: 1, perPage: 28, sort: ['POPULARITY_DESC'], search: queries[qi] }
+    }, { headers: _anvHeaders(), timeoutMs: 12000 });
+    var j = _parseJson(res.body);
+    var list = j && j.data && j.data.Page && j.data.Page.media;
+    if (!Array.isArray(list) || !list.length) continue;
+    media = _rgPick(list, r,
+      function (m) { return m.title && (m.title.english || m.title.romaji || m.title.native); },
+      function (m) { return m.id; }, function (m) { return m.idMal; });
+  }
+  if (!media || !media.slug) return;
+  var pageUrl = ANV_BASE + '/anime/' + media.slug + '-episode-' + ep;
+  var pg = await _fetch(pageUrl, { headers: { 'User-Agent': UA, 'Accept-Language': 'en-US,en;q=0.9' }, timeoutMs: 12000 });
+  var cookie = _rgCookie(pg.headers, 'shiro_watch') || _cookieHeader(pageUrl);
+  var payload = { anilistId: media.id, malId: media.idMal, episode: ep };
+  var episodeJson = null;
+  for (var attempt = 0; attempt < 2 && !episodeJson; attempt++) {
+    var er = await _postJson(ANV_BASE + '/api/episode', payload, {
+      headers: _anvHeaders({ Cookie: cookie, Referer: pageUrl }), timeoutMs: 15000
+    });
+    if (er.status === 403) {
+      var fresh = await _fetch(pageUrl, { headers: { 'User-Agent': UA, 'Accept-Language': 'en-US,en;q=0.9' }, timeoutMs: 12000 });
+      cookie = _rgCookie(fresh.headers, 'shiro_watch') || _cookieHeader(pageUrl);
+      continue;
+    }
+    episodeJson = _parseJson(er.body);
+  }
+  if (!episodeJson || !Array.isArray(episodeJson.variants)) return;
+  var repeats = {}, jobs = [];
+  for (var vi = 0; vi < episodeJson.variants.length; vi++) {
+    var variant = episodeJson.variants[vi] || {};
+    var audio = variant.id === 'dub' ? 'Dub' : (variant.id === 'sub' ? 'Sub' : _cap(variant.id));
+    var sources = Array.isArray(variant.sources) ? variant.sources : [];
+    for (var si = 0; si < sources.length; si++) {
+      var source = sources[si] || {};
+      var url = _abs(source.url, ANV_BASE);
+      if (!url) continue;
+      var n = repeats[url] || 0;
+      repeats[url] = n + 1;
+      if (n > 0) url += (url.indexOf('?') >= 0 ? '&' : '?') + 'f=' + n;
+      jobs.push({ url: url, audio: audio, label: _trim(source.label) || audio, tracks: source.tracks || [] });
+    }
+  }
+  await _parallel(jobs, 4, async function (p) {
+    var q = 0;
+    var mr = await _fetch(p.url, { headers: { 'User-Agent': UA, Cookie: cookie, Referer: pageUrl }, timeoutMs: 12000 });
+    var mm = /RESOLUTION=(\d+)x(\d+)/i.exec(mr.body || '');
+    if (mm) q = parseInt(mm[2], 10) || 0;
+    var subs = [];
+    for (var ti = 0; ti < p.tracks.length; ti++) {
+      var track = p.tracks[ti] || {};
+      var tu = _abs(track.src || track.url, ANV_BASE);
+      if (!tu) continue;
+      var label = _trim(track.label) || track.language || 'Subtitle';
+      subs.push({ url: tu, lang: _langName(track.language || label), label: label });
+      ctx.sub(track.language || label, tu, 'Anv');
+    }
+    var stream = _stream(p.url, q, 'Anv [' + p.audio + ' - ' + p.label + ']', 'hls',
+      { 'User-Agent': UA, Referer: pageUrl, Cookie: cookie }, p.audio, null, subs);
+    if (stream) ctx.emit(stream);
+  });
+}
+
+// ── 61. AniPM ──────────────────────────────────────────────────────────
+var ANIPM_BASE = 'https://ani.pm';
+var ANIPM_SETTLAR = 'https://embed.settlar.io';
+function _anipmHeaders(extra) {
+  return Object.assign({ 'Accept': 'application/json', 'Referer': ANIPM_BASE + '/', 'User-Agent': UA }, extra || {});
+}
+function _anipmQuality(master) {
+  var heights = _all(/RESOLUTION=\d+x(\d+)/gi, master || '', 1);
+  var max = 0;
+  for (var i = 0; i < heights.length; i++) max = Math.max(max, parseInt(heights[i], 10) || 0);
+  return max;
+}
+async function _anipmSettlar(selection, ep, channel, ctx) {
+  if (!selection) return;
+  var sess = _parseJson(await _get(ANIPM_BASE + '/api/anime/settlar/session?selection=' + _quote(selection) +
+    '&provider=anipm&ep=' + ep + '&channel=' + channel + '&telemetry=0', { headers: _anipmHeaders(), timeoutMs: 12000 }));
+  var embed = sess && sess.embedUrl;
+  if (!embed) return;
+  var tm = /[?&]t=([^&]+)/.exec(embed);
+  if (!tm) return;
+  var st = _parseJson(await _get(ANIPM_SETTLAR + '/api/embed/session?t=' + tm[1], {
+    headers: { 'Accept': 'application/json', 'Referer': ANIPM_SETTLAR + '/embed/v1' }, timeoutMs: 12000
+  }));
+  if (!st || !st.source) return;
+  var headers = { 'User-Agent': UA, Referer: ANIPM_SETTLAR + '/' };
+  var subs = [];
+  for (var i = 0; i < (st.subtitles || []).length; i++) {
+    var tr = st.subtitles[i] || {};
+    if (!tr.url) continue;
+    subs.push({ url: tr.url, lang: _langName(tr.srclang || tr.label), label: tr.label || tr.srclang || 'Subtitle' });
+    ctx.sub(tr.srclang || tr.label, tr.url, 'AniPM');
+  }
+  var label = 'AniPM Settlar [' + (channel === 'dub' ? 'Dub' : 'Sub') + (st.audioLang ? ' - ' + st.audioLang : '') + ']';
+  var stream = _stream(st.source, 0, label, 'hls', headers, channel, st.audioLang || null, subs);
+  if (stream) ctx.emit(stream);
+}
+async function provAnipm(r, ctx) {
+  if (!r.isAnime) return;
+  var ep = parseInt(r.absolute || r.episode || 1, 10) || 1;
+  var item = null;
+  var queries = _rgQueries(r);
+  for (var qi = 0; qi < queries.length && !item; qi++) {
+    var s = _parseJson(await _get(ANIPM_BASE + '/api/anime/search?q=' + _quote(queries[qi]), { headers: _anipmHeaders(), timeoutMs: 12000 }));
+    item = _rgPick(s && s.items, r,
+      function (m) { return m.title; },
+      function (m) { return m.anilistId; },
+      function (m) { return m.malId; });
+  }
+  var anilistId = r.anilistId || (item && item.anilistId);
+  var malId = r.malId || (item && item.malId);
+  var seriesId = item && item.id;
+  var tasks = [];
+  if (anilistId) {
+    tasks.push(async function () {
+      var info = _parseJson(await _get(ANIPM_BASE + '/api/anime/beta-server/' + _quote(anilistId), { headers: _anipmHeaders(), timeoutMs: 12000 }));
+      if (!info || info.available !== true || !info.origin || !info.path) return;
+      if (!Array.isArray(info.episodes) || info.episodes.indexOf(ep) < 0) return;
+      var wanted = info.dub === true ? 'dub' : 'sub';
+      if (info.sub !== true && info.dub !== true) return;
+      var path = String(info.path).replace(/^\/watch\//, '');
+      var split = path.lastIndexOf('-');
+      if (split <= 0) return;
+      var slug = path.slice(0, split), betaId = path.slice(split + 1);
+      var origin = String(info.origin).replace(/\/+$/, '');
+      var master = origin + '/hls/' + betaId + '-' + slug + '/E' + ('0000' + ep).slice(-4) + '/master.m3u8';
+      var mr = await _fetch(master, { headers: { 'User-Agent': UA, 'Accept': '*/*', Referer: origin + '/' }, timeoutMs: 15000 });
+      if (!mr.ok || String(mr.body || '').indexOf('#EXTM3U') !== 0) return;
+      var audio = Array.isArray(info.audio) ? info.audio.join(', ') : (info.dub === true ? 'Multi Audio' : 'Japanese');
+      var stream = _stream(master, _anipmQuality(mr.body), 'AniPM Beta [' + wanted + ' - ' + audio + ']', 'hls',
+        { 'User-Agent': UA, Referer: origin + '/' }, wanted, audio, []);
+      if (stream) ctx.emit(stream);
+    });
+  }
+  if (seriesId) {
+    ['sub', 'dub'].forEach(function (channel) {
+      tasks.push(async function () {
+        var boot = _parseJson(await _get(ANIPM_BASE + '/api/anime/playback-bootstrap/settlar/' + seriesId +
+          '?ep=' + ep + '&lang=' + channel + '&backup=1', { headers: _anipmHeaders(), timeoutMs: 12000 }));
+        if (!boot) return;
+        await _anipmSettlar(boot.settlarSelection, ep, channel, ctx).catch(function () {});
+        if (boot.backupEmbed && boot.backupEmbed.available && boot.backupEmbed.url) {
+          await _megaplay(boot.backupEmbed.url, ANIPM_BASE + '/', ctx).catch(function () {});
+        }
+      });
+    });
+  }
+  ['ani', 'mal'].forEach(function (kind) {
+    var id = kind === 'ani' ? anilistId : malId;
+    if (!id) return;
+    ['sub', 'dub'].forEach(function (channel) {
+      tasks.push(async function () {
+        await _megaplay('https://megaplay.buzz/stream/' + kind + '/' + id + '/' + ep + '/' + channel, ANIPM_BASE + '/', ctx);
+      });
+    });
+  });
+  await _parallel(tasks, 4, function (fn) { return fn(); });
+}
+
+// ── 62. NetNaija ───────────────────────────────────────────────────────
+var NETNAIJA_MAIN = 'https://netnaija.film';
+var NETNAIJA_BFF = 'https://h5-api.aoneroom.com/wefeed-h5api-bff';
+var NETNAIJA_WEB = 'https://h5.aoneroom.com';
+var _NETNAIJA_TOKEN = null, _NETNAIJA_TOKEN_TS = 0;
+function _netnaijaHeaders() {
+  return {
+    'User-Agent': 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36',
+    'Accept': 'application/json', 'Origin': NETNAIJA_MAIN, 'Referer': NETNAIJA_MAIN + '/',
+    'X-Request-Lang': 'en', 'X-Client-Info': '{"timezone":"Asia/Kolkata"}'
+  };
+}
+async function _netnaijaToken(force) {
+  if (!force && _NETNAIJA_TOKEN && Date.now() - _NETNAIJA_TOKEN_TS < 3600000) return _NETNAIJA_TOKEN;
+  var res = await _fetch(NETNAIJA_BFF + '/subject/trending?page=1&perPage=1', { headers: _netnaijaHeaders(), timeoutMs: 12000 });
+  var x = _hget(res.headers, 'x-user') || '';
+  var m = /"token"\s*:\s*"([^"]+)"/.exec(x) || /(?:^|;\s*)token=([^;]+)/.exec(_hget(res.headers, 'set-cookie') || '');
+  if (m) { _NETNAIJA_TOKEN = m[1]; _NETNAIJA_TOKEN_TS = Date.now(); }
+  return _NETNAIJA_TOKEN || '';
+}
+async function _netnaijaAuth(extra) {
+  var token = await _netnaijaToken(false);
+  var h = _netnaijaHeaders();
+  if (token) { h.Authorization = 'Bearer ' + token; h.Cookie = 'token=' + token; }
+  return Object.assign(h, extra || {});
+}
+function _netnaijaLang(dub) {
+  if (!dub) return 'Original';
+  if (dub.original === true) return 'Original';
+  var base = String(dub.lanName || 'Audio').replace(/\s*(dub|sub)\s*$/i, '').trim();
+  if (!base) base = 'Audio';
+  var pretty = { ptbr: 'PT-BR', esla: 'ES-LA' }[base.toLowerCase()] || _cap(base);
+  return dub.type === 1 ? pretty + ' Hardsub' : pretty + ' Dub';
+}
+async function provNetnaija(r, ctx) {
+  if (!r.title) return;
+  var wantSeries = r.season != null;
+  var found = null;
+  var queries = _rgQueries(r);
+  for (var qi = 0; qi < queries.length && !found; qi++) {
+    var sr = await _postJson(NETNAIJA_BFF + '/subject/search', {
+      keyword: queries[qi], page: 1, perPage: 20
+    }, { headers: await _netnaijaAuth(), timeoutMs: 12000 });
+    var sj = _parseJson(sr.body);
+    var items = sj && sj.data && sj.data.items;
+    if (!Array.isArray(items) || !items.length) continue;
+    var filtered = items.filter(function (it) {
+      return it && (it.subjectType === 2) === wantSeries;
+    });
+    if (!filtered.length) filtered = items;
+    found = _rgPick(filtered, r, function (it) { return it.title; }, null, null);
+  }
+  if (!found || !found.detailPath) return;
+  var detail = _parseJson(await _get(NETNAIJA_BFF + '/detail?detailPath=' + _quote(found.detailPath), {
+    headers: await _netnaijaAuth(), timeoutMs: 12000
+  }));
+  var data = detail && detail.data;
+  var subject = data && data.subject;
+  if (!subject) return;
+  var dubs = Array.isArray(subject.dubs) && subject.dubs.length ? subject.dubs : [{
+    subjectId: subject.subjectId, detailPath: found.detailPath,
+    lanName: 'Original Audio', original: true, type: 0
+  }];
+  var season = wantSeries ? (r.season || 1) : 0;
+  var episode = wantSeries ? (r.episode || 1) : 0;
+  var captionJob = null;
+  await _parallel(dubs, 4, async function (dub) {
+    if (!dub || !dub.subjectId) return;
+    var detailPath = dub.detailPath || found.detailPath;
+    var playHeaders = await _netnaijaAuth({
+      'X-Source': 'webNetnaijaSite',
+      Referer: NETNAIJA_MAIN + '/videoPlayPage/' + detailPath
+    });
+    var pr = await _get(NETNAIJA_BFF + '/subject/play?subjectId=' + _quote(dub.subjectId) +
+      '&se=' + season + '&ep=' + episode + '&detailPath=' + _quote(detailPath), {
+      headers: playHeaders, timeoutMs: 15000
+    });
+    var pj = _parseJson(pr);
+    var play = pj && pj.data;
+    if (!play) return;
+    var label = 'NetNaija [' + _netnaijaLang(dub) + ']';
+    var playStream = { Referer: NETNAIJA_MAIN + '/', Origin: NETNAIJA_MAIN };
+    var streams = play.streams || [];
+    for (var i = 0; i < streams.length; i++) {
+      var s = streams[i];
+      if (!s || !s.url || s.vipLocked) continue;
+      var q = parseInt(s.resolutions, 10) || _quality(s.url) || 0;
+      var size = _formatSize(s.size);
+      _emitH(ctx, s.url, q, label, 'mp4', playStream, size, s.codecName || '');
+      if (!captionJob && s.id) captionJob = { id: s.id, subjectId: dub.subjectId, detailPath: detailPath };
+    }
+    var hls = play.hls || [];
+    for (var h = 0; h < hls.length; h++) {
+      if (!hls[h] || !hls[h].url) continue;
+      _emitH(ctx, hls[h].url, parseInt(hls[h].resolutions, 10) || 0, label + ' HLS', 'hls', playStream);
+    }
+    var dash = play.dash || [];
+    for (var d = 0; d < dash.length; d++) {
+      if (!dash[d] || !dash[d].url) continue;
+      _emitH(ctx, dash[d].url, 0, label + ' DASH', 'dash', playStream);
+    }
+  });
+  if (captionJob) {
+    var cr = await _get(NETNAIJA_BFF + '/subject/caption?format=MP4&id=' + _quote(captionJob.id) +
+      '&subjectId=' + _quote(captionJob.subjectId) + '&detailPath=' + _quote(captionJob.detailPath), {
+      headers: await _netnaijaAuth({ 'X-Source': 'webNetnaijaSite' }), timeoutMs: 12000
+    });
+    var cj = _parseJson(cr);
+    var caps = cj && cj.data && cj.data.captions;
+    for (var c = 0; c < (caps || []).length; c++) {
+      if (caps[c] && caps[c].url) ctx.sub(caps[c].lanName || caps[c].lan || 'Unknown', caps[c].url, 'NetNaija');
+    }
+  }
+}
+
+// ── 63. HiCine ─────────────────────────────────────────────────────────
+var HICINE_MAIN = 'https://hicine.biz';
+var HICINE_API = 'https://api.hicine.biz';
+var HICINE_SERVERS = { fsl2: 'FSL', fsl: 'FSL', pixel: 'PixelDrain', ten: '10Gbps', gofile: 'GoFile' };
+function _hicineEntry(raw) {
+  var url = _first(/https?:\/\/[^\s,]+/i, raw);
+  if (!url) return null;
+  var quality = _first(/\b(2160p|1440p|1080p|720p|480p|360p|4K)\b/i, raw);
+  var size = _first(/\b\d+(?:\.\d+)?\s*(?:MB|GB)\b/i, raw);
+  return { url: url, quality: quality, size: size };
+}
+function _hicinePick(list, r, wantSeries) {
+  var best = null, bestScore = 0;
+  for (var i = 0; i < (list || []).length; i++) {
+    var row = list[i] || {}, item = row.item || row;
+    if (!item || !item.title) continue;
+    var series = !!(item.season_1 || /series/i.test(row.table || ''));
+    if (series !== wantSeries) continue;
+    var score = _rgScore(item.title, r.title || '');
+    if (r.year && item.date && parseInt(item.date, 10) !== r.year) score -= 0.1;
+    if (score > bestScore) { bestScore = score; best = { table: row.table || item.source_table, item: item }; }
+  }
+  return bestScore >= 0.5 ? best : null;
+}
+async function _hicineResolve(entry, ctx) {
+  if (!entry || !entry.url) return;
+  var q = _quality(entry.quality) || _quality(entry.url) || 0;
+  var headers = { 'User-Agent': UA, Referer: HICINE_MAIN + '/' };
+  if (/pixeldrain/i.test(entry.url)) {
+    var pid = entry.url.split('?')[0].replace(/\/+$/, '').split('/').pop();
+    if (pid) _emitH(ctx, 'https://pixeldrain.dev/api/file/' + pid + '?download', q, 'HiCine [PixelDrain]', 'mp4', headers, entry.size);
+    return;
+  }
+  var base = entry.url.split('/?')[0];
+  var vm = /[?&]vcloud=([^&]+)/i.exec(entry.url);
+  if (!vm) return;
+  var vcloud = decodeURIComponent(vm[1]);
+  var lr = _parseJson(await _get(base + '/api/links?vcloud=' + _quote(vcloud), {
+    headers: { 'Accept': 'application/json', 'User-Agent': UA }, timeoutMs: 12000
+  }));
+  var tokens = lr && lr.tokens;
+  if (!tokens) return;
+  await _parallel(Object.keys(tokens), 4, async function (type) {
+    var tok = tokens[type] || {};
+    if (!tok.ts || !tok.sig) return;
+    var go = base + '/go?type=' + _quote(type) + '&vcloud=' + _quote(vcloud) +
+      '&ts=' + _quote(tok.ts) + '&sig=' + _quote(tok.sig);
+    var target = await _rgFollow(go, { 'User-Agent': UA }, 4);
+    if (!target) return;
+    if (/pixeldrain/i.test(target)) {
+      var id = target.split('?')[0].replace(/\/+$/, '').split('/').pop();
+      if (id) target = 'https://pixeldrain.dev/api/file/' + id + '?download';
+    } else if (!/\.(mp4|mkv|m3u8|mpd)(\?|$)/i.test(target)) {
+      var cur = target;
+      for (var hop = 0; hop < 4; hop++) {
+        var lm = /[?&]link=([^&]+)/i.exec(cur);
+        if (lm) { target = decodeURIComponent(lm[1]); break; }
+        var nxt = await _rgFollow(cur, { 'User-Agent': UA }, 1);
+        if (!nxt || nxt === cur) break;
+        cur = nxt;
+      }
+    }
+    if (!target) return;
+    if (/gofile\./i.test(target)) {
+      await _gofile(target, { emit: function (s) { if (s) { s.label = 'HiCine [GoFile] ' + (s.label || ''); ctx.emit(s); } }, sub: ctx.sub }).catch(function () {});
+      return;
+    }
+    if (!/^https?:\/\//i.test(target)) return;
+    if (!/\.(mp4|mkv|m3u8|mpd)(\?|$)/i.test(target) && !/hubcloud|cloudflarestorage|workers\.dev|pixeldrain/i.test(target)) {
+      await _resolveEmbed(target, ctx, HICINE_MAIN + '/', 0).catch(function () {});
+      return;
+    }
+    var label = HICINE_SERVERS[type] || _cap(type);
+    _emitH(ctx, target, q, 'HiCine [' + label + ']', null, headers, entry.size);
+  });
+}
+async function provHicine(r, ctx) {
+  if (!r.title) return;
+  var wantSeries = r.season != null;
+  var rows = [];
+  var queries = _rgQueries(r);
+  for (var qi = 0; qi < queries.length && !rows.length; qi++) {
+    var arr = _parseJson(await _get(HICINE_API + '/rpc/search/' + _quote(queries[qi]) + '?limit=50', {
+      headers: { 'Accept': 'application/json', 'User-Agent': UA }, timeoutMs: 12000
+    }));
+    if (!Array.isArray(arr)) continue;
+    for (var i = 0; i < arr.length; i++) {
+      var w = arr[i] || {};
+      rows.push({ table: w.source_table || (w.data && w.data.source_table), item: w.data || w });
+    }
+  }
+  var picked = _hicinePick(rows, r, wantSeries);
+  if (!picked || !picked.item.record_id) return;
+  var detail = _parseJson(await _get(HICINE_API + '/api/' + _quote(picked.table) + '/' + picked.item.record_id, {
+    headers: { 'Accept': 'application/json', 'User-Agent': UA }, timeoutMs: 15000
+  }));
+  if (!detail) return;
+  var entries = [];
+  if (!wantSeries) {
+    var raw = detail.links || detail.cloudlinks || '';
+    var lines = String(raw).split(/\r?\n/);
+    for (var l = 0; l < lines.length; l++) {
+      if (!/https?:\/\//i.test(lines[l])) continue;
+      var urls = _all(/https?:\/\/[^\s,]+/gi, lines[l]);
+      for (var u = 0; u < urls.length; u++) {
+        var e = _hicineEntry(lines[l]);
+        if (e) { e.url = urls[u]; entries.push(e); }
+      }
+    }
+  } else {
+    var seasonText = detail['season_' + (r.season || 1)] || '';
+    var slines = String(seasonText).split(/\r?\n/);
+    for (var s = 0; s < slines.length; s++) {
+      var em = /Episode\s+(\d+)\s*:\s*(.*)/i.exec(slines[s]);
+      if (!em || parseInt(em[1], 10) !== (r.episode || 1)) continue;
+      var parts = em[2].split(' : ');
+      for (var p = 0; p < parts.length; p++) {
+        var entry = _hicineEntry(parts[p]);
+        if (entry) entries.push(entry);
+      }
+    }
+  }
+  var seen = {};
+  entries = entries.filter(function (e) { if (!e || seen[e.url]) return false; seen[e.url] = 1; return true; });
+  await _parallel(entries, 4, function (entry) { return _hicineResolve(entry, ctx); });
+}
+
 // ── Orchestrator ───────────────────────────────────────────────────────
 var PROVIDER_FN = {
   p_showbox: provShowbox, p_vidrock: provVidrock, p_moviebox: provMoviebox,
@@ -3896,12 +4397,14 @@ var PROVIDER_FN = {
   p_anineko: provAnineko, p_animedao: provAnimedao, p_anikoto: provAnikoto,
   p_anikage: provAnikage, p_anidb: provAnidb, p_animetoshohttp: provAnimetoshoHttp,
   p_tokyoinsider: provTokyoinsider, p_anizone: provAnizone, p_animekizz: provAnimekizz,
+  p_anv: provAnv, p_anipm: provAnipm, p_netnaija: provNetnaija, p_hicine: provHicine,
   p_wyziesubs: provWyzie
 };
 // Providers that are anime-only in the upstream registry.
 var ANIME_ONLY = {
   p_anineko: 1, p_animedao: 1, p_anikoto: 1, p_anikage: 1, p_anidb: 1,
-  p_animetoshohttp: 1, p_tokyoinsider: 1, p_anizone: 1, p_animekizz: 1
+  p_animetoshohttp: 1, p_tokyoinsider: 1, p_anizone: 1, p_animekizz: 1,
+  p_anv: 1, p_anipm: 1
 };
 
 async function _runProvider(key, r, ctx) {
