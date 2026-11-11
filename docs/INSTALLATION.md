@@ -12,7 +12,7 @@ Everything needed to get Mewtwo Repo running inside Zangetsu, from nothing to a 
 |:--|:--|
 | **Zangetsu** | The app these sources belong to. Get the APK from the [releases page](https://github.com/Spyou/Zangetsu/releases/latest). Verified against **v2.3.5**. |
 | **A network connection** | Every source is a live client of a remote service. Nothing is cached offline. |
-| **Your own account, for three sources** | AIOStreams needs your personalised manifest URL, TMDB + Stremio needs your add-on URLs, and Jellyfin needs your server and login. Mewstream and CineStream also accept optional keys. See the [configuration guide](SOURCE_CONFIGURATION.md). |
+| **Your own account, for three sources** | AIOStreams needs your personalised manifest URL, TMDB + Stremio needs your add-on URLs, and Jellyfin needs your server and login. CineStream also accepts optional keys. See the [configuration guide](SOURCE_CONFIGURATION.md). |
 | **Nothing else** | There is no build step, no clone, no toolchain and no app modification. You add a URL and the app does the rest. |
 
 ### Supported platforms
@@ -85,7 +85,7 @@ The repository now appears in the **Repositories** tab with every source it publ
 
 ## Step 2 — Install individual sources
 
-You do **not** have to install all 26 sources. Each one is independent: installing a source never installs another, and removing one never affects the others.
+You do **not** have to install all 25 sources. Each one is independent: installing a source never installs another, and removing one never affects the others.
 
 1. Stay in the **Repositories** tab and find the repository you just added.
 2. The list under it shows every source with its name, type and version.
@@ -100,13 +100,12 @@ Once installed, a source moves to the **Installed** tab, where it becomes select
 | The quickest possible start with movies and series | **TMDB + PencariMovie** — a public server URL is already filled in |
 | Anime, subbed and dubbed, with a fallback server per episode | **Miruro** — three API mirrors and fourteen servers are prefilled |
 | Anime with AniList metadata and multi-audio | **Zenkai Player** |
-| A wide catalogue of anime sites at once | **Mewstream** — sixteen hosts queried in parallel |
-| The broadest movie and series coverage | **CineStream** — 59 providers, each independently switchable |
+| The broadest movie and series coverage | **CineStream** — 63 providers, each independently switchable |
 | Your own Stremio add-ons | **TMDB + Stremio** — you supply the add-on URLs |
 | Your own AIOStreams instance | **AIOStreams** — you supply the manifest URL |
 | Your own Jellyfin library | **Jellyfin** — you supply the server address and login |
 
-The [source catalogue](EXTENSIONS.md) lists all 26 with their purpose, language, version and limitations.
+The [source catalogue](EXTENSIONS.md) lists all 25 with their purpose, language, version and limitations.
 
 ---
 
@@ -121,7 +120,7 @@ Most sources expose no settings at all. When a source does have settings, they a
 | **TMDB + Stremio** | **Yes** — at least one add-on manifest URL |
 | **TMDB + PencariMovie** | No — the public server URL is prefilled |
 | **Miruro, Zenkai Player, AnimeOnsen, AnimeGG, AnimeAV1, AnimeKai, AniWave** | No — every default works |
-| **Mewstream, CineStream** | No — but each optional key unlocks one more host |
+| **CineStream** | No — but each optional key unlocks one more host |
 | **AnimeSuge, AniKoto, AnimeSalt, DesiDub Anime, AnimeParadise, AnV, HiAnime, AniChan, HDHub4u, MegaPlay, MMani, AniZone, RareAnimes** | No — these expose no settings whatsoever |
 
 Each source's settings, in full, are documented in the [configuration guide](SOURCE_CONFIGURATION.md).
@@ -246,7 +245,7 @@ Android builds can also be told to update installed sources automatically at lau
 
 - [Getting started](GETTING_STARTED.md) — from installation to your first episode
 - [Source configuration](SOURCE_CONFIGURATION.md) — every setting, in detail
-- [Source catalogue](EXTENSIONS.md) — all 26 sources
+- [Source catalogue](EXTENSIONS.md) — all 25 sources
 - [Troubleshooting](TROUBLESHOOTING.md) — symptom-by-symptom fixes
 - [FAQ](FAQ.md) — frequently asked questions
 

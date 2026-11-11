@@ -20,7 +20,7 @@ The per-licence notices themselves are **not** consolidated away — each one is
 | Zangetsu provider repository | `providers/anikoto.js`, `providers/hianime.js`, `providers/hdhub4u.js` | Asserted **MIT** by upstream | Attribution retained; see the note below |
 | Zangetsu app mark | `assets/icon.svg` | **GPL-3.0** | Retained with attribution |
 | Jellyfin icon | `index.json` (`jellyfin` logo) | **CC BY-SA 4.0** | Attributed, unmodified |
-| Pokémon artwork | `index.json` (`megaplay` and `mewstream` logos) | **© The Pokémon Company** | **Flagged — see below** |
+| Pokémon artwork | `index.json` (`megaplay` logo) | **© The Pokémon Company** | **Flagged — see below** |
 | Site favicons | `index.json` (most source logos) | Resolved at request time from the site being referenced | Hotlinked, not redistributed |
 | AIOStreams logo | `index.json` (`aiostreams` logo) | Owned by the AIOStreams project | Hotlinked, not redistributed |
 | CineStream icon | `index.json` (`cinestream` logo) | **GPL-3.0** (upstream project) | Covered by the GPL-3.0 notice |
@@ -67,7 +67,7 @@ It is used unmodified and only to identify Jellyfin compatibility. This is an in
 
 ## © The Pokémon Company — Pokémon artwork
 
-The `megaplay` and `mewstream` sources use a Pokémon sprite, served from [PokeAPI/sprites](https://github.com/PokeAPI/sprites), as their icon.
+The `megaplay` source uses a Pokémon sprite, served from [PokeAPI/sprites](https://github.com/PokeAPI/sprites), as its icon.
 
 That repository's `LICENCE.txt` states: *"All image contents within are Copyright The Pokémon Company. This repository is distributed under CC0 1.0 Universal."* The CC0 grant covers the repository's own contribution; the underlying character artwork remains owned by The Pokémon Company.
 
@@ -96,7 +96,7 @@ These services are **not bundled, vendored or redistributed**. They are contacte
 | [TMDB](https://www.themoviedb.org) | TMDB-backed sources | Catalogue and artwork metadata |
 | [AniList](https://anilist.co) | AniChan, Zenkai Player, several others | Anime metadata and id mapping |
 | [MyAnimeList](https://myanimelist.net) | Zenkai Player, AIOStreams | Anime id mapping |
-| [Kitsu](https://kitsu.io) | Mewstream, HiAnime | Anime metadata and episode stills |
+| [Kitsu](https://kitsu.io) | HiAnime | Anime metadata and episode stills |
 | [AniDB](https://anidb.net) | AIOStreams, CineStream | Anime id mapping |
 | [ARM](https://arm.haglund.dev) | CineStream | Anime id mapping |
 | Stremio-compatible add-ons | TMDB + Stremio | Catalogue and playback |

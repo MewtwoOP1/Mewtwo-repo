@@ -13,7 +13,6 @@ Every statement on this page is derived from the provider code in `providers/` a
 | **[Jellyfin](#jellyfin)** | 🔴 Account or server | Server address and a login, or an API key |
 | **[AIOStreams](#aiostreams)** | 🟠 Requires configuration | Your personalised `/stremio/<id>/<config>/manifest.json` URL |
 | **[TMDB + Stremio](#tmdb--stremio)** | 🟠 Requires configuration | At least one add-on manifest URL |
-| **[Mewstream](#mewstream)** | 🟡 Optional credentials | Nothing required; a Showbox token unlocks one host |
 | **[CineStream](#cinestream)** | 🟡 Optional credentials | Nothing required; each key unlocks one host |
 | **[TMDB + PencariMovie](#tmdb--pencarimovie)** | 🔵 Defaults work | Nothing |
 | **[Miruro](#miruro)** | 🔵 Defaults work | Nothing |
@@ -325,48 +324,11 @@ Never paste any of these into an issue, a pull request, a chat message, a screen
 
 ---
 
-## Mewstream
-
-**Purpose.** One source that queries sixteen anime and movie hosts at the same time and keeps every real result, so one dead host does not empty the list.
-
-**Default behaviour.** All sixteen adapters are enabled. Every adapter can be switched off individually, which is the fastest way to narrow down a problem.
-
-**Setup required.** No.
-
-**Required credentials.**
-
-| Setting | Required | What it is |
-|:--|:--:|:--|
-| **Showbox (Febbox) UI token** | No | A `ui` cookie value copied from febbox.com while logged in. Without it the Showbox host is skipped entirely |
-| **TMDB API key** | No | A personal TMDB v3 key. Blank uses the key the app injects |
-
-The remaining fifteen settings are the per-host switches: `MegaPlay (MAL/AniList direct)`, `AniKoto`, `AniZone`, `AnimeSalt`, `RareAnimes`, `Showbox`, `VaPlayer`, `Vidrock`, `Vidzee`, `Vidfast`, `Hexa`, `VidSrc`, `VidCore / VidUp`, `moviesapi.to` and `VidNest`. All default to on.
-
-**Where to configure.** `Installed → Mewstream → Source settings`.
-
-**Configuration steps.**
-
-1. Leave everything as it is — it works out of the box.
-2. To enable Showbox, copy the `ui` cookie value from a logged-in febbox.com session and paste it into **Showbox (Febbox) UI token**. Showbox also needs an IMDb ID for the title, so it only helps for titles TMDB knows by IMDb id.
-3. If a particular host keeps returning bad links, switch that host off.
-
-**How to verify.** Search for a title, open it, and look at the stream list. Each stream is tagged with the adapter that produced it, so you can see which hosts contributed.
-
-**Common errors.**
-
-| Symptom | Cause | Fix |
-|:--|:--|:--|
-| Showbox never returns anything | The token is missing, or the title has no IMDb id | Supply the token, and check the title's IMDb id in TMDB |
-| The stream list is long but almost nothing plays | Some hosts resolve but their CDN is dead | Switch the failing hosts off and use the remaining ones |
-| A host stopped working entirely | The upstream domain changed | Update the source; the host list is refreshed in code |
-
----
-
 ## CineStream
 
-**Purpose.** An aggregate movie and TV source covering 58 HTTP providers plus Wyzie Subs. It is a native JavaScript port of the GPL-3.0 CineStream CloudStream extension.
+**Purpose.** An aggregate movie and TV source covering 62 HTTP providers plus Wyzie Subs. It is a native JavaScript port of the GPL-3.0 CineStream CloudStream extension.
 
-**Default behaviour.** All 59 providers are enabled and run concurrently under a hard 18-second playback budget. Each provider is isolated, so one failing host does not affect the others. Providers are gated by title — anime-only hosts run for anime, Bollywood-only hosts for Bollywood titles, and unrestricted hosts always run.
+**Default behaviour.** All 63 providers are enabled and run concurrently under a hard 18-second playback budget. Providers are scheduled by measured latency so the quickest hosts answer first, and every provider still runs. Each provider is isolated, so one failing host does not affect the others. Providers are gated by title — anime-only hosts run for anime, Bollywood-only hosts for Bollywood titles, and unrestricted hosts always run.
 
 **Setup required.** No. Each credential unlocks exactly one host.
 
@@ -385,7 +347,7 @@ The remaining fifteen settings are the per-host switches: `MegaPlay (MAL/AniList
 
 | Setting | Default | What it controls |
 |:--|:--|:--|
-| **Enabled providers** | All 59 | Disable the hosts you do not want. This is the single most effective tuning knob |
+| **Enabled providers** | All 63 | Disable the hosts you do not want. This is the single most effective tuning knob |
 | **Provider concurrency** | 10 | How many providers may resolve in parallel (4, 6, 8, 10 or 14). Higher is faster but heavier on the phone |
 | **Include download-only links** | Off | Also emit download-only links as streams when a provider exposes them |
 
@@ -522,7 +484,7 @@ Their behaviour and limitations are documented in the [source catalogue](EXTENSI
 
 ## Related documentation
 
-- [Source catalogue](EXTENSIONS.md) — all 26 sources with versions, settings and limitations
+- [Source catalogue](EXTENSIONS.md) — all 25 sources with versions, settings and limitations
 - [Installation guide](INSTALLATION.md) — adding the repository and installing sources
 - [Troubleshooting](TROUBLESHOOTING.md) — symptom-by-symptom fixes
 - [FAQ](FAQ.md) — common questions

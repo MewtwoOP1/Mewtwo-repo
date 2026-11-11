@@ -6,13 +6,13 @@
 
 ### What exactly is Mewtwo Repo?
 
-A collection of **26 JavaScript sources** for the [Zangetsu](https://github.com/Spyou/Zangetsu) app. Each source is one self-contained file that the app downloads, installs and runs at runtime. You add a single repository URL to the app and then pick the sources you want.
+A collection of **25 JavaScript sources** for the [Zangetsu](https://github.com/Spyou/Zangetsu) app. Each source is one self-contained file that the app downloads, installs and runs at runtime. You add a single repository URL to the app and then pick the sources you want.
 
 It is not an app, not an extension format and not a media library. It is a source repository.
 
 ### Is this the same as the default Zangetsu source repository?
 
-No. Zangetsu has its own default provider repository, [`Spyou/zangetsu-providers`](https://github.com/Spyou/zangetsu-providers), which ships with the app. Mewtwo Repo is an additional, community-maintained repository with its own sources — including aggregate sources such as CineStream and Mewstream that query many hosts at once.
+No. Zangetsu has its own default provider repository, [`Spyou/zangetsu-providers`](https://github.com/Spyou/zangetsu-providers), which ships with the app. Mewtwo Repo is an additional, community-maintained repository with its own sources — including an aggregate source such as CineStream that queries many hosts at once.
 
 ### Does this repository host any video files?
 
@@ -22,7 +22,7 @@ No. It hosts JavaScript and documentation. Every stream is fetched at request ti
 
 Android, Android TV and iOS (beta) — anywhere Zangetsu runs. These are Zangetsu's own JavaScript sources, which is why they work on iOS where CloudStream, Aniyomi and Mihon extensions cannot be loaded.
 
-### Do I need to install all 26 sources?
+### Do I need to install all 25 sources?
 
 No. Install only what you use. They are completely independent of each other. Installing several gives you fallbacks when one site is down.
 
@@ -62,7 +62,7 @@ Open **Settings → Providers → Source health** — *"Test which sources are w
 
 ### Do I need an API key?
 
-For most sources, no. **Thirteen of the 26 sources expose no settings at all** — they handle sessions, cookies, tokens and decryption themselves.
+For most sources, no. **Thirteen of the 25 sources expose no settings at all** — they handle sessions, cookies, tokens and decryption themselves.
 
 **Three sources cannot work without something from you:**
 
@@ -72,7 +72,7 @@ For most sources, no. **Thirteen of the 26 sources expose no settings at all** �
 | **TMDB + Stremio** | At least one add-on manifest URL |
 | **Jellyfin** | Your server address and a login, or an API key |
 
-**Two more work as installed but accept an optional key** that unlocks extra hosts: **Mewstream** (a Showbox token) and **CineStream** (a Showbox, Wyzie Subs or GramCinema credential — one key per host).
+**One more works as installed but accepts an optional key** that unlocks extra hosts: **CineStream** (a Showbox, Wyzie Subs or GramCinema credential — one key per host).
 
 The full breakdown is in the [source configuration guide](SOURCE_CONFIGURATION.md).
 
@@ -86,7 +86,7 @@ From [sub.wyzie.io](https://sub.wyzie.io). It is optional and only unlocks the W
 
 ### Where do I get the Showbox token?
 
-It is the value of the `ui` cookie from a logged-in [febbox.com](https://www.febbox.com) session. It is optional and only affects the Showbox host, in both CineStream and Mewstream.
+It is the value of the `ui` cookie from a logged-in [febbox.com](https://www.febbox.com) session. It is optional and only affects the Showbox host inside CineStream.
 
 ### Is it safe to share my AIOStreams manifest URL?
 
@@ -120,13 +120,12 @@ Because a source can usually reach the content through more than one host, and a
 | Movies and series, zero setup | **TMDB + PencariMovie** |
 | Anime, sub and dub, automatic fallback | **Miruro** |
 | Anime, using AniList titles | **Zenkai Player** |
-| Many anime sites at once | **Mewstream** |
 | The widest movie and series coverage | **CineStream** |
 | Your own add-ons | **TMDB + Stremio** |
 | Your own AIOStreams setup | **AIOStreams** |
 | Your own Jellyfin library | **Jellyfin** |
 
-The [source catalogue](EXTENSIONS.md) compares all 26.
+The [source catalogue](EXTENSIONS.md) compares all 25.
 
 ### Do these sources work offline?
 
