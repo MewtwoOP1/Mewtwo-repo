@@ -35,11 +35,11 @@ There is **no** `package.json`, no `node_modules` and no lockfile. Every script 
 ├── providers/
 │   ├── aiostreams.js             One self-contained file per source
 │   ├── anikoto.js
-│   └── …                          26 files in total
+│   └── …                          25 files in total
 ├── tests/
 │   ├── aiostreams.test.js        One test file per source
 │   ├── provider-health.test.js   Shared contract suite across every provider
-│   └── …                          26 test files in total
+│   └── …                          24 test files in total
 ├── scripts/
 │   ├── check-and-run.mjs         Manifest validation + full test run
 │   ├── generate-extensions-doc.mjs  Regenerates docs/EXTENSIONS.md

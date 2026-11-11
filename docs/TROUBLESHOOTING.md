@@ -126,7 +126,7 @@ This is the single most common state, and it has a small number of causes.
 1. **The source needs configuration you have not entered.** [AIOStreams](SOURCE_CONFIGURATION.md#aiostreams) needs its manifest URL; [TMDB + Stremio](SOURCE_CONFIGURATION.md#tmdb--stremio) needs at least one add-on URL; [Jellyfin](SOURCE_CONFIGURATION.md#jellyfin) needs a server and a login.
 2. **The upstream has no stream for that episode.** Many sites have the catalogue entry but no playable file for a given episode.
 3. **Every host the source tried is currently down**, or blocked your device.
-4. **The source needs a credential you have not supplied** — for example Showbox inside Mewstream, or Gramcinema inside CineStream.
+4. **The source needs a credential you have not supplied** — for example Gramcinema inside CineStream.
 
 **How to identify it.**
 
@@ -138,7 +138,6 @@ This is the single most common state, and it has a small number of causes.
 
 - Fill in the missing configuration from the [source configuration guide](SOURCE_CONFIGURATION.md).
 - In **CineStream**, switch off the hosts you do not need so the remaining ones get the whole time budget.
-- In **Mewstream**, switch off individual adapters to isolate a failing host.
 - Update the source.
 
 **Likely upstream?** Frequently. A catalogue entry with no stream is a normal upstream condition.
@@ -169,7 +168,6 @@ This is the single most common state, and it has a small number of causes.
 **What to try.**
 
 - **CineStream** — switch the failing providers off in **Enabled providers**. The remaining ones then get the full playback budget.
-- **Mewstream** — switch the failing adapter off.
 - **Miruro** — remove the failing server id from **Disabled streaming servers**.
 - Update the source, which usually carries fresh host lists.
 

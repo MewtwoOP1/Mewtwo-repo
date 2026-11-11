@@ -16,10 +16,10 @@ Every source published by this repository, with the exact version in the manifes
 |:--|--:|:--|
 | 🟢 Ready to use | 13 | No settings, no credentials. |
 | 🔵 Ready with defaults | 8 | Settings exist and every default works. |
-| 🟡 Optional credentials | 2 | Works as installed; a key unlocks extra hosts. |
+| 🟡 Optional credentials | 1 | Works as installed; a key unlocks extra hosts. |
 | 🟠 Requires configuration | 2 | A URL or add-on list must be entered. |
 | 🔴 Requires an account or server | 1 | Needs your own server and login. |
-| **Total** | **26** | 19 anime · 7 movie and TV |
+| **Total** | **25** | 19 anime · 6 movie and TV |
 
 ---
 
@@ -47,16 +47,15 @@ Every source published by this repository, with the exact version in the manifes
 | [MMani](#mmani) | anime | en | `1.0.2` | 🟢 Ready to use | MMani catalogue with HLS playback and subtitle tracks. |
 | [AniZone](#anizone) | anime | en | `1.0.3` | 🟢 Ready to use | AniZone catalogue with HLS playback and subtitle tracks. |
 | [RareAnimes](#rareanimes) | anime | hi | `1.0.5` | 🟢 Ready to use | RareAnimes catalogue with multi-language playback. |
-| [Mewstream](#mewstream) | movie | en | `4.0.5` | 🟡 Optional credentials | One source that queries sixteen anime and movie hosts at the same time. |
 | [Zenkai Player](#zenkai-player) | anime | en | `1.4.1` | 🔵 Ready with defaults | AniList metadata with native MegaPlay, VidStream and ACDN multi-audio playback. |
 | [AnimeOnsen](#animeonsen) | anime | all | `1.0.1` | 🔵 Ready with defaults | AnimeOnsen catalogue with DASH playback and ASS subtitle tracks. |
 | [AnimeGG](#animegg) | anime | en | `1.0.2` | 🔵 Ready with defaults | AnimeGG catalogue that returns a direct progressive MP4. |
 | [AnimeAV1](#animeav1) | anime | es | `1.0.1` | 🔵 Ready with defaults | AnimeAV1 catalogue in Spanish with VOE and YourUpload playback. |
-| [CineStream](#cinestream) | movie | en | `1.0.9` | 🟡 Optional credentials | An aggregate movie and TV source covering 58 HTTP providers plus Wyzie Subs. |
+| [CineStream](#cinestream) | movie | en | `1.2.0` | 🟡 Optional credentials | An aggregate movie and TV source covering 62 HTTP providers plus Wyzie Subs. |
 
 ---
 
-## Movie and TV sources (7)
+## Movie and TV sources (6)
 
 ### Jellyfin
 
@@ -213,58 +212,13 @@ The live domain is refreshed from a published domain list and a cached domain is
 
 - The live domain changes frequently, so a source that worked yesterday may need the domain list to refresh.
 
-### Mewstream
-
-`id: mewstream` · `v4.0.5` · movie · en · not flagged NSFW
-
-| Field | Value |
-|:--|:--|
-| **Purpose** | One source that queries sixteen anime and movie hosts at the same time. |
-| **Metadata** | TMDB for the catalogue, enriched with Kitsu and other public anime databases. |
-| **Setup** | 🟡 Optional credentials — Works as installed. Only Showbox needs a credential, and only to enable that one host. |
-| **Settings** | 17 exposed |
-
-**Credentials and settings**
-
-- showboxToken — optional Showbox / Febbox ui cookie value; without it the Showbox host is skipped
-- tmdbApiKey — optional personal v3 API key; blank uses the key the app injects
-
-| Setting | Type | Default | Choices |
-|:--|:--|:--|:--|
-| TMDB API key (optional) (`tmdbApiKey`) | text | _(empty)_ | — |
-| Showbox (Febbox) UI token (`showboxToken`) | text | _(empty)_ | — |
-| MegaPlay (MAL/AniList direct) (`enableMegaplayDirect`) | bool | `true` | — |
-| AniKoto (`enableAnikoto`) | bool | `true` | — |
-| AniZone (`enableAnizone`) | bool | `true` | — |
-| AnimeSalt (`enableAnimesalt`) | bool | `true` | — |
-| RareAnimes (`enableRareanimes`) | bool | `true` | — |
-| Showbox (`enableShowbox`) | bool | `true` | — |
-| VaPlayer (`enableVaplayer`) | bool | `true` | — |
-| Vidrock (`enableVidrock`) | bool | `true` | — |
-| Vidzee (`enableVidzee`) | bool | `true` | — |
-| Vidfast (`enableVidfast`) | bool | `true` | — |
-| Hexa (`enableHexa`) | bool | `true` | — |
-| VidSrc (`enableVidsrc`) | bool | `true` | — |
-| VidCore / VidUp (`enableVidcore`) | bool | `true` | — |
-| moviesapi.to (`enableMoviesapi`) | bool | `true` | — |
-| VidNest (`enableVidnest`) | bool | `true` | — |
-
-**Behaviour**
-
-Sixteen adapters run concurrently and every real HTTP result is kept, so one dead host does not empty the list. Each adapter can be switched off individually. Showbox is skipped unless both an IMDb ID and a token are present. Diagnostics distinguish a host you disabled from a host that was tried and produced nothing.
-
-**Limitations**
-
-- Showbox is the only host in this source that needs a credential.
-- Host domains change often, so individual adapters can stop working without a code change.
-
 ### CineStream
 
-`id: cinestream` · `v1.0.9` · movie · en · not flagged NSFW
+`id: cinestream` · `v1.2.0` · movie · en · not flagged NSFW
 
 | Field | Value |
 |:--|:--|
-| **Purpose** | An aggregate movie and TV source covering 58 HTTP providers plus Wyzie Subs. |
+| **Purpose** | An aggregate movie and TV source covering 62 HTTP providers plus Wyzie Subs. |
 | **Metadata** | TMDB, with AniList and other public anime databases used for id mapping. |
 | **Setup** | 🟡 Optional credentials — The source works as installed. Each credential unlocks one specific host. |
 | **Licence** | GPL-3.0 — see [Licensing](README.md#licensing) |
@@ -281,7 +235,7 @@ Sixteen adapters run concurrently and every real HTTP result is kept, so one dea
 
 | Setting | Type | Default | Choices |
 |:--|:--|:--|:--|
-| Enabled providers (`enabledProviders`) | multiEnum | `59 selected` | Showbox, Vidrock, Moviebox, MovieBlast, Fibwatch, Allmovieland, Hdhub4u, Hexa, Fshare, Videasy, VaPlayer, Vidzee, Peachify, VidFastPro, Cinejoy, Vidcore, Av1encodes, Castle, Reanime, Just4Anime, Zinkmovies, Gramcinema, VegaMovies, RogMovies, Bollyflix, TopMovies, Vidup, Meowtv, Moviesmod, Movies4u, Dudefilms, UHDMovies, MoviesDrive, Hindmoviez, 4KHDHub, PrimeSrc, ProjectFreeTV, Mlsbd, Levidia, Animesalt, M4ufree, Multimovies, Akwam, Rtally, Asiaflix, SkyMovies, KissKH, Onetouchtv, Toonstream, Anineko, Animedao, Anikoto, Anikage, Anidb, AnimeToshoHttp, TokyoInsider, Anizone, Animekizz, Wyzie Subs |
+| Enabled providers (`enabledProviders`) | multiEnum | `63 selected` | Showbox, Vidrock, Moviebox, MovieBlast, Fibwatch, Allmovieland, Hdhub4u, Hexa, Fshare, Videasy, VaPlayer, Vidzee, Peachify, VidFastPro, Cinejoy, Vidcore, Av1encodes, Castle, Reanime, Just4Anime, Zinkmovies, Gramcinema, VegaMovies, RogMovies, Bollyflix, TopMovies, Vidup, Meowtv, Moviesmod, Movies4u, Dudefilms, UHDMovies, MoviesDrive, Hindmoviez, 4KHDHub, PrimeSrc, ProjectFreeTV, Mlsbd, Levidia, Animesalt, M4ufree, Multimovies, Akwam, Rtally, Asiaflix, SkyMovies, KissKH, Onetouchtv, Toonstream, Anineko, Animedao, Anikoto, Anikage, Anidb, AnimeToshoHttp, TokyoInsider, Anizone, Animekizz, Anv, AniPM, NetNaija, HiCine, Wyzie Subs |
 | Showbox / Febbox UI token (`showboxToken`) | text | _(empty)_ | — |
 | Wyzie Subs API key (`wyzieSubsKey`) | text | _(empty)_ | — |
 | GramCinema bearer token (`gramcinemaToken`) | text | _(empty)_ | — |
@@ -290,12 +244,12 @@ Sixteen adapters run concurrently and every real HTTP result is kept, so one dea
 | MovieBlast API base (`movieblastApi`) | text | _(empty)_ | — |
 | MovieBlast signing key (`movieblastKey`) | text | _(empty)_ | — |
 | Castle APK sign key (`castleKey`) | text | _(empty)_ | — |
-| Provider concurrency (`concurrency`) | enum | `10` | 4, 6, 8, 10 (default), 14 |
+| Provider concurrency (`concurrency`) | enum | `16` | 4, 6, 8, 10, 14, 16 (default), 20, 24 |
 | Include download-only links (`includeDownloadLinks`) | bool | `false` | — |
 
 **Behaviour**
 
-All enabled providers run concurrently under a hard 18 second playback budget, and each provider is isolated so one failure does not affect the others. Providers are gated by title: anime-only hosts run for anime, Bollywood-only hosts for Bollywood titles, and unrestricted hosts always run. Metadata, search and home responses are cached with a TTL and duplicate requests are de-duplicated, but stream URLs are never cached because they are short-lived and signer-bound.
+All enabled providers run concurrently under a hard 18 second playback budget, and each provider is isolated so one failure does not affect the others. Providers are scheduled by measured latency so the quickest hosts answer first, and every provider still runs. Providers are gated by title: anime-only hosts run for anime, Bollywood-only hosts for Bollywood titles, and unrestricted hosts always run. Metadata, search and home responses are cached with a TTL and duplicate requests are de-duplicated, but stream URLs are never cached because they are short-lived and signer-bound.
 
 **Limitations**
 
@@ -764,23 +718,6 @@ https://www.neoani…` |
 | `audio` | AniWave (Unoriginal) | enum | `both` |
 | `subtitles` | AniWave (Unoriginal) | bool | `true` |
 | `homeOrder` | AniWave (Unoriginal) | enum | `popular` |
-| `tmdbApiKey` | Mewstream | text | _(empty)_ |
-| `showboxToken` | Mewstream | text | _(empty)_ |
-| `enableMegaplayDirect` | Mewstream | bool | `true` |
-| `enableAnikoto` | Mewstream | bool | `true` |
-| `enableAnizone` | Mewstream | bool | `true` |
-| `enableAnimesalt` | Mewstream | bool | `true` |
-| `enableRareanimes` | Mewstream | bool | `true` |
-| `enableShowbox` | Mewstream | bool | `true` |
-| `enableVaplayer` | Mewstream | bool | `true` |
-| `enableVidrock` | Mewstream | bool | `true` |
-| `enableVidzee` | Mewstream | bool | `true` |
-| `enableVidfast` | Mewstream | bool | `true` |
-| `enableHexa` | Mewstream | bool | `true` |
-| `enableVidsrc` | Mewstream | bool | `true` |
-| `enableVidcore` | Mewstream | bool | `true` |
-| `enableMoviesapi` | Mewstream | bool | `true` |
-| `enableVidnest` | Mewstream | bool | `true` |
 | `server` | Zenkai Player | enum | `megaplay` |
 | `audio` | Zenkai Player | enum | `sub` |
 | `requestTimeoutMs` | AnimeOnsen | enum | `12000` |
@@ -790,7 +727,7 @@ https://www.neoani…` |
 | `requestTimeoutMs` | AnimeGG | enum | `12000` |
 | `audioMode` | AnimeAV1 | enum | `both` |
 | `requestTimeoutMs` | AnimeAV1 | enum | `12000` |
-| `enabledProviders` | CineStream | multiEnum | `59 selected` |
+| `enabledProviders` | CineStream | multiEnum | `63 selected` |
 | `showboxToken` | CineStream | text | _(empty)_ |
 | `wyzieSubsKey` | CineStream | text | _(empty)_ |
 | `gramcinemaToken` | CineStream | text | _(empty)_ |
@@ -799,7 +736,7 @@ https://www.neoani…` |
 | `movieblastApi` | CineStream | text | _(empty)_ |
 | `movieblastKey` | CineStream | text | _(empty)_ |
 | `castleKey` | CineStream | text | _(empty)_ |
-| `concurrency` | CineStream | enum | `10` |
+| `concurrency` | CineStream | enum | `16` |
 | `includeDownloadLinks` | CineStream | bool | `false` |
 
 ---

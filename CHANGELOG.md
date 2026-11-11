@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased — repository
+
+- **Remove the Mewstream source.** `providers/mewstream.js` and its two test files are deleted and the `mewstream` entry is removed from `index.json`, taking the repository from 26 published sources to 25 (19 anime, 6 movie and TV). CineStream is untouched and keeps all 63 of its own providers — the two were independent, and nothing in `providers/cinestream.js` referenced Mewstream.
+- Regenerate `docs/EXTENSIONS.md` and the README source badge from the manifest, and drop the Mewstream prose from `docs/FAQ.md`, `docs/GETTING_STARTED.md`, `docs/INSTALLATION.md`, `docs/SOURCE_CONFIGURATION.md`, `docs/TROUBLESHOOTING.md` and `THIRD_PARTY_NOTICES.md`.
+- Correct the stale CineStream provider counts in the documentation (58 HTTP providers / 59 providers → 62 HTTP providers / 63 providers).
+
 ## CineStream 1.2.0 — source resolution & playback handoff
 
 Fixes the "sources could not be resolved" failure reported by Zangetsu.

@@ -1,9 +1,9 @@
 <p align="center">
-  <img src="assets/readme-hero.svg" alt="Mewtwo Repo — 26 community sources for the Zangetsu app" width="100%" />
+  <img src="assets/readme-hero.svg" alt="Mewtwo Repo — 25 community sources for the Zangetsu app" width="100%" />
 </p>
 
 <p align="center">
-  <a href="docs/EXTENSIONS.md"><img src="https://img.shields.io/badge/Sources-26-8B5CF6?style=flat-square" alt="26 published sources" /></a>
+  <a href="docs/EXTENSIONS.md"><img src="https://img.shields.io/badge/Sources-25-8B5CF6?style=flat-square" alt="25 published sources" /></a>
   <a href="docs/README.md#licensing"><img src="https://img.shields.io/badge/License-MIT%20%2B%20GPL--3.0-8B5CF6?style=flat-square" alt="License: MIT, with providers/cinestream.js under GPL-3.0" /></a>
   <a href="https://github.com/MewtwoOP1/Mewtwo-repo/actions/workflows/test.yml"><img src="https://github.com/MewtwoOP1/Mewtwo-repo/actions/workflows/test.yml/badge.svg" alt="Provider tests" /></a>
   <a href="https://github.com/MewtwoOP1/Mewtwo-repo/stargazers"><img src="https://img.shields.io/github/stars/MewtwoOP1/Mewtwo-repo?style=flat-square&logo=github" alt="GitHub stars" /></a>
@@ -28,7 +28,7 @@
 
 ## What this is
 
-**Mewtwo Repo** is a source repository for the [Zangetsu](https://github.com/Spyou/Zangetsu) app on Android, Android TV and iOS. It publishes **26 independent sources** — each one a self-contained JavaScript file that the app downloads, installs and runs at runtime.
+**Mewtwo Repo** is a source repository for the [Zangetsu](https://github.com/Spyou/Zangetsu) app on Android, Android TV and iOS. It publishes **25 independent sources** — each one a self-contained JavaScript file that the app downloads, installs and runs at runtime.
 
 You add one repository URL to the app, then install only the sources you actually want. Thirteen of them work with **zero configuration**: no API key, no account, no second server.
 
@@ -45,10 +45,10 @@ You add one repository URL to the app, then install only the sources you actuall
 
 | | |
 |:--|:--|
-| **Published sources** | 26 — 19 anime, 7 movie and TV |
+| **Published sources** | 25 — 19 anime, 6 movie and TV |
 | **Expose no settings at all** | 13 sources |
 | **Settings that all have working defaults** | 8 sources |
-| **Optional keys that unlock extra hosts** | 2 sources |
+| **Optional keys that unlock extra hosts** | 1 source |
 | **Must be configured before streams appear** | 2 sources |
 | **Require your own server and login** | 1 source |
 | **Languages** | English (20), Hindi (4), Spanish (1), multi-language (1) |
@@ -110,7 +110,7 @@ Get the app from the [Zangetsu releases page](https://github.com/Spyou/Zangetsu/
 https://raw.githubusercontent.com/MewtwoOP1/Mewtwo-repo/main/index.json
 ```
 
-**2 — Install what you want.** The repository tab now lists every source this repo publishes. Tap **Install** on the ones you want — you never have to install all 26.
+**2 — Install what you want.** The repository tab now lists every source this repo publishes. Tap **Install** on the ones you want — you never have to install all 25.
 
 **3 — Configure only what asks for it.** Most sources need nothing. A handful need a manifest URL, an add-on list or your server details. Every one of them is flagged in [the source catalogue](docs/EXTENSIONS.md) and explained in [the configuration guide](docs/SOURCE_CONFIGURATION.md).
 
@@ -133,7 +133,6 @@ Setup levels are derived from the provider code, not from marketing copy.
 | **Jellyfin** | movie | 🔴 Account or server | Server address plus a login, or an API key |
 | **AIOStreams** | movie | 🟠 Configuration | Your personalised `/stremio/…/manifest.json` URL |
 | **TMDB + Stremio** | movie | 🟠 Configuration | At least one add-on manifest URL |
-| **Mewstream** | movie | 🟡 Optional credentials | Nothing — a Showbox token unlocks one extra host |
 | **CineStream** | movie | 🟡 Optional credentials | Nothing — each key unlocks one specific host |
 | **TMDB + PencariMovie** | movie | 🔵 Defaults work | Nothing — the public server URL is prefilled |
 | **Miruro** | anime | 🔵 Defaults work | Nothing — three API mirrors and the server order are prefilled |
@@ -145,7 +144,7 @@ Setup levels are derived from the provider code, not from marketing copy.
 | **AniWave (Unoriginal)** | anime | 🔵 Defaults work | Nothing |
 | **AnimeSuge, AniKoto, AnimeSalt, DesiDub Anime, AnimeParadise, AnV, HiAnime, AniChan, HDHub4u, MegaPlay, MMani, AniZone, RareAnimes** | anime / movie | 🟢 Ready to use | Nothing at all — these expose no settings |
 
-The complete inventory, with versions, setting keys, behaviour notes and known limitations for all 26 sources, lives in **[docs/EXTENSIONS.md](docs/EXTENSIONS.md)**.
+The complete inventory, with versions, setting keys, behaviour notes and known limitations for all 25 sources, lives in **[docs/EXTENSIONS.md](docs/EXTENSIONS.md)**.
 
 ---
 

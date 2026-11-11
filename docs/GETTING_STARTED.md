@@ -46,14 +46,13 @@ The app downloaded a small JSON file — the *manifest* — that describes every
 
 Open the repository you just added. Every source it publishes is listed with a name and an **Install** button.
 
-**You do not need all 26.** Install the one that suits what you want to watch:
+**You do not need all 25.** Install the one that suits what you want to watch:
 
 | I want to watch… | Try this first |
 |:--|:--|
 | Movies and series, with no setup at all | **TMDB + PencariMovie** |
 | Anime, with dub and sub and a fallback server | **Miruro** |
 | Anime, using AniList for titles | **Zenkai Player** |
-| Lots of different anime sites at once | **Mewstream** |
 | The widest movie and series coverage | **CineStream** |
 | Streams from my own Stremio add-ons | **TMDB + Stremio** |
 | Streams from my own AIOStreams setup | **AIOStreams** |
@@ -81,7 +80,6 @@ Open the installed source's **Source settings**.
 | **TMDB + PencariMovie** | Nothing — the public server URL is already filled in |
 | **Miruro** | Nothing — three API mirrors and the server order are already filled in |
 | **Zenkai Player** | Nothing — but you may want a different server than **MegaPlay** |
-| **Mewstream** | Nothing — a Showbox token only unlocks one extra host |
 | **CineStream** | Nothing — each key unlocks one specific host |
 | **AnimeOnsen, AnimeGG, AnimeAV1, AnimeKai, AniWave** | Nothing — every default works |
 
@@ -173,7 +171,7 @@ Add more once you know which sites you actually use.
 ## Related documentation
 
 - [Installation guide](INSTALLATION.md) — the complete installation reference
-- [Source catalogue](EXTENSIONS.md) — all 26 sources
+- [Source catalogue](EXTENSIONS.md) — all 25 sources
 - [Source configuration](SOURCE_CONFIGURATION.md) — every setting, step by step
 - [Troubleshooting](TROUBLESHOOTING.md) — symptom-by-symptom fixes
 - [FAQ](FAQ.md) — common questions

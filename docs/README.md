@@ -45,7 +45,7 @@ Repository-level documents live at the root:
 
 ## The short version
 
-**Mewtwo Repo** publishes 26 JavaScript sources for the [Zangetsu](https://github.com/Spyou/Zangetsu) app. Each source is one self-contained file that the app downloads and runs at runtime. Add one repository URL, then install only the sources you want.
+**Mewtwo Repo** publishes 25 JavaScript sources for the [Zangetsu](https://github.com/Spyou/Zangetsu) app. Each source is one self-contained file that the app downloads and runs at runtime. Add one repository URL, then install only the sources you want.
 
 ```text
 https://raw.githubusercontent.com/MewtwoOP1/Mewtwo-repo/main/index.json

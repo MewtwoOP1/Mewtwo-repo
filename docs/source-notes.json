@@ -267,21 +267,6 @@
         "Hindi, Tamil and Telugu dubs appear only when the upstream page lists them."
       ]
     },
-    "mewstream": {
-      "purpose": "One source that queries sixteen anime and movie hosts at the same time.",
-      "metadata": "TMDB for the catalogue, enriched with Kitsu and other public anime databases.",
-      "setup": "optional-credentials",
-      "setupNote": "Works as installed. Only Showbox needs a credential, and only to enable that one host.",
-      "credentials": [
-        "showboxToken — optional Showbox / Febbox ui cookie value; without it the Showbox host is skipped",
-        "tmdbApiKey — optional personal v3 API key; blank uses the key the app injects"
-      ],
-      "behaviour": "Sixteen adapters run concurrently and every real HTTP result is kept, so one dead host does not empty the list. Each adapter can be switched off individually. Showbox is skipped unless both an IMDb ID and a token are present. Diagnostics distinguish a host you disabled from a host that was tried and produced nothing.",
-      "limitations": [
-        "Showbox is the only host in this source that needs a credential.",
-        "Host domains change often, so individual adapters can stop working without a code change."
-      ]
-    },
     "zenkaii": {
       "purpose": "AniList metadata with native MegaPlay, VidStream and ACDN multi-audio playback.",
       "metadata": "AniList for discovery, with AniMap mapping AniList ids to MAL ids.",
@@ -326,7 +311,7 @@
       ]
     },
     "cinestream": {
-      "purpose": "An aggregate movie and TV source covering 58 HTTP providers plus Wyzie Subs.",
+      "purpose": "An aggregate movie and TV source covering 62 HTTP providers plus Wyzie Subs.",
       "metadata": "TMDB, with AniList and other public anime databases used for id mapping.",
       "setup": "optional-credentials",
       "setupNote": "The source works as installed. Each credential unlocks one specific host.",
@@ -338,7 +323,7 @@
         "castleKey — build-time value in the upstream project; Castle stays dormant until it is supplied",
         "tmdbApiKey — optional personal v3 API key; blank uses the key the app injects"
       ],
-      "behaviour": "All enabled providers run concurrently under a hard 18 second playback budget, and each provider is isolated so one failure does not affect the others. Providers are gated by title: anime-only hosts run for anime, Bollywood-only hosts for Bollywood titles, and unrestricted hosts always run. Metadata, search and home responses are cached with a TTL and duplicate requests are de-duplicated, but stream URLs are never cached because they are short-lived and signer-bound.",
+      "behaviour": "All enabled providers run concurrently under a hard 18 second playback budget, and each provider is isolated so one failure does not affect the others. Providers are scheduled by measured latency so the quickest hosts answer first, and every provider still runs. Providers are gated by title: anime-only hosts run for anime, Bollywood-only hosts for Bollywood titles, and unrestricted hosts always run. Metadata, search and home responses are cached with a TTL and duplicate requests are de-duplicated, but stream URLs are never cached because they are short-lived and signer-bound.",
       "limitations": [
         "MovieBlast and Castle need build-time credentials that are not part of this repository, so they produce no streams until you supply them.",
         "Stremio add-on discovery, Torrentio, TorrentsDB, AnimeTosho-torrent and StremioSubs are intentionally not part of this port.",
