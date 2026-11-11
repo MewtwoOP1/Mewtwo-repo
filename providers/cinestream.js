@@ -311,7 +311,19 @@ function getSettings() {
       { value: '10', label: '10' }, { value: '14', label: '14' },
       { value: '16', label: '16 (default)' }, { value: '20', label: '20' }, { value: '24', label: '24' }
     ]),
-    _schema('includeDownloadLinks', 'Include download-only links', 'bool', false)
+    _schema('includeDownloadLinks', 'Include download-only links', 'bool', false),
+    _schema('sourceOrder', 'Source order', 'enum', 'best', [
+      { value: 'best', label: 'Best playable source first (default)' },
+      { value: 'quality', label: 'Highest resolution first' },
+      { value: 'speed', label: 'Fastest to resolve first' },
+      { value: 'reliable', label: 'Most reliable provider first' }
+    ]),
+    _schema('preferredAnimeAudio', 'Preferred anime audio', 'enum', 'any', [
+      { value: 'any', label: 'No preference' },
+      { value: 'sub', label: 'Subbed' },
+      { value: 'dub', label: 'Dubbed' }
+    ]),
+    _schema('preferredAudioLang', 'Preferred audio language', 'text', ''),
   ];
 }
 function getInfo() {
@@ -1746,6 +1758,9 @@ async function _loadSource(name, url, referer, ctx, quality, size) {
       if (!s) return;
       s.label = name + ' [' + s.label + ']' + (size ? ' ' + size : '');
       if (quality) s.quality = _qualityLabel(quality);
+      // Stamp the extractor host so the ranking can score it against the
+      // extractor's own measured reliability.
+      if (!s.extractor) s.extractor = _host(url);
       ctx.emit(s);
     },
     sub: ctx.sub
@@ -1804,6 +1819,7 @@ async function _loadSource(name, url, referer, ctx, quality, size) {
     return await _resolveEmbed(url, wrapped, referer);
   } catch (e) {
     console.warn('CineStream extractor failed for ' + _host(url) + ': ' + (e && e.message || e));
+    _rankRecord('x:' + _host(url), false, 0);
   }
 }
 
@@ -4605,6 +4621,243 @@ async function provHicine(r, ctx) {
   await _parallel(entries, 4, function (entry) { return _hicineResolve(entry, ctx); });
 }
 
+// ── Source ranking (AIOStreams-style best-source-first) ────────────────
+// The ranking only ever REORDERS the list. Every source that was discovered
+// stays in the returned array; nothing is filtered out, hidden or dropped
+// because it scored low.
+//
+// Reliability is tracked from real extraction attempts with exponential
+// time-decay, so a single outage cannot permanently penalise a provider and
+// an old failure cannot permanently exclude one either.
+var RANK_HALF_LIFE_MS = 6 * 60 * 60 * 1000;   // 6h
+var RANK_QUALITY = {
+  '2160p': 2160, '4k': 2160, 'uhd': 2160, '4kuhd': 2160, 'uhd2160': 2160, 'uhd2160p': 2160,
+  '1440p': 1440, '2k': 1440, 'qhd': 1440, '1440': 1440,
+  '1080p': 1080, 'fhd': 1080, 'fullhd': 1080, '1080': 1080, 'bdrip1080': 1080,
+  '720p': 720, 'hd': 720, '720': 720, 'webhd': 720,
+  '576p': 576, '540p': 540, '480p': 480, 'sd': 480, '480': 480,
+  '360p': 360, '360': 360
+};
+// Movie profile: playability first, then picture, then trust.
+var RANK_PROFILE_MOVIE = {
+  playability: 34, resolution: 20, format: 12, provider: 12, extractor: 8,
+  audio: 6, speed: 4, codec: 2, metadata: 2, subtitle: 0, language: 0
+};
+// Anime profile: the user's sub/dub choice and the episode mapping matter
+// more than raw resolution.
+var RANK_PROFILE_ANIME = {
+  playability: 32, resolution: 14, format: 10, provider: 6, extractor: 4,
+  audio: 6, speed: 3, codec: 2, metadata: 2, subtitle: 3, language: 16
+};
+var _RANK_STATS = {};
+function _rankStat(key) {
+  var e = _RANK_STATS[key];
+  if (!e) return null;
+  return e;
+}
+function _rankRecord(key, ok, ms) {
+  if (!key) return;
+  var e = _RANK_STATS[key] || { ok: 0, fail: 0, ms: 0, n: 0, ts: 0 };
+  if (ok) { e.ok++; e.ms = e.n ? (e.ms * 0.7 + (ms || 0) * 0.3) : (ms || 0); }
+  else e.fail++;
+  e.n++;
+  e.ts = Date.now();
+  _RANK_STATS[key] = e;
+  // Keep the table bounded so a long session cannot grow it without limit.
+  var keys = Object.keys(_RANK_STATS);
+  if (keys.length > 240) {
+    var oldest = null, oldestTs = Infinity;
+    for (var i = 0; i < keys.length; i++) {
+      if (_RANK_STATS[keys[i]].ts < oldestTs) { oldestTs = _RANK_STATS[keys[i]].ts; oldest = keys[i]; }
+    }
+    if (oldest) delete _RANK_STATS[oldest];
+  }
+}
+// Exponential decay: a statistic that has not been refreshed for a long time
+// fades towards neutral instead of keeping a stale verdict.
+function _rankDecayed(key) {
+  var e = _rankStat(key);
+  if (!e || !e.n) return null;
+  var age = Date.now() - (e.ts || 0);
+  var decay = Math.pow(0.5, age / RANK_HALF_LIFE_MS);
+  var total = (e.ok + e.fail) * decay;
+  if (total < 0.35) return null;   // too little recent evidence to matter
+  var rate = (e.ok * decay) / total;
+  var avg = e.ms > 0 ? e.ms : 0;
+  return { rate: rate, avgMs: avg, recent: total };
+}
+function _rankQuality(label) {
+  var s = String(label == null ? '' : label).toLowerCase();
+  if (!s) return null;
+  var best = null;
+  var keys = Object.keys(RANK_QUALITY);
+  for (var i = 0; i < keys.length; i++) {
+    var k = keys[i];
+    if (s.indexOf(k) >= 0) {
+      var v = RANK_QUALITY[k];
+      if (best == null || v > best) best = v;
+    }
+  }
+  if (best != null) return best;
+  var m = s.match(/(\d{3,4})\s*p/);
+  if (m) return parseInt(m[1], 10) || null;
+  if (s.indexOf('4k') >= 0) return 2160;
+  if (s.indexOf('uhd') >= 0) return 2160;
+  if (s.indexOf('hd') >= 0) return 720;
+  return null;
+}
+// Zangetsu's player understands hls and mp4. Both play; mp4 is a touch more
+// forgiving across devices, hls is the better adaptive format.
+function _rankFormat(stream) {
+  var c = String(stream.container || '').toLowerCase();
+  var u = String(stream.url || '').toLowerCase();
+  if (c === 'mp4' || /\.(mp4|mkv|webm)(\?|$)/.test(u)) return 0.85;
+  if (c === 'hls' || /\.m3u8(\?|$)/.test(u)) return 0.95;
+  if (c === 'torrent') return 0.4;
+  return 0.3;
+}
+function _rankCodec(label) {
+  var s = String(label == null ? '' : label).toLowerCase();
+  if (s.indexOf('av1') >= 0) return 0.9;
+  if (s.indexOf('h.265') >= 0 || s.indexOf('h265') >= 0 || s.indexOf('hevc') >= 0) return 0.85;
+  if (s.indexOf('h.264') >= 0 || s.indexOf('h264') >= 0 || s.indexOf('avc') >= 0) return 0.7;
+  if (s.indexOf('dolby') >= 0 || s.indexOf('vision') >= 0) return 0.95;
+  if (s.indexOf('hdr10+') >= 0) return 0.95;
+  if (s.indexOf('hdr10') >= 0 || s.indexOf('hdr') >= 0) return 0.9;
+  if (s.indexOf('bluray') >= 0 || s.indexOf('bdrip') >= 0) return 0.8;
+  if (s.indexOf('web-dl') >= 0 || s.indexOf('webdl') >= 0) return 0.75;
+  if (s.indexOf('webrip') >= 0 || s.indexOf('web-rip') >= 0) return 0.65;
+  return 0.5;
+}
+function _rankAudio(stream) {
+  var kind = String(stream.kind || '').toLowerCase();
+  var lang = String(stream.audioLang || '').toLowerCase();
+  var score = 0.5;
+  if (kind === 'raw') score = 0.6;
+  if (kind === 'sub' || kind === 'dub') score = 0.65;
+  if (lang && lang !== 'unknown') score = 0.8;
+  if (/\b(multi|multi-audio|multi audio)\b/i.test(String(stream.label || ''))) score = 0.9;
+  if (/\b(dual|dual audio)\b/i.test(String(stream.label || ''))) score = 0.85;
+  return score;
+}
+function _rankMetadata(stream) {
+  var l = String(stream.label || '');
+  var score = 0.4;
+  if (stream.quality && stream.quality !== 'Auto') score += 0.15;
+  if (stream.headers && Object.keys(stream.headers).length) score += 0.15;
+  if (stream.audioLang) score += 0.1;
+  if (stream.subtitles && stream.subtitles.length) score += 0.1;
+  if (/\b(2160|1080|720|480|360)p\b/i.test(l)) score += 0.1;
+  return Math.min(1, score);
+}
+function _rankSubtitles(stream) {
+  return stream.subtitles && stream.subtitles.length ? 1 : 0.2;
+}
+function _rankLanguage(stream, prefs, isAnime) {
+  var want = isAnime ? prefs.animeAudio : prefs.audioLang;
+  if (!want || want === 'any') return 0.5;
+  var kind = String(stream.kind || '').toLowerCase();
+  var lang = String(stream.audioLang || '').toLowerCase();
+  if (isAnime) {
+    if (want === 'sub' && kind === 'sub') return 1;
+    if (want === 'dub' && kind === 'dub') return 1;
+    if (kind === 'raw') return 0.4;
+    return 0.25;
+  }
+  if (!lang) return 0.4;
+  if (lang === String(want).toLowerCase()) return 1;
+  if (String(want).toLowerCase().indexOf(lang) >= 0 || lang.indexOf(String(want).toLowerCase()) >= 0) return 0.85;
+  return 0.3;
+}
+// A single score in 0..100 for one stream under one profile.
+function _rankScore(stream, profile, prefs, isAnime) {
+  var prov = _rankDecayed('p:' + (stream.provider || ''));
+  var extr = _rankDecayed('x:' + (stream.extractor || ''));
+  var q = _rankQuality(stream.quality || stream.label);
+  var res = q == null ? 0.35 : Math.min(1, q / 2160);
+  // Playability: known format, https, and how well the provider and extractor
+  // have actually behaved. A verified source outranks a broken 4K link.
+  var play = 0.35;
+  if (/^https:\/\//i.test(stream.url || '')) play += 0.15;
+  var fmt = _rankFormat(stream);
+  if (fmt >= 0.85) play += 0.2; else if (fmt >= 0.6) play += 0.1;
+  if (prov) play += 0.18 * prov.rate;
+  if (extr) play += 0.12 * extr.rate;
+  if (q != null) play += 0.1;
+  var providerScore = prov ? prov.rate : 0.55;
+  var extractorScore = extr ? extr.rate : 0.55;
+  // Speed: faster resolution is worth a little, but never enough to outrank a
+  // much better picture.
+  var speed = 0.5;
+  if (prov && prov.avgMs > 0) speed = Math.max(0, Math.min(1, 1 - (prov.avgMs / 12000)));
+  var parts = {
+    playability: Math.min(1, play),
+    resolution: res,
+    format: fmt,
+    provider: providerScore,
+    extractor: extractorScore,
+    audio: _rankAudio(stream),
+    speed: speed,
+    codec: _rankCodec((stream.label || '') + ' ' + (stream.info || '')),
+    metadata: _rankMetadata(stream),
+    subtitle: _rankSubtitles(stream),
+    language: _rankLanguage(stream, prefs, isAnime)
+  };
+  var total = 0, weight = 0;
+  for (var k in profile) {
+    if (!Object.prototype.hasOwnProperty.call(profile, k)) continue;
+    var w = profile[k];
+    if (!w) continue;
+    total += w * (parts[k] == null ? 0.5 : parts[k]);
+    weight += w;
+  }
+  return weight ? (total / weight) * 100 : 0;
+}
+function _rankPrefs() {
+  return {
+    order: _str('sourceOrder', 'best'),
+    animeAudio: _str('preferredAnimeAudio', 'any'),
+    audioLang: _str('preferredAudioLang', '')
+  };
+}
+// Reorders the discovered sources. Returns the same array, sorted.
+function _rankStreams(list, r) {
+  if (!list || list.length < 2) return list;
+  var prefs = _rankPrefs();
+  var isAnime = r && r.isAnime === true;
+  var profile = isAnime ? RANK_PROFILE_ANIME : RANK_PROFILE_MOVIE;
+  var decorated = [];
+  for (var i = 0; i < list.length; i++) {
+    var s = list[i];
+    decorated.push({ stream: s, score: _rankScore(s, profile, prefs, isAnime), idx: i });
+  }
+  var order = prefs.order;
+  decorated.sort(function (a, b) {
+    if (order === 'quality') {
+      var qa = _rankQuality(a.stream.quality || a.stream.label) || 0;
+      var qb = _rankQuality(b.stream.quality || b.stream.label) || 0;
+      if (qa !== qb) return qb - qa;
+    } else if (order === 'speed') {
+      var pa = _rankDecayed('p:' + (a.stream.provider || ''));
+      var pb = _rankDecayed('p:' + (b.stream.provider || ''));
+      var sa = pa ? pa.avgMs : 99999, sb = pb ? pb.avgMs : 99999;
+      if (sa !== sb) return sa - sb;
+    } else if (order === 'reliable') {
+      var ra = _rankDecayed('p:' + (a.stream.provider || ''));
+      var rb = _rankDecayed('p:' + (b.stream.provider || ''));
+      var va = ra ? ra.rate : 0.5, vb = rb ? rb.rate : 0.5;
+      if (va !== vb) return vb - va;
+    }
+    // Always best-score first, with a stable tie-break so the order is
+    // predictable for equal scores.
+    if (b.score !== a.score) return b.score - a.score;
+    return a.idx - b.idx;
+  });
+  var out = new Array(decorated.length);
+  for (var k = 0; k < decorated.length; k++) out[k] = decorated[k].stream;
+  return out;
+}
+
 // ── Orchestrator ───────────────────────────────────────────────────────
 var PROVIDER_FN = {
   p_showbox: provShowbox, p_vidrock: provVidrock, p_moviebox: provMoviebox,
@@ -4714,7 +4967,14 @@ async function _runProvider(key, r, ctx, token, stats) {
   var started = Date.now();
   var produced = 0;
   var localCtx = {
-    emit: function (s) { if (s) produced++; local.emit(s); },
+    emit: function (s) {
+      if (!s) return;
+      produced++;
+      // Stamp the provider identity so the ranking can score this source
+      // against the provider's measured reliability.
+      if (!s.provider) s.provider = key;
+      local.emit(s);
+    },
     sub: local.sub,
     includeDownloads: local.includeDownloads,
     count: function () { return produced; }
@@ -4732,7 +4992,10 @@ async function _runProvider(key, r, ctx, token, stats) {
     }
   } finally {
     var took = Date.now() - started;
-    _recordProviderLatency(key, took, produced > 0);
+    // Record the outcome for the ranking. A provider that produced nothing is
+    // a weak signal, not a verdict: the score decays, so one bad evening
+    // cannot permanently penalise it.
+    _rankRecord('p:' + key, produced > 0, took);
     if (entry) { entry.ms = took; entry.sources = produced; }
   }
 }
@@ -4833,6 +5096,10 @@ async function getVideoSources(id, fast) {
       if (!out[o].subtitles || !out[o].subtitles.length) out[o].subtitles = subs.slice();
     }
   }
+  // Best compatible, genuinely playable source first. This only REORDERS the
+  // list: every discovered source stays available, weaker alternatives stay
+  // at the bottom.
+  out = _rankStreams(out, r);
   return out;
 }
 async function getStreams(id, fast) { return getVideoSources(id, fast); }
@@ -4854,6 +5121,10 @@ var _api = {
     decryptPeachify: _decryptPeachify, sha256Hex: _sha256Hex, hmacSha256Hex: _hmacSha256Hex,
     resolveStats: function () { return _LAST_RESOLVE_STATS; },
     providerLatency: function () { return _PROVIDER_LATENCY; },
+    rankStreams: function (list, r) { return _rankStreams(list, r || {}); },
+    rankQuality: function (label) { return _rankQuality(label); },
+    rankStats: function () { return _RANK_STATS; },
+    rankProfile: function (isAnime) { return isAnime ? RANK_PROFILE_ANIME : RANK_PROFILE_MOVIE; },
     timeoutPolicy: function () { return TIMEOUT; },
     budgets: function () {
       return {

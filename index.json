@@ -1612,6 +1612,59 @@
         "description": "Also emit download-only links as streams when a provider exposes them.",
         "type": "bool",
         "default": false
+      },
+      {
+        "key": "sourceOrder",
+        "label": "Source order",
+        "description": "How the discovered sources are ordered. Every source stays available; this only changes which one is offered first.",
+        "type": "enum",
+        "default": "best",
+        "options": [
+          {
+            "value": "best",
+            "label": "Best playable source first (default)"
+          },
+          {
+            "value": "quality",
+            "label": "Highest resolution first"
+          },
+          {
+            "value": "speed",
+            "label": "Fastest to resolve first"
+          },
+          {
+            "value": "reliable",
+            "label": "Most reliable provider first"
+          }
+        ]
+      },
+      {
+        "key": "preferredAnimeAudio",
+        "label": "Preferred anime audio",
+        "description": "Which anime audio track is preferred when both a subbed and a dubbed version are available.",
+        "type": "enum",
+        "default": "any",
+        "options": [
+          {
+            "value": "any",
+            "label": "No preference"
+          },
+          {
+            "value": "sub",
+            "label": "Subbed"
+          },
+          {
+            "value": "dub",
+            "label": "Dubbed"
+          }
+        ]
+      },
+      {
+        "key": "preferredAudioLang",
+        "label": "Preferred audio language",
+        "description": "Preferred audio language code, for example en or hi. Leave blank for no preference.",
+        "type": "text",
+        "default": ""
       }
     ]
   }

@@ -22,9 +22,10 @@ function g(t) { console.log('\n\x1b[36m' + t + '\x1b[0m'); }
 
   g('2. Settings schema');
   var settings = P.getSettings();
-  ok('11 settings present', settings.length === 11, String(settings.length));
+  ok('14 settings present', settings.length === 14, String(settings.length));
   ['enabledProviders','showboxToken','wyzieSubsKey','gramcinemaToken','tmdbApiKey',
-   'movieblastToken','movieblastApi','movieblastKey','castleKey','concurrency','includeDownloadLinks']
+   'movieblastToken','movieblastApi','movieblastKey','castleKey','concurrency',
+   'includeDownloadLinks','sourceOrder','preferredAnimeAudio','preferredAudioLang']
     .forEach(function (k) { ok('setting "' + k + '" present', settings.some(function (s) { return s.key === k; })); });
   ok('enabledProviders is multiEnum', settings[0].type === 'multiEnum', settings[0].type);
   ok('enabledProviders values == provider keys', JSON.stringify(settings[0].options.map(function (o) { return o.value; })) === JSON.stringify(P._providers.map(function (p) { return p[0]; })));
