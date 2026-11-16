@@ -331,6 +331,30 @@
         "Real-player playback could not be verified in the porting environment. HTTP-level extraction is covered by tests; in-app playback should be confirmed on a real device."
       ],
       "licence": "GPL-3.0"
+    },
+    "anipm": {
+      "purpose": "Ani.pm catalogue with sub and dub playback resolved through the site's own player.",
+      "metadata": "Ani.pm's documented partner API (ani.pm/api/partner/v1), which needs no key and is CORS-open.",
+      "setup": "ready-with-defaults",
+      "setupNote": "The domain, fallback and audio settings all ship with defaults; ani.pm needs no account and no key.",
+      "credentials": [],
+      "behaviour": "Search, title details and the episode list come from the documented partner API. Episode availability is read per language, so a sub and a dub of the same episode are listed separately. Playback follows the official embed player: the embed page hands over the player's own configuration, the partner session endpoint signs a session for that one episode and the player origin answers with the media URL and its subtitle tracks. Requests carry the Referer and Origin the player origin expects.",
+      "limitations": [
+        "ani.pm publishes no alternate domain, so the fallback list ships empty. Only a domain ani.pm itself announces should ever be added to it.",
+        "The player origin is fronted by a bot check. On a residential connection it answers; from a datacentre IP it refuses the request and the episode has no stream."
+      ]
+    },
+    "gotaku": {
+      "purpose": "Gotaku catalogue with the site's own sub and dub episode list and playback entry point.",
+      "metadata": "Gotaku's own JSON API under /api/v1, including the AniList and MyAnimeList links the catalogue carries.",
+      "setup": "ready-with-defaults",
+      "setupNote": "Every setting ships with a working default. Gotaku needs no account.",
+      "credentials": [],
+      "behaviour": "Search and title details come from the catalogue endpoints. The episode list and the episode's player descriptor are sealed with AES-256-GCM under a key derived with HKDF-SHA-256; the seal, the hash and the inflate are implemented in plain JavaScript inside the source, so no host support is needed. Episode availability is read per language, so a sub and a dub of the same episode are listed separately. Playback resolves the site's own player page and returns the playback entry point it publishes, with the Referer that host expects.",
+      "limitations": [
+        "Gotaku states that gotaku.to is its only domain. The fallback list therefore ships empty and lookalike domains are not to be trusted.",
+        "gotakudl.top encrypts its media playlists and its segments per file. The source resolves the site's genuine playback entry point, but the app's own player may not be able to decode the result."
+      ]
     }
   }
 }

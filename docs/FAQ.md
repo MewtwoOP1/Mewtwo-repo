@@ -6,7 +6,7 @@
 
 ### What exactly is Mewtwo Repo?
 
-A collection of **25 JavaScript sources** for the [Zangetsu](https://github.com/Spyou/Zangetsu) app. Each source is one self-contained file that the app downloads, installs and runs at runtime. You add a single repository URL to the app and then pick the sources you want.
+A collection of **27 JavaScript sources** for the [Zangetsu](https://github.com/Spyou/Zangetsu) app. Each source is one self-contained file that the app downloads, installs and runs at runtime. You add a single repository URL to the app and then pick the sources you want.
 
 It is not an app, not an extension format and not a media library. It is a source repository.
 
@@ -22,7 +22,7 @@ No. It hosts JavaScript and documentation. Every stream is fetched at request ti
 
 Android, Android TV and iOS (beta) — anywhere Zangetsu runs. These are Zangetsu's own JavaScript sources, which is why they work on iOS where CloudStream, Aniyomi and Mihon extensions cannot be loaded.
 
-### Do I need to install all 25 sources?
+### Do I need to install all 27 sources?
 
 No. Install only what you use. They are completely independent of each other. Installing several gives you fallbacks when one site is down.
 
@@ -62,7 +62,7 @@ Open **Settings → Providers → Source health** — *"Test which sources are w
 
 ### Do I need an API key?
 
-For most sources, no. **Thirteen of the 25 sources expose no settings at all** — they handle sessions, cookies, tokens and decryption themselves.
+For most sources, no. **Thirteen of the 27 sources expose no settings at all** — they handle sessions, cookies, tokens and decryption themselves.
 
 **Three sources cannot work without something from you:**
 

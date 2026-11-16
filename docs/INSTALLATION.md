@@ -85,7 +85,7 @@ The repository now appears in the **Repositories** tab with every source it publ
 
 ## Step 2 — Install individual sources
 
-You do **not** have to install all 25 sources. Each one is independent: installing a source never installs another, and removing one never affects the others.
+You do **not** have to install all 27 sources. Each one is independent: installing a source never installs another, and removing one never affects the others.
 
 1. Stay in the **Repositories** tab and find the repository you just added.
 2. The list under it shows every source with its name, type and version.

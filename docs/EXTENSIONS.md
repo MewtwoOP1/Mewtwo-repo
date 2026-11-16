@@ -15,11 +15,11 @@ Every source published by this repository, with the exact version in the manifes
 | | Count | Sources |
 |:--|--:|:--|
 | 🟢 Ready to use | 13 | No settings, no credentials. |
-| 🔵 Ready with defaults | 8 | Settings exist and every default works. |
+| 🔵 Ready with defaults | 10 | Settings exist and every default works. |
 | 🟡 Optional credentials | 1 | Works as installed; a key unlocks extra hosts. |
 | 🟠 Requires configuration | 2 | A URL or add-on list must be entered. |
 | 🔴 Requires an account or server | 1 | Needs your own server and login. |
-| **Total** | **25** | 19 anime · 6 movie and TV |
+| **Total** | **27** | 21 anime · 6 movie and TV |
 
 ---
 
@@ -48,6 +48,8 @@ Every source published by this repository, with the exact version in the manifes
 | [AniZone](#anizone) | anime | en | `1.0.3` | 🟢 Ready to use | AniZone catalogue with HLS playback and subtitle tracks. |
 | [RareAnimes](#rareanimes) | anime | hi | `1.0.5` | 🟢 Ready to use | RareAnimes catalogue with multi-language playback. |
 | [Zenkai Player](#zenkai-player) | anime | en | `1.4.1` | 🔵 Ready with defaults | AniList metadata with native MegaPlay, VidStream and ACDN multi-audio playback. |
+| [Ani.pm](#anipm) | anime | en | `1.0.0` | 🔵 Ready with defaults | Ani.pm catalogue with sub and dub playback resolved through the site's own player. |
+| [Gotaku](#gotaku) | anime | en | `1.0.0` | 🔵 Ready with defaults | Gotaku catalogue with the site's own sub and dub episode list and playback entry point. |
 | [AnimeOnsen](#animeonsen) | anime | all | `1.0.1` | 🔵 Ready with defaults | AnimeOnsen catalogue with DASH playback and ASS subtitle tracks. |
 | [AnimeGG](#animegg) | anime | en | `1.0.2` | 🔵 Ready with defaults | AnimeGG catalogue that returns a direct progressive MP4. |
 | [AnimeAV1](#animeav1) | anime | es | `1.0.1` | 🔵 Ready with defaults | AnimeAV1 catalogue in Spanish with VOE and YourUpload playback. |
@@ -260,7 +262,7 @@ All enabled providers run concurrently under a hard 18 second playback budget, a
 
 ---
 
-## Anime sources (19)
+## Anime sources (21)
 
 ### AnimeSuge
 
@@ -592,6 +594,74 @@ ACDN returns a single multi-audio HLS playlist rather than a normal sub or dub f
 - FlixCloud falls back to the supported direct MegaPlay and VidStream resolvers until a public direct resolver is available.
 - Long-running episode totals fall back to MAL and the raw AniList next-airing record when AniList does not have them.
 
+### Ani.pm
+
+`id: anipm` · `v1.0.0` · anime · en · not flagged NSFW
+
+| Field | Value |
+|:--|:--|
+| **Purpose** | Ani.pm catalogue with sub and dub playback resolved through the site's own player. |
+| **Metadata** | Ani.pm's documented partner API (ani.pm/api/partner/v1), which needs no key and is CORS-open. |
+| **Setup** | 🔵 Ready with defaults — The domain, fallback and audio settings all ship with defaults; ani.pm needs no account and no key. |
+| **Settings** | 11 exposed |
+
+| Setting | Type | Default | Choices |
+|:--|:--|:--|:--|
+| Primary domain (`primaryDomain`) | text | `ani.pm` | — |
+| Fallback domains (`fallbackDomains`) | text | _(empty)_ | — |
+| Automatic domain fallback (`autoFallback`) | bool | `true` | — |
+| Preferred domain (`preferredDomain`) | enum | `auto` | Automatic (last working domain), Always start from the primary domain |
+| Custom domain override (`customDomain`) | text | _(empty)_ | — |
+| Request timeout (`requestTimeoutMs`) | enum | `12000` | 6 seconds, 12 seconds, 18 seconds, 25 seconds |
+| Maximum retries (`maxRetries`) | enum | `2` | No retry, 1 retry, 2 retries, 3 retries, 5 retries |
+| Automatic recovery (`autoRecovery`) | bool | `true` | — |
+| Episode audio (`preferredAudio`) | enum | `both` | Sub and dub, Sub only, Dub only |
+| Preferred audio language (`preferredAudioLanguage`) | enum | `ja` | Japanese (sub), English (dub) |
+| Include subtitle tracks (`includeSubtitles`) | bool | `true` | — |
+
+**Behaviour**
+
+Search, title details and the episode list come from the documented partner API. Episode availability is read per language, so a sub and a dub of the same episode are listed separately. Playback follows the official embed player: the embed page hands over the player's own configuration, the partner session endpoint signs a session for that one episode and the player origin answers with the media URL and its subtitle tracks. Requests carry the Referer and Origin the player origin expects.
+
+**Limitations**
+
+- ani.pm publishes no alternate domain, so the fallback list ships empty. Only a domain ani.pm itself announces should ever be added to it.
+- The player origin is fronted by a bot check. On a residential connection it answers; from a datacentre IP it refuses the request and the episode has no stream.
+
+### Gotaku
+
+`id: gotaku` · `v1.0.0` · anime · en · not flagged NSFW
+
+| Field | Value |
+|:--|:--|
+| **Purpose** | Gotaku catalogue with the site's own sub and dub episode list and playback entry point. |
+| **Metadata** | Gotaku's own JSON API under /api/v1, including the AniList and MyAnimeList links the catalogue carries. |
+| **Setup** | 🔵 Ready with defaults — Every setting ships with a working default. Gotaku needs no account. |
+| **Settings** | 11 exposed |
+
+| Setting | Type | Default | Choices |
+|:--|:--|:--|:--|
+| Primary domain (`primaryDomain`) | text | `gotaku.to` | — |
+| Fallback domains (`fallbackDomains`) | text | _(empty)_ | — |
+| Automatic domain fallback (`autoFallback`) | bool | `true` | — |
+| Preferred domain (`preferredDomain`) | enum | `auto` | Automatic (last working domain), Always start from the primary domain |
+| Custom domain override (`customDomain`) | text | _(empty)_ | — |
+| Request timeout (`requestTimeoutMs`) | enum | `12000` | 6 seconds, 12 seconds, 18 seconds, 25 seconds |
+| Maximum retries (`maxRetries`) | enum | `2` | No retry, 1 retry, 2 retries, 3 retries, 5 retries |
+| Automatic recovery (`autoRecovery`) | bool | `true` | — |
+| Episode audio (`preferredAudio`) | enum | `both` | Sub and dub, Sub only, Dub only |
+| Preferred audio language (`preferredAudioLanguage`) | enum | `ja` | Japanese (sub), English (dub) |
+| Include subtitle tracks (`includeSubtitles`) | bool | `true` | — |
+
+**Behaviour**
+
+Search and title details come from the catalogue endpoints. The episode list and the episode's player descriptor are sealed with AES-256-GCM under a key derived with HKDF-SHA-256; the seal, the hash and the inflate are implemented in plain JavaScript inside the source, so no host support is needed. Episode availability is read per language, so a sub and a dub of the same episode are listed separately. Playback resolves the site's own player page and returns the playback entry point it publishes, with the Referer that host expects.
+
+**Limitations**
+
+- Gotaku states that gotaku.to is its only domain. The fallback list therefore ships empty and lookalike domains are not to be trusted.
+- gotakudl.top encrypts its media playlists and its segments per file. The source resolves the site's genuine playback entry point, but the app's own player may not be able to decode the result.
+
 ### AnimeOnsen
 
 `id: animeonsen` · `v1.0.1` · anime · all · not flagged NSFW
@@ -720,6 +790,28 @@ https://www.neoani…` |
 | `homeOrder` | AniWave (Unoriginal) | enum | `popular` |
 | `server` | Zenkai Player | enum | `megaplay` |
 | `audio` | Zenkai Player | enum | `sub` |
+| `primaryDomain` | Ani.pm | text | `ani.pm` |
+| `fallbackDomains` | Ani.pm | text | _(empty)_ |
+| `autoFallback` | Ani.pm | bool | `true` |
+| `preferredDomain` | Ani.pm | enum | `auto` |
+| `customDomain` | Ani.pm | text | _(empty)_ |
+| `requestTimeoutMs` | Ani.pm | enum | `12000` |
+| `maxRetries` | Ani.pm | enum | `2` |
+| `autoRecovery` | Ani.pm | bool | `true` |
+| `preferredAudio` | Ani.pm | enum | `both` |
+| `preferredAudioLanguage` | Ani.pm | enum | `ja` |
+| `includeSubtitles` | Ani.pm | bool | `true` |
+| `primaryDomain` | Gotaku | text | `gotaku.to` |
+| `fallbackDomains` | Gotaku | text | _(empty)_ |
+| `autoFallback` | Gotaku | bool | `true` |
+| `preferredDomain` | Gotaku | enum | `auto` |
+| `customDomain` | Gotaku | text | _(empty)_ |
+| `requestTimeoutMs` | Gotaku | enum | `12000` |
+| `maxRetries` | Gotaku | enum | `2` |
+| `autoRecovery` | Gotaku | bool | `true` |
+| `preferredAudio` | Gotaku | enum | `both` |
+| `preferredAudioLanguage` | Gotaku | enum | `ja` |
+| `includeSubtitles` | Gotaku | bool | `true` |
 | `requestTimeoutMs` | AnimeOnsen | enum | `12000` |
 | `homeLimit` | AnimeOnsen | enum | `30` |
 | `includeSubtitles` | AnimeOnsen | bool | `true` |

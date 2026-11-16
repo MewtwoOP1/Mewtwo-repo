@@ -36,6 +36,8 @@ const SAMPLE_EPISODES = {
   animegg: "animegg://one-piece/1",
   animeav1: "animeav1://one-piece/1",
   animeonsen: "animeonsen://1",
+  anipm: "anipm://ani/154587/1/sub",
+  gotaku: "gotaku://episode/vbhgad/0sujsh/sub",
 };
 
 function installHostFetchShim() {
@@ -50,13 +52,23 @@ function installHostFetchShim() {
     if (init.body != null) options.body = init.body;
     if (init.timeoutMs) options.signal = AbortSignal.timeout(init.timeoutMs);
     const response = await originalFetch(String(url), options);
-    const body = await response.text();
+    // Providers that read sealed or encrypted answers need the raw bytes, so the
+    // buffer is kept and exposed through arrayBuffer() next to the text body.
+    const buffer = Buffer.from(await response.arrayBuffer());
+    const body = buffer.toString("utf8");
     const headers = Object.fromEntries(response.headers.entries());
     if (typeof response.headers.getSetCookie === "function") {
       const cookies = response.headers.getSetCookie();
       if (cookies.length) headers["set-cookie"] = cookies;
     }
-    return { status: response.status, body, headers, url: response.url };
+    return {
+      status: response.status,
+      body,
+      headers,
+      url: response.url,
+      text: async () => body,
+      arrayBuffer: async () => buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength),
+    };
   };
   return originalFetch;
 }

@@ -20,6 +20,8 @@ Every statement on this page is derived from the provider code in `providers/` a
 | **[AnimeOnsen](#animeonsen)** | 🔵 Defaults work | Nothing |
 | **[AnimeGG](#animegg)** | 🔵 Defaults work | Nothing |
 | **[AnimeAV1](#animeav1)** | 🔵 Defaults work | Nothing |
+| **[Ani.pm](#anipm)** | 🔵 Defaults work | Nothing |
+| **[Gotaku](#gotaku)** | 🔵 Defaults work | Nothing |
 | **[AnimeKai](#animekai-unoriginal)** | 🔵 Defaults work | Nothing |
 | **[AniWave](#aniwave-unoriginal)** | 🔵 Defaults work | Nothing |
 | **13 further sources** | 🟢 Ready to use | Nothing at all — they expose no settings |
@@ -455,6 +457,90 @@ Never paste any of these into an issue, a pull request, a chat message, a screen
 **How to verify.** Open an episode and check that a stream appears.
 
 **Common errors.** The same as AnimeKai — the newer `getSourcesNew` endpoint is deliberately not advertised.
+
+---
+
+## Ani.pm
+
+**Purpose.** Ani.pm catalogue with sub and dub playback resolved through the site's own player.
+
+**Default behaviour.** Works as installed. ani.pm needs no account and no key: the catalogue comes from its documented partner API.
+
+**Setup required.** No.
+
+**Settings.**
+
+| Setting | Default | What it controls |
+|:--|:--|:--|
+| **Primary domain** | `ani.pm` | The domain used first. Only change it to a domain ani.pm itself confirms |
+| **Fallback domains** | empty | Backup domains tried in order. ani.pm has published none, so leave this blank |
+| **Automatic domain fallback** | On | Try the next candidate when the current domain fails |
+| **Preferred domain** | Automatic | Automatic keeps the last domain that worked; Primary always starts from the domain above |
+| **Custom domain override** | empty | Replaces the primary domain with one you trust yourself |
+| **Request timeout** | 12 seconds | Maximum wait for a single request |
+| **Maximum retries** | 2 retries | How often a failed request is repeated before the next domain is tried |
+| **Automatic recovery** | On | Periodically re-check the primary domain so the source returns to it |
+| **Episode audio** | Sub and dub | Which versions of an episode are listed and played |
+| **Preferred audio language** | Japanese | Which audio language is tried first when an episode offers more than one |
+| **Include subtitle tracks** | On | Attach the subtitle tracks ani.pm publishes for an episode |
+
+**Where to configure.** `Installed → Ani.pm → Source settings`.
+
+**How to verify.** Search for a title, open it and check that the episode list shows both a sub and a dub where ani.pm publishes them.
+
+**Common errors.**
+
+| Symptom | Cause | Fix |
+|:--|:--|:--|
+| The catalogue is empty | The player origin refused the request | This is upstream; try again from a residential connection |
+| An episode lists but has no stream | ani.pm has no session for that language on that episode | Try the other language, or another source |
+| A stream appears but does not play | The player origin needs a Referer the app could not send | Report it with the title and the app log |
+
+> [!NOTE]
+> **Domain safety.** ani.pm publishes `ani.pm` and no alternate. A lookalike domain is not covered by the site's terms, and the fallback list ships empty for that reason.
+
+---
+
+## Gotaku
+
+**Purpose.** Gotaku catalogue with the site's own sub and dub episode list and playback entry point.
+
+**Default behaviour.** Works as installed. Gotaku needs no account.
+
+**Setup required.** No.
+
+**Settings.**
+
+| Setting | Default | What it controls |
+|:--|:--|:--|
+| **Primary domain** | `gotaku.to` | The domain used first. Gotaku states this is its only domain |
+| **Fallback domains** | empty | Backup domains tried in order. Leave blank unless Gotaku announces one |
+| **Automatic domain fallback** | On | Try the next candidate when the current domain fails |
+| **Preferred domain** | Automatic | Automatic keeps the last domain that worked; Primary always starts from the domain above |
+| **Custom domain override** | empty | Replaces the primary domain with one you trust yourself |
+| **Request timeout** | 12 seconds | Maximum wait for a single request |
+| **Maximum retries** | 2 retries | How often a failed request is repeated before the next domain is tried |
+| **Automatic recovery** | On | Periodically re-check the primary domain so the source returns to it |
+| **Episode audio** | Sub and dub | Which versions of an episode are listed and played |
+| **Preferred audio language** | Japanese | Which audio language is tried first when an episode offers more than one |
+| **Include subtitle tracks** | On | Attach the subtitle tracks Gotaku publishes for an episode |
+
+**Where to configure.** `Installed → Gotaku → Source settings`.
+
+**How to verify.** Search for a title, open it and check that the episode list shows both a sub and a dub where Gotaku publishes them.
+
+**Common errors.**
+
+| Symptom | Cause | Fix |
+|:--|:--|:--|
+| The catalogue is empty | Every configured domain failed | Check the device's network, then the domain settings |
+| An episode lists but has no stream | Gotaku issued no player session for that episode | Try the other language, or another source |
+| A stream appears but does not play | Gotaku's player host encrypts its playlists and segments per file | See the note below |
+
+> [!NOTE]
+> **Domain safety.** Gotaku states that `gotaku.to` is its only domain and that lookalike domains are fake sites. The fallback list ships empty and the custom override says so too.
+>
+> **Known limitation.** `gotakudl.top` encrypts its media playlists and its segments per file, and only its own web player decodes them. This source resolves the site's genuine playback entry point, with the Referer that host expects, but whether the app's own player can decode the result depends on the player, not on this source.
 
 ---
 

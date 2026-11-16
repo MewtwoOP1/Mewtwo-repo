@@ -1006,6 +1006,494 @@
       ]
     },
     {
+      "id": "anipm",
+      "name": "Ani.pm",
+      "version": "1.0.0",
+      "type": "anime",
+      "lang": "en",
+      "file": "providers/anipm.js",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=ani.pm",
+      "nsfw": false,
+      "settings": [
+        {
+
+          "key": "primaryDomain",
+
+          "label": "Primary domain",
+
+          "description": "The ani.pm domain used first. Only change this to a domain ani.pm itself confirms; a lookalike domain can serve anything.",
+
+          "type": "text",
+
+          "default": "ani.pm"
+
+        },
+        {
+
+          "key": "fallbackDomains",
+
+          "label": "Fallback domains",
+
+          "description": "Comma or newline separated backup domains, tried in order when the primary fails. ani.pm has not published alternate domains, so leave this blank unless the maintainers announce one.",
+
+          "type": "text",
+
+          "default": ""
+
+        },
+        {
+
+          "key": "autoFallback",
+
+          "label": "Automatic domain fallback",
+
+          "description": "When the current domain fails, try the next candidate instead of giving up on the episode.",
+
+          "type": "bool",
+
+          "default": true
+
+        },
+        {
+
+          "key": "preferredDomain",
+
+          "label": "Preferred domain",
+
+          "description": "Automatic keeps using the last domain that worked. Primary always starts from the domain above and only falls back if it fails.",
+
+          "type": "enum",
+
+          "default": "auto",
+
+          "options": [
+
+            {
+              "value": "auto",
+              "label": "Automatic (last working domain)"
+            },
+            {
+              "value": "primary",
+              "label": "Always start from the primary domain"
+            }
+
+          ]
+
+        },
+        {
+
+          "key": "customDomain",
+
+          "label": "Custom domain override",
+
+          "description": "Replaces the primary domain with a domain you trust. Only use one you have verified yourself: a lookalike domain is not covered by ani.pm.",
+
+          "type": "text",
+
+          "default": ""
+
+        },
+        {
+
+          "key": "requestTimeoutMs",
+
+          "label": "Request timeout",
+
+          "description": "Maximum wait for a single ani.pm request.",
+
+          "type": "enum",
+
+          "default": "12000",
+
+          "options": [
+
+            {
+              "value": "6000",
+              "label": "6 seconds"
+            },
+            {
+              "value": "12000",
+              "label": "12 seconds"
+            },
+            {
+              "value": "18000",
+              "label": "18 seconds"
+            },
+            {
+              "value": "25000",
+              "label": "25 seconds"
+            }
+
+          ]
+
+        },
+        {
+
+          "key": "maxRetries",
+
+          "label": "Maximum retries",
+
+          "description": "How many times a failed request is repeated before the next domain is tried.",
+
+          "type": "enum",
+
+          "default": "2",
+
+          "options": [
+
+            {
+              "value": "0",
+              "label": "No retry"
+            },
+            {
+              "value": "1",
+              "label": "1 retry"
+            },
+            {
+              "value": "2",
+              "label": "2 retries"
+            },
+            {
+              "value": "3",
+              "label": "3 retries"
+            },
+            {
+              "value": "5",
+              "label": "5 retries"
+            }
+
+          ]
+
+        },
+        {
+
+          "key": "autoRecovery",
+
+          "label": "Automatic recovery",
+
+          "description": "Periodically check the primary domain again so the source returns to it once it works.",
+
+          "type": "bool",
+
+          "default": true
+
+        },
+        {
+
+          "key": "preferredAudio",
+
+          "label": "Episode audio",
+
+          "description": "Which versions of an episode to list and play.",
+
+          "type": "enum",
+
+          "default": "both",
+
+          "options": [
+
+            {
+              "value": "both",
+              "label": "Sub and dub"
+            },
+            {
+              "value": "sub",
+              "label": "Sub only"
+            },
+            {
+              "value": "dub",
+              "label": "Dub only"
+            }
+
+          ]
+
+        },
+        {
+
+          "key": "preferredAudioLanguage",
+
+          "label": "Preferred audio language",
+
+          "description": "Which audio language is tried first when an episode offers more than one.",
+
+          "type": "enum",
+
+          "default": "ja",
+
+          "options": [
+
+            {
+              "value": "ja",
+              "label": "Japanese (sub)"
+            },
+            {
+              "value": "en",
+              "label": "English (dub)"
+            }
+
+          ]
+
+        },
+        {
+
+          "key": "includeSubtitles",
+
+          "label": "Include subtitle tracks",
+
+          "description": "Attach the subtitle tracks ani.pm publishes for an episode when they are available.",
+
+          "type": "bool",
+
+          "default": true
+
+        }
+      ]
+    },
+    {
+      "id": "gotaku",
+      "name": "Gotaku",
+      "version": "1.0.0",
+      "type": "anime",
+      "lang": "en",
+      "file": "providers/gotaku.js",
+      "logo": "https://www.google.com/s2/favicons?sz=256&domain=gotaku.to",
+      "nsfw": false,
+      "settings": [
+        {
+
+          "key": "primaryDomain",
+
+          "label": "Primary domain",
+
+          "description": "The Gotaku domain used first. Gotaku publishes gotaku.to as its only official domain; only change this to a domain Gotaku itself announces.",
+
+          "type": "text",
+
+          "default": "gotaku.to"
+
+        },
+        {
+
+          "key": "fallbackDomains",
+
+          "label": "Fallback domains",
+
+          "description": "Comma or newline separated backup domains, tried in order when the primary fails. Leave this blank: Gotaku has not published an alternate domain, and lookalike domains are fake sites.",
+
+          "type": "text",
+
+          "default": ""
+
+        },
+        {
+
+          "key": "autoFallback",
+
+          "label": "Automatic domain fallback",
+
+          "description": "When the current domain fails, try the next candidate instead of giving up on the episode.",
+
+          "type": "bool",
+
+          "default": true
+
+        },
+        {
+
+          "key": "preferredDomain",
+
+          "label": "Preferred domain",
+
+          "description": "Automatic keeps using the last domain that worked. Primary always starts from the domain above and only falls back if it fails.",
+
+          "type": "enum",
+
+          "default": "auto",
+
+          "options": [
+
+            {
+              "value": "auto",
+              "label": "Automatic (last working domain)"
+            },
+            {
+              "value": "primary",
+              "label": "Always start from the primary domain"
+            }
+
+          ]
+
+        },
+        {
+
+          "key": "customDomain",
+
+          "label": "Custom domain override",
+
+          "description": "Replaces the primary domain with a domain you trust yourself. Gotaku states that gotaku.to is its only domain, so only use this if Gotaku announced a change.",
+
+          "type": "text",
+
+          "default": ""
+
+        },
+        {
+
+          "key": "requestTimeoutMs",
+
+          "label": "Request timeout",
+
+          "description": "Maximum wait for a single Gotaku request.",
+
+          "type": "enum",
+
+          "default": "12000",
+
+          "options": [
+
+            {
+              "value": "6000",
+              "label": "6 seconds"
+            },
+            {
+              "value": "12000",
+              "label": "12 seconds"
+            },
+            {
+              "value": "18000",
+              "label": "18 seconds"
+            },
+            {
+              "value": "25000",
+              "label": "25 seconds"
+            }
+
+          ]
+
+        },
+        {
+
+          "key": "maxRetries",
+
+          "label": "Maximum retries",
+
+          "description": "How many times a failed request is repeated before the next domain is tried.",
+
+          "type": "enum",
+
+          "default": "2",
+
+          "options": [
+
+            {
+              "value": "0",
+              "label": "No retry"
+            },
+            {
+              "value": "1",
+              "label": "1 retry"
+            },
+            {
+              "value": "2",
+              "label": "2 retries"
+            },
+            {
+              "value": "3",
+              "label": "3 retries"
+            },
+            {
+              "value": "5",
+              "label": "5 retries"
+            }
+
+          ]
+
+        },
+        {
+
+          "key": "autoRecovery",
+
+          "label": "Automatic recovery",
+
+          "description": "Periodically check the primary domain again so the source returns to it once it works.",
+
+          "type": "bool",
+
+          "default": true
+
+        },
+        {
+
+          "key": "preferredAudio",
+
+          "label": "Episode audio",
+
+          "description": "Which versions of an episode to list and play.",
+
+          "type": "enum",
+
+          "default": "both",
+
+          "options": [
+
+            {
+              "value": "both",
+              "label": "Sub and dub"
+            },
+            {
+              "value": "sub",
+              "label": "Sub only"
+            },
+            {
+              "value": "dub",
+              "label": "Dub only"
+            }
+
+          ]
+
+        },
+        {
+
+          "key": "preferredAudioLanguage",
+
+          "label": "Preferred audio language",
+
+          "description": "Which audio language is tried first when an episode offers more than one.",
+
+          "type": "enum",
+
+          "default": "ja",
+
+          "options": [
+
+            {
+              "value": "ja",
+              "label": "Japanese (sub)"
+            },
+            {
+              "value": "en",
+              "label": "English (dub)"
+            }
+
+          ]
+
+        },
+        {
+
+          "key": "includeSubtitles",
+
+          "label": "Include subtitle tracks",
+
+          "description": "Attach the subtitle tracks Gotaku publishes for an episode when they are available.",
+
+          "type": "bool",
+
+          "default": true
+
+        }
+      ]
+    },
+    {
       "id": "animeonsen",
       "name": "AnimeOnsen",
       "version": "1.0.1",

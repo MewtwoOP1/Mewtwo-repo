@@ -46,7 +46,7 @@ The app downloaded a small JSON file — the *manifest* — that describes every
 
 Open the repository you just added. Every source it publishes is listed with a name and an **Install** button.
 
-**You do not need all 25.** Install the one that suits what you want to watch:
+**You do not need all 27.** Install the one that suits what you want to watch:
 
 | I want to watch… | Try this first |
 |:--|:--|
