@@ -16,7 +16,7 @@
 // What this source resolves is the site's genuine playback entry point; it
 // never hands back a webpage and never invents a stream.
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID) ? String(__SOURCE_ID) : 'gotaku';
-var VERSION = '1.0.0';
+var VERSION = '1.0.1';
 var OFFICIAL_DOMAIN = 'gotaku.to';
 var API_PATH = '/api/v1';
 var API_VERSION = 10;
@@ -461,10 +461,57 @@ function _sealKey() {
   var ikm = SEAL_IKM_B.map(function (value, index) { return value ^ SEAL_IKM_A[index]; });
   return _hkdf(ikm, [], _utf8('api-seal|v1'), 32);
 }
-function _openApiSeal(bytes) {
-  var result = _gcmDecrypt(_sealKey(), bytes.slice(1, 13), bytes.slice(13));
-  if (!result.ok) throw new Error('Gotaku: the API answer failed its seal');
-  return _zlibInflate(result.plain);
+// The API answers a sealed payload as binary. How that binary reaches a
+// provider differs by host: some hand over raw bytes, some hand over the byte
+// list, some hand over base64 text, and some hand over the raw text. The seal
+// authenticates the answer, so every reading is tried and the one that
+// verifies is the right one.
+function _byteCandidates(body) {
+  var out = [], seen = {};
+  function add(bytes) {
+    if (!bytes || !bytes.length) return;
+    var key = bytes.length + ':' + bytes[0] + ':' + bytes[bytes.length - 1];
+    if (seen[key]) return;
+    seen[key] = 1;
+    out.push(bytes);
+  }
+  if (body && typeof body.length === 'number' && typeof body !== 'string') {
+    var direct = [];
+    for (var i = 0; i < body.length; i++) direct.push(body[i] & 255);
+    add(direct);
+    return out;
+  }
+  var text = String(body == null ? '' : body);
+  // Dart's List<int>.toString() form, e.g. "[10, 1, 2, 3]".
+  if (/^\[\s*\d+(\s*,\s*\d+)*\s*\]$/.test(text)) {
+    add(text.replace(/[\[\]\s]/g, '').split(',').filter(Boolean).map(Number));
+  }
+  // Raw bytes carried one per character.
+  var latin1 = [];
+  var plain = true;
+  for (var j = 0; j < text.length; j++) {
+    var code = text.charCodeAt(j);
+    if (code > 255) plain = false;
+    latin1.push(code & 255);
+  }
+  if (plain) add(latin1);
+  // Base64 text.
+  if (/^[A-Za-z0-9+/\-_\s]+={0,2}$/.test(text) && text.replace(/\s/g, '').length % 4 === 0) {
+    add(_b64urlDecode(text.replace(/\s/g, '')));
+  }
+  return out;
+}
+function _openApiSeal(body) {
+  var candidates = _byteCandidates(body);
+  var key = _sealKey();
+  for (var i = 0; i < candidates.length; i++) {
+    var bytes = candidates[i];
+    if (bytes.length < 30) continue;
+    var result = _gcmDecrypt(key, bytes.slice(1, 13), bytes.slice(13));
+    if (!result.ok) continue;
+    return _zlibInflate(result.plain);
+  }
+  throw new Error('Gotaku: the API answer could not be opened (the host delivered it in a form this source cannot read)');
 }
 function _openPlayerSeal(text, salt) {
   var raw = _b64urlDecode(text);
@@ -761,14 +808,6 @@ function _parseItem(url) {
   if (!match) return '';
   try { return decodeURIComponent(match[1]); } catch (e) { return match[1]; }
 }
-function _trackOrder() {
-  var cfg = _settings();
-  var tracks = [];
-  if (cfg.audio !== 'dub') tracks.push('sub');
-  if (cfg.audio !== 'sub') tracks.push('dub');
-  if (cfg.audioLanguage === 'en') tracks.reverse();
-  return tracks;
-}
 function _episodeUrl(titleId, episodeId, track) {
   return 'gotaku://episode/' + encodeURIComponent(String(titleId)) + '/' + encodeURIComponent(String(episodeId)) + '/' + track;
 }
@@ -796,26 +835,40 @@ function _episodeRows(payload) {
   out.sort(function (a, b) { return a.number - b.number; });
   return out;
 }
-function _episodes(titleId, rows) {
-  var tracks = _trackOrder();
+// The app asks for one track per episode through opts.category and counts the
+// rows it gets, so an episode is listed once. The provider's own preference
+// only decides the track when the app does not ask for one.
+function _wantedTrack(opts) {
+  var asked = opts && opts.category ? String(opts.category).toLowerCase() : '';
+  if (asked === 'dub' || asked === 'dubbed') return 'dub';
+  if (asked === 'sub' || asked === 'subbed') return 'sub';
+  var cfg = _settings();
+  if (cfg.audio === 'dub') return 'dub';
+  if (cfg.audio === 'sub') return 'sub';
+  return cfg.audioLanguage === 'en' ? 'dub' : 'sub';
+}
+function _episodeTrack(row, wanted) {
+  if (wanted === 'dub') return row.dub ? 'dub' : (row.sub ? 'sub' : null);
+  return row.sub ? 'sub' : (row.dub ? 'dub' : null);
+}
+function _episodes(titleId, rows, opts) {
+  var wanted = _wantedTrack(opts);
   var out = [];
   rows.forEach(function (row) {
-    tracks.forEach(function (track) {
-      if (track === 'sub' && !row.sub) return;
-      if (track === 'dub' && !row.dub) return;
-      var url = _episodeUrl(titleId, row.id, track);
-      out.push({
-        id: url,
-        url: url,
-        number: row.number,
-        title: 'Episode ' + row.number + (row.label && row.label !== String(row.number) ? ': ' + row.title : ''),
-        date: row.airedAt ? String(row.airedAt).slice(0, 10) : null,
-        thumbnail: row.thumbnail || null,
-        category: track,
-        kind: track,
-        sourceId: SOURCE_ID,
-        type: 'anime'
-      });
+    var track = _episodeTrack(row, wanted);
+    if (!track) return;
+    var url = _episodeUrl(titleId, row.id, track);
+    out.push({
+      id: url,
+      url: url,
+      number: row.number,
+      title: 'Episode ' + row.number + (row.label && row.label !== String(row.number) ? ': ' + row.title : ''),
+      date: row.airedAt ? String(row.airedAt).slice(0, 10) : null,
+      thumbnail: row.thumbnail || null,
+      category: track,
+      kind: track,
+      sourceId: SOURCE_ID,
+      type: 'anime'
     });
   });
   return out;
@@ -828,8 +881,12 @@ function getDetail(url, opts) {
   var failures = [];
   return Promise.all([
     _getJson(titlePath).catch(function (error) { failures.push(error); return null; }),
+    // The API returns a sealed binary payload. The app decodes responses
+    // as UTF-8 text by default, which corrupts the binary. The seal
+    // authenticates it, so we try every reading of the corrupted text
+    // and keep the one that verifies.
     _getBytes(episodesPath, { headers: { 'User-Agent': UA, Accept: 'application/json', 'Accept-Language': 'en-US,en;q=0.9' } }).then(function (body) {
-      return _openApiSeal(_byteArray(body));
+      return _openApiSeal(body);
     }).catch(function (error) { failures.push(error); return null; })
   ]).then(function (results) {
     var payload = results[0] && results[0].data ? results[0].data : null;
@@ -862,7 +919,7 @@ function getDetail(url, opts) {
       card.relations = Array.isArray(payload.relations) ? payload.relations.map(function (r) { return { id: r.id, name: r.name, relation: r.relation, type: r.relation_type }; }) : [];
     }
     if (!rows.length) throw new Error('Gotaku: Gotaku lists no episodes for this title');
-    card.episodes = _episodes(id, rows);
+    card.episodes = _episodes(id, rows, opts);
     card.episodeCount = rows.length;
     card.subCount = rows.filter(function (r) { return r.sub; }).length;
     card.dubCount = rows.filter(function (r) { return r.dub; }).length;

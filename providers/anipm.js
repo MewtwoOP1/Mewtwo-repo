@@ -11,7 +11,7 @@
 // A webpage is never handed back as a playable stream: when the player origin
 // cannot be reached the episode simply has no stream.
 var SOURCE_ID = (typeof __SOURCE_ID !== 'undefined' && __SOURCE_ID) ? String(__SOURCE_ID) : 'anipm';
-var VERSION = '1.0.0';
+var VERSION = '1.0.1';
 var OFFICIAL_DOMAIN = 'ani.pm';
 var API_PATH = '/api/partner/v1';
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36';
@@ -368,38 +368,51 @@ function _episodeRows(payload) {
   out.sort(function (a, b) { return a.number - b.number; });
   return out;
 }
-function _trackOrder() {
+// The app asks for one track per episode through opts.category and counts the
+// rows it gets, so an episode is listed once. The provider's own preference only
+// decides the track when the app does not ask for one.
+function _wantedTrack(opts) {
+  var asked = opts && opts.category ? String(opts.category).toLowerCase() : '';
+  if (asked === 'dub' || asked === 'dubbed') return 'dub';
+  if (asked === 'sub' || asked === 'subbed') return 'sub';
   var cfg = _settings();
-  var tracks = [];
-  if (cfg.audio !== 'dub') tracks.push('sub');
-  if (cfg.audio !== 'sub') tracks.push('dub');
-  if (cfg.audioLanguage === 'en') tracks.reverse();
-  return tracks;
+  if (cfg.audio === 'dub') return 'dub';
+  if (cfg.audio === 'sub') return 'sub';
+  return cfg.audioLanguage === 'en' ? 'dub' : 'sub';
 }
-function _episodeUrl(anilistId, number, track) {
-  return 'anipm://ani/' + encodeURIComponent(String(anilistId)) + '/' + number + '/' + track;
+function _episodeTrack(row, wanted) {
+  if (wanted === 'dub') return row.dub ? 'dub' : (row.sub ? 'sub' : null);
+  return row.sub ? 'sub' : (row.dub ? 'dub' : null);
 }
-function _episodes(anilistId, rows) {
-  var tracks = _trackOrder();
+function _episodeUrl(anilistId, slug, number, track) {
+  return 'anipm://ani/' + encodeURIComponent(String(anilistId)) + '/' + encodeURIComponent(String(slug || '')) + '/' + number + '/' + track;
+}
+// The playback bootstrap is keyed by the title slug, which is the last segment
+// of the title URL the catalogue publishes.
+function _slugOf(row) {
+  var url = String((row && row.url) || '');
+  var match = url.match(/\/anime\/([^/?#]+)/);
+  return match ? match[1] : '';
+}
+function _episodes(anilistId, slug, rows, opts) {
+  var wanted = _wantedTrack(opts);
   var out = [];
   rows.forEach(function (row) {
-    tracks.forEach(function (track) {
-      if (track === 'sub' && !row.sub) return;
-      if (track === 'dub' && !row.dub) return;
-      var url = _episodeUrl(anilistId, row.number, track);
-      out.push({
-        id: url,
-        url: url,
-        number: row.number,
-        title: 'Episode ' + row.number + (row.title && row.title !== 'Episode ' + row.number ? ': ' + row.title : ''),
-        date: row.aired || null,
-        thumbnail: row.thumbnail || null,
-        runtimeSeconds: row.runtimeSeconds || null,
-        category: track,
-        kind: track,
-        sourceId: SOURCE_ID,
-        type: 'anime'
-      });
+    var track = _episodeTrack(row, wanted);
+    if (!track) return;
+    var url = _episodeUrl(anilistId, slug, row.number, track);
+    out.push({
+      id: url,
+      url: url,
+      number: row.number,
+      title: 'Episode ' + row.number + (row.title && row.title !== 'Episode ' + row.number ? ': ' + row.title : ''),
+      date: row.aired || null,
+      thumbnail: row.thumbnail || null,
+      runtimeSeconds: row.runtimeSeconds || null,
+      category: track,
+      kind: track,
+      sourceId: SOURCE_ID,
+      type: 'anime'
     });
   });
   return out;
@@ -427,7 +440,7 @@ function getDetail(url, opts) {
       card.nativeTitle = row.nativeTitle || null;
       card.altTitles = Array.isArray(row.altNames) ? row.altNames.slice(0) : [];
       card.malId = _malOf(row) || card.malId || null;
-      card.episodes = _episodes(anilistId, rows);
+      card.episodes = _episodes(anilistId, _slugOf(row), rows, opts);
       card.episodeCount = rows.length;
       card.subCount = rows.filter(function (r) { return r.sub; }).length;
       card.dubCount = rows.filter(function (r) { return r.dub; }).length;
@@ -440,11 +453,18 @@ function getEpisodes(url, opts) {
 }
 function _parseEpisode(value) {
   var text = String(value == null ? '' : value);
-  var match = text.match(/^anipm:\/\/ani\/([^/?#]+)\/(\d+)\/(sub|dub)$/i);
-  if (!match) return null;
-  var anilistId;
-  try { anilistId = decodeURIComponent(match[1]); } catch (e) { anilistId = match[1]; }
-  return { anilistId: anilistId, number: Number(match[2]), track: match[3].toLowerCase() };
+  var match = text.match(/^anipm:\/\/ani\/([^/?#]+)\/([^/?#]*)\/(\d+)\/(sub|dub)$/i);
+  if (match) {
+    var anilistId, slug;
+    try { anilistId = decodeURIComponent(match[1]); } catch (e) { anilistId = match[1]; }
+    try { slug = decodeURIComponent(match[2]); } catch (e) { slug = match[2]; }
+    return { anilistId: anilistId, slug: slug, number: Number(match[3]), track: match[4].toLowerCase() };
+  }
+  var legacy = text.match(/^anipm:\/\/ani\/([^/?#]+)\/(\d+)\/(sub|dub)$/i);
+  if (!legacy) return null;
+  var legacyId;
+  try { legacyId = decodeURIComponent(legacy[1]); } catch (e) { legacyId = legacy[1]; }
+  return { anilistId: legacyId, slug: '', number: Number(legacy[2]), track: legacy[3].toLowerCase() };
 }
 function _embedConfig(html) {
   var match = String(html || '').match(/id="anipm-embed-config"[^>]*>([\s\S]*?)<\/script>/i);
@@ -482,49 +502,89 @@ function _container(url, kind) {
   if (kind === 'mp4') return 'mp4';
   return /\.m3u8(?:[?#]|$)/i.test(url) ? 'hls' : 'mp4';
 }
-// Playback follows the official embed player: embed page -> partner session ->
-// player session. Each step is one request, and a failed step means no stream
-// rather than a webpage handed to the player.
+// Playback follows the chain ani.pm's own player uses: the playback bootstrap
+// for the title slug, the session it points at, the player page, and finally the
+// player session that carries the media URL. Every step is a separate request
+// and a failed step means no stream, never a webpage handed to the player.
+//
+// The player host sits behind a bot check. The browser flag asks the app to
+// attach a Cloudflare clearance for that host; where the host refuses every
+// non-browser client the episode simply has no stream.
+// A Cloudflare refusal is not a playback failure of the source: the host says so
+// in its answer, and the app's own solver is switched off, so the message says
+// which host refused rather than leaving the reader guessing.
+function _blockedByCloudflare(status, body) {
+  if (status !== 403 && status !== 503) return false;
+  var text = String(body || '').toLowerCase();
+  return text.indexOf('cloudflare') >= 0 || text.indexOf('attention required') >= 0 || text.indexOf('just a moment') >= 0;
+}
+function _playerGet(url, headers) {
+  var cfg = _settings();
+  return fetch(url, {
+    headers: headers,
+    timeoutMs: cfg.timeoutMs,
+    browser: true
+  }).then(function (response) {
+    var status = Number(response && response.status || 0);
+    return _readBody(response).then(function (body) {
+      if (status && (status < 200 || status >= 300)) {
+        if (_blockedByCloudflare(status, body)) throw new Error('Ani.pm: the player host refused the request (Cloudflare)');
+        throw new Error('Ani.pm player HTTP ' + status);
+      }
+      return body;
+    });
+  });
+}
 function _resolveStream(episode, track) {
-  var embedPath = '/embed/ani/' + encodeURIComponent(episode.anilistId) + '/' + episode.number + '/' + track;
-  return _getText(embedPath).then(function (html) {
-    var config = _embedConfig(html);
-    if (!config || !config.nonce) throw new Error('Ani.pm: the embed page carried no player nonce');
-    var playerOrigin = String(config.playerOrigin || '').replace(/\/+$/, '');
-    if (!/^https?:\/\//i.test(playerOrigin)) throw new Error('Ani.pm: the embed page named no player origin');
-    var sessionPath = API_PATH + '/session?n=' + encodeURIComponent(config.nonce) + '&id=' + encodeURIComponent(episode.anilistId) + '&ep=' + episode.number + '&lang=' + track + '&hardsub=0&adult=1';
-    return _getJson(sessionPath, { headers: { Referer: 'https://' + OFFICIAL_DOMAIN + embedPath } }).then(function (session) {
-      var token = session && session.token;
-      if (!token) throw new Error('Ani.pm: the partner session carried no token');
-      var playerUrl = playerOrigin + '/api/embed/session?t=' + encodeURIComponent(token);
-      return fetch(playerUrl, {
-        headers: { 'User-Agent': UA, 'Accept': 'application/json, text/plain, */*', 'Referer': playerOrigin + '/', 'Origin': 'https://' + OFFICIAL_DOMAIN },
-        timeoutMs: _settings().timeoutMs,
-        browser: true
-      }).then(function (response) {
-        var status = Number(response && response.status || 0);
-        return _readBody(response).then(function (body) {
-          if (status && (status < 200 || status >= 300)) throw new Error('Ani.pm player HTTP ' + status);
-          var payload;
-          try { payload = JSON.parse(String(body || '') || 'null'); } catch (e) { throw new Error('Ani.pm: the player returned a malformed answer'); }
-          var sources = _mediaSources(payload);
-          if (!sources.length) throw new Error('Ani.pm: the player returned no media source');
-          var headers = { 'User-Agent': UA, 'Referer': playerOrigin + '/', 'Origin': 'https://' + OFFICIAL_DOMAIN };
-          var subtitles = _settings().subtitles ? _subtitleTracks(payload.subtitles || payload.tracks) : [];
-          return sources.map(function (source, index) {
-            return {
-              url: source.url,
-              quality: 'Auto',
-              label: 'Ani.pm ' + track.toUpperCase() + (index ? ' · ' + (index + 1) : ''),
-              container: _container(source.url, source.kind),
-              headers: headers,
-              kind: track === 'dub' ? 'dub' : 'sub',
-              audio: track === 'dub' ? 'en' : 'ja',
-              audioLang: payload.audioLang || (track === 'dub' ? 'en' : 'ja'),
-              subtitles: subtitles,
-              isActive: index === 0
-            };
-          });
+  if (!episode.slug) return Promise.reject(new Error('Ani.pm: the episode carries no title slug'));
+  var bootPath = '/api/anime/playback-bootstrap/settlar/' + encodeURIComponent(episode.slug) + '?ep=' + episode.number + '&lang=' + track + '&core=0';
+  return _getJson(bootPath, { headers: { Accept: 'application/json, text/plain, */*', Referer: 'https://' + OFFICIAL_DOMAIN + '/' } }).then(function (boot) {
+    var selection = boot && boot.settlarSelection;
+    if (!selection) throw new Error('Ani.pm: the playback bootstrap carried no session');
+    var availability = boot && boot.availability ? boot.availability : {};
+    if (track === 'sub' && availability.sub === false) throw new Error('Ani.pm: this episode has no sub version');
+    if (track === 'dub' && availability.dub === false) throw new Error('Ani.pm: this episode has no dub version');
+    var sessionPath = '/api/anime/settlar/session?selection=' + encodeURIComponent(selection) + '&provider=anipm&ep=' + episode.number + '&channel=' + track + '&telemetry=0';
+    return _getJson(sessionPath, { headers: { Accept: 'application/json, text/plain, */*', Referer: 'https://' + OFFICIAL_DOMAIN + '/' } }).then(function (session) {
+      var embedUrl = session && session.embedUrl;
+      if (!embedUrl || !/^https?:\/\//i.test(String(embedUrl))) throw new Error('Ani.pm: the session carried no player page');
+      var tokenMatch = String(embedUrl).match(/[?&]t=([^&]+)/);
+      if (!tokenMatch) throw new Error('Ani.pm: the player page carried no session token');
+      var token = decodeURIComponent(tokenMatch[1]);
+      var playerOrigin = String(embedUrl).replace(/^(https?:\/\/[^/]+).*$/, '$1');
+      var playerHeaders = {
+        'User-Agent': UA,
+        'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Referer': playerOrigin + '/',
+        'Origin': 'https://' + OFFICIAL_DOMAIN,
+        'Cache-Control': 'no-cache',
+        Pragma: 'no-cache'
+      };
+      // The player page first: it is what a browser loads, and it is where a
+      // clearance for the player host is established.
+      return _playerGet(embedUrl, { 'User-Agent': UA, Accept: 'text/html,application/xhtml+xml', Referer: 'https://' + OFFICIAL_DOMAIN + '/' }).then(function () {
+        return _playerGet(playerOrigin + '/api/embed/session?t=' + encodeURIComponent(token), playerHeaders);
+      }).then(function (body) {
+        var payload;
+        try { payload = JSON.parse(String(body || '') || 'null'); } catch (e) { throw new Error('Ani.pm: the player returned a malformed answer'); }
+        var sources = _mediaSources(payload);
+        if (!sources.length) throw new Error('Ani.pm: the player returned no media source');
+        var headers = { 'User-Agent': UA, 'Referer': playerOrigin + '/', 'Origin': 'https://' + OFFICIAL_DOMAIN };
+        var subtitles = _settings().subtitles ? _subtitleTracks(payload.subtitles || payload.tracks) : [];
+        return sources.map(function (source, index) {
+          return {
+            url: source.url,
+            quality: 'Auto',
+            label: 'Ani.pm ' + track.toUpperCase() + (index ? ' · ' + (index + 1) : ''),
+            container: _container(source.url, source.kind),
+            headers: headers,
+            kind: track === 'dub' ? 'dub' : 'sub',
+            audio: track === 'dub' ? 'en' : 'ja',
+            audioLang: payload.audioLang || (track === 'dub' ? 'en' : 'ja'),
+            subtitles: subtitles,
+            isActive: index === 0
+          };
         });
       });
     });

@@ -139,7 +139,7 @@ global.fetch = async (url, opts) => {
 };
 
 async function main() {
-  assert.equal(provider.version, "1.0.0");
+  assert.equal(provider.version, "1.0.1");
   assert.equal(provider.getInfo().name, "Gotaku");
   assert.equal(provider.getInfo().type, "anime");
   assert.equal(provider.getInfo().lang, "en");
@@ -183,14 +183,18 @@ async function main() {
   assert.equal(detail.anilistId, 154587);
   assert.equal(detail.malId, 52991);
   assert.deepEqual(detail.genres, ["Adventure"]);
-  assert.equal(detail.episodes.length, 3, "episode one has both tracks, episode two only sub");
-  assert.deepEqual(detail.episodes.map((e) => e.number), [1, 1, 2]);
-  assert.deepEqual(detail.episodes.map((e) => e.category), ["sub", "dub", "sub"]);
+  assert.equal(detail.episodes.length, 2, "one row per episode: the app counts the rows it is given");
+  assert.deepEqual(detail.episodes.map((e) => e.number), [1, 2]);
+  assert.deepEqual(detail.episodes.map((e) => e.category), ["sub", "sub"]);
   assert.equal(detail.subCount, 2);
   assert.equal(detail.dubCount, 1);
 
+  // The app asks for a track through opts.category.
+  const dubFirst = await provider.getEpisodes("gotaku://title/vbhgad", { category: "dub" });
+  assert.deepEqual(dubFirst.map((e) => e.category), ["dub", "sub"], "the requested track wins; an episode without it falls back");
+
   const episodes = await provider.getEpisodes("gotaku://title/vbhgad", {});
-  assert.equal(episodes.length, 3);
+  assert.equal(episodes.length, 2);
   assert.match(episodes[0].url, /^gotaku:\/\/episode\/vbhgad\/ep1\/sub$/);
 
   // Stream resolution.
@@ -234,7 +238,24 @@ async function main() {
   assert.deepEqual(subOnly.episodes.map((e) => e.category), ["sub", "sub"]);
   settings = { primaryDomain: "gotaku.to", preferredAudio: "dub" };
   const dubOnly = await provider.getDetail("gotaku://title/vbhgad", {});
-  assert.deepEqual(dubOnly.episodes.map((e) => e.category), ["dub"]);
+  assert.deepEqual(dubOnly.episodes.map((e) => e.category), ["dub", "sub"], "a dub-only preference still lists an episode that has no dub");
+
+  // The sealed answer reaches a provider in more than one shape. The seal
+  // authenticates it, so the source tries every reading and keeps the one that
+  // verifies: raw bytes, a byte list, raw text and base64 text.
+  const rawSeal = await sealApi({ data: episodeRows });
+  const forms = {
+    "raw bytes": Buffer.from(rawSeal),
+    "byte list": "[" + Array.from(rawSeal).join(", ") + "]",
+    "raw text": Buffer.from(rawSeal).toString("latin1"),
+    "base64 text": Buffer.from(rawSeal).toString("base64"),
+  };
+  for (const [label, body] of Object.entries(forms)) {
+    const opened = provider._openApiSeal(body);
+    assert.equal(opened.length, Buffer.from(JSON.stringify({ data: episodeRows })).length, label + " must open to the same payload");
+    assert.deepEqual(JSON.parse(Buffer.from(opened).toString("utf8")).data.length, 2, label + " must list both episodes");
+  }
+  assert.throws(() => provider._openApiSeal("not a sealed payload at all"), /could not be opened/, "an unreadable answer is a clear failure");
 
   console.log("Gotaku mocked integration tests passed.");
 }

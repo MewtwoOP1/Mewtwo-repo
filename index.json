@@ -1,6 +1,6 @@
 {
-  "name": "\ud835\udc74\ud835\udc86\ud835\udc98\ud835\udc95\ud835\udc98\ud835\udc90\u2661 Repo",
-  "description": "\ud835\udc74\ud835\udc86\ud835\udc98\ud835\udc95\ud835\udc98\ud835\udc90\u2661 community sources for Zangetsu. Third-party provider integrations; this repository does not host video files.",
+  "name": "𝑴𝒆𝒘𝒕𝒘𝒐♡ Repo",
+  "description": "𝑴𝒆𝒘𝒕𝒘𝒐♡ community sources for Zangetsu. Third-party provider integrations; this repository does not host video files.",
   "sources": [
     {
       "id": "jellyfin",
@@ -140,7 +140,7 @@
         {
           "key": "tmdbApiKey",
           "label": "TMDB API key or Read Access Token (optional)",
-          "description": "Leave blank to use Zangetsu\u2019s built-in TMDB key. Or provide your own v3 API key or Read Access Token.",
+          "description": "Leave blank to use Zangetsu’s built-in TMDB key. Or provide your own v3 API key or Read Access Token.",
           "type": "text",
           "default": ""
         },
@@ -266,14 +266,14 @@
         {
           "key": "tmdbApiKey",
           "label": "TMDB API Key (optional; blank uses app default)",
-          "description": "Your personal TMDB v3 API key. Leave blank to use Zangetsu\u2019s built-in key. Sent only to TMDB.",
+          "description": "Your personal TMDB v3 API key. Leave blank to use Zangetsu’s built-in key. Sent only to TMDB.",
           "type": "text",
           "default": ""
         },
         {
           "key": "addonUrls",
           "label": "Streaming Add-on URLs (manifest URLs; comma/newline separated)",
-          "description": "Stremio-compatible add-on manifest URLs used to fetch playback streams. Keep each add-on\u2019s required URL path and token intact.",
+          "description": "Stremio-compatible add-on manifest URLs used to fetch playback streams. Keep each add-on’s required URL path and token intact.",
           "type": "text",
           "default": ""
         },
@@ -342,7 +342,7 @@
         {
           "key": "tmdbApiKey",
           "label": "TMDB API Key (optional; blank uses app default)",
-          "description": "Your personal TMDB v3 API key. Leave blank to use Zangetsu\u2019s built-in key. Sent only to TMDB.",
+          "description": "Your personal TMDB v3 API key. Leave blank to use Zangetsu’s built-in key. Sent only to TMDB.",
           "type": "text",
           "default": ""
         },
@@ -995,11 +995,11 @@
           "options": [
             {
               "value": "sub",
-              "label": "SUB \u00b7 Original audio"
+              "label": "SUB · Original audio"
             },
             {
               "value": "dub",
-              "label": "DUB \u00b7 English audio"
+              "label": "DUB · English audio"
             }
           ]
         }
@@ -1008,7 +1008,7 @@
     {
       "id": "anipm",
       "name": "Ani.pm",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "type": "anime",
       "lang": "en",
       "file": "providers/anipm.js",
@@ -1016,58 +1016,33 @@
       "nsfw": false,
       "settings": [
         {
-
           "key": "primaryDomain",
-
           "label": "Primary domain",
-
           "description": "The ani.pm domain used first. Only change this to a domain ani.pm itself confirms; a lookalike domain can serve anything.",
-
           "type": "text",
-
           "default": "ani.pm"
-
         },
         {
-
           "key": "fallbackDomains",
-
           "label": "Fallback domains",
-
           "description": "Comma or newline separated backup domains, tried in order when the primary fails. ani.pm has not published alternate domains, so leave this blank unless the maintainers announce one.",
-
           "type": "text",
-
           "default": ""
-
         },
         {
-
           "key": "autoFallback",
-
           "label": "Automatic domain fallback",
-
           "description": "When the current domain fails, try the next candidate instead of giving up on the episode.",
-
           "type": "bool",
-
           "default": true
-
         },
         {
-
           "key": "preferredDomain",
-
           "label": "Preferred domain",
-
           "description": "Automatic keeps using the last domain that worked. Primary always starts from the domain above and only falls back if it fails.",
-
           "type": "enum",
-
           "default": "auto",
-
           "options": [
-
             {
               "value": "auto",
               "label": "Automatic (last working domain)"
@@ -1076,37 +1051,22 @@
               "value": "primary",
               "label": "Always start from the primary domain"
             }
-
           ]
-
         },
         {
-
           "key": "customDomain",
-
           "label": "Custom domain override",
-
           "description": "Replaces the primary domain with a domain you trust. Only use one you have verified yourself: a lookalike domain is not covered by ani.pm.",
-
           "type": "text",
-
           "default": ""
-
         },
         {
-
           "key": "requestTimeoutMs",
-
           "label": "Request timeout",
-
           "description": "Maximum wait for a single ani.pm request.",
-
           "type": "enum",
-
           "default": "12000",
-
           "options": [
-
             {
               "value": "6000",
               "label": "6 seconds"
@@ -1123,24 +1083,15 @@
               "value": "25000",
               "label": "25 seconds"
             }
-
           ]
-
         },
         {
-
           "key": "maxRetries",
-
           "label": "Maximum retries",
-
           "description": "How many times a failed request is repeated before the next domain is tried.",
-
           "type": "enum",
-
           "default": "2",
-
           "options": [
-
             {
               "value": "0",
               "label": "No retry"
@@ -1161,37 +1112,22 @@
               "value": "5",
               "label": "5 retries"
             }
-
           ]
-
         },
         {
-
           "key": "autoRecovery",
-
           "label": "Automatic recovery",
-
           "description": "Periodically check the primary domain again so the source returns to it once it works.",
-
           "type": "bool",
-
           "default": true
-
         },
         {
-
           "key": "preferredAudio",
-
           "label": "Episode audio",
-
           "description": "Which versions of an episode to list and play.",
-
           "type": "enum",
-
           "default": "both",
-
           "options": [
-
             {
               "value": "both",
               "label": "Sub and dub"
@@ -1204,24 +1140,15 @@
               "value": "dub",
               "label": "Dub only"
             }
-
           ]
-
         },
         {
-
           "key": "preferredAudioLanguage",
-
           "label": "Preferred audio language",
-
           "description": "Which audio language is tried first when an episode offers more than one.",
-
           "type": "enum",
-
           "default": "ja",
-
           "options": [
-
             {
               "value": "ja",
               "label": "Japanese (sub)"
@@ -1230,29 +1157,21 @@
               "value": "en",
               "label": "English (dub)"
             }
-
           ]
-
         },
         {
-
           "key": "includeSubtitles",
-
           "label": "Include subtitle tracks",
-
           "description": "Attach the subtitle tracks ani.pm publishes for an episode when they are available.",
-
           "type": "bool",
-
           "default": true
-
         }
       ]
     },
     {
       "id": "gotaku",
       "name": "Gotaku",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "type": "anime",
       "lang": "en",
       "file": "providers/gotaku.js",
@@ -1260,58 +1179,33 @@
       "nsfw": false,
       "settings": [
         {
-
           "key": "primaryDomain",
-
           "label": "Primary domain",
-
           "description": "The Gotaku domain used first. Gotaku publishes gotaku.to as its only official domain; only change this to a domain Gotaku itself announces.",
-
           "type": "text",
-
           "default": "gotaku.to"
-
         },
         {
-
           "key": "fallbackDomains",
-
           "label": "Fallback domains",
-
           "description": "Comma or newline separated backup domains, tried in order when the primary fails. Leave this blank: Gotaku has not published an alternate domain, and lookalike domains are fake sites.",
-
           "type": "text",
-
           "default": ""
-
         },
         {
-
           "key": "autoFallback",
-
           "label": "Automatic domain fallback",
-
           "description": "When the current domain fails, try the next candidate instead of giving up on the episode.",
-
           "type": "bool",
-
           "default": true
-
         },
         {
-
           "key": "preferredDomain",
-
           "label": "Preferred domain",
-
           "description": "Automatic keeps using the last domain that worked. Primary always starts from the domain above and only falls back if it fails.",
-
           "type": "enum",
-
           "default": "auto",
-
           "options": [
-
             {
               "value": "auto",
               "label": "Automatic (last working domain)"
@@ -1320,37 +1214,22 @@
               "value": "primary",
               "label": "Always start from the primary domain"
             }
-
           ]
-
         },
         {
-
           "key": "customDomain",
-
           "label": "Custom domain override",
-
           "description": "Replaces the primary domain with a domain you trust yourself. Gotaku states that gotaku.to is its only domain, so only use this if Gotaku announced a change.",
-
           "type": "text",
-
           "default": ""
-
         },
         {
-
           "key": "requestTimeoutMs",
-
           "label": "Request timeout",
-
           "description": "Maximum wait for a single Gotaku request.",
-
           "type": "enum",
-
           "default": "12000",
-
           "options": [
-
             {
               "value": "6000",
               "label": "6 seconds"
@@ -1367,24 +1246,15 @@
               "value": "25000",
               "label": "25 seconds"
             }
-
           ]
-
         },
         {
-
           "key": "maxRetries",
-
           "label": "Maximum retries",
-
           "description": "How many times a failed request is repeated before the next domain is tried.",
-
           "type": "enum",
-
           "default": "2",
-
           "options": [
-
             {
               "value": "0",
               "label": "No retry"
@@ -1405,37 +1275,22 @@
               "value": "5",
               "label": "5 retries"
             }
-
           ]
-
         },
         {
-
           "key": "autoRecovery",
-
           "label": "Automatic recovery",
-
           "description": "Periodically check the primary domain again so the source returns to it once it works.",
-
           "type": "bool",
-
           "default": true
-
         },
         {
-
           "key": "preferredAudio",
-
           "label": "Episode audio",
-
           "description": "Which versions of an episode to list and play.",
-
           "type": "enum",
-
           "default": "both",
-
           "options": [
-
             {
               "value": "both",
               "label": "Sub and dub"
@@ -1448,24 +1303,15 @@
               "value": "dub",
               "label": "Dub only"
             }
-
           ]
-
         },
         {
-
           "key": "preferredAudioLanguage",
-
           "label": "Preferred audio language",
-
           "description": "Which audio language is tried first when an episode offers more than one.",
-
           "type": "enum",
-
           "default": "ja",
-
           "options": [
-
             {
               "value": "ja",
               "label": "Japanese (sub)"
@@ -1474,22 +1320,14 @@
               "value": "en",
               "label": "English (dub)"
             }
-
           ]
-
         },
         {
-
           "key": "includeSubtitles",
-
           "label": "Include subtitle tracks",
-
           "description": "Attach the subtitle tracks Gotaku publishes for an episode when they are available.",
-
           "type": "bool",
-
           "default": true
-
         }
       ]
     },
@@ -1663,445 +1501,445 @@
       ]
     },
     {
-    "id": "cinestream",
-    "name": "CineStream",
-    "version": "1.2.0",
-    "type": "movie",
-    "lang": "en",
-    "file": "providers/cinestream.js",
-    "logo": "https://raw.githubusercontent.com/SaurabhKaperwan/CSX/master/CineStream/icon.png",
-    "nsfw": false,
-    "settings": [
-      {
-        "key": "enabledProviders",
-        "label": "Enabled providers",
-        "description": "Choose which CineStream providers run during playback. Disable slow or unwanted hosts here.",
-        "type": "multiEnum",
-        "default": [
-          "p_showbox",
-          "p_vidrock",
-          "p_moviebox",
-          "p_movieblast",
-          "p_fibwatch",
-          "p_allmovieland",
-          "p_hdhub4u",
-          "p_hexa",
-          "p_fshare",
-          "p_videasy",
-          "p_vaplayer",
-          "p_vidzee",
-          "p_peachify",
-          "p_vidfastpro",
-          "p_cinejoy",
-          "p_vidcore",
-          "p_av1encodes",
-          "p_castle",
-          "p_reanime",
-          "p_just4anime",
-          "p_zinkmovies",
-          "p_bollywood",
-          "p_vegamovies",
-          "p_rogmovies",
-          "p_bollyflix",
-          "p_topmovies",
-          "p_vidup",
-          "p_meowtv",
-          "p_moviesmod",
-          "p_movies4u",
-          "p_dudefilms",
-          "p_uhdmovies",
-          "p_moviesdrive",
-          "p_hindmoviez",
-          "p_4khdhub",
-          "p_primesrc",
-          "p_projectfreetv",
-          "p_mlsbd",
-          "p_levidia",
-          "p_animesalt",
-          "p_m4ufree",
-          "p_multimovies",
-          "p_akwam",
-          "p_rtally",
-          "p_asiaflix",
-          "p_skymovies",
-          "p_kisskh",
-          "p_onetouchtv",
-          "p_toonstream",
-          "p_anineko",
-          "p_animedao",
-          "p_anikoto",
-          "p_anikage",
-          "p_anidb",
-          "p_animetoshohttp",
-          "p_tokyoinsider",
-          "p_anizone",
-          "p_animekizz",
-          "p_anv",
-          "p_anipm",
-          "p_netnaija",
-          "p_hicine",
-          "p_wyziesubs"
-        ],
-        "options": [
-          {
-            "value": "p_showbox",
-            "label": "Showbox"
-          },
-          {
-            "value": "p_vidrock",
-            "label": "Vidrock"
-          },
-          {
-            "value": "p_moviebox",
-            "label": "Moviebox"
-          },
-          {
-            "value": "p_movieblast",
-            "label": "MovieBlast"
-          },
-          {
-            "value": "p_fibwatch",
-            "label": "Fibwatch"
-          },
-          {
-            "value": "p_allmovieland",
-            "label": "Allmovieland"
-          },
-          {
-            "value": "p_hdhub4u",
-            "label": "Hdhub4u"
-          },
-          {
-            "value": "p_hexa",
-            "label": "Hexa"
-          },
-          {
-            "value": "p_fshare",
-            "label": "Fshare"
-          },
-          {
-            "value": "p_videasy",
-            "label": "Videasy"
-          },
-          {
-            "value": "p_vaplayer",
-            "label": "VaPlayer"
-          },
-          {
-            "value": "p_vidzee",
-            "label": "Vidzee"
-          },
-          {
-            "value": "p_peachify",
-            "label": "Peachify"
-          },
-          {
-            "value": "p_vidfastpro",
-            "label": "VidFastPro"
-          },
-          {
-            "value": "p_cinejoy",
-            "label": "Cinejoy"
-          },
-          {
-            "value": "p_vidcore",
-            "label": "Vidcore"
-          },
-          {
-            "value": "p_av1encodes",
-            "label": "Av1encodes"
-          },
-          {
-            "value": "p_castle",
-            "label": "Castle"
-          },
-          {
-            "value": "p_reanime",
-            "label": "Reanime"
-          },
-          {
-            "value": "p_just4anime",
-            "label": "Just4Anime"
-          },
-          {
-            "value": "p_zinkmovies",
-            "label": "Zinkmovies"
-          },
-          {
-            "value": "p_bollywood",
-            "label": "Gramcinema"
-          },
-          {
-            "value": "p_vegamovies",
-            "label": "VegaMovies"
-          },
-          {
-            "value": "p_rogmovies",
-            "label": "RogMovies"
-          },
-          {
-            "value": "p_bollyflix",
-            "label": "Bollyflix"
-          },
-          {
-            "value": "p_topmovies",
-            "label": "TopMovies"
-          },
-          {
-            "value": "p_vidup",
-            "label": "Vidup"
-          },
-          {
-            "value": "p_meowtv",
-            "label": "Meowtv"
-          },
-          {
-            "value": "p_moviesmod",
-            "label": "Moviesmod"
-          },
-          {
-            "value": "p_movies4u",
-            "label": "Movies4u"
-          },
-          {
-            "value": "p_dudefilms",
-            "label": "Dudefilms"
-          },
-          {
-            "value": "p_uhdmovies",
-            "label": "UHDMovies"
-          },
-          {
-            "value": "p_moviesdrive",
-            "label": "MoviesDrive"
-          },
-          {
-            "value": "p_hindmoviez",
-            "label": "Hindmoviez"
-          },
-          {
-            "value": "p_4khdhub",
-            "label": "4KHDHub"
-          },
-          {
-            "value": "p_primesrc",
-            "label": "PrimeSrc"
-          },
-          {
-            "value": "p_projectfreetv",
-            "label": "ProjectFreeTV"
-          },
-          {
-            "value": "p_mlsbd",
-            "label": "Mlsbd"
-          },
-          {
-            "value": "p_levidia",
-            "label": "Levidia"
-          },
-          {
-            "value": "p_animesalt",
-            "label": "Animesalt"
-          },
-          {
-            "value": "p_m4ufree",
-            "label": "M4ufree"
-          },
-          {
-            "value": "p_multimovies",
-            "label": "Multimovies"
-          },
-          {
-            "value": "p_akwam",
-            "label": "Akwam"
-          },
-          {
-            "value": "p_rtally",
-            "label": "Rtally"
-          },
-          {
-            "value": "p_asiaflix",
-            "label": "Asiaflix"
-          },
-          {
-            "value": "p_skymovies",
-            "label": "SkyMovies"
-          },
-          {
-            "value": "p_kisskh",
-            "label": "KissKH"
-          },
-          {
-            "value": "p_onetouchtv",
-            "label": "Onetouchtv"
-          },
-          {
-            "value": "p_toonstream",
-            "label": "Toonstream"
-          },
-          {
-            "value": "p_anineko",
-            "label": "Anineko"
-          },
-          {
-            "value": "p_animedao",
-            "label": "Animedao"
-          },
-          {
-            "value": "p_anikoto",
-            "label": "Anikoto"
-          },
-          {
-            "value": "p_anikage",
-            "label": "Anikage"
-          },
-          {
-            "value": "p_anidb",
-            "label": "Anidb"
-          },
-          {
-            "value": "p_animetoshohttp",
-            "label": "AnimeToshoHttp"
-          },
-          {
-            "value": "p_tokyoinsider",
-            "label": "TokyoInsider"
-          },
-          {
-            "value": "p_anizone",
-            "label": "Anizone"
-          },
-          {
-            "value": "p_animekizz",
-            "label": "Animekizz"
-          },
-          {
-            "value": "p_anv",
-            "label": "Anv"
-          },
-          {
-            "value": "p_anipm",
-            "label": "AniPM"
-          },
-          {
-            "value": "p_netnaija",
-            "label": "NetNaija"
-          },
-          {
-            "value": "p_hicine",
-            "label": "HiCine"
-          },
-          {
-            "value": "p_wyziesubs",
-            "label": "Wyzie Subs"
-          }
-        ]
-      },
-      {
-        "key": "showboxToken",
-        "label": "Showbox / Febbox UI token",
-        "description": "Showbox / Febbox UI token. Copy the ui cookie value from febbox.com while logged in. Required for Showbox.",
-        "type": "text",
-        "default": ""
-      },
-      {
-        "key": "wyzieSubsKey",
-        "label": "Wyzie Subs API key",
-        "description": "Wyzie Subs API key. Required for the Wyzie subtitle provider; get a free key from sub.wyzie.io.",
-        "type": "text",
-        "default": ""
-      },
-      {
-        "key": "gramcinemaToken",
-        "label": "GramCinema bearer token",
-        "description": "GramCinema bearer token. Required for the Gramcinema (Bollywood) provider.",
-        "type": "text",
-        "default": ""
-      },
-      {
-        "key": "tmdbApiKey",
-        "label": "TMDB API key (optional)",
-        "description": "Optional personal TMDB v3 API key. Leave blank to use the key Zangetsu injects.",
-        "type": "text",
-        "default": ""
-      },
-      {
-        "key": "movieblastToken",
-        "label": "MovieBlast token",
-        "description": "MovieBlast token (build-time value in upstream). Leave blank to disable MovieBlast.",
-        "type": "text",
-        "default": ""
-      },
-      {
-        "key": "movieblastApi",
-        "label": "MovieBlast API base",
-        "description": "MovieBlast API base URL (build-time value in upstream). Leave blank to disable MovieBlast.",
-        "type": "text",
-        "default": ""
-      },
-      {
-        "key": "movieblastKey",
-        "label": "MovieBlast signing key",
-        "description": "MovieBlast signing key (build-time value in upstream). Leave blank to disable MovieBlast.",
-        "type": "text",
-        "default": ""
-      },
-      {
-        "key": "castleKey",
-        "label": "Castle APK sign key",
-        "description": "Castle APK HMAC signing key (build-time value in upstream). Leave blank to disable Castle.",
-        "type": "text",
-        "default": ""
-      },
-      {
-        "key": "concurrency",
-        "label": "Provider concurrency",
-        "description": "How many providers may resolve in parallel. Higher is faster but heavier on the phone.",
-        "type": "enum",
-        "default": "16",
-        "options": [
-          {
-            "value": "4",
-            "label": "4"
-          },
-          {
-            "value": "6",
-            "label": "6"
-          },
-          {
-            "value": "8",
-            "label": "8"
-          },
-          {
-            "value": "10",
-            "label": "10"
-          },
-          {
-            "value": "14",
-            "label": "14"
-          },
-          {
-            "value": "16",
-            "label": "16 (default)"
-          },
-          {
-            "value": "20",
-            "label": "20"
-          },
-          {
-            "value": "24",
-            "label": "24"
-          }
-        ]
-      },
-      {
-        "key": "includeDownloadLinks",
-        "label": "Include download-only links",
-        "description": "Also emit download-only links as streams when a provider exposes them.",
-        "type": "bool",
-        "default": false
-      }
-    ]
-  }
-]
+      "id": "cinestream",
+      "name": "CineStream",
+      "version": "1.2.0",
+      "type": "movie",
+      "lang": "en",
+      "file": "providers/cinestream.js",
+      "logo": "https://raw.githubusercontent.com/SaurabhKaperwan/CSX/master/CineStream/icon.png",
+      "nsfw": false,
+      "settings": [
+        {
+          "key": "enabledProviders",
+          "label": "Enabled providers",
+          "description": "Choose which CineStream providers run during playback. Disable slow or unwanted hosts here.",
+          "type": "multiEnum",
+          "default": [
+            "p_showbox",
+            "p_vidrock",
+            "p_moviebox",
+            "p_movieblast",
+            "p_fibwatch",
+            "p_allmovieland",
+            "p_hdhub4u",
+            "p_hexa",
+            "p_fshare",
+            "p_videasy",
+            "p_vaplayer",
+            "p_vidzee",
+            "p_peachify",
+            "p_vidfastpro",
+            "p_cinejoy",
+            "p_vidcore",
+            "p_av1encodes",
+            "p_castle",
+            "p_reanime",
+            "p_just4anime",
+            "p_zinkmovies",
+            "p_bollywood",
+            "p_vegamovies",
+            "p_rogmovies",
+            "p_bollyflix",
+            "p_topmovies",
+            "p_vidup",
+            "p_meowtv",
+            "p_moviesmod",
+            "p_movies4u",
+            "p_dudefilms",
+            "p_uhdmovies",
+            "p_moviesdrive",
+            "p_hindmoviez",
+            "p_4khdhub",
+            "p_primesrc",
+            "p_projectfreetv",
+            "p_mlsbd",
+            "p_levidia",
+            "p_animesalt",
+            "p_m4ufree",
+            "p_multimovies",
+            "p_akwam",
+            "p_rtally",
+            "p_asiaflix",
+            "p_skymovies",
+            "p_kisskh",
+            "p_onetouchtv",
+            "p_toonstream",
+            "p_anineko",
+            "p_animedao",
+            "p_anikoto",
+            "p_anikage",
+            "p_anidb",
+            "p_animetoshohttp",
+            "p_tokyoinsider",
+            "p_anizone",
+            "p_animekizz",
+            "p_anv",
+            "p_anipm",
+            "p_netnaija",
+            "p_hicine",
+            "p_wyziesubs"
+          ],
+          "options": [
+            {
+              "value": "p_showbox",
+              "label": "Showbox"
+            },
+            {
+              "value": "p_vidrock",
+              "label": "Vidrock"
+            },
+            {
+              "value": "p_moviebox",
+              "label": "Moviebox"
+            },
+            {
+              "value": "p_movieblast",
+              "label": "MovieBlast"
+            },
+            {
+              "value": "p_fibwatch",
+              "label": "Fibwatch"
+            },
+            {
+              "value": "p_allmovieland",
+              "label": "Allmovieland"
+            },
+            {
+              "value": "p_hdhub4u",
+              "label": "Hdhub4u"
+            },
+            {
+              "value": "p_hexa",
+              "label": "Hexa"
+            },
+            {
+              "value": "p_fshare",
+              "label": "Fshare"
+            },
+            {
+              "value": "p_videasy",
+              "label": "Videasy"
+            },
+            {
+              "value": "p_vaplayer",
+              "label": "VaPlayer"
+            },
+            {
+              "value": "p_vidzee",
+              "label": "Vidzee"
+            },
+            {
+              "value": "p_peachify",
+              "label": "Peachify"
+            },
+            {
+              "value": "p_vidfastpro",
+              "label": "VidFastPro"
+            },
+            {
+              "value": "p_cinejoy",
+              "label": "Cinejoy"
+            },
+            {
+              "value": "p_vidcore",
+              "label": "Vidcore"
+            },
+            {
+              "value": "p_av1encodes",
+              "label": "Av1encodes"
+            },
+            {
+              "value": "p_castle",
+              "label": "Castle"
+            },
+            {
+              "value": "p_reanime",
+              "label": "Reanime"
+            },
+            {
+              "value": "p_just4anime",
+              "label": "Just4Anime"
+            },
+            {
+              "value": "p_zinkmovies",
+              "label": "Zinkmovies"
+            },
+            {
+              "value": "p_bollywood",
+              "label": "Gramcinema"
+            },
+            {
+              "value": "p_vegamovies",
+              "label": "VegaMovies"
+            },
+            {
+              "value": "p_rogmovies",
+              "label": "RogMovies"
+            },
+            {
+              "value": "p_bollyflix",
+              "label": "Bollyflix"
+            },
+            {
+              "value": "p_topmovies",
+              "label": "TopMovies"
+            },
+            {
+              "value": "p_vidup",
+              "label": "Vidup"
+            },
+            {
+              "value": "p_meowtv",
+              "label": "Meowtv"
+            },
+            {
+              "value": "p_moviesmod",
+              "label": "Moviesmod"
+            },
+            {
+              "value": "p_movies4u",
+              "label": "Movies4u"
+            },
+            {
+              "value": "p_dudefilms",
+              "label": "Dudefilms"
+            },
+            {
+              "value": "p_uhdmovies",
+              "label": "UHDMovies"
+            },
+            {
+              "value": "p_moviesdrive",
+              "label": "MoviesDrive"
+            },
+            {
+              "value": "p_hindmoviez",
+              "label": "Hindmoviez"
+            },
+            {
+              "value": "p_4khdhub",
+              "label": "4KHDHub"
+            },
+            {
+              "value": "p_primesrc",
+              "label": "PrimeSrc"
+            },
+            {
+              "value": "p_projectfreetv",
+              "label": "ProjectFreeTV"
+            },
+            {
+              "value": "p_mlsbd",
+              "label": "Mlsbd"
+            },
+            {
+              "value": "p_levidia",
+              "label": "Levidia"
+            },
+            {
+              "value": "p_animesalt",
+              "label": "Animesalt"
+            },
+            {
+              "value": "p_m4ufree",
+              "label": "M4ufree"
+            },
+            {
+              "value": "p_multimovies",
+              "label": "Multimovies"
+            },
+            {
+              "value": "p_akwam",
+              "label": "Akwam"
+            },
+            {
+              "value": "p_rtally",
+              "label": "Rtally"
+            },
+            {
+              "value": "p_asiaflix",
+              "label": "Asiaflix"
+            },
+            {
+              "value": "p_skymovies",
+              "label": "SkyMovies"
+            },
+            {
+              "value": "p_kisskh",
+              "label": "KissKH"
+            },
+            {
+              "value": "p_onetouchtv",
+              "label": "Onetouchtv"
+            },
+            {
+              "value": "p_toonstream",
+              "label": "Toonstream"
+            },
+            {
+              "value": "p_anineko",
+              "label": "Anineko"
+            },
+            {
+              "value": "p_animedao",
+              "label": "Animedao"
+            },
+            {
+              "value": "p_anikoto",
+              "label": "Anikoto"
+            },
+            {
+              "value": "p_anikage",
+              "label": "Anikage"
+            },
+            {
+              "value": "p_anidb",
+              "label": "Anidb"
+            },
+            {
+              "value": "p_animetoshohttp",
+              "label": "AnimeToshoHttp"
+            },
+            {
+              "value": "p_tokyoinsider",
+              "label": "TokyoInsider"
+            },
+            {
+              "value": "p_anizone",
+              "label": "Anizone"
+            },
+            {
+              "value": "p_animekizz",
+              "label": "Animekizz"
+            },
+            {
+              "value": "p_anv",
+              "label": "Anv"
+            },
+            {
+              "value": "p_anipm",
+              "label": "AniPM"
+            },
+            {
+              "value": "p_netnaija",
+              "label": "NetNaija"
+            },
+            {
+              "value": "p_hicine",
+              "label": "HiCine"
+            },
+            {
+              "value": "p_wyziesubs",
+              "label": "Wyzie Subs"
+            }
+          ]
+        },
+        {
+          "key": "showboxToken",
+          "label": "Showbox / Febbox UI token",
+          "description": "Showbox / Febbox UI token. Copy the ui cookie value from febbox.com while logged in. Required for Showbox.",
+          "type": "text",
+          "default": ""
+        },
+        {
+          "key": "wyzieSubsKey",
+          "label": "Wyzie Subs API key",
+          "description": "Wyzie Subs API key. Required for the Wyzie subtitle provider; get a free key from sub.wyzie.io.",
+          "type": "text",
+          "default": ""
+        },
+        {
+          "key": "gramcinemaToken",
+          "label": "GramCinema bearer token",
+          "description": "GramCinema bearer token. Required for the Gramcinema (Bollywood) provider.",
+          "type": "text",
+          "default": ""
+        },
+        {
+          "key": "tmdbApiKey",
+          "label": "TMDB API key (optional)",
+          "description": "Optional personal TMDB v3 API key. Leave blank to use the key Zangetsu injects.",
+          "type": "text",
+          "default": ""
+        },
+        {
+          "key": "movieblastToken",
+          "label": "MovieBlast token",
+          "description": "MovieBlast token (build-time value in upstream). Leave blank to disable MovieBlast.",
+          "type": "text",
+          "default": ""
+        },
+        {
+          "key": "movieblastApi",
+          "label": "MovieBlast API base",
+          "description": "MovieBlast API base URL (build-time value in upstream). Leave blank to disable MovieBlast.",
+          "type": "text",
+          "default": ""
+        },
+        {
+          "key": "movieblastKey",
+          "label": "MovieBlast signing key",
+          "description": "MovieBlast signing key (build-time value in upstream). Leave blank to disable MovieBlast.",
+          "type": "text",
+          "default": ""
+        },
+        {
+          "key": "castleKey",
+          "label": "Castle APK sign key",
+          "description": "Castle APK HMAC signing key (build-time value in upstream). Leave blank to disable Castle.",
+          "type": "text",
+          "default": ""
+        },
+        {
+          "key": "concurrency",
+          "label": "Provider concurrency",
+          "description": "How many providers may resolve in parallel. Higher is faster but heavier on the phone.",
+          "type": "enum",
+          "default": "16",
+          "options": [
+            {
+              "value": "4",
+              "label": "4"
+            },
+            {
+              "value": "6",
+              "label": "6"
+            },
+            {
+              "value": "8",
+              "label": "8"
+            },
+            {
+              "value": "10",
+              "label": "10"
+            },
+            {
+              "value": "14",
+              "label": "14"
+            },
+            {
+              "value": "16",
+              "label": "16 (default)"
+            },
+            {
+              "value": "20",
+              "label": "20"
+            },
+            {
+              "value": "24",
+              "label": "24"
+            }
+          ]
+        },
+        {
+          "key": "includeDownloadLinks",
+          "label": "Include download-only links",
+          "description": "Also emit download-only links as streams when a provider exposes them.",
+          "type": "bool",
+          "default": false
+        }
+      ]
+    }
+  ]
 }

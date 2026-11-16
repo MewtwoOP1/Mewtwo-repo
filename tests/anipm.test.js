@@ -92,11 +92,23 @@ global.fetch = async (url, opts) => {
   if (path === DOMAIN + "/api/partner/v1/titles/21") return json({ data: { ...title, anilistId: 21, malId: null } });
   if (u.startsWith(DOMAIN + "/api/partner/v1/top")) return json({ data: [title] });
   if (u.startsWith(DOMAIN + "/api/partner/v1/recent")) return json({ data: [] });
-  if (u.startsWith(DOMAIN + "/api/partner/v1/session")) {
-    return json({ token: "session-token", embedUrl: "https://player.example/embed/v1?t=session-token", expiresAt: 1794833708, availability: { sub: true, dub: true } });
+  if (u.indexOf(DOMAIN + "/api/anime/playback-bootstrap/settlar/") === 0) {
+    const lang = u.indexOf("lang=dub") >= 0 ? "dub" : "sub";
+    return json({
+      version: 1,
+      source: "settlar",
+      episode: 1,
+      requestedLanguage: lang,
+      effectiveLanguage: lang,
+      availability: { sub: true, dub: true },
+      settlarSelection: "selection-token",
+    });
   }
-  if (u === DOMAIN + "/embed/ani/154587/1/sub" || u === DOMAIN + "/embed/ani/154587/2/sub" || u === DOMAIN + "/embed/ani/154587/3/sub") {
-    return { status: 200, body: embedPage, headers: {} };
+  if (u.indexOf(DOMAIN + "/api/anime/settlar/session") === 0) {
+    return json({ embedUrl: "https://player.example/embed/v1?t=session-token", expiresAt: 1794833708, provider: "anipm" });
+  }
+  if (u.indexOf("https://player.example/embed/v1") === 0) {
+    return { status: 200, body: "<html>player</html>", headers: {} };
   }
   if (u.startsWith("https://player.example/api/embed/session")) {
     return json({
@@ -110,7 +122,7 @@ global.fetch = async (url, opts) => {
 };
 
 async function main() {
-  assert.equal(provider.version, "1.0.0");
+  assert.equal(provider.version, "1.0.1");
   assert.equal(provider.getInfo().name, "Ani.pm");
   assert.equal(provider.getInfo().type, "anime");
   assert.equal(provider.getInfo().lang, "en");
@@ -156,18 +168,22 @@ async function main() {
   assert.equal(detail.title, "Frieren: Beyond Journey’s End");
   assert.equal(detail.format, "TV");
   assert.equal(detail.malId, 52991);
-  assert.equal(detail.episodes.length, 5, "three episodes, sub and dub where both exist");
-  assert.deepEqual(detail.episodes.map((e) => e.number), [1, 1, 2, 3, 3]);
-  assert.deepEqual(detail.episodes.map((e) => e.category), ["sub", "dub", "sub", "sub", "dub"]);
+  assert.equal(detail.episodes.length, 3, "one row per episode: the app counts the rows it is given");
+  assert.deepEqual(detail.episodes.map((e) => e.number), [1, 2, 3], "one row per episode, never a second row for the other track");
+  assert.deepEqual(detail.episodes.map((e) => e.category), ["sub", "sub", "sub"]);
   assert.equal(detail.subCount, 3);
   assert.equal(detail.dubCount, 2);
 
+  // The app asks for a track through opts.category; the source must answer with
+  // that track rather than listing both.
+  const dubFirst = await provider.getEpisodes("anipm://ani/154587", { category: "dub" });
+  assert.deepEqual(dubFirst.map((e) => e.category), ["dub", "sub", "dub"], "the requested track wins; an episode without it falls back");
   const episodes = await provider.getEpisodes("anipm://ani/154587", {});
-  assert.equal(episodes.length, 5);
-  assert.match(episodes[0].url, /^anipm:\/\/ani\/154587\/1\/sub$/);
+  assert.equal(episodes.length, 3);
+  assert.match(episodes[0].url, /^anipm:\/\/ani\/154587\/frieren-beyond-journeys-end-6351-wixprd\/1\/sub$/, "the episode URL carries the title slug the playback bootstrap needs");
 
   // Stream resolution: the official embed chain, ending in a media URL.
-  const streams = await provider.getVideoSources("anipm://ani/154587/1/sub", {});
+  const streams = await provider.getVideoSources(episodes[0].url, {});
   assert.equal(streams.length, 1);
   assert.equal(streams[0].url, "https://cdn.example/master.m3u8");
   assert.equal(streams[0].container, "hls");
@@ -178,6 +194,7 @@ async function main() {
 
   // A webpage is never handed back as a playable stream.
   assert.deepEqual(await provider.getVideoSources("not-an-episode-url", {}), []);
+  assert.deepEqual(await provider.getVideoSources("anipm://ani/154587/1/sub", {}), [], "an episode without its title slug cannot be resolved");
   assert.deepEqual(await provider.getVideoSources("", {}), []);
 
   // A player that answers with no media yields no stream, not a fake one.
@@ -225,7 +242,7 @@ async function main() {
   assert.deepEqual(subOnly.episodes.map((e) => e.category), ["sub", "sub", "sub"]);
   settings = { primaryDomain: "ani.pm", preferredAudio: "dub" };
   const dubOnly = await provider.getDetail("anipm://ani/154587", {});
-  assert.deepEqual(dubOnly.episodes.map((e) => e.category), ["dub", "dub"]);
+  assert.deepEqual(dubOnly.episodes.map((e) => e.category), ["dub", "sub", "dub"], "a dub-only preference still lists an episode that has no dub");
 
   // A timeout is retried, bounded by the retry setting.
   settings = { primaryDomain: "ani.pm", maxRetries: "1" };
